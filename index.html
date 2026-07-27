@@ -1039,6 +1039,11 @@ let dictationActive = false;
 let dictationQueue = [];
 let dictationIndex = 0;
 let dictationRecognizer = null;
+let dictationIsListening = false;
+let dictationAwaitingAnswer = false;
+let dictationHandlingAnswer = false;
+let dictationRetryTimer = null;
+let dictationAudioContext = null;
 
 function getQuizWordColumn(section){
   const idx = (section.speakCols && section.speakCols[0] != null) ? section.speakCols[0] : null;
@@ -1098,9 +1103,157 @@ function startDictationQuiz(){
 
 function stopDictationQuiz(){
   dictationActive = false;
+  dictationAwaitingAnswer = false;
+  dictationHandlingAnswer = false;
+  clearTimeout(dictationRetryTimer);
   if(dictationRecognizer){ try{ dictationRecognizer.stop(); }catch(e){} }
   window.speechSynthesis.cancel();
   document.getElementById('scoreboard').textContent = "وقف التسميع.";
+}
+
+function normalizeSpeechText(text){
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[’`]/g, "'")
+    .replace(/[^a-z0-9'\s-]/g, ' ')
+    .replace(/[-']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function editDistance(a, b){
+  if(a === b) return 0;
+  if(!a.length) return b.length;
+  if(!b.length) return a.length;
+  let previous = Array.from({length:b.length + 1}, (_, i) => i);
+  for(let i = 1; i <= a.length; i++){
+    const current = [i];
+    for(let j = 1; j <= b.length; j++){
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+function wordsAreClose(spoken, expected){
+  const a = normalizeSpeechText(spoken);
+  const b = normalizeSpeechText(expected);
+  if(!a || !b) return false;
+  if(a === b) return true;
+  // Speech recognition often adds/removes the final s (toward/towards, work/works).
+  if(a.replace(/s$/, '') === b.replace(/s$/, '')) return true;
+  const longest = Math.max(a.length, b.length);
+  const allowed = longest >= 10 ? 2 : (longest >= 6 ? 1 : 0);
+  return editDistance(a, b) <= allowed;
+}
+
+function acceptedAnswersFor(item){
+  const answer = String(item.row.values[item.col] || '');
+  const list = [answer];
+  // "until / till" and "toward(s)" are intentionally accepted as alternatives.
+  answer.split('/').map(v => v.trim()).filter(Boolean).forEach(v => list.push(v));
+  const optionalPlural = answer.match(/^(.*)\(s\)$/);
+  if(optionalPlural){
+    list.push(optionalPlural[1], optionalPlural[1] + 's');
+  }
+  return [...new Set(list.map(normalizeSpeechText).filter(Boolean))];
+}
+
+function transcriptMatchesAnswer(transcript, item){
+  const heard = normalizeSpeechText(transcript);
+  if(!heard) return false;
+  return acceptedAnswersFor(item).some(expected => {
+    if(heard === expected || heard.includes(' ' + expected + ' ') || heard.startsWith(expected + ' ') || heard.endsWith(' ' + expected)) return true;
+    const heardWords = heard.split(' ');
+    const expectedWords = expected.split(' ');
+    if(heardWords.length !== expectedWords.length) return false;
+    return heardWords.every((word, i) => wordsAreClose(word, expectedWords[i]));
+  });
+}
+
+function playFeedbackTone(type, done){
+  try{
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if(!AudioCtx){ setTimeout(done, 250); return; }
+    if(!dictationAudioContext) dictationAudioContext = new AudioCtx();
+    const ctx = dictationAudioContext;
+    const startTone = (frequency, at, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type === 'correct' ? 'sine' : 'square';
+      osc.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.16, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(at); osc.stop(at + duration + 0.02);
+    };
+    const now = ctx.currentTime;
+    if(type === 'correct'){
+      startTone(740, now, 0.12); startTone(988, now + 0.14, 0.16);
+      setTimeout(done, 340);
+    }else{
+      startTone(210, now, 0.15); startTone(160, now + 0.18, 0.18);
+      setTimeout(done, 420);
+    }
+  }catch(e){ setTimeout(done, 250); }
+}
+
+function ensureDictationRecognizer(){
+  if(dictationRecognizer) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  dictationRecognizer = new SR();
+  dictationRecognizer.lang = 'en-US';
+  dictationRecognizer.continuous = true;
+  dictationRecognizer.interimResults = false;
+  dictationRecognizer.maxAlternatives = 3;
+  dictationRecognizer.onstart = () => { dictationIsListening = true; };
+  dictationRecognizer.onresult = event => {
+    if(!dictationActive || !dictationAwaitingAnswer || dictationHandlingAnswer) return;
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      if(event.results[i].isFinal){
+        handleDictationAnswer(event.results[i][0].transcript);
+        break;
+      }
+    }
+  };
+  dictationRecognizer.onerror = e => {
+    dictationIsListening = false;
+    if(!dictationActive) return;
+    if(e.error === 'not-allowed' || e.error === 'audio-capture'){
+      document.getElementById('scoreboard').textContent = 'حصل خطأ في الميكروفون: ' + e.error;
+      stopDictationQuiz();
+    }
+  };
+  dictationRecognizer.onend = () => {
+    dictationIsListening = false;
+    if(dictationActive && dictationAwaitingAnswer){
+      clearTimeout(dictationRetryTimer);
+      dictationRetryTimer = setTimeout(startDictationListening, 160);
+    }
+  };
+}
+
+function startDictationListening(){
+  if(!dictationActive || !dictationAwaitingAnswer || dictationIsListening) return;
+  ensureDictationRecognizer();
+  try{ dictationRecognizer.start(); }
+  catch(e){
+    clearTimeout(dictationRetryTimer);
+    dictationRetryTimer = setTimeout(startDictationListening, 220);
+  }
+}
+
+function pauseDictationListening(){
+  dictationAwaitingAnswer = false;
+  if(dictationRecognizer && dictationIsListening){
+    try{ dictationRecognizer.stop(); }catch(e){}
+  }
 }
 
 function runDictationStep(){
@@ -1111,7 +1264,9 @@ function runDictationStep(){
     if(isShuffleOn()) dictationQueue = shuffleArray(dictationQueue);
   }
   const item = dictationQueue[dictationIndex];
-  document.getElementById('scoreboard').textContent = `🎧 كلمة ${dictationIndex + 1} من ${dictationQueue.length} (بيعيد لحد ما توقفه) — دوس ⏹ عشان توقف`;
+  dictationHandlingAnswer = false;
+  pauseDictationListening();
+  document.getElementById('scoreboard').textContent = `🎧 كلمة ${dictationIndex + 1} من ${dictationQueue.length} — اسمع المعنى، ثم قل الإجابة بالإنجليزية`;
   const inp = findAnswerInput(item.row.id, item.col);
   if(inp){
     inp.value = '';
@@ -1124,80 +1279,45 @@ function runDictationStep(){
   const utter = new SpeechSynthesisUtterance(arabicText);
   utter.lang = 'ar-SA';
   utter.rate = getSpeechRate();
-  utter.onend = () => { if(dictationActive) setTimeout(() => listenForDictationAnswer(item), 350); };
-  utter.onerror = () => { if(dictationActive) setTimeout(() => listenForDictationAnswer(item), 350); };
+  utter.onend = () => {
+    if(dictationActive){
+      dictationAwaitingAnswer = true;
+      startDictationListening();
+    }
+  };
+  utter.onerror = utter.onend;
   window.speechSynthesis.speak(utter);
 }
 
-function listenForDictationAnswer(item){
-  if(!dictationActive) return;
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  dictationRecognizer = new SR();
-  dictationRecognizer.lang = 'en-US';
-  dictationRecognizer.continuous = false;
-  dictationRecognizer.interimResults = false;
-  dictationRecognizer.maxAlternatives = 1;
-
-  dictationRecognizer.onresult = (event) => {
-    const said = event.results[0][0].transcript;
-    checkDictationAnswer(item, said);
-  };
-  dictationRecognizer.onerror = (e) => {
-    if(!dictationActive) return;
-    if(e.error === 'not-allowed' || e.error === 'audio-capture'){
-      document.getElementById('scoreboard').textContent = "حصل خطأ في الميكروفون: " + e.error;
-      stopDictationQuiz();
-    } else {
-      // no-speech / aborted / network / other transient error — just retry listening for the same word
-      setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 500);
-    }
-  };
-  try{
-    dictationRecognizer.start();
-  }catch(err){
-    // start() can throw if the previous session hasn't fully released yet — back off and retry
-    setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 500);
-  }
-}
-
-// handles cases where recognition stutters/repeats a word (e.g. "cat cat") by checking
-// whether the correct answer appears anywhere in the spoken transcript as a whole phrase
-function speechContainsAnswer(said, correctVal){
-  const saidNorm = normalize(said, 'en');
-  const correctNorm = normalize(correctVal, 'en');
-  if(!correctNorm) return false;
-  if(saidNorm === correctNorm) return true;
-  const escaped = correctNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp('(^|\\s)' + escaped + '(\\s|$)');
-  return pattern.test(saidNorm);
-}
-
-function checkDictationAnswer(item, said){
+function handleDictationAnswer(said){
+  if(!dictationActive || !dictationAwaitingAnswer || dictationHandlingAnswer) return;
+  const item = dictationQueue[dictationIndex];
+  if(!item) return;
+  dictationHandlingAnswer = true;
   const correctVal = item.row.values[item.col];
   const inp = findAnswerInput(item.row.id, item.col);
-  const isMatch = speechContainsAnswer(said, correctVal);
+  const isMatch = transcriptMatchesAnswer(said, item);
 
   if(isMatch){
     if(inp){ inp.value = correctVal; inp.classList.remove('wrong'); inp.classList.add('correct'); }
-    dictationIndex++;
-    const utter = new SpeechSynthesisUtterance('Good!');
-    utter.lang = 'en-US';
-    utter.onend = () => { if(dictationActive) setTimeout(runDictationStep, 300); };
-    utter.onerror = () => { if(dictationActive) setTimeout(runDictationStep, 300); };
-    window.speechSynthesis.speak(utter);
+    pauseDictationListening();
+    document.getElementById('scoreboard').textContent = `✅ صح: ${correctVal} — التالي الآن...`;
+    playFeedbackTone('correct', () => {
+      if(dictationActive){ dictationIndex++; runDictationStep(); }
+    });
   } else {
     if(inp){ inp.value = said; inp.classList.remove('correct'); inp.classList.add('wrong'); }
-    const utter = new SpeechSynthesisUtterance('Try again');
-    utter.lang = 'en-US';
-    utter.onend = () => {
-      setTimeout(() => {
-        const freshInp = findAnswerInput(item.row.id, item.col);
-        if(freshInp){ freshInp.value = ''; freshInp.classList.remove('wrong'); }
-        if(dictationActive) listenForDictationAnswer(item);
-      }, 350);
-    };
-    utter.onerror = () => { if(dictationActive) listenForDictationAnswer(item); };
-    window.speechSynthesis.speak(utter);
+    pauseDictationListening();
+    document.getElementById('scoreboard').textContent = `❌ سمعت: “${said}” — حاول نفس الكلمة مرة أخرى.`;
+    playFeedbackTone('wrong', () => {
+      const freshInp = findAnswerInput(item.row.id, item.col);
+      if(freshInp){ freshInp.value = ''; freshInp.classList.remove('wrong'); }
+      if(dictationActive){
+        dictationHandlingAnswer = false;
+        dictationAwaitingAnswer = true;
+        startDictationListening();
+      }
+    });
   }
 }
 
@@ -1207,6 +1327,7 @@ let readWords = [];       // [{raw, norm}]
 let readIndex = 0;
 let readRecognizer = null;
 let readActive = false;
+let readMisses = 0;
 
 function normalizeSpokenWord(w){
   return String(w || '').toLowerCase().replace(/[^a-z0-9']/g, '');
@@ -1244,19 +1365,25 @@ function updateReadCurrentHighlight(){
 }
 
 function processReadWords(newWords){
-  const LOOKAHEAD = 6;
+  const LOOKAHEAD = 9;
+  let matchedAny = false;
   newWords.forEach(spoken => {
     if(readIndex >= readWords.length) return;
     let foundOffset = -1;
     const windowEnd = Math.min(readWords.length, readIndex + LOOKAHEAD);
     for(let k = readIndex; k < windowEnd; k++){
-      if(readWords[k].norm === spoken){ foundOffset = k; break; }
+      if(wordsAreClose(spoken, readWords[k].norm)){ foundOffset = k; break; }
     }
     if(foundOffset === -1){
-      // no nearby match: treat as a wrong attempt on the current expected word, don't advance
-      const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
-      if(span){ span.classList.add('word-error'); span.classList.remove('word-current', 'word-correct'); }
+      // Recognition often returns a stray word. Do not mark the learner wrong from one noisy result.
+      readMisses++;
+      if(readMisses >= 3){
+        const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
+        if(span){ span.classList.add('word-error'); span.classList.remove('word-current', 'word-correct'); }
+      }
     } else {
+      matchedAny = true;
+      readMisses = 0;
       // mark any skipped words in between as error, mark the matched word correct, jump past it
       for(let k = readIndex; k < foundOffset; k++){
         const skipSpan = document.querySelector(`.read-word[data-idx="${k}"]`);
@@ -1268,6 +1395,9 @@ function processReadWords(newWords){
       updateReadCurrentHighlight();
     }
   });
+  if(matchedAny && readIndex < readWords.length){
+    document.getElementById('readStatus').textContent = 'ممتاز، استمر في القراءة...';
+  }
   if(readIndex >= readWords.length){
     document.getElementById('readStatus').textContent = "برافو! خلصت النص كله صح 🎉";
     stopReadAlong();
@@ -1294,11 +1424,13 @@ function startReadAlong(){
   }
   readLastResultIndex = -1;
   readLastWordCount = 0;
+  readMisses = 0;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   readRecognizer = new SR();
   readRecognizer.lang = 'en-US';
   readRecognizer.continuous = true;
-  readRecognizer.interimResults = true;
+  // Final phrases are much steadier than interim word-by-word guesses.
+  readRecognizer.interimResults = false;
   readRecognizer.maxAlternatives = 1;
 
   readRecognizer.onresult = (event) => {
@@ -1306,17 +1438,7 @@ function startReadAlong(){
       const result = event.results[i];
       const transcript = result[0].transcript;
       const words = transcript.trim().split(/\s+/).map(normalizeSpokenWord).filter(Boolean);
-      const startFrom = (i === readLastResultIndex) ? readLastWordCount : 0;
-      if(words.length > startFrom){
-        processReadWords(words.slice(startFrom));
-      }
-      if(result.isFinal){
-        readLastResultIndex = -1;
-        readLastWordCount = 0;
-      } else {
-        readLastResultIndex = i;
-        readLastWordCount = words.length;
-      }
+      if(result.isFinal && words.length){ processReadWords(words); }
     }
   };
   readRecognizer.onerror = (e) => {
@@ -1333,8 +1455,8 @@ function startReadAlong(){
   readRecognizer.onend = () => {
     if(readActive){
       setTimeout(() => {
-        if(readActive){ try{ readRecognizer.start(); }catch(err){ /* already running */ } }
-      }, 350);
+        if(readActive){ try{ readRecognizer.start(); }catch(err){ /* browser is releasing the microphone */ } }
+      }, 120);
     }
   };
 
