@@ -167,12 +167,7 @@
   #btnStartDictation{background:var(--orange);}
   #btnStopDictation{background:var(--red);}
   .selection-count{ text-align:center; font-size:.82rem; color:var(--teal); font-weight:bold; margin-bottom:8px; min-height:1.1em; }
-  .dictation-live{
-    max-width:760px; min-height:2.2em; margin:0 auto 12px; padding:8px 12px;
-    border:1px dashed #b9c9d6; border-radius:8px; background:#f4f9ff; color:#29475e;
-    text-align:center; font-size:.9rem;
-  }
-  .dictation-live strong{ color:var(--teal); }
+  .dictation-live{max-width:760px;min-height:2.2em;margin:0 auto 12px;padding:8px 12px;border:1px dashed #b9c9d6;border-radius:8px;background:#f4f9ff;color:#29475e;text-align:center;font-size:.9rem;}
 
   .sentence-cell{ text-align:right; }
   .extra-sentences-list{ margin-top:4px; border-top:1px dashed #ddd6c0; padding-top:3px; }
@@ -279,6 +274,9 @@
   </label>
   <label>صوت القارئ:
     <select id="speechVoice"><option value="">افتراضي</option></select>
+  </label>
+  <label>لهجة الاستماع:
+    <select id="recognitionLang"><option value="en-US" selected>English (US)</option><option value="en-GB">English (UK)</option></select>
   </label>
   <label>ينطق:
     <select id="speechContent">
@@ -1046,11 +1044,6 @@ let dictationActive = false;
 let dictationQueue = [];
 let dictationIndex = 0;
 let dictationRecognizer = null;
-let dictationIsListening = false;
-let dictationAwaitingAnswer = false;
-let dictationHandlingAnswer = false;
-let dictationRetryTimer = null;
-let dictationAudioContext = null;
 
 function getQuizWordColumn(section){
   const idx = (section.speakCols && section.speakCols[0] != null) ? section.speakCols[0] : null;
@@ -1110,203 +1103,9 @@ function startDictationQuiz(){
 
 function stopDictationQuiz(){
   dictationActive = false;
-  dictationAwaitingAnswer = false;
-  dictationHandlingAnswer = false;
-  clearTimeout(dictationRetryTimer);
   if(dictationRecognizer){ try{ dictationRecognizer.stop(); }catch(e){} }
   window.speechSynthesis.cancel();
-  setDictationLive('تم إيقاف التسميع.', '⏹️');
   document.getElementById('scoreboard').textContent = "وقف التسميع.";
-}
-
-function normalizeSpeechText(text){
-  return String(text || '')
-    .toLowerCase()
-    .replace(/[’`]/g, "'")
-    .replace(/[^a-z0-9'\s-]/g, ' ')
-    .replace(/[-']/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function editDistance(a, b){
-  if(a === b) return 0;
-  if(!a.length) return b.length;
-  if(!b.length) return a.length;
-  let previous = Array.from({length:b.length + 1}, (_, i) => i);
-  for(let i = 1; i <= a.length; i++){
-    const current = [i];
-    for(let j = 1; j <= b.length; j++){
-      current[j] = Math.min(
-        current[j - 1] + 1,
-        previous[j] + 1,
-        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
-      );
-    }
-    previous = current;
-  }
-  return previous[b.length];
-}
-
-function soundKey(word){
-  const clean = normalizeSpeechText(word).replace(/[^a-z]/g, '');
-  if(clean.length < 4) return '';
-  const codes = {b:'1',f:'1',p:'1',v:'1',c:'2',g:'2',j:'2',k:'2',q:'2',s:'2',x:'2',z:'2',d:'3',t:'3',l:'4',m:'5',n:'5',r:'6'};
-  let key = clean[0].toUpperCase();
-  let previous = codes[clean[0]] || '';
-  for(let i = 1; i < clean.length && key.length < 4; i++){
-    const code = codes[clean[i]] || '';
-    if(code && code !== previous) key += code;
-    previous = code;
-  }
-  return (key + '000').slice(0, 4);
-}
-
-function wordsAreClose(spoken, expected){
-  const a = normalizeSpeechText(spoken);
-  const b = normalizeSpeechText(expected);
-  if(!a || !b) return false;
-  if(a === b) return true;
-  // Speech recognition often adds/removes the final s (toward/towards, work/works).
-  if(a.replace(/s$/, '') === b.replace(/s$/, '')) return true;
-  const longest = Math.max(a.length, b.length);
-  const allowed = longest >= 10 ? 2 : (longest >= 6 ? 1 : 0);
-  if(editDistance(a, b) <= allowed) return true;
-  // A phonetic fallback helps when speech-to-text chooses a different spelling for the same pronunciation.
-  const aKey = soundKey(a), bKey = soundKey(b);
-  return !!aKey && aKey === bKey;
-}
-
-function acceptedAnswersFor(item){
-  const answer = String(item.row.values[item.col] || '');
-  const list = [answer];
-  // "until / till" and "toward(s)" are intentionally accepted as alternatives.
-  answer.split('/').map(v => v.trim()).filter(Boolean).forEach(v => list.push(v));
-  const optionalPlural = answer.match(/^(.*)\(s\)$/);
-  if(optionalPlural){
-    list.push(optionalPlural[1], optionalPlural[1] + 's');
-  }
-  return [...new Set(list.map(normalizeSpeechText).filter(Boolean))];
-}
-
-function transcriptMatchesAnswer(transcript, item){
-  const heard = normalizeSpeechText(transcript);
-  if(!heard) return false;
-  return acceptedAnswersFor(item).some(expected => {
-    if(heard === expected || heard.includes(' ' + expected + ' ') || heard.startsWith(expected + ' ') || heard.endsWith(' ' + expected)) return true;
-    const heardWords = heard.split(' ');
-    const expectedWords = expected.split(' ');
-    if(heardWords.length < expectedWords.length) return false;
-    // Accept the answer even when the recognizer adds filler words before or after it.
-    return heardWords.some((_, start) =>
-      start + expectedWords.length <= heardWords.length &&
-      expectedWords.every((word, i) => wordsAreClose(heardWords[start + i], word))
-    );
-  });
-}
-
-function setDictationLive(text, label){
-  const live = document.getElementById('dictationLive');
-  if(!live) return;
-  live.textContent = label ? `${label}: ${text || '...'}` : (text || '...');
-}
-
-function playFeedbackTone(type, done){
-  try{
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if(!AudioCtx){ setTimeout(done, 250); return; }
-    if(!dictationAudioContext) dictationAudioContext = new AudioCtx();
-    const ctx = dictationAudioContext;
-    const startTone = (frequency, at, duration) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type === 'correct' ? 'sine' : 'square';
-      osc.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.16, at + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(at); osc.stop(at + duration + 0.02);
-    };
-    const now = ctx.currentTime;
-    if(type === 'correct'){
-      startTone(740, now, 0.12); startTone(988, now + 0.14, 0.16);
-      setTimeout(done, 340);
-    }else{
-      startTone(210, now, 0.15); startTone(160, now + 0.18, 0.18);
-      setTimeout(done, 420);
-    }
-  }catch(e){ setTimeout(done, 250); }
-}
-
-function playDictationFeedback(type, done){
-  playFeedbackTone(type, () => {});
-  const utter = new SpeechSynthesisUtterance(type === 'correct' ? 'Good' : 'Try again');
-  utter.lang = 'en-US';
-  utter.rate = 0.92;
-  utter.onend = done;
-  utter.onerror = done;
-  window.speechSynthesis.speak(utter);
-}
-
-function ensureDictationRecognizer(){
-  if(dictationRecognizer) return;
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  dictationRecognizer = new SR();
-  dictationRecognizer.lang = 'en-US';
-  dictationRecognizer.continuous = true;
-  dictationRecognizer.interimResults = true;
-  dictationRecognizer.maxAlternatives = 5;
-  dictationRecognizer.onstart = () => {
-    dictationIsListening = true;
-    setDictationLive('أنا أسمعك الآن، قل الإجابة بالإنجليزية.', '🎙️');
-  };
-  dictationRecognizer.onresult = event => {
-    if(!dictationActive || !dictationAwaitingAnswer || dictationHandlingAnswer) return;
-    for(let i = event.resultIndex; i < event.results.length; i++){
-      const result = event.results[i];
-      const alternatives = Array.from({length: result.length}, (_, index) => result[index].transcript).filter(Boolean);
-      setDictationLive(alternatives[0] || '', result.isFinal ? 'سمعت' : 'أسمع الآن');
-      if(result.isFinal){
-        handleDictationAnswer(alternatives[0] || '', alternatives);
-        break;
-      }
-    }
-  };
-  dictationRecognizer.onerror = e => {
-    dictationIsListening = false;
-    if(!dictationActive) return;
-    if(e.error === 'not-allowed' || e.error === 'audio-capture'){
-      document.getElementById('scoreboard').textContent = 'حصل خطأ في الميكروفون: ' + e.error;
-      stopDictationQuiz();
-    }else if(e.error === 'no-speech'){
-      setDictationLive('لم أسمع كلامًا واضحًا، حاول مرة أخرى.', '🎙️');
-    }
-  };
-  dictationRecognizer.onend = () => {
-    dictationIsListening = false;
-    if(dictationActive && dictationAwaitingAnswer){
-      clearTimeout(dictationRetryTimer);
-      dictationRetryTimer = setTimeout(startDictationListening, 160);
-    }
-  };
-}
-
-function startDictationListening(){
-  if(!dictationActive || !dictationAwaitingAnswer || dictationIsListening) return;
-  ensureDictationRecognizer();
-  try{ dictationRecognizer.start(); }
-  catch(e){
-    clearTimeout(dictationRetryTimer);
-    dictationRetryTimer = setTimeout(startDictationListening, 220);
-  }
-}
-
-function pauseDictationListening(){
-  dictationAwaitingAnswer = false;
-  if(dictationRecognizer && dictationIsListening){
-    try{ dictationRecognizer.stop(); }catch(e){}
-  }
 }
 
 function runDictationStep(){
@@ -1317,10 +1116,7 @@ function runDictationStep(){
     if(isShuffleOn()) dictationQueue = shuffleArray(dictationQueue);
   }
   const item = dictationQueue[dictationIndex];
-  dictationHandlingAnswer = false;
-  pauseDictationListening();
-  setDictationLive('استمع للمعنى، ثم قل الإجابة بالإنجليزية.', '🎧');
-  document.getElementById('scoreboard').textContent = `🎧 كلمة ${dictationIndex + 1} من ${dictationQueue.length} — اسمع المعنى، ثم قل الإجابة بالإنجليزية`;
+  document.getElementById('scoreboard').textContent = `🎧 كلمة ${dictationIndex + 1} من ${dictationQueue.length} (بيعيد لحد ما توقفه) — دوس ⏹ عشان توقف`;
   const inp = findAnswerInput(item.row.id, item.col);
   if(inp){
     inp.value = '';
@@ -1333,48 +1129,80 @@ function runDictationStep(){
   const utter = new SpeechSynthesisUtterance(arabicText);
   utter.lang = 'ar-SA';
   utter.rate = getSpeechRate();
-  utter.onend = () => {
-    if(dictationActive){
-      dictationAwaitingAnswer = true;
-      startDictationListening();
-    }
-  };
-  utter.onerror = utter.onend;
+  utter.onend = () => { if(dictationActive) setTimeout(() => listenForDictationAnswer(item), 350); };
+  utter.onerror = () => { if(dictationActive) setTimeout(() => listenForDictationAnswer(item), 350); };
   window.speechSynthesis.speak(utter);
 }
 
-function handleDictationAnswer(said, alternatives = []){
-  if(!dictationActive || !dictationAwaitingAnswer || dictationHandlingAnswer) return;
-  const item = dictationQueue[dictationIndex];
-  if(!item) return;
-  dictationHandlingAnswer = true;
+function listenForDictationAnswer(item){
+  if(!dictationActive) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  dictationRecognizer = new SR();
+  dictationRecognizer.lang = 'en-US';
+  dictationRecognizer.continuous = false;
+  dictationRecognizer.interimResults = false;
+  dictationRecognizer.maxAlternatives = 1;
+
+  dictationRecognizer.onresult = (event) => {
+    const said = event.results[0][0].transcript;
+    checkDictationAnswer(item, said);
+  };
+  dictationRecognizer.onerror = (e) => {
+    if(!dictationActive) return;
+    if(e.error === 'not-allowed' || e.error === 'audio-capture'){
+      document.getElementById('scoreboard').textContent = "حصل خطأ في الميكروفون: " + e.error;
+      stopDictationQuiz();
+    } else {
+      // no-speech / aborted / network / other transient error — just retry listening for the same word
+      setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 500);
+    }
+  };
+  try{
+    dictationRecognizer.start();
+  }catch(err){
+    // start() can throw if the previous session hasn't fully released yet — back off and retry
+    setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 500);
+  }
+}
+
+// handles cases where recognition stutters/repeats a word (e.g. "cat cat") by checking
+// whether the correct answer appears anywhere in the spoken transcript as a whole phrase
+function speechContainsAnswer(said, correctVal){
+  const saidNorm = normalize(said, 'en');
+  const correctNorm = normalize(correctVal, 'en');
+  if(!correctNorm) return false;
+  if(saidNorm === correctNorm) return true;
+  const escaped = correctNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp('(^|\\s)' + escaped + '(\\s|$)');
+  return pattern.test(saidNorm);
+}
+
+function checkDictationAnswer(item, said){
   const correctVal = item.row.values[item.col];
   const inp = findAnswerInput(item.row.id, item.col);
-  const heardOptions = [...new Set([said, ...alternatives].filter(Boolean))];
-  const isMatch = heardOptions.some(option => transcriptMatchesAnswer(option, item));
+  const isMatch = speechContainsAnswer(said, correctVal);
 
   if(isMatch){
     if(inp){ inp.value = correctVal; inp.classList.remove('wrong'); inp.classList.add('correct'); }
-    pauseDictationListening();
-    document.getElementById('scoreboard').textContent = `✅ صح: ${correctVal} — التالي الآن...`;
-    setDictationLive(said, '✅ إجابة صحيحة');
-    playDictationFeedback('correct', () => {
-      if(dictationActive){ dictationIndex++; runDictationStep(); }
-    });
+    dictationIndex++;
+    const utter = new SpeechSynthesisUtterance('Good!');
+    utter.lang = 'en-US';
+    utter.onend = () => { if(dictationActive) setTimeout(runDictationStep, 300); };
+    utter.onerror = () => { if(dictationActive) setTimeout(runDictationStep, 300); };
+    window.speechSynthesis.speak(utter);
   } else {
     if(inp){ inp.value = said; inp.classList.remove('correct'); inp.classList.add('wrong'); }
-    pauseDictationListening();
-    document.getElementById('scoreboard').textContent = `❌ سمعت: “${said}” — حاول نفس الكلمة مرة أخرى.`;
-    setDictationLive(said, '❌ غير صحيحة');
-    playDictationFeedback('wrong', () => {
-      const freshInp = findAnswerInput(item.row.id, item.col);
-      if(freshInp){ freshInp.value = ''; freshInp.classList.remove('wrong'); }
-      if(dictationActive){
-        dictationHandlingAnswer = false;
-        dictationAwaitingAnswer = true;
-        startDictationListening();
-      }
-    });
+    const utter = new SpeechSynthesisUtterance('Try again');
+    utter.lang = 'en-US';
+    utter.onend = () => {
+      setTimeout(() => {
+        const freshInp = findAnswerInput(item.row.id, item.col);
+        if(freshInp){ freshInp.value = ''; freshInp.classList.remove('wrong'); }
+        if(dictationActive) listenForDictationAnswer(item);
+      }, 350);
+    };
+    utter.onerror = () => { if(dictationActive) listenForDictationAnswer(item); };
+    window.speechSynthesis.speak(utter);
   }
 }
 
@@ -1384,7 +1212,6 @@ let readWords = [];       // [{raw, norm}]
 let readIndex = 0;
 let readRecognizer = null;
 let readActive = false;
-let readMisses = 0;
 
 function normalizeSpokenWord(w){
   return String(w || '').toLowerCase().replace(/[^a-z0-9']/g, '');
@@ -1422,25 +1249,19 @@ function updateReadCurrentHighlight(){
 }
 
 function processReadWords(newWords){
-  const LOOKAHEAD = 9;
-  let matchedAny = false;
+  const LOOKAHEAD = 6;
   newWords.forEach(spoken => {
     if(readIndex >= readWords.length) return;
     let foundOffset = -1;
     const windowEnd = Math.min(readWords.length, readIndex + LOOKAHEAD);
     for(let k = readIndex; k < windowEnd; k++){
-      if(wordsAreClose(spoken, readWords[k].norm)){ foundOffset = k; break; }
+      if(readWords[k].norm === spoken){ foundOffset = k; break; }
     }
     if(foundOffset === -1){
-      // Recognition often returns a stray word. Do not mark the learner wrong from one noisy result.
-      readMisses++;
-      if(readMisses >= 3){
-        const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
-        if(span){ span.classList.add('word-error'); span.classList.remove('word-current', 'word-correct'); }
-      }
+      // no nearby match: treat as a wrong attempt on the current expected word, don't advance
+      const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
+      if(span){ span.classList.add('word-error'); span.classList.remove('word-current', 'word-correct'); }
     } else {
-      matchedAny = true;
-      readMisses = 0;
       // mark any skipped words in between as error, mark the matched word correct, jump past it
       for(let k = readIndex; k < foundOffset; k++){
         const skipSpan = document.querySelector(`.read-word[data-idx="${k}"]`);
@@ -1452,9 +1273,6 @@ function processReadWords(newWords){
       updateReadCurrentHighlight();
     }
   });
-  if(matchedAny && readIndex < readWords.length){
-    document.getElementById('readStatus').textContent = 'ممتاز، استمر في القراءة...';
-  }
   if(readIndex >= readWords.length){
     document.getElementById('readStatus').textContent = "برافو! خلصت النص كله صح 🎉";
     stopReadAlong();
@@ -1481,13 +1299,11 @@ function startReadAlong(){
   }
   readLastResultIndex = -1;
   readLastWordCount = 0;
-  readMisses = 0;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   readRecognizer = new SR();
   readRecognizer.lang = 'en-US';
   readRecognizer.continuous = true;
-  // Final phrases are much steadier than interim word-by-word guesses.
-  readRecognizer.interimResults = false;
+  readRecognizer.interimResults = true;
   readRecognizer.maxAlternatives = 1;
 
   readRecognizer.onresult = (event) => {
@@ -1495,7 +1311,17 @@ function startReadAlong(){
       const result = event.results[i];
       const transcript = result[0].transcript;
       const words = transcript.trim().split(/\s+/).map(normalizeSpokenWord).filter(Boolean);
-      if(result.isFinal && words.length){ processReadWords(words); }
+      const startFrom = (i === readLastResultIndex) ? readLastWordCount : 0;
+      if(words.length > startFrom){
+        processReadWords(words.slice(startFrom));
+      }
+      if(result.isFinal){
+        readLastResultIndex = -1;
+        readLastWordCount = 0;
+      } else {
+        readLastResultIndex = i;
+        readLastWordCount = words.length;
+      }
     }
   };
   readRecognizer.onerror = (e) => {
@@ -1512,8 +1338,8 @@ function startReadAlong(){
   readRecognizer.onend = () => {
     if(readActive){
       setTimeout(() => {
-        if(readActive){ try{ readRecognizer.start(); }catch(err){ /* browser is releasing the microphone */ } }
-      }, 120);
+        if(readActive){ try{ readRecognizer.start(); }catch(err){ /* already running */ } }
+      }, 350);
     }
   };
 
@@ -1612,6 +1438,102 @@ async function loadSavedState(){
   }
 }
 
+/* ============ DICTATION V2: CONTINUOUS + LIVE TRANSCRIPT + CONTEXT BIAS ============ */
+let quizV2Active = false, quizV2Index = 0, quizV2Queue = [], quizV2Recognizer = null;
+let quizV2Listening = false, quizV2Waiting = false, quizV2Handling = false, quizV2Timer = null;
+
+function quizV2Live(text, prefix){
+  const el = document.getElementById('dictationLive');
+  if(el) el.textContent = prefix ? `${prefix}: ${text || '...'}` : (text || '...');
+}
+function quizV2Norm(text){ return String(text || '').toLowerCase().replace(/[’`]/g,"'").replace(/[^a-z0-9'\s-]/g,' ').replace(/[-']/g,'').replace(/\s+/g,' ').trim(); }
+function quizV2Sound(word){
+  const s = quizV2Norm(word).replace(/[^a-z]/g,''); if(s.length < 4) return '';
+  const map={b:'1',f:'1',p:'1',v:'1',c:'2',g:'2',j:'2',k:'2',q:'2',s:'2',x:'2',z:'2',d:'3',t:'3',l:'4',m:'5',n:'5',r:'6'};
+  let out=s[0].toUpperCase(), prev=map[s[0]]||'';
+  for(let i=1;i<s.length&&out.length<4;i++){ const code=map[s[i]]||''; if(code&&code!==prev) out+=code; prev=code; }
+  return (out+'000').slice(0,4);
+}
+function quizV2Distance(a,b){
+  let row=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){ const next=[i]; for(let j=1;j<=b.length;j++) next[j]=Math.min(next[j-1]+1,row[j]+1,row[j-1]+(a[i-1]===b[j-1]?0:1)); row=next; }
+  return row[b.length];
+}
+function quizV2Close(a,b){
+  a=quizV2Norm(a); b=quizV2Norm(b); if(!a||!b) return false;
+  if(a===b || a.replace(/s$/,'')===b.replace(/s$/,'')) return true;
+  const max=Math.max(a.length,b.length), limit=max>=10?2:(max>=6?1:0);
+  return quizV2Distance(a,b)<=limit || (!!quizV2Sound(a)&&quizV2Sound(a)===quizV2Sound(b));
+}
+function quizV2Answers(item){
+  const raw=String(item.row.values[item.col]||''), list=[raw,...raw.split('/').map(x=>x.trim())];
+  const optional=raw.match(/^(.*)\(s\)$/); if(optional) list.push(optional[1],optional[1]+'s');
+  return [...new Set(list.map(quizV2Norm).filter(Boolean))];
+}
+function quizV2Matches(transcript,item){
+  const heard=quizV2Norm(transcript); if(!heard) return false;
+  return quizV2Answers(item).some(answer=>{
+    if(heard===answer||heard.includes(' '+answer+' ')||heard.startsWith(answer+' ')||heard.endsWith(' '+answer)) return true;
+    const h=heard.split(' '), a=answer.split(' ');
+    return h.some((_,start)=>start+a.length<=h.length&&a.every((word,i)=>quizV2Close(h[start+i],word)));
+  });
+}
+function quizV2Feedback(ok, done){
+  const utter=new SpeechSynthesisUtterance(ok?'Good':'Try again'); utter.lang='en-US'; utter.rate=.9;
+  utter.onend=done; utter.onerror=done; window.speechSynthesis.speak(utter);
+}
+function quizV2ConfigureBias(item){
+  if(!quizV2Recognizer || typeof window.SpeechRecognitionPhrase !== 'function' || !('phrases' in quizV2Recognizer)) return;
+  try{
+    const all=[...new Set(quizV2Queue.flatMap(quizV2Answers))];
+    quizV2Recognizer.phrases=all.slice(0,250).map(phrase=>new window.SpeechRecognitionPhrase(phrase,quizV2Answers(item).includes(phrase)?10:4));
+  }catch(e){}
+}
+function quizV2EnsureRecognizer(){
+  if(quizV2Recognizer) return;
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  quizV2Recognizer=new SR(); quizV2Recognizer.continuous=true; quizV2Recognizer.interimResults=true; quizV2Recognizer.maxAlternatives=10;
+  quizV2Recognizer.onstart=()=>{quizV2Listening=true;quizV2Live('أنا أسمعك الآن، قل الإجابة بالإنجليزية.','🎙️');};
+  quizV2Recognizer.onresult=e=>{
+    if(!quizV2Active||!quizV2Waiting||quizV2Handling) return;
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const result=e.results[i], choices=Array.from({length:result.length},(_,n)=>result[n].transcript).filter(Boolean);
+      quizV2Live(choices[0]||'',result.isFinal?'سمعت':'أسمع الآن');
+      if(result.isFinal){quizV2Handle(choices[0]||'',choices);break;}
+    }
+  };
+  quizV2Recognizer.onerror=e=>{quizV2Listening=false;if(!quizV2Active)return;if(e.error==='not-allowed'||e.error==='audio-capture'){quizV2Stop();document.getElementById('scoreboard').textContent='تعذر استخدام الميكروفون: '+e.error;}else if(e.error==='no-speech')quizV2Live('لم أسمع كلامًا واضحًا، حاول مرة أخرى.','🎙️');};
+  quizV2Recognizer.onend=()=>{quizV2Listening=false;if(quizV2Active&&quizV2Waiting){clearTimeout(quizV2Timer);quizV2Timer=setTimeout(quizV2Listen,150);}};
+}
+function quizV2Listen(){
+  if(!quizV2Active||!quizV2Waiting||quizV2Listening)return; quizV2EnsureRecognizer();
+  try{quizV2Recognizer.lang=document.getElementById('recognitionLang').value;quizV2Recognizer.start();}catch(e){clearTimeout(quizV2Timer);quizV2Timer=setTimeout(quizV2Listen,200);}
+}
+function quizV2Pause(){quizV2Waiting=false;if(quizV2Recognizer&&quizV2Listening)try{quizV2Recognizer.stop();}catch(e){}}
+function quizV2Step(){
+  if(!quizV2Active)return; if(quizV2Index>=quizV2Queue.length){quizV2Index=0;if(isShuffleOn())quizV2Queue=shuffleArray(quizV2Queue);}
+  const item=quizV2Queue[quizV2Index]; quizV2Handling=false; quizV2Pause(); quizV2EnsureRecognizer(); quizV2ConfigureBias(item); quizV2Live('استمع للمعنى، ثم قل الإجابة بالإنجليزية.','🎧');
+  const input=findAnswerInput(item.row.id,item.col); if(input){input.value='';input.disabled=false;input.classList.remove('correct','wrong');input.scrollIntoView({block:'center',behavior:'smooth'});}
+  document.getElementById('scoreboard').textContent=`🎧 كلمة ${quizV2Index+1} من ${quizV2Queue.length} — قل الإجابة بالإنجليزية`;
+  window.speechSynthesis.cancel(); const utter=new SpeechSynthesisUtterance(item.row.values[item.arIdx]||'...'); utter.lang='ar-SA'; utter.rate=getSpeechRate();
+  utter.onend=()=>{if(quizV2Active){quizV2Waiting=true;quizV2Listen();}}; utter.onerror=utter.onend; window.speechSynthesis.speak(utter);
+}
+function quizV2Handle(said,choices){
+  if(!quizV2Active||!quizV2Waiting||quizV2Handling)return; const item=quizV2Queue[quizV2Index]; quizV2Handling=true;
+  const correct=item.row.values[item.col], input=findAnswerInput(item.row.id,item.col), ok=[said,...choices].some(value=>quizV2Matches(value,item)); quizV2Pause();
+  if(ok){if(input){input.value=correct;input.classList.add('correct');input.classList.remove('wrong');}quizV2Live(said,'✅ إجابة صحيحة');document.getElementById('scoreboard').textContent=`✅ صح: ${correct} — التالي الآن...`;quizV2Feedback(true,()=>{if(quizV2Active){quizV2Index++;quizV2Step();}});}
+  else {if(input){input.value=said;input.classList.add('wrong');input.classList.remove('correct');}quizV2Live(said,'❌ غير صحيحة');document.getElementById('scoreboard').textContent=`❌ سمعت: “${said}” — حاول نفس الكلمة مرة أخرى.`;quizV2Feedback(false,()=>{if(input){input.value='';input.classList.remove('wrong');}if(quizV2Active){quizV2Handling=false;quizV2Waiting=true;quizV2Listen();}});}
+}
+function startDictationQuizV2(){
+  if(!supportsSpeech()||!supportsRecognition()){alert('التسميع يحتاج متصفحًا يدعم النطق والتعرف على الصوت.');return;}
+  if(!window.isSecureContext){document.getElementById('scoreboard').textContent='التسميع يحتاج HTTPS أو خادمًا محليًا.';return;}
+  if(mode!=='noEn'){document.getElementById('scoreboard').textContent="اضغط أولًا «شيل كل الإنجليزي» ثم ابدأ التسميع.";return;}
+  quizV2Queue=[]; sections.forEach(section=>{const arIdx=section.kinds.indexOf('ar'),col=getQuizWordColumn(section);if(arIdx<0||col==null)return;getRowsInOrder(section).forEach(row=>{if(selectedRows.has(section.id+'::'+row.id))quizV2Queue.push({section,row,col,arIdx});});});
+  if(!quizV2Queue.length){document.getElementById('scoreboard').textContent='حدد كلمة واحدة على الأقل في عمود 🔊.';return;}
+  if(isShuffleOn())quizV2Queue=shuffleArray(quizV2Queue); quizV2Active=true;quizV2Index=0;quizV2Step();
+}
+function quizV2Stop(){quizV2Active=false;quizV2Waiting=false;quizV2Handling=false;clearTimeout(quizV2Timer);if(quizV2Recognizer)try{quizV2Recognizer.stop();}catch(e){}window.speechSynthesis.cancel();quizV2Live('تم إيقاف التسميع.','⏹️');}
+
 /* ============ EVENTS ============ */
 
 document.getElementById('btnNoEn').addEventListener('click', () => {
@@ -1627,8 +1549,8 @@ document.getElementById('btnSaveOrder').addEventListener('click', saveEverything
 document.getElementById('btnSpeakSelected').addEventListener('click', speakSelected);
 document.getElementById('btnStopSpeak').addEventListener('click', stopSpeaking);
 document.getElementById('btnClearSelection').addEventListener('click', clearSelection);
-document.getElementById('btnStartDictation').addEventListener('click', startDictationQuiz);
-document.getElementById('btnStopDictation').addEventListener('click', stopDictationQuiz);
+document.getElementById('btnStartDictation').addEventListener('click', startDictationQuizV2);
+document.getElementById('btnStopDictation').addEventListener('click', quizV2Stop);
 
 document.getElementById('btnStartReadAlong').addEventListener('click', startReadAlong);
 document.getElementById('btnStopReadAlong').addEventListener('click', stopReadAlong);
