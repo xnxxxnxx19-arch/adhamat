@@ -167,6 +167,12 @@
   #btnStartDictation{background:var(--orange);}
   #btnStopDictation{background:var(--red);}
   .selection-count{ text-align:center; font-size:.82rem; color:var(--teal); font-weight:bold; margin-bottom:8px; min-height:1.1em; }
+  .dictation-live{
+    max-width:760px; min-height:2.2em; margin:0 auto 12px; padding:8px 12px;
+    border:1px dashed #b9c9d6; border-radius:8px; background:#f4f9ff; color:#29475e;
+    text-align:center; font-size:.9rem;
+  }
+  .dictation-live strong{ color:var(--teal); }
 
   .sentence-cell{ text-align:right; }
   .extra-sentences-list{ margin-top:4px; border-top:1px dashed #ddd6c0; padding-top:3px; }
@@ -290,6 +296,7 @@
 </div>
 <div class="hint" style="margin-bottom:14px;">وضع التسميع: دوس "شيل كل الإنجليزي" أول حاجة، بعدين حدد الكلمات اللي عايزها بعلامة ✔ في عمود 🔊 (وفعّل "نطق عشوائي 🔀" لو عايزها تتكرر بترتيب مختلف كل مرة)، وبعدين دوس "ابدأ التسميع" — التطبيق هيقولك معنى كل كلمة بالعربي وينتظرك ترد بالإنجليزي: لو غلط هيقولك تحاول تاني وينتظرك تعيدها لحد ما تجاوب صح، ولو صح هيكتبها ويقولك "Good!" وينتقل للي بعدها. بعد ما يخلص كل الكلمات المحددة هيرجع يلف عليها تاني تلقائي لحد ما تدوس "⏹ إيقاف التسميع".</div>
 <div class="selection-count" id="selectionCount"></div>
+<div class="dictation-live" id="dictationLive" aria-live="polite">التسميع: اضغط «ابدأ التسميع» ثم قل الإجابة بالإنجليزية.</div>
 
 <div class="hint" id="hintText">اسحب من علامة (⠿) بجنب كل صف لترتيب الكلمات. دوس "تعديل الكلمات" عشان تعدّل أي كلمة، تحذف صف، أو تضيف صفوف جديدة لأي جدول. حدد الكلمات بعلامة ✔ في عمود 🔊 وبعدين دوس "انطق الكلمات المحددة" عشان الأبليكيشن ينطقها لك، أو دوس زرار 🔊 الصغير جنب أي كلمة عشان تسمعها فورًا. متنساش "حفظ التغييرات" عشان كل حاجة تفضل محفوظة.</div>
 
@@ -1108,6 +1115,7 @@ function stopDictationQuiz(){
   clearTimeout(dictationRetryTimer);
   if(dictationRecognizer){ try{ dictationRecognizer.stop(); }catch(e){} }
   window.speechSynthesis.cancel();
+  setDictationLive('تم إيقاف التسميع.', '⏹️');
   document.getElementById('scoreboard').textContent = "وقف التسميع.";
 }
 
@@ -1140,6 +1148,20 @@ function editDistance(a, b){
   return previous[b.length];
 }
 
+function soundKey(word){
+  const clean = normalizeSpeechText(word).replace(/[^a-z]/g, '');
+  if(clean.length < 4) return '';
+  const codes = {b:'1',f:'1',p:'1',v:'1',c:'2',g:'2',j:'2',k:'2',q:'2',s:'2',x:'2',z:'2',d:'3',t:'3',l:'4',m:'5',n:'5',r:'6'};
+  let key = clean[0].toUpperCase();
+  let previous = codes[clean[0]] || '';
+  for(let i = 1; i < clean.length && key.length < 4; i++){
+    const code = codes[clean[i]] || '';
+    if(code && code !== previous) key += code;
+    previous = code;
+  }
+  return (key + '000').slice(0, 4);
+}
+
 function wordsAreClose(spoken, expected){
   const a = normalizeSpeechText(spoken);
   const b = normalizeSpeechText(expected);
@@ -1149,7 +1171,10 @@ function wordsAreClose(spoken, expected){
   if(a.replace(/s$/, '') === b.replace(/s$/, '')) return true;
   const longest = Math.max(a.length, b.length);
   const allowed = longest >= 10 ? 2 : (longest >= 6 ? 1 : 0);
-  return editDistance(a, b) <= allowed;
+  if(editDistance(a, b) <= allowed) return true;
+  // A phonetic fallback helps when speech-to-text chooses a different spelling for the same pronunciation.
+  const aKey = soundKey(a), bKey = soundKey(b);
+  return !!aKey && aKey === bKey;
 }
 
 function acceptedAnswersFor(item){
@@ -1171,9 +1196,19 @@ function transcriptMatchesAnswer(transcript, item){
     if(heard === expected || heard.includes(' ' + expected + ' ') || heard.startsWith(expected + ' ') || heard.endsWith(' ' + expected)) return true;
     const heardWords = heard.split(' ');
     const expectedWords = expected.split(' ');
-    if(heardWords.length !== expectedWords.length) return false;
-    return heardWords.every((word, i) => wordsAreClose(word, expectedWords[i]));
+    if(heardWords.length < expectedWords.length) return false;
+    // Accept the answer even when the recognizer adds filler words before or after it.
+    return heardWords.some((_, start) =>
+      start + expectedWords.length <= heardWords.length &&
+      expectedWords.every((word, i) => wordsAreClose(heardWords[start + i], word))
+    );
   });
+}
+
+function setDictationLive(text, label){
+  const live = document.getElementById('dictationLive');
+  if(!live) return;
+  live.textContent = label ? `${label}: ${text || '...'}` : (text || '...');
 }
 
 function playFeedbackTone(type, done){
@@ -1204,20 +1239,36 @@ function playFeedbackTone(type, done){
   }catch(e){ setTimeout(done, 250); }
 }
 
+function playDictationFeedback(type, done){
+  playFeedbackTone(type, () => {});
+  const utter = new SpeechSynthesisUtterance(type === 'correct' ? 'Good' : 'Try again');
+  utter.lang = 'en-US';
+  utter.rate = 0.92;
+  utter.onend = done;
+  utter.onerror = done;
+  window.speechSynthesis.speak(utter);
+}
+
 function ensureDictationRecognizer(){
   if(dictationRecognizer) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   dictationRecognizer = new SR();
   dictationRecognizer.lang = 'en-US';
   dictationRecognizer.continuous = true;
-  dictationRecognizer.interimResults = false;
-  dictationRecognizer.maxAlternatives = 3;
-  dictationRecognizer.onstart = () => { dictationIsListening = true; };
+  dictationRecognizer.interimResults = true;
+  dictationRecognizer.maxAlternatives = 5;
+  dictationRecognizer.onstart = () => {
+    dictationIsListening = true;
+    setDictationLive('أنا أسمعك الآن، قل الإجابة بالإنجليزية.', '🎙️');
+  };
   dictationRecognizer.onresult = event => {
     if(!dictationActive || !dictationAwaitingAnswer || dictationHandlingAnswer) return;
     for(let i = event.resultIndex; i < event.results.length; i++){
-      if(event.results[i].isFinal){
-        handleDictationAnswer(event.results[i][0].transcript);
+      const result = event.results[i];
+      const alternatives = Array.from({length: result.length}, (_, index) => result[index].transcript).filter(Boolean);
+      setDictationLive(alternatives[0] || '', result.isFinal ? 'سمعت' : 'أسمع الآن');
+      if(result.isFinal){
+        handleDictationAnswer(alternatives[0] || '', alternatives);
         break;
       }
     }
@@ -1228,6 +1279,8 @@ function ensureDictationRecognizer(){
     if(e.error === 'not-allowed' || e.error === 'audio-capture'){
       document.getElementById('scoreboard').textContent = 'حصل خطأ في الميكروفون: ' + e.error;
       stopDictationQuiz();
+    }else if(e.error === 'no-speech'){
+      setDictationLive('لم أسمع كلامًا واضحًا، حاول مرة أخرى.', '🎙️');
     }
   };
   dictationRecognizer.onend = () => {
@@ -1266,6 +1319,7 @@ function runDictationStep(){
   const item = dictationQueue[dictationIndex];
   dictationHandlingAnswer = false;
   pauseDictationListening();
+  setDictationLive('استمع للمعنى، ثم قل الإجابة بالإنجليزية.', '🎧');
   document.getElementById('scoreboard').textContent = `🎧 كلمة ${dictationIndex + 1} من ${dictationQueue.length} — اسمع المعنى، ثم قل الإجابة بالإنجليزية`;
   const inp = findAnswerInput(item.row.id, item.col);
   if(inp){
@@ -1289,27 +1343,30 @@ function runDictationStep(){
   window.speechSynthesis.speak(utter);
 }
 
-function handleDictationAnswer(said){
+function handleDictationAnswer(said, alternatives = []){
   if(!dictationActive || !dictationAwaitingAnswer || dictationHandlingAnswer) return;
   const item = dictationQueue[dictationIndex];
   if(!item) return;
   dictationHandlingAnswer = true;
   const correctVal = item.row.values[item.col];
   const inp = findAnswerInput(item.row.id, item.col);
-  const isMatch = transcriptMatchesAnswer(said, item);
+  const heardOptions = [...new Set([said, ...alternatives].filter(Boolean))];
+  const isMatch = heardOptions.some(option => transcriptMatchesAnswer(option, item));
 
   if(isMatch){
     if(inp){ inp.value = correctVal; inp.classList.remove('wrong'); inp.classList.add('correct'); }
     pauseDictationListening();
     document.getElementById('scoreboard').textContent = `✅ صح: ${correctVal} — التالي الآن...`;
-    playFeedbackTone('correct', () => {
+    setDictationLive(said, '✅ إجابة صحيحة');
+    playDictationFeedback('correct', () => {
       if(dictationActive){ dictationIndex++; runDictationStep(); }
     });
   } else {
     if(inp){ inp.value = said; inp.classList.remove('correct'); inp.classList.add('wrong'); }
     pauseDictationListening();
     document.getElementById('scoreboard').textContent = `❌ سمعت: “${said}” — حاول نفس الكلمة مرة أخرى.`;
-    playFeedbackTone('wrong', () => {
+    setDictationLive(said, '❌ غير صحيحة');
+    playDictationFeedback('wrong', () => {
       const freshInp = findAnswerInput(item.row.id, item.col);
       if(freshInp){ freshInp.value = ''; freshInp.classList.remove('wrong'); }
       if(dictationActive){
