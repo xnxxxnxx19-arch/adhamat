@@ -164,6 +164,8 @@
   #btnSpeakSelected{background:var(--teal);}
   #btnStopSpeak{background:var(--red);}
   #btnClearSelection{background:#8a8370;}
+  #btnStartDictation{background:var(--orange);}
+  #btnStopDictation{background:var(--red);}
   .selection-count{ text-align:center; font-size:.82rem; color:var(--teal); font-weight:bold; margin-bottom:8px; min-height:1.1em; }
 
   .sentence-cell{ text-align:right; }
@@ -283,7 +285,10 @@
   <button id="btnSpeakSelected">🔊 انطق الكلمات المحددة</button>
   <button id="btnStopSpeak">⏹ إيقاف</button>
   <button id="btnClearSelection">مسح التحديد ✖</button>
+  <button id="btnStartDictation">🎧 ابدأ التسميع (اسمع وجاوب)</button>
+  <button id="btnStopDictation">⏹ إيقاف التسميع</button>
 </div>
+<div class="hint" style="margin-bottom:14px;">وضع التسميع: دوس "شيل كل الإنجليزي" أول حاجة، بعدين حدد الكلمات اللي عايزها بعلامة ✔ في عمود 🔊، وبعدين دوس "ابدأ التسميع" — التطبيق هيقولك معنى كل كلمة بالعربي وينتظرك ترد عليه بالإنجليزي من الميكروفون، ولو غلطت هيقولك تحاول تاني.</div>
 <div class="selection-count" id="selectionCount"></div>
 
 <div class="hint" id="hintText">اسحب من علامة (⠿) بجنب كل صف لترتيب الكلمات. دوس "تعديل الكلمات" عشان تعدّل أي كلمة، تحذف صف، أو تضيف صفوف جديدة لأي جدول. حدد الكلمات بعلامة ✔ في عمود 🔊 وبعدين دوس "انطق الكلمات المحددة" عشان الأبليكيشن ينطقها لك، أو دوس زرار 🔊 الصغير جنب أي كلمة عشان تسمعها فورًا. متنساش "حفظ التغييرات" عشان كل حاجة تفضل محفوظة.</div>
@@ -507,7 +512,7 @@ function findSection(id){ return sections.find(s => s.id === id); }
 
 /* ============ RENDER ============ */
 
-function renderCellHTML(text, kind, extras){
+function renderCellHTML(text, kind, extras, colIndex){
   if(kind === 'static'){ return `<td>${esc(text)}</td>`; }
   const id = cellId();
   answers[id] = { value: text, kind: kind, extras: extras || null };
@@ -517,7 +522,8 @@ function renderCellHTML(text, kind, extras){
     extraHtml = `<div class="extra-sentences-list">` +
       extras.map(s => `<div class="extra-sentence-view">${esc(s)}</div>`).join('') + `</div>`;
   }
-  return `<td data-cellwrap="${id}" class="${extras ? 'sentence-cell' : ''}"><span class="cellview ${cls}" data-id="${id}">${esc(text)}</span>${extraHtml}</td>`;
+  const colAttr = colIndex != null ? ` data-col="${colIndex}"` : '';
+  return `<td data-cellwrap="${id}"${colAttr} class="${extras ? 'sentence-cell' : ''}"><span class="cellview ${cls}" data-id="${id}">${esc(text)}</span>${extraHtml}</td>`;
 }
 
 function renderSentenceEditTD(section, rowObj, colIndex, kind){
@@ -564,9 +570,9 @@ function renderRowHTML(section, rowObj, position){
         cells += `<td><input class="edit-input ${clsExtra}" data-row="${rowObj.id}" data-col="${i}" value="${esc(val)}" autocomplete="off"></td>`;
       }
     } else if(isSentenceCol){
-      cells += renderCellHTML(val, kind, rowObj.extraSentences || []);
+      cells += renderCellHTML(val, kind, rowObj.extraSentences || [], i);
     } else {
-      cells += renderCellHTML(val, kind);
+      cells += renderCellHTML(val, kind, null, i);
     }
   });
   const commentVal = rowObj.comment || '';
@@ -1027,6 +1033,154 @@ function updateSelectionCount(){
   el.textContent = selectedRows.size > 0 ? `الكلمات المحددة للنطق: ${selectedRows.size}` : '';
 }
 
+/* ============ DICTATION QUIZ (app speaks the Arabic meaning, you answer in English by voice) ============ */
+
+let dictationActive = false;
+let dictationQueue = [];
+let dictationIndex = 0;
+let dictationRecognizer = null;
+
+function getQuizWordColumn(section){
+  const idx = (section.speakCols && section.speakCols[0] != null) ? section.speakCols[0] : null;
+  if(idx != null && section.kinds[idx] === 'en') return idx;
+  if(section.sentenceCol != null && section.kinds[section.sentenceCol] === 'en') return section.sentenceCol;
+  return null;
+}
+
+function findAnswerInput(rowId, col){
+  const td = document.querySelector(`tr[data-key="${rowId}"] td[data-col="${col}"]`);
+  return td ? td.querySelector('input.blank') : null;
+}
+
+function startDictationQuiz(){
+  if(!supportsSpeech() || !supportsRecognition()){
+    alert('التسميع محتاج خاصيتي النطق والتعرف على الصوت مع بعض، والمتصفح أو الجهاز ده مش بيدعمهم بالكامل.');
+    return;
+  }
+  if(!window.isSecureContext){
+    document.getElementById('scoreboard').textContent =
+      "❌ التسميع محتاج الصفحة تتفتح على رابط آمن (https) أو من سيرفر محلي عشان يستخدم الميكروفون.";
+    return;
+  }
+  if(mode !== 'noEn'){
+    document.getElementById('scoreboard').textContent = "دوس الأول 'شيل كل الإنجليزي' عشان تظهر الخانات الفاضية، وبعدها ابدأ التسميع.";
+    return;
+  }
+  if(selectedRows.size === 0){
+    document.getElementById('scoreboard').textContent = "حدد الكلمات اللي عايز تتسمّع فيها بعلامة ✔ في عمود 🔊 الأول.";
+    return;
+  }
+
+  dictationQueue = [];
+  sections.forEach(section => {
+    const arIdx = section.kinds.indexOf('ar');
+    const col = getQuizWordColumn(section);
+    if(arIdx === -1 || col == null) return;
+    const rows = getRowsInOrder(section);
+    rows.forEach(row => {
+      const key = section.id + '::' + row.id;
+      if(selectedRows.has(key)){
+        dictationQueue.push({ section: section, row: row, col: col, arIdx: arIdx });
+      }
+    });
+  });
+  if(isShuffleOn()) dictationQueue = shuffleArray(dictationQueue);
+
+  if(dictationQueue.length === 0){
+    document.getElementById('scoreboard').textContent = "مفيش كلمات مناسبة للتسميع في الكلمات المحددة.";
+    return;
+  }
+
+  dictationActive = true;
+  dictationIndex = 0;
+  runDictationStep();
+}
+
+function stopDictationQuiz(){
+  dictationActive = false;
+  if(dictationRecognizer){ try{ dictationRecognizer.stop(); }catch(e){} }
+  window.speechSynthesis.cancel();
+}
+
+function runDictationStep(){
+  if(!dictationActive) return;
+  if(dictationIndex >= dictationQueue.length){
+    dictationActive = false;
+    document.getElementById('scoreboard').textContent = "خلصت التسميع كله ✅ برافو عليك!";
+    const utter = new SpeechSynthesisUtterance('Well done, you finished!');
+    utter.lang = 'en-US';
+    window.speechSynthesis.speak(utter);
+    return;
+  }
+  const item = dictationQueue[dictationIndex];
+  document.getElementById('scoreboard').textContent = `🎧 كلمة ${dictationIndex + 1} من ${dictationQueue.length}...`;
+  const inp = findAnswerInput(item.row.id, item.col);
+  if(inp){ inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  const arabicText = item.row.values[item.arIdx] || '...';
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(arabicText);
+  utter.lang = 'ar-SA';
+  utter.rate = getSpeechRate();
+  utter.onend = () => { if(dictationActive) listenForDictationAnswer(item); };
+  utter.onerror = () => { if(dictationActive) listenForDictationAnswer(item); };
+  window.speechSynthesis.speak(utter);
+}
+
+function listenForDictationAnswer(item){
+  if(!dictationActive) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  dictationRecognizer = new SR();
+  dictationRecognizer.lang = 'en-US';
+  dictationRecognizer.continuous = false;
+  dictationRecognizer.interimResults = false;
+  dictationRecognizer.maxAlternatives = 1;
+
+  dictationRecognizer.onresult = (event) => {
+    const said = event.results[0][0].transcript;
+    checkDictationAnswer(item, said);
+  };
+  dictationRecognizer.onerror = (e) => {
+    if(!dictationActive) return;
+    if(e.error === 'no-speech' || e.error === 'aborted'){
+      setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 400);
+    } else {
+      document.getElementById('scoreboard').textContent = "حصل خطأ في الميكروفون: " + e.error;
+      stopDictationQuiz();
+    }
+  };
+  try{ dictationRecognizer.start(); }catch(err){}
+}
+
+function checkDictationAnswer(item, said){
+  const correctVal = item.row.values[item.col];
+  const userNorm = normalize(said, 'en');
+  const correctNorm = normalize(correctVal, 'en');
+  const inp = findAnswerInput(item.row.id, item.col);
+
+  if(userNorm === correctNorm){
+    if(inp){ inp.value = correctVal; inp.classList.remove('wrong'); inp.classList.add('correct'); inp.disabled = true; }
+    dictationIndex++;
+    const utter = new SpeechSynthesisUtterance('Correct!');
+    utter.lang = 'en-US';
+    utter.onend = () => { if(dictationActive) setTimeout(runDictationStep, 250); };
+    utter.onerror = () => { if(dictationActive) setTimeout(runDictationStep, 250); };
+    window.speechSynthesis.speak(utter);
+  } else {
+    if(inp){ inp.value = said; inp.classList.remove('correct'); inp.classList.add('wrong'); }
+    const utter = new SpeechSynthesisUtterance('Try again');
+    utter.lang = 'en-US';
+    utter.onend = () => {
+      setTimeout(() => {
+        const freshInp = findAnswerInput(item.row.id, item.col);
+        if(freshInp){ freshInp.value = ''; freshInp.classList.remove('wrong'); }
+        if(dictationActive) listenForDictationAnswer(item);
+      }, 300);
+    };
+    utter.onerror = () => { if(dictationActive) listenForDictationAnswer(item); };
+    window.speechSynthesis.speak(utter);
+  }
+}
+
 /* ============ READ-ALONG (speech recognition tracks the user's own reading) ============ */
 
 let readWords = [];       // [{raw, norm}]
@@ -1069,9 +1223,8 @@ function updateReadCurrentHighlight(){
   }
 }
 
-function processReadTranscript(transcript){
-  const spokenWords = transcript.trim().split(/\s+/).map(normalizeSpokenWord).filter(Boolean);
-  spokenWords.forEach(spoken => {
+function processReadWords(newWords){
+  newWords.forEach(spoken => {
     if(readIndex >= readWords.length) return;
     const expected = readWords[readIndex].norm;
     const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
@@ -1089,6 +1242,9 @@ function processReadTranscript(transcript){
   }
 }
 
+let readLastResultIndex = -1;
+let readLastWordCount = 0;
+
 function startReadAlong(){
   if(!supportsRecognition()){
     alert('المتصفح أو الجهاز ده مش بيدعم خاصية التعرف على الصوت (Speech Recognition). جرب Chrome على الكمبيوتر أو الأندرويد.');
@@ -1104,17 +1260,31 @@ function startReadAlong(){
     document.getElementById('readStatus').textContent = "اكتب نص الأول قبل ما تبدأ.";
     return;
   }
+  readLastResultIndex = -1;
+  readLastWordCount = 0;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   readRecognizer = new SR();
   readRecognizer.lang = 'en-US';
   readRecognizer.continuous = true;
-  readRecognizer.interimResults = false;
+  readRecognizer.interimResults = true;
   readRecognizer.maxAlternatives = 1;
 
   readRecognizer.onresult = (event) => {
     for(let i = event.resultIndex; i < event.results.length; i++){
       const result = event.results[i];
-      if(result.isFinal) processReadTranscript(result[0].transcript);
+      const transcript = result[0].transcript;
+      const words = transcript.trim().split(/\s+/).map(normalizeSpokenWord).filter(Boolean);
+      const startFrom = (i === readLastResultIndex) ? readLastWordCount : 0;
+      if(words.length > startFrom){
+        processReadWords(words.slice(startFrom));
+      }
+      if(result.isFinal){
+        readLastResultIndex = -1;
+        readLastWordCount = 0;
+      } else {
+        readLastResultIndex = i;
+        readLastWordCount = words.length;
+      }
     }
   };
   readRecognizer.onerror = (e) => {
@@ -1244,6 +1414,8 @@ document.getElementById('btnSaveOrder').addEventListener('click', saveEverything
 document.getElementById('btnSpeakSelected').addEventListener('click', speakSelected);
 document.getElementById('btnStopSpeak').addEventListener('click', stopSpeaking);
 document.getElementById('btnClearSelection').addEventListener('click', clearSelection);
+document.getElementById('btnStartDictation').addEventListener('click', startDictationQuiz);
+document.getElementById('btnStopDictation').addEventListener('click', stopDictationQuiz);
 
 document.getElementById('btnStartReadAlong').addEventListener('click', startReadAlong);
 document.getElementById('btnStopReadAlong').addEventListener('click', stopReadAlong);
