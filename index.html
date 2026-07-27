@@ -288,7 +288,7 @@
   <button id="btnStartDictation">🎧 ابدأ التسميع (اسمع وجاوب)</button>
   <button id="btnStopDictation">⏹ إيقاف التسميع</button>
 </div>
-<div class="hint" style="margin-bottom:14px;">وضع التسميع: دوس "شيل كل الإنجليزي" أول حاجة، بعدين حدد الكلمات اللي عايزها بعلامة ✔ في عمود 🔊، وبعدين دوس "ابدأ التسميع" — التطبيق هيقولك معنى كل كلمة بالعربي وينتظرك ترد عليه بالإنجليزي من الميكروفون، ولو غلطت هيقولك تحاول تاني.</div>
+<div class="hint" style="margin-bottom:14px;">وضع التسميع: دوس "شيل كل الإنجليزي" أول حاجة، بعدين حدد الكلمات اللي عايزها بعلامة ✔ في عمود 🔊 (وفعّل "نطق عشوائي 🔀" لو عايزها تتكرر بترتيب مختلف كل مرة)، وبعدين دوس "ابدأ التسميع" — التطبيق هيقولك معنى كل كلمة بالعربي وينتظرك ترد بالإنجليزي: لو صح يكتبها وينتقل للكلمة اللي بعدها، ولو غلط يقولك "Wrong" ويكمل برضو. التسميع هيفضل يلف على نفس الكلمات المحددة تكرارًا لحد ما تدوس "⏹ إيقاف التسميع".</div>
 <div class="selection-count" id="selectionCount"></div>
 
 <div class="hint" id="hintText">اسحب من علامة (⠿) بجنب كل صف لترتيب الكلمات. دوس "تعديل الكلمات" عشان تعدّل أي كلمة، تحذف صف، أو تضيف صفوف جديدة لأي جدول. حدد الكلمات بعلامة ✔ في عمود 🔊 وبعدين دوس "انطق الكلمات المحددة" عشان الأبليكيشن ينطقها لك، أو دوس زرار 🔊 الصغير جنب أي كلمة عشان تسمعها فورًا. متنساش "حفظ التغييرات" عشان كل حاجة تفضل محفوظة.</div>
@@ -1100,22 +1100,25 @@ function stopDictationQuiz(){
   dictationActive = false;
   if(dictationRecognizer){ try{ dictationRecognizer.stop(); }catch(e){} }
   window.speechSynthesis.cancel();
+  document.getElementById('scoreboard').textContent = "وقف التسميع.";
 }
 
 function runDictationStep(){
   if(!dictationActive) return;
   if(dictationIndex >= dictationQueue.length){
-    dictationActive = false;
-    document.getElementById('scoreboard').textContent = "خلصت التسميع كله ✅ برافو عليك!";
-    const utter = new SpeechSynthesisUtterance('Well done, you finished!');
-    utter.lang = 'en-US';
-    window.speechSynthesis.speak(utter);
-    return;
+    // finished one full pass — loop again (shuffled if the shuffle option is on) until the user presses stop
+    dictationIndex = 0;
+    if(isShuffleOn()) dictationQueue = shuffleArray(dictationQueue);
   }
   const item = dictationQueue[dictationIndex];
-  document.getElementById('scoreboard').textContent = `🎧 كلمة ${dictationIndex + 1} من ${dictationQueue.length}...`;
+  document.getElementById('scoreboard').textContent = `🎧 كلمة ${dictationIndex + 1} من ${dictationQueue.length} (بيعيد لحد ما توقفه) — دوس ⏹ عشان توقف`;
   const inp = findAnswerInput(item.row.id, item.col);
-  if(inp){ inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  if(inp){
+    inp.value = '';
+    inp.disabled = false;
+    inp.classList.remove('correct', 'wrong');
+    inp.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
   const arabicText = item.row.values[item.arIdx] || '...';
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(arabicText);
@@ -1158,7 +1161,7 @@ function checkDictationAnswer(item, said){
   const inp = findAnswerInput(item.row.id, item.col);
 
   if(userNorm === correctNorm){
-    if(inp){ inp.value = correctVal; inp.classList.remove('wrong'); inp.classList.add('correct'); inp.disabled = true; }
+    if(inp){ inp.value = correctVal; inp.classList.remove('wrong'); inp.classList.add('correct'); }
     dictationIndex++;
     const utter = new SpeechSynthesisUtterance('Correct!');
     utter.lang = 'en-US';
@@ -1167,16 +1170,11 @@ function checkDictationAnswer(item, said){
     window.speechSynthesis.speak(utter);
   } else {
     if(inp){ inp.value = said; inp.classList.remove('correct'); inp.classList.add('wrong'); }
-    const utter = new SpeechSynthesisUtterance('Try again');
+    dictationIndex++;
+    const utter = new SpeechSynthesisUtterance('Wrong!');
     utter.lang = 'en-US';
-    utter.onend = () => {
-      setTimeout(() => {
-        const freshInp = findAnswerInput(item.row.id, item.col);
-        if(freshInp){ freshInp.value = ''; freshInp.classList.remove('wrong'); }
-        if(dictationActive) listenForDictationAnswer(item);
-      }, 300);
-    };
-    utter.onerror = () => { if(dictationActive) listenForDictationAnswer(item); };
+    utter.onend = () => { if(dictationActive) setTimeout(runDictationStep, 250); };
+    utter.onerror = () => { if(dictationActive) setTimeout(runDictationStep, 250); };
     window.speechSynthesis.speak(utter);
   }
 }
@@ -1224,16 +1222,28 @@ function updateReadCurrentHighlight(){
 }
 
 function processReadWords(newWords){
+  const LOOKAHEAD = 6;
   newWords.forEach(spoken => {
     if(readIndex >= readWords.length) return;
-    const expected = readWords[readIndex].norm;
-    const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
-    if(spoken === expected){
-      if(span){ span.classList.remove('word-error', 'word-current'); span.classList.add('word-correct'); }
-      readIndex++;
-      updateReadCurrentHighlight();
-    } else {
+    let foundOffset = -1;
+    const windowEnd = Math.min(readWords.length, readIndex + LOOKAHEAD);
+    for(let k = readIndex; k < windowEnd; k++){
+      if(readWords[k].norm === spoken){ foundOffset = k; break; }
+    }
+    if(foundOffset === -1){
+      // no nearby match: treat as a wrong attempt on the current expected word, don't advance
+      const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
       if(span){ span.classList.add('word-error'); span.classList.remove('word-current', 'word-correct'); }
+    } else {
+      // mark any skipped words in between as error, mark the matched word correct, jump past it
+      for(let k = readIndex; k < foundOffset; k++){
+        const skipSpan = document.querySelector(`.read-word[data-idx="${k}"]`);
+        if(skipSpan){ skipSpan.classList.add('word-error'); skipSpan.classList.remove('word-current', 'word-correct'); }
+      }
+      const matchSpan = document.querySelector(`.read-word[data-idx="${foundOffset}"]`);
+      if(matchSpan){ matchSpan.classList.remove('word-error', 'word-current'); matchSpan.classList.add('word-correct'); }
+      readIndex = foundOffset + 1;
+      updateReadCurrentHighlight();
     }
   });
   if(readIndex >= readWords.length){
