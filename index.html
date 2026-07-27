@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>English Grammar Basics — تمرين تفاعلي</title>
+<style>
+  :root{
+    --ink:#1c2430;
+    --paper:#f2f0e6;
+    --green:#1f6f4e;
+    --green-d:#144c35;
+    --blue:#1e4d8c;
+    --purple:#5b3a8a;
+    --magenta:#a5205f;
+    --orange:#c9660a;
+    --teal:#12666e;
+    --red:#b3212f;
+    --ok:#1f8a4c;
+    --bad:#c73535;
+    --gold:#caa23d;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    background-image:
+      linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.02) 1px, transparent 1px);
+    background-size:24px 24px;
+    color:var(--ink);
+    font-family:"Tahoma","Segoe UI",Arial,sans-serif;
+    padding:18px;
+  }
+  .en{font-family:"Georgia","Times New Roman",serif;direction:ltr;unicode-bidi:embed;}
+
+  header.top{ text-align:center; margin-bottom:18px; }
+  header.top h1{
+    font-size:2.1rem; letter-spacing:1px; margin:0;
+    color:var(--green-d); font-family:"Georgia",serif; text-transform:uppercase;
+  }
+  header.top p{ margin:4px 0 0; color:var(--orange); font-weight:bold; letter-spacing:2px; }
+
+  .controlbar{
+    display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
+    margin:16px auto 8px; max-width:1150px;
+  }
+  .controlbar button{
+    border:none; border-radius:8px; padding:11px 18px; font-size:.95rem;
+    font-weight:bold; cursor:pointer; color:#fff; box-shadow:0 2px 0 rgba(0,0,0,.2);
+    transition:transform .08s ease, filter .15s ease;
+  }
+  .controlbar button:hover{filter:brightness(1.08);}
+  .controlbar button:active{transform:translateY(2px);box-shadow:none;}
+  #btnNoEn{background:var(--blue);}
+  #btnNoAr{background:var(--magenta);}
+  #btnCompare{background:var(--green);}
+  #btnEditToggle{background:var(--purple);}
+  #btnSaveOrder{background:var(--gold); color:#2a1e00;}
+  #btnReset{background:var(--red);}
+  #btnEditToggle.active{background:var(--teal);}
+
+  .hint{
+    text-align:center; max-width:860px; margin:0 auto 14px; font-size:.85rem;
+    color:#6b6450;
+  }
+
+  .scoreboard{
+    text-align:center; max-width:1100px; margin:0 auto 18px;
+    font-weight:bold; color:var(--green-d); min-height:1.2em;
+  }
+
+  .grid{ max-width:1400px; margin:0 auto; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
+
+  .card{
+    background:#fff; border-radius:10px; overflow:hidden;
+    box-shadow:0 2px 6px rgba(0,0,0,.12); border:1px solid rgba(0,0,0,.06);
+  }
+  .card .head{ padding:9px 14px; color:#fff; font-weight:bold; font-size:1.05rem; }
+  .card table{ width:100%; border-collapse:collapse; font-size:.85rem; table-layout:fixed; }
+  .card th, .card td{
+    padding:6px 6px; border-bottom:1px solid #eee; text-align:center;
+    vertical-align:middle; word-break:break-word;
+  }
+  .card th{ background:rgba(0,0,0,.04); font-size:.78rem; }
+  .card tbody tr:nth-child(even){ background:rgba(0,0,0,.015); }
+  .num{ color:#999; font-size:.75rem; width:22px; }
+  .handle-col{ width:44px; }
+
+  .card.green .head{background:var(--green);}
+  .card.blue .head{background:var(--blue);}
+  .card.purple .head{background:var(--purple);}
+  .card.magenta .head{background:var(--magenta);}
+  .card.orange .head{background:var(--orange);}
+  .card.teal .head{background:var(--teal);}
+
+  .subhead{ background:rgba(0,0,0,.06); font-weight:bold; text-align:right; padding:5px 10px; font-size:.8rem; }
+
+  input.blank{
+    width:100%; min-width:50px; border:1.5px solid #c9c2a8; border-radius:5px;
+    padding:4px 5px; font-size:.85rem; background:#fffdf5; text-align:center;
+  }
+  input.blank.en{font-family:"Georgia",serif;direction:ltr;}
+  input.blank.ar{direction:rtl;}
+  input.blank:focus{outline:2px solid var(--gold);}
+  input.blank.correct{background:#e6f6ea;border-color:var(--ok);color:var(--green-d);}
+  input.blank.wrong{background:#fdeaea;border-color:var(--bad);animation:shake .25s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);}
+    25%{transform:translateX(-4px);}
+    75%{transform:translateX(4px);}
+  }
+
+  input.edit-input{
+    width:100%; min-width:50px; border:1.5px dashed #9a927a; border-radius:5px;
+    padding:4px 5px; font-size:.85rem; background:#fbfaf3; text-align:center;
+  }
+  input.edit-input.en{ font-family:"Georgia",serif; direction:ltr; }
+  input.edit-input.ar{ direction:rtl; }
+  input.edit-input:focus{ outline:2px solid var(--purple); background:#fff; }
+
+  .drag-handle{
+    display:inline-flex; align-items:center; justify-content:center;
+    cursor:grab; font-size:1rem; color:#9a927a; touch-action:none;
+    user-select:none; -webkit-user-select:none; padding:2px;
+  }
+  .drag-handle:active{ cursor:grabbing; }
+  .handle-col{ display:table-cell; }
+  .handle-col-inner{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .del-btn{
+    border:none; background:#f4d6d6; color:var(--bad); border-radius:50%;
+    width:18px; height:18px; line-height:16px; font-size:.7rem; cursor:pointer; padding:0;
+  }
+  .del-btn:hover{ background:var(--bad); color:#fff; }
+
+  tr.dragging{ opacity:.35; background:#fff7d8 !important; }
+
+  .comment-th{ width:90px; }
+  input.comment-input{
+    width:100%; min-width:60px; border:1.5px dotted #9db3c9; border-radius:5px;
+    padding:4px 5px; font-size:.78rem; background:#f4f9ff; text-align:center; color:#3a4a5a;
+  }
+  input.comment-input::placeholder{ color:#a9b8c7; font-style:italic; }
+  input.comment-input:focus{ outline:2px solid var(--blue); background:#fff; }
+  input.comment-input.has-text{ background:#eaf3ff; border-color:var(--blue); }
+
+  .speak-th{ width:46px; }
+  .speak-col{ display:flex; flex-direction:column; align-items:center; gap:3px; padding:4px 2px; }
+  .speak-check{ width:15px; height:15px; cursor:pointer; accent-color:var(--teal); }
+  .speak-row-btn{
+    border:none; background:#e4f2f1; color:var(--teal); border-radius:50%;
+    width:22px; height:22px; font-size:.75rem; cursor:pointer; padding:0; line-height:1;
+  }
+  .speak-row-btn:hover{ background:var(--teal); color:#fff; }
+
+  .speechbar{
+    background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:10px;
+    padding:10px 14px; max-width:1150px; margin:0 auto 10px; align-items:center;
+  }
+  .speechbar select{
+    border:1.5px solid #c9c2a8; border-radius:6px; padding:6px 8px; font-size:.85rem; background:#fffdf5;
+  }
+  #btnSpeakSelected{background:var(--teal);}
+  #btnStopSpeak{background:var(--red);}
+  #btnClearSelection{background:#8a8370;}
+  .selection-count{ text-align:center; font-size:.82rem; color:var(--teal); font-weight:bold; margin-bottom:8px; min-height:1.1em; }
+
+  .sentence-cell{ text-align:right; }
+  .extra-sentences-list{ margin-top:4px; border-top:1px dashed #ddd6c0; padding-top:3px; }
+  .extra-sentence-view{
+    font-size:.78rem; color:#5c6a78; text-align:left; direction:ltr; font-family:"Georgia",serif;
+    padding:1px 0;
+  }
+  .extra-sentence-row{ display:flex; gap:4px; align-items:center; margin-top:4px; }
+  .extra-sentence-row .edit-input{ flex:1; }
+  .del-extra-btn{
+    border:none; background:#f4d6d6; color:var(--bad); border-radius:50%;
+    width:18px; height:18px; line-height:16px; font-size:.68rem; cursor:pointer; padding:0; flex-shrink:0;
+  }
+  .del-extra-btn:hover{ background:var(--bad); color:#fff; }
+  .add-sentence-btn{
+    display:block; width:100%; margin-top:5px; border:1.3px dashed var(--teal); background:#eafaf8;
+    color:var(--teal); border-radius:6px; padding:3px; font-size:.72rem; font-weight:bold; cursor:pointer;
+  }
+  .add-sentence-btn:hover{ background:var(--teal); color:#fff; }
+
+  .speechbar{ flex-wrap:wrap; }
+  .speechbar label{ font-size:.85rem; display:flex; align-items:center; gap:5px; }
+  .speechbar input[type="checkbox"]{ width:15px; height:15px; accent-color:var(--teal); }
+  .speechbar select{ max-width:170px; }
+
+  .longread-card{
+    max-width:1400px; margin:22px auto 0; background:#fff; border-radius:10px;
+    box-shadow:0 2px 6px rgba(0,0,0,.12); border:1px solid rgba(0,0,0,.06); overflow:hidden;
+  }
+  .longread-card .head{ background:var(--purple); color:#fff; padding:10px 16px; font-weight:bold; font-size:1.1rem; }
+  .longread-body{ padding:16px; }
+  .longread-body p.desc{ margin:0 0 10px; font-size:.85rem; color:#6b6450; }
+  textarea#longTextInput{
+    width:100%; min-height:110px; border:1.5px solid #c9c2a8; border-radius:8px;
+    padding:10px; font-size:.95rem; font-family:"Georgia",serif; direction:ltr; text-align:left;
+    resize:vertical; background:#fffdf5;
+  }
+  .longread-controls{ display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; align-items:center; }
+  .longread-controls button{
+    border:none; border-radius:8px; padding:10px 16px; font-size:.9rem; font-weight:bold;
+    cursor:pointer; color:#fff; box-shadow:0 2px 0 rgba(0,0,0,.2);
+  }
+  #btnStartReadAlong{ background:var(--green); }
+  #btnStopReadAlong{ background:var(--red); }
+  #btnResetReadAlong{ background:#8a8370; }
+  #readStatus{ font-size:.85rem; font-weight:bold; color:var(--purple); min-height:1.2em; margin:4px 0 10px; }
+  #readDisplay{
+    border:1.5px dashed #d8d2ba; border-radius:8px; padding:14px; min-height:60px;
+    font-family:"Georgia",serif; direction:ltr; text-align:left; line-height:2.1; font-size:1.05rem;
+    background:#fbfaf3;
+  }
+  .read-word{ padding:1px 4px; border-radius:5px; margin:0 1px; display:inline-block; transition:background .15s, color .15s; }
+  .word-current{ background:#fff3b0; outline:1.5px solid var(--gold); }
+  .word-correct{ background:#c8f0d0; color:#1a5c33; }
+  .word-error{ background:#ffcccb; color:#8a1f1f; font-weight:bold; outline:1.5px solid var(--bad); }
+  .read-hint{ color:#a9a390; font-style:italic; }
+
+  .add-row-tr td{ padding:8px; }
+  .add-row-btn{
+    width:100%; border:1.5px dashed var(--purple); background:#faf6ff; color:var(--purple);
+    border-radius:6px; padding:7px; font-weight:bold; cursor:pointer; font-size:.82rem;
+  }
+  .add-row-btn:hover{ background:var(--purple); color:#fff; }
+
+  .tips{
+    max-width:1400px; margin:20px auto 0; background:var(--red); color:#fff;
+    border-radius:10px; padding:14px 18px; text-align:center; font-weight:bold; letter-spacing:.5px;
+  }
+  footer{ text-align:center; color:#8a8370; font-size:.8rem; margin:22px 0 4px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1 class="en">English Grammar Basics</h1>
+  <p>PREPOSITIONS • TENSES • ESSENTIAL RULES — تمرين تفاعلي</p>
+</header>
+
+<div class="controlbar">
+  <button id="btnNoEn">شيل كل الإنجليزي ✏️</button>
+  <button id="btnNoAr">شيل كل العربي ✏️</button>
+  <button id="btnCompare">قارن ✅</button>
+  <button id="btnEditToggle">تعديل الكلمات 🛠️</button>
+  <button id="btnSaveOrder">حفظ التغييرات 💾</button>
+  <button id="btnReset">ريسِت 🔄</button>
+</div>
+
+<div class="controlbar speechbar">
+  <label>سرعة النطق:
+    <select id="speechRate">
+      <option value="0.7">بطيء 🐢</option>
+      <option value="1" selected>عادي</option>
+      <option value="1.3">سريع 🐇</option>
+    </select>
+  </label>
+  <label>الفاصل بين الكلمات:
+    <select id="speechGap">
+      <option value="100">سريع جدًا ⚡</option>
+      <option value="300">سريع</option>
+      <option value="600" selected>عادي</option>
+      <option value="1100">بطيء</option>
+      <option value="1800">بطيء جدًا 🐌</option>
+    </select>
+  </label>
+  <label>صوت القارئ:
+    <select id="speechVoice"><option value="">افتراضي</option></select>
+  </label>
+  <label>ينطق:
+    <select id="speechContent">
+      <option value="both" selected>الكلمة + الجملة</option>
+      <option value="word">الكلمة فقط</option>
+      <option value="sentence">الجمل فقط</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="speechShuffle"> نطق عشوائي 🔀</label>
+  <button id="btnSpeakSelected">🔊 انطق الكلمات المحددة</button>
+  <button id="btnStopSpeak">⏹ إيقاف</button>
+  <button id="btnClearSelection">مسح التحديد ✖</button>
+</div>
+<div class="selection-count" id="selectionCount"></div>
+
+<div class="hint" id="hintText">اسحب من علامة (⠿) بجنب كل صف لترتيب الكلمات. دوس "تعديل الكلمات" عشان تعدّل أي كلمة، تحذف صف، أو تضيف صفوف جديدة لأي جدول. حدد الكلمات بعلامة ✔ في عمود 🔊 وبعدين دوس "انطق الكلمات المحددة" عشان الأبليكيشن ينطقها لك، أو دوس زرار 🔊 الصغير جنب أي كلمة عشان تسمعها فورًا. متنساش "حفظ التغييرات" عشان كل حاجة تفضل محفوظة.</div>
+
+<div class="scoreboard" id="scoreboard"></div>
+
+<div class="grid" id="app"></div>
+
+<div class="tips">★ PRACTICE MAKES PERFECT ★ CONSISTENCY IS THE KEY ★ KEEP LEARNING EVERY DAY! ★</div>
+
+<div class="longread-card">
+  <div class="head">📖 قسم القراءة الطويلة — اقرأ بصوت عالي وتابع تقدمك</div>
+  <div class="longread-body">
+    <p class="desc">حط أي جمل أو فقرة طويلة إنجليزي في الخانة دي، بعدين دوس "ابدأ القراءة" وابدأ تقرأ بصوت عالي. الأبليكيشن هيتابع كل كلمة بتقولها: صح = تلوّن خضرا وينتقل للي بعدها، غلط = تتلوّن حمرا وتفضل ثابتة لحد ما تعيد قولها صح.</p>
+    <p class="desc" style="color:#a5205f;">⚠️ خاصية الميكروفون محتاجة الصفحة تكون متفتحة على رابط آمن (https) أو من سيرفر محلي — فتح الملف مباشرة كملف (file://) أو معاينته جوه بعض التطبيقات بيمنع إذن الميكروفون تلقائيًا مهما ضغطت "سماح". لو ظهرلك "not-allowed"، جرب تفتح الملف من Chrome على الكمبيوتر أو الموبايل مباشرة (مش داخل معاينة)، وتأكد إنك مديت إذن الميكروفون للمتصفح نفسه من إعدادات الجهاز.</p>
+    <textarea id="longTextInput" placeholder="Paste or type a long paragraph or sentences here..."></textarea>
+    <div class="longread-controls">
+      <button type="button" id="btnStartReadAlong">🎤 ابدأ القراءة والمتابعة</button>
+      <button type="button" id="btnStopReadAlong">⏹ وقف الاستماع</button>
+      <button type="button" id="btnResetReadAlong">🔄 إعادة تعيين التتبع</button>
+    </div>
+    <div id="readStatus"></div>
+    <div id="readDisplay"><span class="read-hint">اكتب أو الصق نص طويل فوق، وبعدين دوس "ابدأ القراءة والمتابعة".</span></div>
+  </div>
+</div>
+
+<footer>اكتب في الخانات الفاضية، وبعدين دوس "قارن" لتشوف إجابتك صح ولا لأ.</footer>
+
+<script>
+/* ============ DEFAULT DATA ============ */
+
+const prepositions = [
+[1,"in","في","in the room"],[2,"inside","في الداخل","inside the box"],
+[3,"within","في حدود","within a week"],[4,"on","على","on the table"],
+[5,"onto","على (اتجاه)","onto the bus"],[6,"at","في (مكان محدد)","at the door"],
+[7,"to","إلى","to school"],[8,"toward(s)","نحو","toward the goal"],
+[9,"from","من","from Cairo"],[10,"into","إلى الداخل","into the water"],
+[11,"out of","خارج","out of the box"],[12,"off","بعيد عن","off the road"],
+[13,"over","فوق","over the bridge"],[14,"above","أعلى (فوق)","above the clouds"],
+[15,"under","تحت","under the table"],[16,"below","أسفل","below zero"],
+[17,"beneath","أسفل (سفلى)","beneath the sea"],[18,"between","بين (اثنين)","between you and me"],
+[19,"among","بين (وسط كثيرين)","among friends"],[20,"amidst","بدلالة وسط","amidst the crowd"],
+[21,"behind","خلف","behind the car"],[22,"in front of","أمام","in front of the house"],
+[23,"before","قبل","before the meal"],[24,"after","بعد","after the class"],
+[25,"next to","بجانب","next to the window"],[26,"beside","بجانب","beside the lake"],
+[27,"near","قريب من","near my home"],[28,"far from","بعيد عن","far from here"],
+[29,"around","حول","around the world"],[30,"round","حول (دائرة)","round the corner"],
+[31,"through","خلال","through the tunnel"],[32,"across","عبر (الجهة)","across the street"],
+[33,"along","على طول","along the road"],[34,"past","مجاز / بعد","walk past the shop"],
+[35,"across from","مقابل","across from the park"],[36,"opposite","مقابل","opposite the bank"],
+[37,"by","عند / بـ","by the river"],[38,"via","(الوسيطة)","via London"],
+[39,"with","مع","with my friend"],[40,"without","بدون","without sugar"],
+[41,"for","لأجل","for your help"],[42,"of","من / لـ","a cup of tea"],
+[43,"about","عن","about the book"],[44,"like","مثل","like my father"],
+[45,"unlike","على عكس","unlike others"],[46,"except","باستثناء","all except me"],
+[47,"except for","باستثناء","all except for me"],[48,"including","بما في ذلك","including you"],
+[49,"despite","على الرغم من","despite the rain"],[50,"in spite of","على الرغم من","in spite of the trip"],
+[51,"during","خلال","during the trip"],[52,"since","منذ","since 2010"],
+[53,"until / till","حتى","until tomorrow"],[54,"throughout","في جميع أنحاء","throughout the day"],
+[55,"per","لكل","2$ per kg"],[56,"according to","وفقًا لـ","according to the rule"],
+[57,"against","ضد","against the law"],[58,"beyond","بعد ذلك","beyond belief"],
+[59,"besides","بالإضافة إلى","besides English"],[60,"concerning","بخصوص","concerning you"],
+];
+
+const tensesPresent = [
+[1,"Present Simple","S + V1(s/es)","حقائق - عادات - حدث عام","I study every day."],
+[2,"Present Continuous","S + am/is/are + V-ing","أحداث تحدث الآن","I am studying now."],
+[3,"Present Perfect","S + have/has + V3","حدث له علاقة بالماضي والحاضر","I have finished my work."],
+[4,"Present Perfect Continuous","S + have/has been + V-ing","حدث بدأ في الماضي وما زال مستمرًا","I have been working for 2 hours."],
+];
+const tensesPast = [
+[5,"Past Simple","S + V2","حدث مكتمل في الماضي","I visited Cairo yesterday."],
+[6,"Past Continuous","S + was/were + V-ing","حدث كان مستمرًا في الماضي حدث آخر","I was watching TV at 8 pm."],
+[7,"Past Perfect","S + had + V3","حدث سابق لحدث آخر في الماضي","I had finished before he came."],
+[8,"Past Perfect Continuous","S + had been + V-ing","حدث بدأ في الماضي واستمر حتى وقت آخر في الماضي","I had been working for 3 hours."],
+];
+const tensesFuture = [
+[9,"Future Simple","S + will + V1","حدث مستقبلي - قرار لحظي","I will call you later."],
+[10,"Future Continuous","S + will be + V-ing","حدث مستمر في المستقبل","I will be studying at 8 pm."],
+[11,"Future Perfect","S + will have + V3","حدث سينتهي قبل وقت محدد في المستقبل","I will have finished by 5 pm."],
+[12,"Future Perfect Continuous","S + will have been + V-ing","حدث مستمر سينتهي في وقت محدد بالمستقبل","I will have been working for 4 hours."],
+];
+const tensesPassive = [
+[13,"Simple Present Passive","S + am/is/are + V3","تركيز على الفعل وليس الفاعل","The book is read by Ali."],
+[14,"Simple Past Passive","S + was/were + V3","حدث في الماضي (مجهول)","The door was closed."],
+[15,"Present Perfect Passive","S + have/has been + V3","حدث له علاقة بالحاضر (مجهول)","The work has been done."],
+[16,"Future Simple Passive","S + will be + V3","حدث في المستقبل (مجهول)","The meeting will be held."],
+];
+
+const commonRules = [
+["Subject - Verb Agreement","يجب أن يتوافق الفعل مع الفاعل","The works. They work."],
+["Add -s / -es","يضاف للفعل مع he / she / it في الحاضر","He/She/It goes. She watches."],
+["Do / Does / Did","تستخدم في السؤال والنفي","Do you like? Does he play? Did they go?"],
+["Regular Verbs","تصريفات عادية للفعل","play → played, watch → watched"],
+["Irregular Verbs","أفعال شاذة لها تصريف خاص","go → went, eat → ate"],
+["Adjectives Order","الترتيب: رأي-حجم-عمر-لون-أصل-مادة-غرض-اسم","Beautiful big old red Italian leather shoes."],
+["Countable / Uncountable","الأسماء المعدودة وغير المعدودة","many books / much water / a lot of money"],
+["Much / Many / A lot of","تستخدم مع الكمية","much water, many books, a lot of money"],
+["Some / Any","إثبات (some) - نفي وسؤال (any)","some milk, any milk?"],
+];
+
+const auxiliaries = [
+["Be (am/is/are/was/were)","تستخدم في المستمر والصيغة السلبية","I am happy. She is here. They were late."],
+["Have (has/have/had)","للأزمنة التامة والصيغة السلبية","I have a car. He has done it. They had finished."],
+["Do (do/does/did)","في الأسئلة والنفي والتوكيد","Do you like it? She does study. They did not come."],
+["Will","للمستقبل والوعود","I will go. He will help you."],
+["Can","للقدرة والإذن","I can swim. You can go."],
+["May","للإذن أو الاحتمال","May I come in? It may rain."],
+["Must","للضرورة أو التوكيد","You must study. He must go."],
+];
+
+const questionWords = [
+["What","ماذا","What is your name?"],["Where","أين","Where do you live?"],
+["When","متى","When is your birthday?"],["Who","من","Who is he?"],
+["Whom","لمن (مفعول به)","Whom did you see?"],["Why","لماذا","Why are you sad?"],
+["How","كيف","How are you?"],["How old","كم عمرك","How old are you?"],
+["How many","كم عدد (معدود)","How many books?"],["How much","كم مقدار (غير معدود)","How much water?"],
+["Which","أي (للاختيار)","Which book?"],
+];
+
+const pronouns = [
+["Personal","I, you, he, she, it, we, they"],
+["Object","me, you, him, her, it, us, them"],
+["Possessive Adjectives","my, your, his, her, its, our, their"],
+["Possessive Pronouns","mine, yours, his, hers, its, ours, theirs"],
+["Reflexive","myself, yourself, himself, herself, itself, ourselves, yourselves, themselves"],
+["Relative","who, whom, whose, which, that"],
+["Demonstrative","this, that, these, those"],
+["Indefinite","some, any, no, each, every, all, none, many, few, little, several, one, others"],
+];
+
+const modals = [
+["Can","القدرة","I can help you."],["Could","القدرة في الماضي / طلب مهذب","I could help you."],
+["May","إذن / احتمال","You may leave."],["Might","احتمال ضعيف","It might rain."],
+["Must","ضرورة","You must study."],["Have to","واجب (خارجي)","I have to go now."],
+["Should","نصيحة","You should sleep."],["Ought to","نصيحة / واجب","You ought to see a doctor."],
+["Will","قرار لحظي","I will call you."],["Would","عادة مهذبة / طلب في الماضي","I would like some tea."],
+];
+
+const conjunctions = [
+["And","و","I like tea and coffee."],["But","لكن","I like tea but not coffee."],
+["Or","أو","Tea or coffee?"],["So","لذلك","It rained, so I stayed home."],
+["Because","لأن","I stayed home because it rained."],["Although","على الرغم من","Although it rained, I went out."],
+["If","إذا","If it rains, I will stay home."],["When","عندما","Call me when you arrive."],
+["While","بينما","Listen to music while studying."],["Since","منذ","I have lived here since 2015."],
+];
+
+/* ============ SECTION DEFINITIONS ============ */
+// kinds: 'num' (auto position number), 'static', 'en', 'ar'
+
+const sections = [
+  {id:'prep', color:'green', title:'١. Prepositions — حروف الجر',
+   headers:['#','Preposition','Meaning','Example'], kinds:['num','en','ar','en'], data:prepositions, sub:null, speakCols:[1,3], sentenceCol:3},
+
+  {id:'tense-present', color:'blue', title:'٢. Tenses — الأزمنة', sub:'PRESENT — الحاضر',
+   headers:['#','Tense','Structure','Use','Example'], kinds:['num','static','static','ar','en'], data:tensesPresent, speakCols:[1,4], sentenceCol:4},
+  {id:'tense-past', color:'blue', title:null, sub:'PAST — الماضي',
+   headers:['#','Tense','Structure','Use','Example'], kinds:['num','static','static','ar','en'], data:tensesPast, speakCols:[1,4], sentenceCol:4},
+  {id:'tense-future', color:'blue', title:null, sub:'FUTURE — المستقبل',
+   headers:['#','Tense','Structure','Use','Example'], kinds:['num','static','static','ar','en'], data:tensesFuture, speakCols:[1,4], sentenceCol:4},
+  {id:'tense-passive', color:'blue', title:null, sub:'PASSIVE — المجهول',
+   headers:['#','Tense','Structure','Use','Example'], kinds:['num','static','static','ar','en'], data:tensesPassive, speakCols:[1,4], sentenceCol:4},
+
+  {id:'rules', color:'purple', title:'٣. Common Grammar Rules — قواعد عامة',
+   headers:['Rule','Note (Arabic)','Example'], kinds:['static','ar','en'], data:commonRules, sub:null, speakCols:[0,2], sentenceCol:2},
+
+  {id:'aux', color:'teal', title:'٤. Auxiliary Verbs — الأفعال المساعدة',
+   headers:['Auxiliary','Use','Examples'], kinds:['en','ar','en'], data:auxiliaries, sub:null, speakCols:[0,2], sentenceCol:2},
+
+  {id:'qwords', color:'blue', title:'٥. Question Words — أدوات الاستفهام',
+   headers:['Word','Meaning','Example'], kinds:['en','ar','en'], data:questionWords, sub:null, speakCols:[0,2], sentenceCol:2},
+
+  {id:'pronouns', color:'teal', title:'٦. Pronouns — الضمائر',
+   headers:['Category','Examples'], kinds:['static','en'], data:pronouns, sub:null, speakCols:[1], sentenceCol:null},
+
+  {id:'modals', color:'orange', title:'٧. Modal Verbs — الأفعال الناقصة',
+   headers:['Modal','Use','Example'], kinds:['en','ar','en'], data:modals, sub:null, speakCols:[0,2], sentenceCol:2},
+
+  {id:'conj', color:'magenta', title:'٨. Conjunctions — روابط',
+   headers:['Word','Meaning','Example'], kinds:['en','ar','en'], data:conjunctions, sub:null, speakCols:[0,2], sentenceCol:2},
+];
+
+/* ============ STATE ============ */
+let idCounter = 0;
+let answers = {};        // cellId -> {value, kind}
+let orderState = {};     // sectionId -> [rowId,...]
+let mode = 'full';       // 'full' | 'noEn' | 'noAr'
+let editMode = false;
+let selectedRows = new Set(); // keys "sectionId::rowId" chosen for read-aloud
+
+function cellId(){ return "c" + (idCounter++); }
+
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function initSectionRows(section){
+  section.rows = section.data.map((vals, i) => ({ id: section.id + '-' + i, values: vals.slice(), comment: '', extraSentences: [] }));
+}
+
+function ensureOrder(section){
+  const allIds = section.rows.map(r => r.id);
+  let ord = orderState[section.id];
+  if(!ord){ ord = allIds.slice(); }
+  else{
+    ord = ord.filter(id => allIds.includes(id));
+    allIds.forEach(id => { if(!ord.includes(id)) ord.push(id); });
+  }
+  orderState[section.id] = ord;
+  return ord;
+}
+
+function getRowsInOrder(section){
+  const map = {};
+  section.rows.forEach(r => { map[r.id] = r; });
+  return ensureOrder(section).map(id => map[id]).filter(Boolean);
+}
+
+function findSection(id){ return sections.find(s => s.id === id); }
+
+/* ============ RENDER ============ */
+
+function renderCellHTML(text, kind, extras){
+  if(kind === 'static'){ return `<td>${esc(text)}</td>`; }
+  const id = cellId();
+  answers[id] = { value: text, kind: kind, extras: extras || null };
+  const cls = kind === 'en' ? 'en' : 'ar';
+  let extraHtml = '';
+  if(extras && extras.length && mode === 'full'){
+    extraHtml = `<div class="extra-sentences-list">` +
+      extras.map(s => `<div class="extra-sentence-view">${esc(s)}</div>`).join('') + `</div>`;
+  }
+  return `<td data-cellwrap="${id}" class="${extras ? 'sentence-cell' : ''}"><span class="cellview ${cls}" data-id="${id}">${esc(text)}</span>${extraHtml}</td>`;
+}
+
+function renderSentenceEditTD(section, rowObj, colIndex, kind){
+  const clsExtra = kind === 'en' ? 'en' : (kind === 'ar' ? 'ar' : '');
+  const primary = rowObj.values[colIndex];
+  const extras = rowObj.extraSentences || [];
+  let inner = `<input class="edit-input ${clsExtra}" data-row="${rowObj.id}" data-col="${colIndex}" value="${esc(primary)}" autocomplete="off">`;
+  extras.forEach((s, idx) => {
+    inner += `<div class="extra-sentence-row">` +
+      `<input class="edit-input extra-sentence-input ${clsExtra}" data-row="${rowObj.id}" data-extraidx="${idx}" value="${esc(s)}" autocomplete="off">` +
+      `<button type="button" class="del-extra-btn" data-row="${rowObj.id}" data-extraidx="${idx}" title="حذف الجملة">✕</button>` +
+      `</div>`;
+  });
+  inner += `<button type="button" class="add-sentence-btn" data-row="${rowObj.id}" title="أضف جملة زيادة">+ جملة</button>`;
+  return `<td class="sentence-cell">${inner}</td>`;
+}
+
+function renderRowHTML(section, rowObj, position){
+  let handleCell = `<td class="handle-col"><div class="handle-col-inner">` +
+    `<span class="drag-handle" title="اسحب لإعادة الترتيب">⠿</span>`;
+  if(editMode){
+    handleCell += `<button type="button" class="del-btn" data-row="${rowObj.id}" title="حذف الصف">✕</button>`;
+  }
+  handleCell += `</div></td>`;
+
+  const selKey = section.id + '::' + rowObj.id;
+  const isSelected = selectedRows.has(selKey);
+  const speakCell = `<td class="speak-col">` +
+    `<input type="checkbox" class="speak-check" data-section="${section.id}" data-row="${rowObj.id}" ${isSelected ? 'checked' : ''} title="اختر للنطق">` +
+    `<button type="button" class="speak-row-btn" data-section="${section.id}" data-row="${rowObj.id}" title="اسمع الكلمة دي">🔊</button>` +
+    `</td>`;
+
+  let cells = handleCell + speakCell;
+  section.kinds.forEach((kind, i) => {
+    const val = rowObj.values[i];
+    const isSentenceCol = (section.sentenceCol === i);
+    if(kind === 'num'){
+      cells += `<td class="num">${position}</td>`;
+    } else if(editMode){
+      if(isSentenceCol){
+        cells += renderSentenceEditTD(section, rowObj, i, kind);
+      } else {
+        const clsExtra = kind === 'en' ? 'en' : (kind === 'ar' ? 'ar' : '');
+        cells += `<td><input class="edit-input ${clsExtra}" data-row="${rowObj.id}" data-col="${i}" value="${esc(val)}" autocomplete="off"></td>`;
+      }
+    } else if(isSentenceCol){
+      cells += renderCellHTML(val, kind, rowObj.extraSentences || []);
+    } else {
+      cells += renderCellHTML(val, kind);
+    }
+  });
+  const commentVal = rowObj.comment || '';
+  const hasText = commentVal.trim().length > 0 ? ' has-text' : '';
+  cells += `<td><input type="text" class="comment-input${hasText}" data-row="${rowObj.id}" value="${esc(commentVal)}" placeholder="ملاحظتك..." autocomplete="off"></td>`;
+  return `<tr data-key="${rowObj.id}">${cells}</tr>`;
+}
+
+function renderTbody(section){
+  const rows = getRowsInOrder(section);
+  let html = rows.map((r, i) => renderRowHTML(section, r, i + 1)).join('');
+  if(editMode){
+    const colspan = 3 + section.kinds.length;
+    html += `<tr class="add-row-tr"><td colspan="${colspan}">` +
+      `<button type="button" class="add-row-btn" data-section="${section.id}">+ أضف صف جديد</button></td></tr>`;
+  }
+  return html;
+}
+
+function renderSectionTable(section){
+  const theadCells = `<th class="handle-col"></th>` + `<th class="speak-th">🔊</th>` +
+    section.headers.map(h => `<th>${esc(h)}</th>`).join('') +
+    `<th class="comment-th">ملاحظة</th>`;
+  return `<table id="table-${section.id}">
+    <thead><tr>${theadCells}</tr></thead>
+    <tbody id="tbody-${section.id}">${renderTbody(section)}</tbody>
+  </table>`;
+}
+
+function buildApp(){
+  idCounter = 0;
+  answers = {};
+  const app = document.getElementById('app');
+  let html = "";
+  let openCard = false;
+
+  sections.forEach(section => {
+    if(section.title){
+      if(openCard) html += `</div>`;
+      html += `<div class="card ${section.color}"><div class="head">${section.title}</div>`;
+      openCard = true;
+    }
+    if(section.sub){ html += `<div class="subhead">${section.sub}</div>`; }
+    html += renderSectionTable(section);
+  });
+  if(openCard) html += `</div>`;
+
+  app.innerHTML = html;
+
+  sections.forEach(section => {
+    const tbody = document.getElementById('tbody-' + section.id);
+    if(tbody) wireTbody(tbody, section);
+  });
+
+  applyMode();
+  updateSelectionCount();
+}
+
+function rerenderSectionBody(section){
+  const tbody = document.getElementById('tbody-' + section.id);
+  if(!tbody) return;
+  tbody.innerHTML = renderTbody(section);
+  wireTbody(tbody, section);
+  applyMode();
+}
+
+/* ============ MODE (blank English / blank Arabic) ============ */
+
+function applyMode(){
+  document.querySelectorAll('[data-cellwrap]').forEach(td => {
+    const id = td.getAttribute('data-cellwrap');
+    const info = answers[id];
+    if(!info) return;
+    const shouldBlank = (mode === 'noEn' && info.kind === 'en') ||
+                         (mode === 'noAr' && info.kind === 'ar');
+    if(shouldBlank){
+      const clsExtra = info.kind === 'en' ? 'en' : 'ar';
+      td.innerHTML = `<input class="blank ${clsExtra}" type="text" data-id="${id}" data-kind="${info.kind}" autocomplete="off">`;
+    } else {
+      let html = `<span class="cellview ${info.kind === 'en' ? 'en' : 'ar'}" data-id="${id}">${esc(info.value)}</span>`;
+      if(mode === 'full' && info.extras && info.extras.length){
+        html += `<div class="extra-sentences-list">` +
+          info.extras.map(s => `<div class="extra-sentence-view">${esc(s)}</div>`).join('') + `</div>`;
+      }
+      td.innerHTML = html;
+    }
+  });
+}
+
+function normalize(str, kind){
+  let s = (str || "").trim();
+  if(kind === 'en') s = s.toLowerCase();
+  s = s.replace(/\s+/g, ' ');
+  s = s.replace(/[.!?]+$/, '');
+  return s;
+}
+
+function compareAnswers(){
+  const inputs = document.querySelectorAll('input.blank');
+  if(inputs.length === 0){
+    document.getElementById('scoreboard').textContent = "لا توجد خانات فاضية دلوقتي — اضغط أول 'شيل الإنجليزي' أو 'شيل العربي'.";
+    return;
+  }
+  let correct = 0, total = inputs.length;
+  inputs.forEach(inp => {
+    const id = inp.getAttribute('data-id');
+    const kind = inp.getAttribute('data-kind');
+    const info = answers[id];
+    const userVal = normalize(inp.value, kind);
+    const correctVal = normalize(info.value, kind);
+    inp.classList.remove('correct', 'wrong');
+    if(userVal.length > 0 && userVal === correctVal){
+      inp.classList.add('correct');
+      inp.disabled = true;
+      correct++;
+    } else {
+      inp.classList.add('wrong');
+      setTimeout(() => {
+        inp.value = "";
+        inp.classList.remove('wrong');
+      }, 450);
+    }
+  });
+  document.getElementById('scoreboard').textContent =
+    `النتيجة: ${correct} صحيح من ${total} — الباقي هيتمسح تاني علشان تحاول من جديد ✍️`;
+}
+
+/* ============ EDIT MODE WIRING (edit text, delete row, add row) ============ */
+
+function wireTbody(tbody, section){
+  makeSortable(tbody, section);
+
+  tbody.querySelectorAll('.edit-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const rowId = inp.getAttribute('data-row');
+      const col = parseInt(inp.getAttribute('data-col'), 10);
+      const row = section.rows.find(r => r.id === rowId);
+      if(row) row.values[col] = inp.value;
+    });
+  });
+
+  tbody.querySelectorAll('.comment-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const rowId = inp.getAttribute('data-row');
+      const row = section.rows.find(r => r.id === rowId);
+      if(row) row.comment = inp.value;
+      inp.classList.toggle('has-text', inp.value.trim().length > 0);
+    });
+  });
+
+  tbody.querySelectorAll('.extra-sentence-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const rowId = inp.getAttribute('data-row');
+      const idx = parseInt(inp.getAttribute('data-extraidx'), 10);
+      const row = section.rows.find(r => r.id === rowId);
+      if(row && row.extraSentences) row.extraSentences[idx] = inp.value;
+    });
+  });
+
+  tbody.querySelectorAll('.del-extra-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rowId = btn.getAttribute('data-row');
+      const idx = parseInt(btn.getAttribute('data-extraidx'), 10);
+      const row = section.rows.find(r => r.id === rowId);
+      if(row && row.extraSentences) row.extraSentences.splice(idx, 1);
+      rerenderSectionBody(section);
+    });
+  });
+
+  tbody.querySelectorAll('.add-sentence-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rowId = btn.getAttribute('data-row');
+      const row = section.rows.find(r => r.id === rowId);
+      if(row){
+        if(!row.extraSentences) row.extraSentences = [];
+        row.extraSentences.push('');
+      }
+      rerenderSectionBody(section);
+      setTimeout(() => {
+        const inputs = tbody.querySelectorAll(`.extra-sentence-input[data-row="${rowId}"]`);
+        if(inputs.length) inputs[inputs.length - 1].focus();
+      }, 0);
+    });
+  });
+
+  tbody.querySelectorAll('.speak-check').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const key = chk.dataset.section + '::' + chk.dataset.row;
+      if(chk.checked) selectedRows.add(key); else selectedRows.delete(key);
+      updateSelectionCount();
+    });
+  });
+
+  tbody.querySelectorAll('.speak-row-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sec = findSection(btn.dataset.section);
+      const row = sec && sec.rows.find(r => r.id === btn.dataset.row);
+      if(row) speakSingle(sec, row);
+    });
+  });
+
+  tbody.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rowId = btn.getAttribute('data-row');
+      section.rows = section.rows.filter(r => r.id !== rowId);
+      orderState[section.id] = (orderState[section.id] || []).filter(id => id !== rowId);
+      selectedRows.delete(section.id + '::' + rowId);
+      rerenderSectionBody(section);
+    });
+  });
+
+  const addBtn = tbody.querySelector('.add-row-btn');
+  if(addBtn){
+    addBtn.addEventListener('click', () => {
+      const newId = section.id + '-new-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const values = section.kinds.map(k => k === 'num' ? null : '');
+      section.rows.push({ id: newId, values: values, comment: '', extraSentences: [] });
+      if(!orderState[section.id]) orderState[section.id] = section.rows.map(r => r.id);
+      else orderState[section.id].push(newId);
+      rerenderSectionBody(section);
+      setTimeout(() => {
+        const newRow = tbody.querySelector(`tr[data-key="${newId}"]`);
+        if(newRow){
+          const firstInput = newRow.querySelector('input.edit-input');
+          if(firstInput) firstInput.focus();
+        }
+      }, 0);
+    });
+  }
+}
+
+/* ============ DRAG & DROP REORDERING (pointer events, works on touch + mouse) ============ */
+
+function makeSortable(tbody, section){
+  let draggingRow = null;
+
+  tbody.querySelectorAll('.drag-handle').forEach(handle => {
+    handle.addEventListener('pointerdown', (e) => {
+      draggingRow = handle.closest('tr');
+      draggingRow.classList.add('dragging');
+      try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+      e.preventDefault();
+    });
+
+    handle.addEventListener('pointermove', (e) => {
+      if(!draggingRow) return;
+      const rows = Array.from(tbody.children).filter(tr => !tr.classList.contains('add-row-tr'));
+      const y = e.clientY;
+      for(const row of rows){
+        if(row === draggingRow) continue;
+        const rect = row.getBoundingClientRect();
+        if(y > rect.top && y < rect.bottom){
+          const rowsNow = Array.from(tbody.children);
+          const draggingIndex = rowsNow.indexOf(draggingRow);
+          const targetIndex = rowsNow.indexOf(row);
+          if(draggingIndex < targetIndex){ row.after(draggingRow); }
+          else{ row.before(draggingRow); }
+          break;
+        }
+      }
+    });
+
+    function finishDrag(){
+      if(!draggingRow) return;
+      draggingRow.classList.remove('dragging');
+      const newOrder = Array.from(tbody.children)
+        .filter(tr => !tr.classList.contains('add-row-tr'))
+        .map(tr => tr.dataset.key);
+      orderState[section.id] = newOrder;
+      Array.from(tbody.children).forEach((tr, i) => {
+        const numCell = tr.querySelector('td.num');
+        if(numCell) numCell.textContent = i + 1;
+      });
+      draggingRow = null;
+    }
+
+    handle.addEventListener('pointerup', finishDrag);
+    handle.addEventListener('pointercancel', finishDrag);
+  });
+}
+
+/* ============ TEXT-TO-SPEECH (read selected words aloud) ============ */
+
+function supportsSpeech(){ return 'speechSynthesis' in window; }
+
+function getSpeechRate(){
+  const sel = document.getElementById('speechRate');
+  return sel ? parseFloat(sel.value) : 1;
+}
+
+function getSpeechContentMode(){
+  const sel = document.getElementById('speechContent');
+  return sel ? sel.value : 'both';
+}
+
+function getSpeechGap(){
+  const sel = document.getElementById('speechGap');
+  return sel ? parseInt(sel.value, 10) : 600;
+}
+
+let availableVoices = [];
+
+function populateVoiceList(){
+  if(!supportsSpeech()) return;
+  const sel = document.getElementById('speechVoice');
+  if(!sel) return;
+  const voices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+  if(voices.length === 0) return; // try again later when voices actually load
+  availableVoices = voices;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">افتراضي</option>' +
+    voices.map((v, i) => `<option value="${i}">${esc(v.name)} (${esc(v.lang)})</option>`).join('');
+  if(prev && parseInt(prev, 10) < voices.length) sel.value = prev;
+}
+
+function getSelectedVoice(){
+  const sel = document.getElementById('speechVoice');
+  if(!sel || sel.value === '') return null;
+  const idx = parseInt(sel.value, 10);
+  return availableVoices[idx] || null;
+}
+
+// plays a list of text strings one after another with a configurable silent gap between them
+function playQueueSequential(texts, options, onDone){
+  const rate = options.rate || 1;
+  const gap = options.gap != null ? options.gap : 600;
+  const voice = options.voice || null;
+  let i = 0;
+  let stopped = false;
+
+  function playNext(){
+    if(stopped) return;
+    if(i >= texts.length){ if(onDone) onDone(); return; }
+    const utter = new SpeechSynthesisUtterance(texts[i]);
+    utter.lang = 'en-US';
+    utter.rate = rate;
+    if(voice) utter.voice = voice;
+    utter.onend = () => { i++; if(!stopped) setTimeout(playNext, gap); };
+    utter.onerror = () => { i++; if(!stopped) setTimeout(playNext, gap); };
+    window.speechSynthesis.speak(utter);
+  }
+  playNext();
+  return { stop(){ stopped = true; } };
+}
+
+let currentQueueHandle = null;
+
+function isShuffleOn(){
+  const chk = document.getElementById('speechShuffle');
+  return chk ? chk.checked : false;
+}
+
+function shuffleArray(arr){
+  const a = arr.slice();
+  for(let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
+// returns an array of strings to be spoken (one utterance each) for a given row, based on content mode
+function collectUtterancesForRow(section, row, contentMode){
+  const wordText = (section.speakCols && section.speakCols[0] != null) ? row.values[section.speakCols[0]] : null;
+
+  let sentenceTexts = [];
+  if(section.sentenceCol != null){
+    const primary = row.values[section.sentenceCol];
+    if(primary && String(primary).trim()) sentenceTexts.push(primary);
+    (row.extraSentences || []).forEach(s => { if(s && String(s).trim()) sentenceTexts.push(s); });
+  } else if(section.speakCols && section.speakCols.length > 1){
+    const alt = row.values[section.speakCols[1]];
+    if(alt && String(alt).trim()) sentenceTexts.push(alt);
+  }
+
+  const list = [];
+  if(contentMode === 'word'){
+    if(wordText && String(wordText).trim()) list.push(wordText);
+  } else if(contentMode === 'sentence'){
+    sentenceTexts.forEach(s => list.push(s));
+    if(list.length === 0 && wordText && String(wordText).trim()) list.push(wordText); // fallback if no sentence exists
+  } else { // both
+    const parts = [];
+    if(wordText && String(wordText).trim()) parts.push(wordText);
+    if(sentenceTexts.length) parts.push(sentenceTexts[0]);
+    if(parts.length) list.push(parts.join('. '));
+  }
+  return list;
+}
+
+function speakSingle(section, row){
+  if(!supportsSpeech()){ alert('المتصفح أو الجهاز ده مش بيدعم النطق الصوتي.'); return; }
+  window.speechSynthesis.cancel();
+  if(currentQueueHandle) currentQueueHandle.stop();
+  const contentMode = getSpeechContentMode();
+  const utterances = collectUtterancesForRow(section, row, contentMode);
+  if(utterances.length === 0) return;
+  currentQueueHandle = playQueueSequential(utterances, {
+    rate: getSpeechRate(), gap: getSpeechGap(), voice: getSelectedVoice()
+  });
+}
+
+function speakSelected(){
+  if(!supportsSpeech()){ alert('المتصفح أو الجهاز ده مش بيدعم النطق الصوتي.'); return; }
+  if(selectedRows.size === 0){
+    document.getElementById('scoreboard').textContent = "محددتش أي كلمات للنطق — حط علامة ✔ في عمود 🔊 جنب الكلمات اللي عايز تسمعها.";
+    return;
+  }
+  window.speechSynthesis.cancel();
+  if(currentQueueHandle) currentQueueHandle.stop();
+  const contentMode = getSpeechContentMode();
+
+  let entries = [];
+  sections.forEach(section => {
+    const rows = getRowsInOrder(section);
+    rows.forEach(row => {
+      const key = section.id + '::' + row.id;
+      if(selectedRows.has(key)) entries.push({ section: section, row: row });
+    });
+  });
+  if(isShuffleOn()) entries = shuffleArray(entries);
+
+  let allTexts = [];
+  entries.forEach(({ section, row }) => {
+    allTexts = allTexts.concat(collectUtterancesForRow(section, row, contentMode));
+  });
+
+  if(allTexts.length === 0){
+    document.getElementById('scoreboard').textContent = "مفيش نص للنطق في الكلمات المحددة دلوقتي.";
+    return;
+  }
+
+  document.getElementById('scoreboard').textContent =
+    `جاري نطق ${allTexts.length} عنصر${isShuffleOn() ? ' بترتيب عشوائي 🔀' : ''}... 🔊`;
+
+  currentQueueHandle = playQueueSequential(allTexts, {
+    rate: getSpeechRate(), gap: getSpeechGap(), voice: getSelectedVoice()
+  }, () => {
+    document.getElementById('scoreboard').textContent = "خلص النطق ✅";
+  });
+}
+
+function stopSpeaking(){
+  if(supportsSpeech()) window.speechSynthesis.cancel();
+  if(currentQueueHandle) currentQueueHandle.stop();
+  document.getElementById('scoreboard').textContent = "";
+}
+
+function clearSelection(){
+  selectedRows.clear();
+  document.querySelectorAll('.speak-check').forEach(chk => { chk.checked = false; });
+  updateSelectionCount();
+}
+
+function updateSelectionCount(){
+  const el = document.getElementById('selectionCount');
+  if(!el) return;
+  el.textContent = selectedRows.size > 0 ? `الكلمات المحددة للنطق: ${selectedRows.size}` : '';
+}
+
+/* ============ READ-ALONG (speech recognition tracks the user's own reading) ============ */
+
+let readWords = [];       // [{raw, norm}]
+let readIndex = 0;
+let readRecognizer = null;
+let readActive = false;
+
+function normalizeSpokenWord(w){
+  return String(w || '').toLowerCase().replace(/[^a-z0-9']/g, '');
+}
+
+function supportsRecognition(){
+  return ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
+}
+
+function buildReadingDisplay(){
+  const text = document.getElementById('longTextInput').value.trim();
+  const display = document.getElementById('readDisplay');
+  if(!text){
+    display.innerHTML = '<span class="read-hint">اكتب أو الصق نص طويل فوق، وبعدين دوس "ابدأ القراءة والمتابعة".</span>';
+    readWords = [];
+    return false;
+  }
+  const rawWords = text.split(/\s+/);
+  readWords = rawWords.map(w => ({ raw: w, norm: normalizeSpokenWord(w) })).filter(w => w.norm.length > 0);
+  display.innerHTML = readWords.map((w, i) => `<span class="read-word" data-idx="${i}">${esc(w.raw)}</span>`).join(' ');
+  readIndex = 0;
+  updateReadCurrentHighlight();
+  return true;
+}
+
+function updateReadCurrentHighlight(){
+  document.querySelectorAll('.read-word').forEach(s => s.classList.remove('word-current'));
+  if(readIndex < readWords.length){
+    const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
+    if(span){
+      span.classList.add('word-current');
+      span.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+}
+
+function processReadTranscript(transcript){
+  const spokenWords = transcript.trim().split(/\s+/).map(normalizeSpokenWord).filter(Boolean);
+  spokenWords.forEach(spoken => {
+    if(readIndex >= readWords.length) return;
+    const expected = readWords[readIndex].norm;
+    const span = document.querySelector(`.read-word[data-idx="${readIndex}"]`);
+    if(spoken === expected){
+      if(span){ span.classList.remove('word-error', 'word-current'); span.classList.add('word-correct'); }
+      readIndex++;
+      updateReadCurrentHighlight();
+    } else {
+      if(span){ span.classList.add('word-error'); span.classList.remove('word-current', 'word-correct'); }
+    }
+  });
+  if(readIndex >= readWords.length){
+    document.getElementById('readStatus').textContent = "برافو! خلصت النص كله صح 🎉";
+    stopReadAlong();
+  }
+}
+
+function startReadAlong(){
+  if(!supportsRecognition()){
+    alert('المتصفح أو الجهاز ده مش بيدعم خاصية التعرف على الصوت (Speech Recognition). جرب Chrome على الكمبيوتر أو الأندرويد.');
+    return;
+  }
+  if(!window.isSecureContext){
+    document.getElementById('readStatus').textContent =
+      "❌ الميكروفون محتاج الصفحة تتفتح على رابط آمن (https) أو من سيرفر محلي. فتح الملف مباشرة أو معاينته جوه تطبيق تاني بيمنع إذن الميكروفون. جرب تفتح الملف في Chrome كصفحة كاملة (مش معاينة).";
+    return;
+  }
+  const ok = buildReadingDisplay();
+  if(!ok){
+    document.getElementById('readStatus').textContent = "اكتب نص الأول قبل ما تبدأ.";
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  readRecognizer = new SR();
+  readRecognizer.lang = 'en-US';
+  readRecognizer.continuous = true;
+  readRecognizer.interimResults = false;
+  readRecognizer.maxAlternatives = 1;
+
+  readRecognizer.onresult = (event) => {
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      const result = event.results[i];
+      if(result.isFinal) processReadTranscript(result[0].transcript);
+    }
+  };
+  readRecognizer.onerror = (e) => {
+    const messages = {
+      'not-allowed': "❌ اتمنع إذن الميكروفون. لو انت داخل معاينة جوه تطبيق تاني، افتح الملف في تبويب Chrome كامل بدل المعاينة. ولو برضو نفس المشكلة، افتح إعدادات الموقع (أيقونة القفل جنب الرابط) وسمح للميكروفون يدويًا، وتأكد كمان إن المتصفح نفسه عنده إذن ميكروفون من إعدادات الجهاز/النظام.",
+      'no-speech': "معدش أي كلام. جرب تاني وتأكد إن الميكروفون شغال.",
+      'audio-capture': "مفيش ميكروفون متاح على الجهاز ده.",
+      'network': "في مشكلة في الاتصال بالإنترنت أثناء التعرف على الصوت.",
+      'aborted': "اتوقف الاستماع."
+    };
+    document.getElementById('readStatus').textContent = messages[e.error] || ('حصل خطأ في الميكروفون: ' + e.error);
+    if(e.error === 'not-allowed' || e.error === 'audio-capture'){ readActive = false; }
+  };
+  readRecognizer.onend = () => {
+    if(readActive){
+      try{ readRecognizer.start(); }catch(err){ /* already started */ }
+    }
+  };
+
+  readActive = true;
+  document.getElementById('readStatus').textContent = "بيسمعك دلوقتي... اقرأ بصوت عالي 🎤";
+  try{ readRecognizer.start(); }catch(err){ /* ignore */ }
+}
+
+function stopReadAlong(){
+  readActive = false;
+  if(readRecognizer){ try{ readRecognizer.stop(); }catch(e){} }
+  if(document.getElementById('readStatus').textContent.indexOf('برافو') === -1){
+    document.getElementById('readStatus').textContent = "وقف الاستماع.";
+  }
+}
+
+function resetReadAlong(){
+  stopReadAlong();
+  buildReadingDisplay();
+  document.getElementById('readStatus').textContent = "";
+}
+
+/* ============ PERSISTENT STORAGE ============ */
+
+async function storageSet(key, value){
+  try{
+    if(window.storage){
+      const r = await window.storage.set(key, value, false);
+      return !!r;
+    } else {
+      localStorage.setItem(key, value);
+      return true;
+    }
+  }catch(e){ console.error('storage set failed', e); return false; }
+}
+
+async function storageGet(key){
+  try{
+    if(window.storage){
+      const r = await window.storage.get(key, false);
+      return r ? r.value : null;
+    } else {
+      return localStorage.getItem(key);
+    }
+  }catch(e){ return null; }
+}
+
+async function saveEverything(){
+  const state = { sections: {}, longText: document.getElementById('longTextInput').value };
+  sections.forEach(section => {
+    const ord = ensureOrder(section);
+    const rowsObj = {};
+    section.rows.forEach(r => { rowsObj[r.id] = { values: r.values, comment: r.comment || '', extraSentences: r.extraSentences || [] }; });
+    state.sections[section.id] = { order: ord, rows: rowsObj };
+  });
+  const payload = JSON.stringify(state);
+  const ok = await storageSet('grammar-full-state', payload);
+  document.getElementById('scoreboard').textContent = ok
+    ? "تم حفظ كل التعديلات والترتيب بنجاح ✅"
+    : "حصل خطأ أثناء الحفظ، جرب تاني ❌";
+}
+
+function applySavedState(saved){
+  if(!saved || !saved.sections) return;
+  if(typeof saved.longText === 'string'){
+    const ta = document.getElementById('longTextInput');
+    if(ta) ta.value = saved.longText;
+  }
+  sections.forEach(section => {
+    const s = saved.sections[section.id];
+    if(s && Array.isArray(s.order) && s.rows){
+      const rows = s.order
+        .filter(id => s.rows[id] !== undefined)
+        .map(id => {
+          const entry = s.rows[id];
+          if(Array.isArray(entry)){
+            return { id: id, values: entry, comment: '', extraSentences: [] }; // legacy format
+          }
+          return { id: id, values: entry.values, comment: entry.comment || '', extraSentences: entry.extraSentences || [] };
+        });
+      if(rows.length > 0 || s.order.length === 0){
+        section.rows = rows;
+        orderState[section.id] = rows.map(r => r.id);
+      }
+    }
+  });
+}
+
+async function loadSavedState(){
+  const raw = await storageGet('grammar-full-state');
+  if(raw){
+    try{
+      const parsed = JSON.parse(raw);
+      applySavedState(parsed);
+    }catch(e){ /* ignore corrupt data */ }
+  }
+}
+
+/* ============ EVENTS ============ */
+
+document.getElementById('btnNoEn').addEventListener('click', () => {
+  mode = (mode === 'noEn') ? 'full' : 'noEn';
+  applyMode();
+});
+document.getElementById('btnNoAr').addEventListener('click', () => {
+  mode = (mode === 'noAr') ? 'full' : 'noAr';
+  applyMode();
+});
+document.getElementById('btnCompare').addEventListener('click', compareAnswers);
+document.getElementById('btnSaveOrder').addEventListener('click', saveEverything);
+document.getElementById('btnSpeakSelected').addEventListener('click', speakSelected);
+document.getElementById('btnStopSpeak').addEventListener('click', stopSpeaking);
+document.getElementById('btnClearSelection').addEventListener('click', clearSelection);
+
+document.getElementById('btnStartReadAlong').addEventListener('click', startReadAlong);
+document.getElementById('btnStopReadAlong').addEventListener('click', stopReadAlong);
+document.getElementById('btnResetReadAlong').addEventListener('click', resetReadAlong);
+document.getElementById('longTextInput').addEventListener('input', buildReadingDisplay);
+
+document.getElementById('btnEditToggle').addEventListener('click', () => {
+  editMode = !editMode;
+  const btn = document.getElementById('btnEditToggle');
+  btn.textContent = editMode ? "تم ✅ (اقفل التعديل)" : "تعديل الكلمات 🛠️";
+  btn.classList.toggle('active', editMode);
+  document.getElementById('hintText').textContent = editMode
+    ? "إنت دلوقتي في وضع التعديل: عدّل أي كلمة مباشرة، احذف صف بالـ (✕)، أو دوس (+ أضف صف جديد) تحت أي جدول. متنساش تحفظ بعد ما تخلص."
+    : "اسحب من علامة (⠿) بجنب كل صف لترتيب الكلمات. دوس \"تعديل الكلمات\" عشان تعدّل أي كلمة، تحذف صف، أو تضيف صفوف جديدة لأي جدول. متنساش \"حفظ التغييرات\" عشان كل حاجة تفضل محفوظة.";
+  buildApp();
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  mode = 'full';
+  buildApp();
+  document.getElementById('scoreboard').textContent = "";
+});
+
+/* ============ INIT ============ */
+
+(async function init(){
+  sections.forEach(initSectionRows);
+  await loadSavedState();
+  buildApp();
+  buildReadingDisplay();
+  if(supportsSpeech()){
+    populateVoiceList();
+    window.speechSynthesis.onvoiceschanged = populateVoiceList;
+  }
+})();
+</script>
+</body>
+</html>
