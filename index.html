@@ -167,7 +167,7 @@
   #btnStartDictation{background:var(--orange);}
   #btnStopDictation{background:var(--red);}
   .selection-count{ text-align:center; font-size:.82rem; color:var(--teal); font-weight:bold; margin-bottom:8px; min-height:1.1em; }
-  .dictation-live{max-width:760px;min-height:2.2em;margin:0 auto 12px;padding:8px 12px;border:1px dashed #b9c9d6;border-radius:8px;background:#f4f9ff;color:#29475e;text-align:center;font-size:.9rem;}
+  .whisper-status{max-width:760px;min-height:2.2em;margin:0 auto 12px;padding:8px 12px;border:1px dashed #b9c9d6;border-radius:8px;background:#f4f9ff;color:#29475e;text-align:center;font-size:.9rem;}
 
   .sentence-cell{ text-align:right; }
   .extra-sentences-list{ margin-top:4px; border-top:1px dashed #ddd6c0; padding-top:3px; }
@@ -275,9 +275,6 @@
   <label>صوت القارئ:
     <select id="speechVoice"><option value="">افتراضي</option></select>
   </label>
-  <label>لهجة الاستماع:
-    <select id="recognitionLang"><option value="en-US" selected>English (US)</option><option value="en-GB">English (UK)</option></select>
-  </label>
   <label>ينطق:
     <select id="speechContent">
       <option value="both" selected>الكلمة + الجملة</option>
@@ -294,7 +291,7 @@
 </div>
 <div class="hint" style="margin-bottom:14px;">وضع التسميع: دوس "شيل كل الإنجليزي" أول حاجة، بعدين حدد الكلمات اللي عايزها بعلامة ✔ في عمود 🔊 (وفعّل "نطق عشوائي 🔀" لو عايزها تتكرر بترتيب مختلف كل مرة)، وبعدين دوس "ابدأ التسميع" — التطبيق هيقولك معنى كل كلمة بالعربي وينتظرك ترد بالإنجليزي: لو غلط هيقولك تحاول تاني وينتظرك تعيدها لحد ما تجاوب صح، ولو صح هيكتبها ويقولك "Good!" وينتقل للي بعدها. بعد ما يخلص كل الكلمات المحددة هيرجع يلف عليها تاني تلقائي لحد ما تدوس "⏹ إيقاف التسميع".</div>
 <div class="selection-count" id="selectionCount"></div>
-<div class="dictation-live" id="dictationLive" aria-live="polite">التسميع: اضغط «ابدأ التسميع» ثم قل الإجابة بالإنجليزية.</div>
+<div class="whisper-status" id="whisperStatus" aria-live="polite">التسميع الذكي المجاني: النموذج لم يُحمّل بعد.</div>
 
 <div class="hint" id="hintText">اسحب من علامة (⠿) بجنب كل صف لترتيب الكلمات. دوس "تعديل الكلمات" عشان تعدّل أي كلمة، تحذف صف، أو تضيف صفوف جديدة لأي جدول. حدد الكلمات بعلامة ✔ في عمود 🔊 وبعدين دوس "انطق الكلمات المحددة" عشان الأبليكيشن ينطقها لك، أو دوس زرار 🔊 الصغير جنب أي كلمة عشان تسمعها فورًا. متنساش "حفظ التغييرات" عشان كل حاجة تفضل محفوظة.</div>
 
@@ -1438,101 +1435,84 @@ async function loadSavedState(){
   }
 }
 
-/* ============ DICTATION V2: CONTINUOUS + LIVE TRANSCRIPT + CONTEXT BIAS ============ */
-let quizV2Active = false, quizV2Index = 0, quizV2Queue = [], quizV2Recognizer = null;
-let quizV2Listening = false, quizV2Waiting = false, quizV2Handling = false, quizV2Timer = null;
-
-function quizV2Live(text, prefix){
-  const el = document.getElementById('dictationLive');
-  if(el) el.textContent = prefix ? `${prefix}: ${text || '...'}` : (text || '...');
+/* ============ FREE WHISPER DICTATION (runs in the visitor's browser) ============ */
+let whisperWorker, whisperReady = false, whisperLoading, whisperStream, whisperQueue = [], whisperIndex = 0, whisperActive = false, whisperBusy = false;
+function whisperStatus(text){ document.getElementById('whisperStatus').textContent = text; }
+function whisperNorm(text){ return String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(); }
+function whisperMatch(transcript, expected){
+  const heard = whisperNorm(transcript);
+  const choices = String(expected || '').split('/').flatMap(x => {
+    x=x.trim(); const optional=x.match(/^(.*)\(s\)$/); return optional ? [optional[1], optional[1]+'s'] : [x];
+  }).map(whisperNorm);
+  return choices.some(answer => heard === answer || heard.includes(answer));
 }
-function quizV2Norm(text){ return String(text || '').toLowerCase().replace(/[’`]/g,"'").replace(/[^a-z0-9'\s-]/g,' ').replace(/[-']/g,'').replace(/\s+/g,' ').trim(); }
-function quizV2Sound(word){
-  const s = quizV2Norm(word).replace(/[^a-z]/g,''); if(s.length < 4) return '';
-  const map={b:'1',f:'1',p:'1',v:'1',c:'2',g:'2',j:'2',k:'2',q:'2',s:'2',x:'2',z:'2',d:'3',t:'3',l:'4',m:'5',n:'5',r:'6'};
-  let out=s[0].toUpperCase(), prev=map[s[0]]||'';
-  for(let i=1;i<s.length&&out.length<4;i++){ const code=map[s[i]]||''; if(code&&code!==prev) out+=code; prev=code; }
-  return (out+'000').slice(0,4);
-}
-function quizV2Distance(a,b){
-  let row=Array.from({length:b.length+1},(_,i)=>i);
-  for(let i=1;i<=a.length;i++){ const next=[i]; for(let j=1;j<=b.length;j++) next[j]=Math.min(next[j-1]+1,row[j]+1,row[j-1]+(a[i-1]===b[j-1]?0:1)); row=next; }
-  return row[b.length];
-}
-function quizV2Close(a,b){
-  a=quizV2Norm(a); b=quizV2Norm(b); if(!a||!b) return false;
-  if(a===b || a.replace(/s$/,'')===b.replace(/s$/,'')) return true;
-  const max=Math.max(a.length,b.length), limit=max>=10?2:(max>=6?1:0);
-  return quizV2Distance(a,b)<=limit || (!!quizV2Sound(a)&&quizV2Sound(a)===quizV2Sound(b));
-}
-function quizV2Answers(item){
-  const raw=String(item.row.values[item.col]||''), list=[raw,...raw.split('/').map(x=>x.trim())];
-  const optional=raw.match(/^(.*)\(s\)$/); if(optional) list.push(optional[1],optional[1]+'s');
-  return [...new Set(list.map(quizV2Norm).filter(Boolean))];
-}
-function quizV2Matches(transcript,item){
-  const heard=quizV2Norm(transcript); if(!heard) return false;
-  return quizV2Answers(item).some(answer=>{
-    if(heard===answer||heard.includes(' '+answer+' ')||heard.startsWith(answer+' ')||heard.endsWith(' '+answer)) return true;
-    const h=heard.split(' '), a=answer.split(' ');
-    return h.some((_,start)=>start+a.length<=h.length&&a.every((word,i)=>quizV2Close(h[start+i],word)));
+function ensureWhisper(){
+  if(whisperReady) return Promise.resolve();
+  if(whisperLoading) return whisperLoading;
+  whisperLoading = new Promise((resolve, reject) => {
+    whisperWorker = new Worker('./whisper-worker.js', {type:'module'});
+    whisperWorker.onmessage = ({data}) => {
+      if(data.type === 'status') whisperStatus(data.text);
+      if(data.type === 'ready'){ whisperReady=true; whisperStatus(data.text); resolve(); }
+      if(data.type === 'error'){ whisperStatus('خطأ في Whisper: '+data.text); reject(new Error(data.text)); }
+      if(data.type === 'transcript') handleWhisperTranscript(data.text);
+    };
+    whisperWorker.onerror = () => reject(new Error('تعذر تشغيل ملف whisper-worker.js'));
+    whisperWorker.postMessage({type:'load'});
   });
+  return whisperLoading;
 }
-function quizV2Feedback(ok, done){
-  const utter=new SpeechSynthesisUtterance(ok?'Good':'Try again'); utter.lang='en-US'; utter.rate=.9;
-  utter.onend=done; utter.onerror=done; window.speechSynthesis.speak(utter);
+async function whisperAudio(blob){
+  const context = new (window.AudioContext || window.webkitAudioContext)();
+  const decoded = await context.decodeAudioData(await blob.arrayBuffer());
+  const source = decoded.getChannelData(0), rate = decoded.sampleRate, targetRate = 16000;
+  const out = new Float32Array(Math.floor(source.length * targetRate / rate));
+  for(let i=0;i<out.length;i++) out[i] = source[Math.floor(i * rate / targetRate)];
+  await context.close();
+  whisperWorker.postMessage({type:'transcribe', audio:out.buffer}, [out.buffer]);
 }
-function quizV2ConfigureBias(item){
-  if(!quizV2Recognizer || typeof window.SpeechRecognitionPhrase !== 'function' || !('phrases' in quizV2Recognizer)) return;
+async function recordWhisperAnswer(){
+  if(!whisperActive || whisperBusy) return;
+  whisperBusy = true;
   try{
-    const all=[...new Set(quizV2Queue.flatMap(quizV2Answers))];
-    quizV2Recognizer.phrases=all.slice(0,250).map(phrase=>new window.SpeechRecognitionPhrase(phrase,quizV2Answers(item).includes(phrase)?10:4));
-  }catch(e){}
+    if(!whisperStream) whisperStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    const recorder = new MediaRecorder(whisperStream), chunks=[];
+    recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => whisperAudio(new Blob(chunks,{type:recorder.mimeType})).catch(e => whisperStatus('تعذر قراءة الصوت: '+e.message));
+    recorder.start(); whisperStatus('🎙️ أنا أسمعك… قل الكلمة الإنجليزية الآن.');
+    setTimeout(() => { if(recorder.state !== 'inactive') recorder.stop(); }, 3500);
+  }catch(e){ whisperBusy=false; whisperStatus('تعذر تشغيل الميكروفون: '+e.message); }
 }
-function quizV2EnsureRecognizer(){
-  if(quizV2Recognizer) return;
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  quizV2Recognizer=new SR(); quizV2Recognizer.continuous=true; quizV2Recognizer.interimResults=true; quizV2Recognizer.maxAlternatives=10;
-  quizV2Recognizer.onstart=()=>{quizV2Listening=true;quizV2Live('أنا أسمعك الآن، قل الإجابة بالإنجليزية.','🎙️');};
-  quizV2Recognizer.onresult=e=>{
-    if(!quizV2Active||!quizV2Waiting||quizV2Handling) return;
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      const result=e.results[i], choices=Array.from({length:result.length},(_,n)=>result[n].transcript).filter(Boolean);
-      quizV2Live(choices[0]||'',result.isFinal?'سمعت':'أسمع الآن');
-      if(result.isFinal){quizV2Handle(choices[0]||'',choices);break;}
-    }
-  };
-  quizV2Recognizer.onerror=e=>{quizV2Listening=false;if(!quizV2Active)return;if(e.error==='not-allowed'||e.error==='audio-capture'){quizV2Stop();document.getElementById('scoreboard').textContent='تعذر استخدام الميكروفون: '+e.error;}else if(e.error==='no-speech')quizV2Live('لم أسمع كلامًا واضحًا، حاول مرة أخرى.','🎙️');};
-  quizV2Recognizer.onend=()=>{quizV2Listening=false;if(quizV2Active&&quizV2Waiting){clearTimeout(quizV2Timer);quizV2Timer=setTimeout(quizV2Listen,150);}};
+function whisperStep(){
+  if(!whisperActive) return;
+  if(whisperIndex >= whisperQueue.length){ whisperIndex=0; if(isShuffleOn()) whisperQueue=shuffleArray(whisperQueue); }
+  whisperBusy=false; const item=whisperQueue[whisperIndex], input=findAnswerInput(item.row.id,item.col);
+  if(input){ input.value=''; input.disabled=false; input.classList.remove('correct','wrong'); input.scrollIntoView({block:'center',behavior:'smooth'}); }
+  document.getElementById('scoreboard').textContent=`🎧 كلمة ${whisperIndex+1} من ${whisperQueue.length} — استمع ثم أجب.`;
+  window.speechSynthesis.cancel(); const voice=new SpeechSynthesisUtterance(item.row.values[item.arIdx]||'...'); voice.lang='ar-SA'; voice.rate=getSpeechRate();
+  voice.onend=()=>setTimeout(recordWhisperAnswer,250); voice.onerror=voice.onend; window.speechSynthesis.speak(voice);
 }
-function quizV2Listen(){
-  if(!quizV2Active||!quizV2Waiting||quizV2Listening)return; quizV2EnsureRecognizer();
-  try{quizV2Recognizer.lang=document.getElementById('recognitionLang').value;quizV2Recognizer.start();}catch(e){clearTimeout(quizV2Timer);quizV2Timer=setTimeout(quizV2Listen,200);}
+function handleWhisperTranscript(text){
+  if(!whisperActive) return;
+  const item=whisperQueue[whisperIndex], input=findAnswerInput(item.row.id,item.col), correct=item.row.values[item.col];
+  if(whisperMatch(text,correct)){
+    if(input){input.value=correct;input.classList.add('correct');}
+    whisperStatus(`✅ سمعت: ${text}`); document.getElementById('scoreboard').textContent='✅ Good — الإجابة صحيحة.';
+    const u=new SpeechSynthesisUtterance('Good');u.lang='en-US';u.onend=()=>{whisperIndex++;whisperStep();};u.onerror=u.onend;window.speechSynthesis.speak(u);
+  }else{
+    if(input){input.value=text;input.classList.add('wrong');}
+    whisperStatus(`❌ سمعت: ${text || '(لا شيء واضح)'}`); document.getElementById('scoreboard').textContent='❌ Try again — أعد نفس الكلمة.';
+    const u=new SpeechSynthesisUtterance('Try again');u.lang='en-US';u.onend=()=>{if(input){input.value='';input.classList.remove('wrong');}whisperBusy=false;recordWhisperAnswer();};u.onerror=u.onend;window.speechSynthesis.speak(u);
+  }
 }
-function quizV2Pause(){quizV2Waiting=false;if(quizV2Recognizer&&quizV2Listening)try{quizV2Recognizer.stop();}catch(e){}}
-function quizV2Step(){
-  if(!quizV2Active)return; if(quizV2Index>=quizV2Queue.length){quizV2Index=0;if(isShuffleOn())quizV2Queue=shuffleArray(quizV2Queue);}
-  const item=quizV2Queue[quizV2Index]; quizV2Handling=false; quizV2Pause(); quizV2EnsureRecognizer(); quizV2ConfigureBias(item); quizV2Live('استمع للمعنى، ثم قل الإجابة بالإنجليزية.','🎧');
-  const input=findAnswerInput(item.row.id,item.col); if(input){input.value='';input.disabled=false;input.classList.remove('correct','wrong');input.scrollIntoView({block:'center',behavior:'smooth'});}
-  document.getElementById('scoreboard').textContent=`🎧 كلمة ${quizV2Index+1} من ${quizV2Queue.length} — قل الإجابة بالإنجليزية`;
-  window.speechSynthesis.cancel(); const utter=new SpeechSynthesisUtterance(item.row.values[item.arIdx]||'...'); utter.lang='ar-SA'; utter.rate=getSpeechRate();
-  utter.onend=()=>{if(quizV2Active){quizV2Waiting=true;quizV2Listen();}}; utter.onerror=utter.onend; window.speechSynthesis.speak(utter);
+async function startWhisperDictation(){
+  if(mode !== 'noEn'){ document.getElementById('scoreboard').textContent='اضغط أولًا «شيل كل الإنجليزي». '; return; }
+  whisperQueue=[]; sections.forEach(section=>{ const arIdx=section.kinds.indexOf('ar'), col=getQuizWordColumn(section); if(arIdx<0||col==null)return; getRowsInOrder(section).forEach(row=>{if(selectedRows.has(section.id+'::'+row.id)) whisperQueue.push({row,col,arIdx});}); });
+  if(!whisperQueue.length){document.getElementById('scoreboard').textContent='حدد كلمات للتسميع أولًا.';return;}
+  if(isShuffleOn()) whisperQueue=shuffleArray(whisperQueue); whisperStatus('جاري تجهيز Whisper… قد يأخذ التحميل الأول عدة دقائق.');
+  try{await ensureWhisper(); whisperActive=true; whisperIndex=0; whisperStep();}catch(e){whisperStatus('لم يتم تشغيل Whisper: '+e.message);}
 }
-function quizV2Handle(said,choices){
-  if(!quizV2Active||!quizV2Waiting||quizV2Handling)return; const item=quizV2Queue[quizV2Index]; quizV2Handling=true;
-  const correct=item.row.values[item.col], input=findAnswerInput(item.row.id,item.col), ok=[said,...choices].some(value=>quizV2Matches(value,item)); quizV2Pause();
-  if(ok){if(input){input.value=correct;input.classList.add('correct');input.classList.remove('wrong');}quizV2Live(said,'✅ إجابة صحيحة');document.getElementById('scoreboard').textContent=`✅ صح: ${correct} — التالي الآن...`;quizV2Feedback(true,()=>{if(quizV2Active){quizV2Index++;quizV2Step();}});}
-  else {if(input){input.value=said;input.classList.add('wrong');input.classList.remove('correct');}quizV2Live(said,'❌ غير صحيحة');document.getElementById('scoreboard').textContent=`❌ سمعت: “${said}” — حاول نفس الكلمة مرة أخرى.`;quizV2Feedback(false,()=>{if(input){input.value='';input.classList.remove('wrong');}if(quizV2Active){quizV2Handling=false;quizV2Waiting=true;quizV2Listen();}});}
-}
-function startDictationQuizV2(){
-  if(!supportsSpeech()||!supportsRecognition()){alert('التسميع يحتاج متصفحًا يدعم النطق والتعرف على الصوت.');return;}
-  if(!window.isSecureContext){document.getElementById('scoreboard').textContent='التسميع يحتاج HTTPS أو خادمًا محليًا.';return;}
-  if(mode!=='noEn'){document.getElementById('scoreboard').textContent="اضغط أولًا «شيل كل الإنجليزي» ثم ابدأ التسميع.";return;}
-  quizV2Queue=[]; sections.forEach(section=>{const arIdx=section.kinds.indexOf('ar'),col=getQuizWordColumn(section);if(arIdx<0||col==null)return;getRowsInOrder(section).forEach(row=>{if(selectedRows.has(section.id+'::'+row.id))quizV2Queue.push({section,row,col,arIdx});});});
-  if(!quizV2Queue.length){document.getElementById('scoreboard').textContent='حدد كلمة واحدة على الأقل في عمود 🔊.';return;}
-  if(isShuffleOn())quizV2Queue=shuffleArray(quizV2Queue); quizV2Active=true;quizV2Index=0;quizV2Step();
-}
-function quizV2Stop(){quizV2Active=false;quizV2Waiting=false;quizV2Handling=false;clearTimeout(quizV2Timer);if(quizV2Recognizer)try{quizV2Recognizer.stop();}catch(e){}window.speechSynthesis.cancel();quizV2Live('تم إيقاف التسميع.','⏹️');}
+function stopWhisperDictation(){ whisperActive=false;whisperBusy=false;window.speechSynthesis.cancel();if(whisperStream){whisperStream.getTracks().forEach(t=>t.stop());whisperStream=null;}whisperStatus('تم إيقاف التسميع الذكي.');document.getElementById('scoreboard').textContent='وقف التسميع.'; }
 
 /* ============ EVENTS ============ */
 
@@ -1549,8 +1529,8 @@ document.getElementById('btnSaveOrder').addEventListener('click', saveEverything
 document.getElementById('btnSpeakSelected').addEventListener('click', speakSelected);
 document.getElementById('btnStopSpeak').addEventListener('click', stopSpeaking);
 document.getElementById('btnClearSelection').addEventListener('click', clearSelection);
-document.getElementById('btnStartDictation').addEventListener('click', startDictationQuizV2);
-document.getElementById('btnStopDictation').addEventListener('click', quizV2Stop);
+document.getElementById('btnStartDictation').addEventListener('click', startWhisperDictation);
+document.getElementById('btnStopDictation').addEventListener('click', stopWhisperDictation);
 
 document.getElementById('btnStartReadAlong').addEventListener('click', startReadAlong);
 document.getElementById('btnStopReadAlong').addEventListener('click', stopReadAlong);
