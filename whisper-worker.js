@@ -8,7 +8,7 @@ let recognizer = null;
 self.onmessage = async ({ data }) => {
   try {
     if (data.type === 'load') {
-      self.postMessage({ type: 'status', text: 'جارٍ تنزيل نموذج الذكاء الاصطناعي لأول مرة…' });
+      self.postMessage({ type: 'status', text: 'جارٍ تحميل نموذج سريع…' });
       const options = {
         dtype: 'q8',
         progress_callback: info => {
@@ -18,28 +18,27 @@ self.onmessage = async ({ data }) => {
         },
       };
       try {
-        recognizer = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-base.en', {
+        recognizer = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny.en', {
           ...options, device: 'webgpu',
         });
       } catch {
-        recognizer = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-base.en', {
+        recognizer = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny.en', {
           ...options, device: 'wasm',
         });
       }
-      self.postMessage({ type: 'ready', text: 'النموذج جاهز. يمكنك البدء في الكلام.' });
+      self.postMessage({ type: 'ready', text: 'النموذج السريع جاهز.' });
     }
 
     if (data.type === 'transcribe') {
       if (!recognizer) throw new Error('Model is not ready');
       self.postMessage({ type: 'status', text: 'أفهم نطقك الآن…' });
-      // whisper-base.en is English-only: do not pass language or task here.
       const result = await recognizer(new Float32Array(data.audio), {
-        chunk_length_s: 8,
-        stride_length_s: 1,
+        chunk_length_s: 3,
+        stride_length_s: 0,
       });
       self.postMessage({ type: 'transcript', text: result.text || '' });
     }
   } catch (error) {
-    self.postMessage({ type: 'error', text: error.message || 'تعذر تشغيل Whisper.' });
+    self.postMessage({ type: 'error', text: error.message || 'تعذر تشغيل التسميع.' });
   }
 };
