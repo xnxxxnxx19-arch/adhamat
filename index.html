@@ -166,8 +166,13 @@
   #btnClearSelection{background:#8a8370;}
   #btnStartDictation{background:var(--orange);}
   #btnStopDictation{background:var(--red);}
+  #btnPushToTalk{
+    border:none; border-radius:30px; padding:18px 30px; font-size:1.05rem; font-weight:bold;
+    cursor:pointer; color:#fff; background:var(--teal); box-shadow:0 3px 0 rgba(0,0,0,.25);
+    touch-action:none; user-select:none; -webkit-user-select:none;
+  }
+  #btnPushToTalk:active{ background:#0d4a4f; transform:translateY(2px); box-shadow:none; }
   .selection-count{ text-align:center; font-size:.82rem; color:var(--teal); font-weight:bold; margin-bottom:8px; min-height:1.1em; }
-  .whisper-status{max-width:760px;min-height:2.2em;margin:0 auto 12px;padding:8px 12px;border:1px dashed #b9c9d6;border-radius:8px;background:#f4f9ff;color:#29475e;text-align:center;font-size:.9rem;}
 
   .sentence-cell{ text-align:right; }
   .extra-sentences-list{ margin-top:4px; border-top:1px dashed #ddd6c0; padding-top:3px; }
@@ -286,12 +291,20 @@
   <button id="btnSpeakSelected">🔊 انطق الكلمات المحددة</button>
   <button id="btnStopSpeak">⏹ إيقاف</button>
   <button id="btnClearSelection">مسح التحديد ✖</button>
+  <label>محرك التعرف على الصوت:
+    <select id="recognitionEngine">
+      <option value="browser" selected>سريع (متصفح)</option>
+      <option value="whisper">Whisper 🧠 (أدق - بضغط زرار)</option>
+    </select>
+  </label>
   <button id="btnStartDictation">🎧 ابدأ التسميع (اسمع وجاوب)</button>
   <button id="btnStopDictation">⏹ إيقاف التسميع</button>
 </div>
-<div class="hint" style="margin-bottom:14px;">وضع التسميع: دوس "شيل كل الإنجليزي" أول حاجة، بعدين حدد الكلمات اللي عايزها بعلامة ✔ في عمود 🔊 (وفعّل "نطق عشوائي 🔀" لو عايزها تتكرر بترتيب مختلف كل مرة)، وبعدين دوس "ابدأ التسميع" — التطبيق هيقولك معنى كل كلمة بالعربي وينتظرك ترد بالإنجليزي: لو غلط هيقولك تحاول تاني وينتظرك تعيدها لحد ما تجاوب صح، ولو صح هيكتبها ويقولك "Good!" وينتقل للي بعدها. بعد ما يخلص كل الكلمات المحددة هيرجع يلف عليها تاني تلقائي لحد ما تدوس "⏹ إيقاف التسميع".</div>
+<div style="text-align:center; margin:0 auto 10px;">
+  <button type="button" id="btnPushToTalk" style="display:none;">🎤 اضغط باستمرار وقول الكلمة</button>
+</div>
+<div class="hint" style="margin-bottom:14px;">وضع التسميع: دوس "شيل كل الإنجليزي" أول حاجة، بعدين حدد الكلمات اللي عايزها بعلامة ✔ في عمود 🔊 (وفعّل "نطق عشوائي 🔀" لو عايزها تتكرر بترتيب مختلف كل مرة)، وبعدين دوس "ابدأ التسميع" — التطبيق هيقولك معنى كل كلمة بالعربي وينتظرك ترد بالإنجليزي: لو غلط هيقولك تحاول تاني وينتظرك تعيدها لحد ما تجاوب صح، ولو صح هيكتبها ويقولك "Good!" وينتقل للي بعدها. بعد ما يخلص كل الكلمات المحددة هيرجع يلف عليها تاني تلقائي لحد ما تدوس "⏹ إيقاف التسميع". لو اخترت محرك "Whisper 🧠"، أول استخدام هيحمّل ملف صغير مرة واحدة (محتاج نت وقتها بس)، وبعدين هتضغط بإصبعك على الزرار وتفضل ماسكه وانت بتقول الكلمة، وتسيبه لما تخلص.</div>
 <div class="selection-count" id="selectionCount"></div>
-<div class="whisper-status" id="whisperStatus" aria-live="polite">التسميع الذكي المجاني: النموذج لم يُحمّل بعد.</div>
 
 <div class="hint" id="hintText">اسحب من علامة (⠿) بجنب كل صف لترتيب الكلمات. دوس "تعديل الكلمات" عشان تعدّل أي كلمة، تحذف صف، أو تضيف صفوف جديدة لأي جدول. حدد الكلمات بعلامة ✔ في عمود 🔊 وبعدين دوس "انطق الكلمات المحددة" عشان الأبليكيشن ينطقها لك، أو دوس زرار 🔊 الصغير جنب أي كلمة عشان تسمعها فورًا. متنساش "حفظ التغييرات" عشان كل حاجة تفضل محفوظة.</div>
 
@@ -1035,6 +1048,135 @@ function updateSelectionCount(){
   el.textContent = selectedRows.size > 0 ? `الكلمات المحددة للنطق: ${selectedRows.size}` : '';
 }
 
+/* ============ WHISPER (free, in-browser, push-to-talk speech recognition) ============ */
+
+let whisperPipelinePromise = null;
+let micStream = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+
+function getRecognitionEngine(){
+  const sel = document.getElementById('recognitionEngine');
+  return sel ? sel.value : 'browser';
+}
+
+async function ensureMicStream(){
+  if(micStream) return micStream;
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  return micStream;
+}
+
+async function loadWhisperPipeline(){
+  if(whisperPipelinePromise) return whisperPipelinePromise;
+  document.getElementById('scoreboard').textContent = "⏳ بيحمّل نموذج Whisper لأول مرة (حوالي 40 ميجا)... محتاج نت دلوقتي بس، وهيتخزن في الجهاز بعد كده.";
+  whisperPipelinePromise = (async () => {
+    const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3');
+    const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en', {
+      progress_callback: (p) => {
+        if(p && p.status === 'progress' && typeof p.progress === 'number'){
+          document.getElementById('scoreboard').textContent = `⏳ تحميل نموذج Whisper... ${Math.round(p.progress)}%`;
+        }
+      }
+    });
+    document.getElementById('scoreboard').textContent = "✅ نموذج Whisper جاهز! تقدر تبدأ.";
+    return transcriber;
+  })();
+  return whisperPipelinePromise;
+}
+
+async function decodeBlobToFloat32(blob){
+  const arrayBuffer = await blob.arrayBuffer();
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioCtx();
+  const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+  const targetRate = 16000;
+  const offlineCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * targetRate), targetRate);
+  const source = offlineCtx.createBufferSource();
+  source.buffer = decoded;
+  source.connect(offlineCtx.destination);
+  source.start(0);
+  const rendered = await offlineCtx.startRendering();
+  return rendered.getChannelData(0);
+}
+
+async function transcribeWithWhisper(blob){
+  const transcriber = await loadWhisperPipeline();
+  const audioData = await decodeBlobToFloat32(blob);
+  const result = await transcriber(audioData);
+  return (result && result.text) ? result.text.trim() : '';
+}
+
+function hidePushToTalk(){
+  const btn = document.getElementById('btnPushToTalk');
+  if(btn) btn.style.display = 'none';
+}
+
+function showPushToTalkForItem(item){
+  let btn = document.getElementById('btnPushToTalk');
+  // clone to strip any previously attached listeners from earlier words
+  const freshBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(freshBtn, btn);
+  btn = freshBtn;
+
+  btn.style.display = 'inline-block';
+  btn.disabled = false;
+  btn.textContent = '🎤 اضغط باستمرار وقول الكلمة';
+
+  const startRec = async (e) => {
+    e.preventDefault();
+    if(!dictationActive) return;
+    try{
+      await ensureMicStream();
+    }catch(err){
+      document.getElementById('scoreboard').textContent = "معنديش إذن الميكروفون.";
+      return;
+    }
+    recordedChunks = [];
+    try{
+      mediaRecorder = new MediaRecorder(micStream);
+    }catch(err){
+      document.getElementById('scoreboard').textContent = "مقدرش يفتح تسجيل الصوت على الجهاز ده.";
+      return;
+    }
+    mediaRecorder.ondataavailable = (ev) => { if(ev.data.size > 0) recordedChunks.push(ev.data); };
+    mediaRecorder.start();
+    btn.textContent = '🔴 بيسجل... سيب الزرار لما تخلص';
+    document.getElementById('scoreboard').textContent = "🎤 بيسجل... قول الكلمة وسيب الزرار";
+  };
+
+  const stopRec = async (e) => {
+    e.preventDefault();
+    if(!mediaRecorder || mediaRecorder.state === 'inactive') return;
+    btn.disabled = true;
+    btn.textContent = '🧠 بيحلل الصوت...';
+    document.getElementById('scoreboard').textContent = "🧠 بيحلل الصوت...";
+    const stopped = new Promise(resolve => { mediaRecorder.onstop = resolve; });
+    mediaRecorder.stop();
+    await stopped;
+    if(recordedChunks.length === 0){ btn.disabled = false; btn.textContent = '🎤 اضغط باستمرار وقول الكلمة'; return; }
+    const blob = new Blob(recordedChunks, { type: recordedChunks[0].type || 'audio/webm' });
+    try{
+      const text = await transcribeWithWhisper(blob);
+      btn.disabled = false;
+      btn.textContent = '🎤 اضغط باستمرار وقول الكلمة';
+      if(dictationActive) checkDictationAnswer(item, text || '');
+    }catch(err){
+      console.error(err);
+      document.getElementById('scoreboard').textContent = "حصل خطأ في تحليل الصوت، حاول تاني.";
+      btn.disabled = false;
+      btn.textContent = '🎤 اضغط باستمرار وقول الكلمة';
+    }
+  };
+
+  btn.addEventListener('pointerdown', startRec);
+  btn.addEventListener('pointerup', stopRec);
+  btn.addEventListener('pointercancel', stopRec);
+}
+
+document.getElementById('recognitionEngine').addEventListener('change', () => {
+  if(getRecognitionEngine() === 'whisper') loadWhisperPipeline();
+});
+
 /* ============ DICTATION QUIZ (app speaks the Arabic meaning, you answer in English by voice) ============ */
 
 let dictationActive = false;
@@ -1055,8 +1197,17 @@ function findAnswerInput(rowId, col){
 }
 
 function startDictationQuiz(){
-  if(!supportsSpeech() || !supportsRecognition()){
-    alert('التسميع محتاج خاصيتي النطق والتعرف على الصوت مع بعض، والمتصفح أو الجهاز ده مش بيدعمهم بالكامل.');
+  const engine = getRecognitionEngine();
+  if(!supportsSpeech()){
+    alert('التسميع محتاج خاصية النطق الصوتي (TTS)، والمتصفح ده مش بيدعمها.');
+    return;
+  }
+  if(engine === 'browser' && !supportsRecognition()){
+    alert('محرك "سريع (متصفح)" مش مدعوم هنا. جرب تختار محرك Whisper 🧠 بدلاً منه.');
+    return;
+  }
+  if(engine === 'whisper' && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    alert('المتصفح أو الجهاز ده مش بيدعم تسجيل الصوت اللازم لـ Whisper.');
     return;
   }
   if(!window.isSecureContext){
@@ -1071,6 +1222,11 @@ function startDictationQuiz(){
   if(selectedRows.size === 0){
     document.getElementById('scoreboard').textContent = "حدد الكلمات اللي عايز تتسمّع فيها بعلامة ✔ في عمود 🔊 الأول.";
     return;
+  }
+
+  if(engine === 'whisper'){
+    loadWhisperPipeline();
+    ensureMicStream().catch(() => {});
   }
 
   dictationQueue = [];
@@ -1101,6 +1257,8 @@ function startDictationQuiz(){
 function stopDictationQuiz(){
   dictationActive = false;
   if(dictationRecognizer){ try{ dictationRecognizer.stop(); }catch(e){} }
+  if(mediaRecorder && mediaRecorder.state !== 'inactive'){ try{ mediaRecorder.stop(); }catch(e){} }
+  hidePushToTalk();
   window.speechSynthesis.cancel();
   document.getElementById('scoreboard').textContent = "وقف التسميع.";
 }
@@ -1126,13 +1284,20 @@ function runDictationStep(){
   const utter = new SpeechSynthesisUtterance(arabicText);
   utter.lang = 'ar-SA';
   utter.rate = getSpeechRate();
-  utter.onend = () => { if(dictationActive) setTimeout(() => listenForDictationAnswer(item), 350); };
-  utter.onerror = () => { if(dictationActive) setTimeout(() => listenForDictationAnswer(item), 350); };
+  utter.onend = () => { if(dictationActive) setTimeout(() => beginListeningForItem(item), 350); };
+  utter.onerror = () => { if(dictationActive) setTimeout(() => beginListeningForItem(item), 350); };
   window.speechSynthesis.speak(utter);
+}
+
+function beginListeningForItem(item){
+  if(!dictationActive) return;
+  if(getRecognitionEngine() === 'whisper') showPushToTalkForItem(item);
+  else listenForDictationAnswer(item);
 }
 
 function listenForDictationAnswer(item){
   if(!dictationActive) return;
+  document.getElementById('scoreboard').textContent = "🎤 قول الكلمة دلوقتي...";
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   dictationRecognizer = new SR();
   dictationRecognizer.lang = 'en-US';
@@ -1150,16 +1315,46 @@ function listenForDictationAnswer(item){
       document.getElementById('scoreboard').textContent = "حصل خطأ في الميكروفون: " + e.error;
       stopDictationQuiz();
     } else {
-      // no-speech / aborted / network / other transient error — just retry listening for the same word
-      setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 500);
+      // no-speech / aborted / network / other transient error — tell the user clearly and retry listening
+      document.getElementById('scoreboard').textContent = "مسمعتش حاجة واضحة، قول الكلمة تاني 🎤";
+      setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 700);
     }
   };
   try{
     dictationRecognizer.start();
   }catch(err){
     // start() can throw if the previous session hasn't fully released yet — back off and retry
-    setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 500);
+    setTimeout(() => { if(dictationActive) listenForDictationAnswer(item); }, 700);
   }
+}
+
+// classic edit-distance (Levenshtein) between two strings
+function levenshtein(a, b){
+  const m = a.length, n = b.length;
+  if(m === 0) return n;
+  if(n === 0) return m;
+  const dp = new Array(n + 1);
+  for(let j = 0; j <= n; j++) dp[j] = j;
+  for(let i = 1; i <= m; i++){
+    let prev = dp[0];
+    dp[0] = i;
+    for(let j = 1; j <= n; j++){
+      const temp = dp[j];
+      dp[j] = (a[i - 1] === b[j - 1]) ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = temp;
+    }
+  }
+  return dp[n];
+}
+
+// allows small transcription differences (e.g. one misheard letter) without accepting genuinely different words
+function fuzzyWordMatch(a, b){
+  if(a === b) return true;
+  const maxLen = Math.max(a.length, b.length);
+  if(maxLen === 0) return true;
+  const dist = levenshtein(a, b);
+  const threshold = maxLen <= 3 ? 0 : (maxLen <= 6 ? 1 : Math.floor(maxLen * 0.2));
+  return dist <= threshold;
 }
 
 // handles cases where recognition stutters/repeats a word (e.g. "cat cat") by checking
@@ -1169,9 +1364,21 @@ function speechContainsAnswer(said, correctVal){
   const correctNorm = normalize(correctVal, 'en');
   if(!correctNorm) return false;
   if(saidNorm === correctNorm) return true;
+
   const escaped = correctNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp('(^|\\s)' + escaped + '(\\s|$)');
-  return pattern.test(saidNorm);
+  if(pattern.test(saidNorm)) return true;
+
+  // constrained fuzzy match: slide a same-length word-window across what was heard
+  // and compare it (with edit-distance tolerance) only against the one known correct answer
+  const correctWords = correctNorm.split(' ');
+  const saidWords = saidNorm.split(' ').filter(Boolean);
+  const winSize = correctWords.length;
+  for(let i = 0; i + winSize <= saidWords.length; i++){
+    const windowPhrase = saidWords.slice(i, i + winSize).join(' ');
+    if(fuzzyWordMatch(windowPhrase, correctNorm)) return true;
+  }
+  return false;
 }
 
 function checkDictationAnswer(item, said){
@@ -1182,23 +1389,26 @@ function checkDictationAnswer(item, said){
   if(isMatch){
     if(inp){ inp.value = correctVal; inp.classList.remove('wrong'); inp.classList.add('correct'); }
     dictationIndex++;
+    hidePushToTalk();
+    document.getElementById('scoreboard').textContent = `✅ صح! سمعت: "${said}"`;
     const utter = new SpeechSynthesisUtterance('Good!');
     utter.lang = 'en-US';
-    utter.onend = () => { if(dictationActive) setTimeout(runDictationStep, 300); };
-    utter.onerror = () => { if(dictationActive) setTimeout(runDictationStep, 300); };
+    utter.onend = () => { if(dictationActive) setTimeout(runDictationStep, 400); };
+    utter.onerror = () => { if(dictationActive) setTimeout(runDictationStep, 400); };
     window.speechSynthesis.speak(utter);
   } else {
     if(inp){ inp.value = said; inp.classList.remove('correct'); inp.classList.add('wrong'); }
-    const utter = new SpeechSynthesisUtterance('Try again');
+    document.getElementById('scoreboard').textContent = `❌ غلط. سمعت: "${said}" — المفروض: "${correctVal}". حاول تاني`;
+    const utter = new SpeechSynthesisUtterance('Wrong, try again');
     utter.lang = 'en-US';
     utter.onend = () => {
       setTimeout(() => {
         const freshInp = findAnswerInput(item.row.id, item.col);
         if(freshInp){ freshInp.value = ''; freshInp.classList.remove('wrong'); }
-        if(dictationActive) listenForDictationAnswer(item);
-      }, 350);
+        if(dictationActive) beginListeningForItem(item);
+      }, 500);
     };
-    utter.onerror = () => { if(dictationActive) listenForDictationAnswer(item); };
+    utter.onerror = () => { if(dictationActive) beginListeningForItem(item); };
     window.speechSynthesis.speak(utter);
   }
 }
@@ -1435,85 +1645,6 @@ async function loadSavedState(){
   }
 }
 
-/* ============ FREE WHISPER DICTATION (runs in the visitor's browser) ============ */
-let whisperWorker, whisperReady = false, whisperLoading, whisperStream, whisperQueue = [], whisperIndex = 0, whisperActive = false, whisperBusy = false;
-function whisperStatus(text){ document.getElementById('whisperStatus').textContent = text; }
-function whisperNorm(text){ return String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(); }
-function whisperMatch(transcript, expected){
-  const heard = whisperNorm(transcript);
-  const choices = String(expected || '').split('/').flatMap(x => {
-    x=x.trim(); const optional=x.match(/^(.*)\(s\)$/); return optional ? [optional[1], optional[1]+'s'] : [x];
-  }).map(whisperNorm);
-  return choices.some(answer => heard === answer || heard.includes(answer));
-}
-function ensureWhisper(){
-  if(whisperReady) return Promise.resolve();
-  if(whisperLoading) return whisperLoading;
-  whisperLoading = new Promise((resolve, reject) => {
-    whisperWorker = new Worker('./whisper-worker.js', {type:'module'});
-    whisperWorker.onmessage = ({data}) => {
-      if(data.type === 'status') whisperStatus(data.text);
-      if(data.type === 'ready'){ whisperReady=true; whisperStatus(data.text); resolve(); }
-      if(data.type === 'error'){ whisperStatus('خطأ في Whisper: '+data.text); reject(new Error(data.text)); }
-      if(data.type === 'transcript') handleWhisperTranscript(data.text);
-    };
-    whisperWorker.onerror = () => reject(new Error('تعذر تشغيل ملف whisper-worker.js'));
-    whisperWorker.postMessage({type:'load'});
-  });
-  return whisperLoading;
-}
-async function whisperAudio(blob){
-  const context = new (window.AudioContext || window.webkitAudioContext)();
-  const decoded = await context.decodeAudioData(await blob.arrayBuffer());
-  const source = decoded.getChannelData(0), rate = decoded.sampleRate, targetRate = 16000;
-  const out = new Float32Array(Math.floor(source.length * targetRate / rate));
-  for(let i=0;i<out.length;i++) out[i] = source[Math.floor(i * rate / targetRate)];
-  await context.close();
-  whisperWorker.postMessage({type:'transcribe', audio:out.buffer}, [out.buffer]);
-}
-async function recordWhisperAnswer(){
-  if(!whisperActive || whisperBusy) return;
-  whisperBusy = true;
-  try{
-    if(!whisperStream) whisperStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
-    const recorder = new MediaRecorder(whisperStream), chunks=[];
-    recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
-    recorder.onstop = () => whisperAudio(new Blob(chunks,{type:recorder.mimeType})).catch(e => whisperStatus('تعذر قراءة الصوت: '+e.message));
-    recorder.start(); whisperStatus('🎙️ أنا أسمعك… قل الكلمة الإنجليزية الآن.');
-    setTimeout(() => { if(recorder.state !== 'inactive') recorder.stop(); }, 3500);
-  }catch(e){ whisperBusy=false; whisperStatus('تعذر تشغيل الميكروفون: '+e.message); }
-}
-function whisperStep(){
-  if(!whisperActive) return;
-  if(whisperIndex >= whisperQueue.length){ whisperIndex=0; if(isShuffleOn()) whisperQueue=shuffleArray(whisperQueue); }
-  whisperBusy=false; const item=whisperQueue[whisperIndex], input=findAnswerInput(item.row.id,item.col);
-  if(input){ input.value=''; input.disabled=false; input.classList.remove('correct','wrong'); input.scrollIntoView({block:'center',behavior:'smooth'}); }
-  document.getElementById('scoreboard').textContent=`🎧 كلمة ${whisperIndex+1} من ${whisperQueue.length} — استمع ثم أجب.`;
-  window.speechSynthesis.cancel(); const voice=new SpeechSynthesisUtterance(item.row.values[item.arIdx]||'...'); voice.lang='ar-SA'; voice.rate=getSpeechRate();
-  voice.onend=()=>setTimeout(recordWhisperAnswer,250); voice.onerror=voice.onend; window.speechSynthesis.speak(voice);
-}
-function handleWhisperTranscript(text){
-  if(!whisperActive) return;
-  const item=whisperQueue[whisperIndex], input=findAnswerInput(item.row.id,item.col), correct=item.row.values[item.col];
-  if(whisperMatch(text,correct)){
-    if(input){input.value=correct;input.classList.add('correct');}
-    whisperStatus(`✅ سمعت: ${text}`); document.getElementById('scoreboard').textContent='✅ Good — الإجابة صحيحة.';
-    const u=new SpeechSynthesisUtterance('Good');u.lang='en-US';u.onend=()=>{whisperIndex++;whisperStep();};u.onerror=u.onend;window.speechSynthesis.speak(u);
-  }else{
-    if(input){input.value=text;input.classList.add('wrong');}
-    whisperStatus(`❌ سمعت: ${text || '(لا شيء واضح)'}`); document.getElementById('scoreboard').textContent='❌ Try again — أعد نفس الكلمة.';
-    const u=new SpeechSynthesisUtterance('Try again');u.lang='en-US';u.onend=()=>{if(input){input.value='';input.classList.remove('wrong');}whisperBusy=false;recordWhisperAnswer();};u.onerror=u.onend;window.speechSynthesis.speak(u);
-  }
-}
-async function startWhisperDictation(){
-  if(mode !== 'noEn'){ document.getElementById('scoreboard').textContent='اضغط أولًا «شيل كل الإنجليزي». '; return; }
-  whisperQueue=[]; sections.forEach(section=>{ const arIdx=section.kinds.indexOf('ar'), col=getQuizWordColumn(section); if(arIdx<0||col==null)return; getRowsInOrder(section).forEach(row=>{if(selectedRows.has(section.id+'::'+row.id)) whisperQueue.push({row,col,arIdx});}); });
-  if(!whisperQueue.length){document.getElementById('scoreboard').textContent='حدد كلمات للتسميع أولًا.';return;}
-  if(isShuffleOn()) whisperQueue=shuffleArray(whisperQueue); whisperStatus('جاري تجهيز Whisper… قد يأخذ التحميل الأول عدة دقائق.');
-  try{await ensureWhisper(); whisperActive=true; whisperIndex=0; whisperStep();}catch(e){whisperStatus('لم يتم تشغيل Whisper: '+e.message);}
-}
-function stopWhisperDictation(){ whisperActive=false;whisperBusy=false;window.speechSynthesis.cancel();if(whisperStream){whisperStream.getTracks().forEach(t=>t.stop());whisperStream=null;}whisperStatus('تم إيقاف التسميع الذكي.');document.getElementById('scoreboard').textContent='وقف التسميع.'; }
-
 /* ============ EVENTS ============ */
 
 document.getElementById('btnNoEn').addEventListener('click', () => {
@@ -1529,8 +1660,8 @@ document.getElementById('btnSaveOrder').addEventListener('click', saveEverything
 document.getElementById('btnSpeakSelected').addEventListener('click', speakSelected);
 document.getElementById('btnStopSpeak').addEventListener('click', stopSpeaking);
 document.getElementById('btnClearSelection').addEventListener('click', clearSelection);
-document.getElementById('btnStartDictation').addEventListener('click', startWhisperDictation);
-document.getElementById('btnStopDictation').addEventListener('click', stopWhisperDictation);
+document.getElementById('btnStartDictation').addEventListener('click', startDictationQuiz);
+document.getElementById('btnStopDictation').addEventListener('click', stopDictationQuiz);
 
 document.getElementById('btnStartReadAlong').addEventListener('click', startReadAlong);
 document.getElementById('btnStopReadAlong').addEventListener('click', stopReadAlong);
