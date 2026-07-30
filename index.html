@@ -343,6 +343,60 @@
   .broken-chip.placed{ border-color:var(--purple); background:#faf6ff; color:var(--purple); }
   .broken-chip.used{ opacity:.3; pointer-events:none; }
   .broken-chip:disabled{ opacity:.6; pointer-events:none; }
+
+  /* ---- Progress & Review pages ---- */
+  #btnGoToProgressPage{ background:var(--orange); }
+  #btnBackFromProgress, #btnBackFromReview{ background:#8a8370; }
+  #btnGoToReviewFromProgress{ background:var(--purple); }
+  #btnGoToProgressFromReview{ background:var(--orange); }
+  .progress-wrap, .review-wrap{ max-width:900px; margin:0 auto; }
+  .progress-card{
+    background:#fff; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,.12);
+    border:1px solid rgba(0,0,0,.06); padding:18px 20px; margin-bottom:18px;
+  }
+  .progress-card h3{ margin:0 0 12px; color:var(--green-d); font-size:1.05rem; }
+  .progress-stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  @media (max-width:700px){ .progress-stat-grid{ grid-template-columns:repeat(2,1fr); } }
+  .progress-stat-card{
+    background:#fbfaf3; border:1px solid #eee2c6; border-radius:10px;
+    padding:12px 8px; text-align:center;
+  }
+  .progress-stat-num{ font-size:1.5rem; font-weight:bold; color:var(--teal); }
+  .progress-stat-label{ font-size:.75rem; color:#6b6450; margin-top:2px; }
+  .mastery-bar-wrap{ display:flex; height:20px; border-radius:10px; overflow:hidden; margin-top:16px; border:1px solid rgba(0,0,0,.08); }
+  .mastery-bar-seg{ min-width:2px; transition:flex .3s; }
+  .mastery-legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; font-size:.75rem; color:#6b6450; }
+  .mastery-legend i{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-inline-end:4px; vertical-align:middle; }
+  .chart-empty{ text-align:center; color:#8a8370; padding:24px 10px; font-size:.9rem; }
+  .progress-svg-chart{ width:100%; height:220px; display:block; }
+  .review-hint{ text-align:center; color:#6b6450; font-size:.85rem; margin-bottom:12px; }
+  #reviewList table, #progressWeakPoints table{ margin-top:6px; }
+  #btnStartFocusedReview{
+    display:block; width:100%; margin-top:14px; border:none; border-radius:10px; padding:14px;
+    font-size:1.05rem; font-weight:bold; cursor:pointer; color:#fff; background:var(--purple);
+    box-shadow:0 3px 0 rgba(0,0,0,.2);
+  }
+  .review-check{ width:16px; height:16px; cursor:pointer; accent-color:var(--purple); }
+  #btnReviewMistakes{
+    display:block; width:100%; margin-top:10px; border:none; border-radius:10px; padding:12px;
+    font-size:.95rem; font-weight:bold; cursor:pointer; color:#fff; background:var(--purple);
+    box-shadow:0 3px 0 rgba(0,0,0,.2);
+  }
+  #btnGoToNotesPage{ background:var(--teal); }
+  #btnBackFromNotes{ background:#8a8370; }
+  #notesTextarea{
+    width:100%; min-height:60vh; border:1.5px solid #c9c2a8; border-radius:8px;
+    padding:14px; font-size:1rem; background:#fffdf5; line-height:1.7; resize:vertical;
+    font-family:"Tahoma","Segoe UI",Arial,sans-serif;
+  }
+  #notesTextarea:focus{ outline:2px solid var(--teal); background:#fff; }
+  #autosaveIndicator{
+    position:fixed; bottom:14px; left:14px; background:var(--green-d); color:#fff;
+    padding:8px 14px; border-radius:20px; font-size:.78rem; font-weight:bold;
+    box-shadow:0 2px 8px rgba(0,0,0,.2); opacity:0; transform:translateY(10px);
+    transition:opacity .25s ease, transform .25s ease; pointer-events:none; z-index:999;
+  }
+  #autosaveIndicator.show{ opacity:1; transform:translateY(0); }
 </style>
 </head>
 <body>
@@ -362,6 +416,8 @@
   <button id="btnSaveOrder">حفظ التغييرات 💾</button>
   <button id="btnReset">ريسِت 🔄</button>
   <button id="btnGoToTestPage">📝 صفحة الاختبار</button>
+  <button id="btnGoToProgressPage">📊 تقدمي وتحليل أخطائي</button>
+  <button id="btnGoToNotesPage">📓 دفتر ملاحظاتي</button>
   <button id="btnOpenImport">📥 استيراد كلمات بالجملة</button>
 </div>
 
@@ -554,6 +610,67 @@
 
   <div id="testResultPanel" class="test-card" style="display:none;"></div>
 </div>
+
+<div id="progressPage" style="display:none; padding:0 10px;">
+  <header class="top">
+    <h1 class="en">Progress Dashboard</h1>
+    <p>لوحة تقدمك ومستوى إتقانك</p>
+  </header>
+  <div class="controlbar">
+    <button id="btnBackFromProgress">⬅ رجوع للرئيسية</button>
+    <button id="btnGoToReviewFromProgress">🩹 صفحة المراجعة والتصحيح</button>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-card">
+      <h3>📈 مستواك ونظرة عامة</h3>
+      <div id="progressOverview"></div>
+    </div>
+    <div class="progress-card">
+      <h3>📊 تقدمك في آخر الاختبارات (النسبة المئوية لكل اختبار)</h3>
+      <div id="progressChart"></div>
+    </div>
+    <div class="progress-card">
+      <h3>🎯 تحليل نقاط ضعفك (الكلمات اللي بتغلط فيها أكتر)</h3>
+      <div id="progressWeakPoints"></div>
+    </div>
+  </div>
+</div>
+
+<div id="reviewPage" style="display:none; padding:0 10px;">
+  <header class="top">
+    <h1 class="en">Mistake Review</h1>
+    <p>راجع أخطاءك وتدرّب عليها بأشكال مختلفة</p>
+  </header>
+  <div class="controlbar">
+    <button id="btnBackFromReview">⬅ رجوع للرئيسية</button>
+    <button id="btnGoToProgressFromReview">📊 لوحة التقدم</button>
+  </div>
+  <div class="review-wrap">
+    <p class="review-hint">دي الكلمات اللي محتاجة مراجعة. حدد اللي عايز تتدرب عليها دلوقتي، وبعدين دوس "ابدأ اختبار مركّز" — هتوصلك لصفحة الاختبار وهي محددة بنفس الكلمات دي بس، واختار أي شكل اختبار تحب (اختيار من متعدد، بقاء، مطابقة، فك تشفير... إلخ) عشان تثبّتها بطرق مختلفة.</p>
+    <div class="progress-card">
+      <div id="reviewList"></div>
+      <button type="button" id="btnStartFocusedReview">🎯 ابدأ اختبار مركّز على أخطائي</button>
+    </div>
+  </div>
+</div>
+
+<div id="notesPage" style="display:none; padding:0 10px;">
+  <header class="top">
+    <h1 class="en">My Notebook</h1>
+    <p>دفتر ملاحظاتك — مراجعة، تنشيط، أو أي حاجة عايز تسجلها</p>
+  </header>
+  <div class="controlbar">
+    <button id="btnBackFromNotes">⬅ رجوع للرئيسية</button>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-card">
+      <p class="review-hint" style="margin-bottom:10px;">اكتب هنا أي ملاحظات، قواعد بتراجعها، كلمات عايز تفتكرها، أو أي حاجة — بيتحفظ أوتوماتيك وانت بتكتب.</p>
+      <textarea id="notesTextarea" placeholder="اكتب ملاحظاتك هنا..."></textarea>
+    </div>
+  </div>
+</div>
+
+<div id="autosaveIndicator"></div>
 
 <script>
 /* ============ DEFAULT DATA ============ */
@@ -2142,6 +2259,79 @@ let testTimeLeft = 0;
 // persisted per-word mastery stats, used by "smart review" (spaced-repetition style) mode
 let wordStats = {}; // "sectionId::rowId" -> {correct, wrong, box(1-5), lastSeenTs}
 
+// persisted history of finished tests/rounds, used to power the progress dashboard chart
+let testHistory = []; // { ts, testType, total, correct, pct, wrongItems:[{sectionId,rowId,arabic,english}] }
+
+function pushTestHistory(testTypeLabel, total, correct, wrongItemsRaw){
+  if(total <= 0) return;
+  const pct = Math.round((correct / total) * 100);
+  const wrongItems = (wrongItemsRaw || []).map(r => {
+    const it = r.item || r;
+    if(!it || !it.section || !it.row) return null;
+    return { sectionId: it.section.id, rowId: it.row.id, arabic: it.arabic || '', english: it.english || '' };
+  }).filter(Boolean);
+  testHistory.push({ ts: Date.now(), testType: testTypeLabel, total: total, correct: correct, pct: pct, wrongItems: wrongItems });
+  if(testHistory.length > 200) testHistory.shift();
+  persistStats();
+}
+
+// lightweight auto-save for stats only (doesn't require the user to press "save changes")
+async function persistStats(){
+  try{
+    const payload = JSON.stringify({ wordStats: wordStats, testHistory: testHistory });
+    await storageSet('grammar-stats', payload);
+  }catch(e){ /* best-effort only */ }
+}
+
+async function loadStatsOnly(){
+  try{
+    const raw = await storageGet('grammar-stats');
+    if(!raw) return;
+    const parsed = JSON.parse(raw);
+    if(parsed.wordStats && typeof parsed.wordStats === 'object') wordStats = parsed.wordStats;
+    if(Array.isArray(parsed.testHistory)) testHistory = parsed.testHistory;
+  }catch(e){ /* ignore corrupt/missing data */ }
+}
+
+// builds the list of "weakest" words (most wrong answers / lowest mastery box) for the
+// progress dashboard and the mistake-review page
+function getWeakWords(limit){
+  const items = [];
+  Object.keys(wordStats).forEach(key => {
+    const stat = wordStats[key];
+    if(!stat || !(stat.wrong > 0)) return;
+    const sepIdx = key.indexOf('::');
+    if(sepIdx === -1) return;
+    const sectionId = key.slice(0, sepIdx), rowId = key.slice(sepIdx + 2);
+    const section = sections.find(s => s.id === sectionId);
+    if(!section) return;
+    const row = section.rows.find(r => r.id === rowId);
+    if(!row) return;
+    const arIdx = section.kinds.indexOf('ar');
+    const wordCol = getQuizWordColumn(section);
+    items.push({
+      section: section, row: row,
+      arabic: arIdx !== -1 ? (row.values[arIdx] || '') : '',
+      english: wordCol != null ? (row.values[wordCol] || '') : '',
+      wrong: stat.wrong, correct: stat.correct || 0, box: stat.box || 1
+    });
+  });
+  items.sort((a, b) => (b.wrong - a.wrong) || (a.box - b.box));
+  return limit ? items.slice(0, limit) : items;
+}
+
+// converts a finished test's wrongList (item-bearing result objects) into the shape
+// used by the weak-words list / review page
+function wrongListToReviewItems(wrongList){
+  return (wrongList || []).map(r => {
+    const it = r.item || r;
+    if(!it || !it.section || !it.row) return null;
+    const key = it.section.id + '::' + it.row.id;
+    const stat = wordStats[key] || { wrong: 0, box: 1 };
+    return { section: it.section, row: it.row, arabic: it.arabic || '', english: it.english || '', wrong: stat.wrong, box: stat.box };
+  }).filter(Boolean);
+}
+
 function recordAnswerStat(section, row, isCorrect){
   const key = section.id + '::' + row.id;
   if(!wordStats[key]) wordStats[key] = { correct: 0, wrong: 0, box: 1, lastSeenTs: 0 };
@@ -2263,9 +2453,151 @@ function showMainPage(){
   clearInterval(testTimerInterval);
   clearInterval(matchingTimerInterval);
   document.getElementById('testPage').style.display = 'none';
+  document.getElementById('progressPage').style.display = 'none';
+  document.getElementById('reviewPage').style.display = 'none';
+  document.getElementById('notesPage').style.display = 'none';
   document.getElementById('mainPage').style.display = 'block';
   window.scrollTo(0, 0);
 }
+
+function showNotesPage(){
+  document.getElementById('mainPage').style.display = 'none';
+  document.getElementById('testPage').style.display = 'none';
+  document.getElementById('progressPage').style.display = 'none';
+  document.getElementById('reviewPage').style.display = 'none';
+  document.getElementById('notesPage').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+/* ============ PROGRESS DASHBOARD & MISTAKE REVIEW ============ */
+
+function masteryColor(box){
+  return ['#c73535', '#c9660a', '#caa23d', '#1f8a4c', '#144c35'][box - 1] || '#999';
+}
+
+function buildProgressChartSvg(){
+  const data = testHistory.slice(-20);
+  if(data.length === 0){
+    return `<div class="chart-empty">لسه معملتش أي اختبار. اعمل اختبار من صفحة الاختبار عشان تبدأ تشوف تقدمك هنا 📈</div>`;
+  }
+  const w = 640, h = 220, padL = 34, padR = 14, padT = 14, padB = 14;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  const n = data.length;
+  const stepX = n > 1 ? innerW / (n - 1) : 0;
+  const points = data.map((d, i) => ({
+    x: padL + stepX * i,
+    y: padT + innerH - (d.pct / 100) * innerH,
+    d: d
+  }));
+  const linePath = points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const floorY = (padT + innerH).toFixed(1);
+  const areaPath = linePath + ` L${points[points.length - 1].x.toFixed(1)},${floorY} L${points[0].x.toFixed(1)},${floorY} Z`;
+  const gridLines = [0, 25, 50, 75, 100].map(v => {
+    const y = padT + innerH - (v / 100) * innerH;
+    return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="#e6e0cf" stroke-width="1"/>` +
+      `<text x="${padL - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="#8a8370" text-anchor="end">${v}%</text>`;
+  }).join('');
+  const dots = points.map(p => {
+    const color = p.d.pct >= 70 ? '#1f8a4c' : (p.d.pct >= 40 ? '#c9660a' : '#c73535');
+    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${color}" stroke="#fff" stroke-width="1.5"><title>${esc(p.d.testType)}: ${p.d.pct}% (${p.d.correct}/${p.d.total})</title></circle>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" class="progress-svg-chart" preserveAspectRatio="none">
+    ${gridLines}
+    <path d="${areaPath}" fill="rgba(31,111,78,0.12)" stroke="none"/>
+    <path d="${linePath}" fill="none" stroke="#1f6f4e" stroke-width="2.5"/>
+    ${dots}
+  </svg>`;
+}
+
+function renderWeakPointsList(){
+  const weak = getWeakWords(10);
+  const el = document.getElementById('progressWeakPoints');
+  if(weak.length === 0){
+    el.innerHTML = `<div class="chart-empty">مفيش نقاط ضعف مسجلة لسه — استمر في التدريب وهنجمعلك هنا أكتر الكلمات اللي بتغلط فيها 👍</div>`;
+    return;
+  }
+  el.innerHTML = `<table class="test-wrong-table"><thead><tr><th>عربي</th><th>إنجليزي</th><th>مرات الغلط</th><th>مستوى الإتقان</th></tr></thead><tbody>` +
+    weak.map(w => `<tr><td>${esc(w.arabic)}</td><td class="en" style="direction:ltr;">${esc(w.english)}</td><td>${w.wrong}</td><td>${w.box}/5</td></tr>`).join('') +
+    `</tbody></table>`;
+}
+
+function renderProgressPage(){
+  const allStats = Object.values(wordStats);
+  const totalAnswered = allStats.reduce((s, v) => s + (v.correct || 0) + (v.wrong || 0), 0);
+  const totalCorrect = allStats.reduce((s, v) => s + (v.correct || 0), 0);
+  const overallAcc = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+  const boxCounts = [0, 0, 0, 0, 0, 0];
+  allStats.forEach(v => { boxCounts[v.box || 1]++; });
+  const totalWords = allStats.length;
+
+  document.getElementById('progressOverview').innerHTML = `
+    <div class="progress-stat-grid">
+      <div class="progress-stat-card"><div class="progress-stat-num">${totalAnswered}</div><div class="progress-stat-label">إجمالي الإجابات</div></div>
+      <div class="progress-stat-card"><div class="progress-stat-num">${overallAcc}%</div><div class="progress-stat-label">نسبة الدقة الكلية</div></div>
+      <div class="progress-stat-card"><div class="progress-stat-num">${testHistory.length}</div><div class="progress-stat-label">اختبارات منجزة</div></div>
+      <div class="progress-stat-card"><div class="progress-stat-num">${boxCounts[5]} / ${totalWords}</div><div class="progress-stat-label">كلمات متقنة (مستوى 5)</div></div>
+    </div>
+    <div class="mastery-bar-wrap">
+      ${[1, 2, 3, 4, 5].map(b => `<div class="mastery-bar-seg" style="flex:${boxCounts[b] || 0.001}; background:${masteryColor(b)};"></div>`).join('')}
+    </div>
+    <div class="mastery-legend">${[1, 2, 3, 4, 5].map(b => `<span><i style="background:${masteryColor(b)};"></i>مستوى ${b} (${boxCounts[b]})</span>`).join('')}</div>
+  `;
+  document.getElementById('progressChart').innerHTML = buildProgressChartSvg();
+  renderWeakPointsList();
+}
+
+let reviewCurrentItems = [];
+
+function renderReviewPage(prefillItems){
+  const source = (prefillItems && prefillItems.length) ? prefillItems : getWeakWords(20);
+  reviewCurrentItems = source;
+  const listEl = document.getElementById('reviewList');
+  const startBtn = document.getElementById('btnStartFocusedReview');
+  if(source.length === 0){
+    listEl.innerHTML = `<div class="chart-empty">مفيش أخطاء مسجلة لسه — كل ما تختبر نفسك، أي كلمة تغلط فيها هتتجمع هنا عشان تتدرب عليها من جديد 👍</div>`;
+    startBtn.style.display = 'none';
+    return;
+  }
+  startBtn.style.display = 'block';
+  listEl.innerHTML = `<table class="test-wrong-table"><thead><tr><th>✔</th><th>عربي</th><th>إنجليزي</th><th>مرات الغلط</th><th>مستوى</th></tr></thead><tbody>` +
+    source.map((w, i) => `<tr><td><input type="checkbox" class="review-check" data-idx="${i}" checked></td><td>${esc(w.arabic)}</td><td class="en" style="direction:ltr;">${esc(w.english)}</td><td>${w.wrong || '—'}</td><td>${w.box || '—'}/5</td></tr>`).join('') +
+    `</tbody></table>`;
+}
+
+function startFocusedReview(){
+  const checks = document.querySelectorAll('.review-check:checked');
+  const chosen = Array.from(checks).map(c => reviewCurrentItems[parseInt(c.dataset.idx, 10)]).filter(Boolean);
+  if(chosen.length === 0){ alert('اختار كلمة واحدة على الأقل عشان تبدأ اختبار المراجعة.'); return; }
+  selectedRows.clear();
+  chosen.forEach(it => selectedRows.add(it.section.id + '::' + it.row.id));
+  document.getElementById('reviewPage').style.display = 'none';
+  showTestPage();
+}
+
+function showProgressPage(){
+  document.getElementById('mainPage').style.display = 'none';
+  document.getElementById('testPage').style.display = 'none';
+  document.getElementById('reviewPage').style.display = 'none';
+  document.getElementById('progressPage').style.display = 'block';
+  renderProgressPage();
+  window.scrollTo(0, 0);
+}
+
+function showReviewPage(prefillItems){
+  document.getElementById('mainPage').style.display = 'none';
+  document.getElementById('testPage').style.display = 'none';
+  document.getElementById('progressPage').style.display = 'none';
+  document.getElementById('reviewPage').style.display = 'block';
+  renderReviewPage(prefillItems);
+  window.scrollTo(0, 0);
+}
+
+document.getElementById('btnGoToProgressPage').addEventListener('click', showProgressPage);
+document.getElementById('btnBackFromProgress').addEventListener('click', showMainPage);
+document.getElementById('btnGoToReviewFromProgress').addEventListener('click', () => showReviewPage());
+document.getElementById('btnBackFromReview').addEventListener('click', showMainPage);
+document.getElementById('btnGoToProgressFromReview').addEventListener('click', showProgressPage);
+document.getElementById('btnStartFocusedReview').addEventListener('click', startFocusedReview);
 
 function updateTestTypeUI(){
   const t = document.getElementById('testTypeSelect').value;
@@ -2592,10 +2924,15 @@ function finishTest(){
   html += `<div class="test-result-actions">
       <button type="button" id="btnRetakeTest">🔁 أعد نفس الاختبار</button>
       <button type="button" id="btnBackFromResult">⬅ رجوع للرئيسية</button>
-    </div></div>`;
+    </div>
+    <button type="button" id="btnReviewMistakes">🩹 راجع أخطائي وتدرّب عليها بشكل مختلف</button></div>`;
   resultPanel.innerHTML = html;
   document.getElementById('btnRetakeTest').addEventListener('click', startTest);
   document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
+  document.getElementById('btnReviewMistakes').addEventListener('click', () => {
+    showReviewPage(isPuzzle ? [] : wrongListToReviewItems(wrongList));
+  });
+  pushTestHistory(testType, total, correctCount, isPuzzle ? [] : wrongList);
 }
 
 /* ---- Broken sentence puzzle: decoy word detection + click-to-reorder reconstruction ---- */
@@ -2710,7 +3047,8 @@ function submitBrokenRound(timedOut){
   brokenResults.push({
     correct: isCorrect,
     original: round.originalWords.join(' '),
-    yours: brokenAssembledWords.map(w => w.word).join(' ') || '(محصلش وقت)'
+    yours: brokenAssembledWords.map(w => w.word).join(' ') || '(محصلش وقت)',
+    item: round.item
   });
 
   setTimeout(() => { brokenIndex++; runBrokenRound(); }, 1300);
@@ -2738,10 +3076,15 @@ function finishBroken(){
   html += `<div class="test-result-actions">
       <button type="button" id="btnRetakeTest">🔁 جرب تاني</button>
       <button type="button" id="btnBackFromResult">⬅ رجوع للرئيسية</button>
-    </div></div>`;
+    </div>
+    <button type="button" id="btnReviewMistakes">🩹 راجع أخطائي وتدرّب عليها بشكل مختلف</button></div>`;
   resultPanel.innerHTML = html;
   document.getElementById('btnRetakeTest').addEventListener('click', startTest);
   document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
+  document.getElementById('btnReviewMistakes').addEventListener('click', () => {
+    showReviewPage(wrongListToReviewItems(wrongList));
+  });
+  pushTestHistory('brokensentence', total, correctCount, wrongList);
 }
 document.getElementById('btnBrokenSubmit').addEventListener('click', () => submitBrokenRound(false));
 
@@ -2828,9 +3171,14 @@ function finishSurvival(){
     <div class="test-result-actions">
       <button type="button" id="btnRetakeTest">🔁 جرب تاني</button>
       <button type="button" id="btnBackFromResult">⬅ رجوع للرئيسية</button>
-    </div></div>`;
+    </div>
+    <button type="button" id="btnReviewMistakes">🩹 راجع أخطائي وتدرّب عليها بشكل مختلف</button></div>`;
   document.getElementById('btnRetakeTest').addEventListener('click', startTest);
   document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
+  document.getElementById('btnReviewMistakes').addEventListener('click', () => {
+    showReviewPage(wrongListToReviewItems(testResults));
+  });
+  pushTestHistory('survival', survivalStreak + 1, survivalStreak, testResults);
 }
 
 /* ---- Matching pairs mode ---- */
@@ -2928,9 +3276,12 @@ function finishMatching(){
     <div class="test-result-actions">
       <button type="button" id="btnRetakeTest">🔁 جرب تاني</button>
       <button type="button" id="btnBackFromResult">⬅ رجوع للرئيسية</button>
-    </div></div>`;
+    </div>
+    <button type="button" id="btnReviewMistakes">📊 شوف تقدمك ونقاط ضعفك</button></div>`;
   document.getElementById('btnRetakeTest').addEventListener('click', startTest);
   document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
+  document.getElementById('btnReviewMistakes').addEventListener('click', showProgressPage);
+  pushTestHistory('matching', matchingPairs.length, matchingMatchedCount, []);
 }
 
 document.getElementById('btnGoToTestPage').addEventListener('click', showTestPage);
@@ -2974,8 +3325,14 @@ async function storageGet(key){
   }catch(e){ return null; }
 }
 
-async function saveEverything(){
-  const state = { sections: {}, longText: document.getElementById('longTextInput').value, wordStats: wordStats };
+async function saveEverything(silent){
+  const state = {
+    sections: {},
+    longText: document.getElementById('longTextInput').value,
+    notesText: document.getElementById('notesTextarea').value,
+    wordStats: wordStats,
+    testHistory: testHistory
+  };
   sections.forEach(section => {
     const ord = ensureOrder(section);
     const rowsObj = {};
@@ -2984,10 +3341,43 @@ async function saveEverything(){
   });
   const payload = JSON.stringify(state);
   const ok = await storageSet('grammar-full-state', payload);
-  document.getElementById('scoreboard').textContent = ok
-    ? "تم حفظ كل التعديلات والترتيب بنجاح ✅"
-    : "حصل خطأ أثناء الحفظ، جرب تاني ❌";
+  if(silent){
+    showAutosaveIndicator(ok);
+  } else {
+    document.getElementById('scoreboard').textContent = ok
+      ? "تم حفظ كل التعديلات والترتيب بنجاح ✅"
+      : "حصل خطأ أثناء الحفظ، جرب تاني ❌";
+  }
+  return ok;
 }
+
+let autosaveTimer = null;
+function scheduleAutosave(){
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => { saveEverything(true); }, 900);
+}
+function showAutosaveIndicator(ok){
+  const el = document.getElementById('autosaveIndicator');
+  if(!el) return;
+  el.textContent = ok ? '💾 تم الحفظ التلقائي' : '⚠️ فشل الحفظ التلقائي، تأكد من اتصالك';
+  el.classList.add('show');
+  clearTimeout(showAutosaveIndicator._t);
+  showAutosaveIndicator._t = setTimeout(() => el.classList.remove('show'), 1800);
+}
+// autosave on any edit anywhere in the app (word edits, comments, long-read text, notebook, add/delete row, drag reorder)
+document.addEventListener('input', (e) => {
+  if(e.target && e.target.matches && e.target.matches('.edit-input, .comment-input, #longTextInput, #notesTextarea')){
+    scheduleAutosave();
+  }
+});
+document.addEventListener('click', (e) => {
+  if(e.target && e.target.matches && e.target.matches('.del-btn, .add-row-btn, .del-extra-btn')){
+    scheduleAutosave();
+  }
+});
+document.addEventListener('drop', () => scheduleAutosave());
+document.getElementById('btnGoToNotesPage').addEventListener('click', showNotesPage);
+document.getElementById('btnBackFromNotes').addEventListener('click', showMainPage);
 
 function applySavedState(saved){
   if(!saved || !saved.sections) return;
@@ -2995,8 +3385,15 @@ function applySavedState(saved){
     const ta = document.getElementById('longTextInput');
     if(ta) ta.value = saved.longText;
   }
+  if(typeof saved.notesText === 'string'){
+    const nt = document.getElementById('notesTextarea');
+    if(nt) nt.value = saved.notesText;
+  }
   if(saved.wordStats && typeof saved.wordStats === 'object'){
     wordStats = saved.wordStats;
+  }
+  if(Array.isArray(saved.testHistory)){
+    testHistory = saved.testHistory;
   }
   sections.forEach(section => {
     const s = saved.sections[section.id];
@@ -3073,6 +3470,7 @@ document.getElementById('btnReset').addEventListener('click', () => {
 (async function init(){
   sections.forEach(initSectionRows);
   await loadSavedState();
+  await loadStatsOnly();
   buildApp();
   buildReadingDisplay();
   if(supportsSpeech()){
