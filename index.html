@@ -97,6 +97,18 @@
 
   .subhead{ background:rgba(0,0,0,.06); font-weight:bold; text-align:right; padding:5px 10px; font-size:.8rem; }
 
+  .section-toolbar{
+    display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; background:rgba(0,0,0,.02);
+    border-bottom:1px solid #eee;
+  }
+  .section-toolbar button{
+    border:none; border-radius:6px; padding:5px 10px; font-size:.72rem; font-weight:bold;
+    cursor:pointer; color:#fff;
+  }
+  .select-all-btn{ background:var(--teal); }
+  .export-btn{ background:var(--gold); color:#2a1e00 !important; }
+  .import-section-btn{ background:var(--orange); }
+
   input.blank{
     width:100%; min-width:50px; border:1.5px solid #c9c2a8; border-radius:5px;
     padding:4px 5px; font-size:.85rem; background:#fffdf5; text-align:center;
@@ -242,9 +254,100 @@
     border-radius:10px; padding:14px 18px; text-align:center; font-weight:bold; letter-spacing:.5px;
   }
   footer{ text-align:center; color:#8a8370; font-size:.8rem; margin:22px 0 4px; }
+
+  /* ---- Test Page ---- */
+  .test-card{
+    max-width:700px; margin:20px auto; background:#fff; border-radius:12px;
+    box-shadow:0 3px 10px rgba(0,0,0,.15); border:1px solid rgba(0,0,0,.06); overflow:hidden;
+  }
+  .test-card-inner{ padding:22px; }
+  .test-selected-count{ text-align:center; font-weight:bold; color:var(--teal); font-size:1rem; }
+  .test-setup-row{ display:flex; justify-content:center; align-items:center; gap:10px; margin:14px 0; font-size:.95rem; }
+  .test-setup-row select, .test-setup-row input{
+    border:1.5px solid #c9c2a8; border-radius:6px; padding:6px 10px; font-size:.9rem; background:#fffdf5;
+  }
+  .test-start-btn, .test-submit-btn{
+    display:block; width:100%; margin-top:16px; border:none; border-radius:10px; padding:14px;
+    font-size:1.05rem; font-weight:bold; cursor:pointer; color:#fff; background:var(--green);
+    box-shadow:0 3px 0 rgba(0,0,0,.2);
+  }
+  .test-start-btn:active, .test-submit-btn:active{ transform:translateY(2px); box-shadow:none; }
+  .test-top-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .test-progress{ font-weight:bold; color:var(--purple); }
+  .test-timer{ font-weight:bold; font-size:1.2rem; color:var(--teal); background:#eafaf8; padding:4px 12px; border-radius:20px; }
+  .test-timer.test-timer-warning{ color:#fff; background:var(--bad); animation:shake .4s infinite; }
+  .test-prompt{ text-align:center; margin:20px 0; }
+  .test-word{ font-size:2.1rem; font-weight:bold; padding:14px; }
+  .test-word.en{ font-family:"Georgia",serif; direction:ltr; color:var(--blue); }
+  .test-word.ar{ direction:rtl; color:var(--magenta); }
+  .test-sentence{ font-size:1.3rem; font-family:"Georgia",serif; direction:ltr; color:var(--ink); line-height:1.8; padding:10px; }
+  .test-answer-input{
+    width:100%; border:2px solid #c9c2a8; border-radius:8px; padding:12px; font-size:1.1rem;
+    text-align:center; background:#fffdf5;
+  }
+  .test-answer-input.correct{ background:#e6f6ea; border-color:var(--ok); color:var(--green-d); }
+  .test-answer-input.wrong{ background:#fdeaea; border-color:var(--bad); color:var(--bad); }
+  .test-score{ text-align:center; font-size:1.4rem; font-weight:bold; color:var(--green-d); margin:10px 0 20px; }
+  .test-perfect{ text-align:center; font-size:1.1rem; color:var(--green-d); font-weight:bold; margin:10px 0; }
+  .test-wrong-title{ font-weight:bold; margin:10px 0; color:var(--bad); }
+  .test-wrong-table{ width:100%; border-collapse:collapse; font-size:.9rem; margin-bottom:16px; }
+  .test-wrong-table th, .test-wrong-table td{ border:1px solid #eee; padding:7px; text-align:center; }
+  .test-wrong-table th{ background:rgba(0,0,0,.05); }
+  .test-result-actions{ display:flex; gap:10px; }
+  .test-result-actions button{
+    flex:1; border:none; border-radius:8px; padding:12px; font-weight:bold; cursor:pointer; color:#fff;
+  }
+  #btnRetakeTest{ background:var(--teal); }
+  #btnBackFromResult{ background:#8a8370; }
+  #btnGoToTestPage{ background:var(--purple); }
+  #btnBackFromTest{ background:#8a8370; }
+  #btnOpenImport{ background:var(--orange); }
+  #btnRunImport{ background:var(--green); color:#fff; border:none; }
+  #btnCloseImport{ background:#8a8370; color:#fff; border:none; }
+  #importPanel code{ background:rgba(0,0,0,.06); padding:2px 5px; border-radius:4px; direction:ltr; display:inline-block; }
+
+  .test-type-desc{ text-align:center; font-size:.8rem; color:#6b6450; min-height:1.2em; margin:-6px 0 4px; }
+  .test-streak{ font-weight:bold; color:var(--orange); background:#fff3e0; padding:4px 12px; border-radius:20px; }
+
+  .test-options-container{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+  .test-option-btn{
+    border:2px solid #c9c2a8; background:#fffdf5; border-radius:10px; padding:14px 8px;
+    font-size:1rem; font-weight:bold; cursor:pointer; color:var(--ink); word-break:break-word;
+  }
+  .test-option-btn:active{ transform:translateY(1px); }
+  .test-option-btn.correct{ background:#e6f6ea; border-color:var(--ok); color:var(--green-d); }
+  .test-option-btn.wrong{ background:#fdeaea; border-color:var(--bad); color:var(--bad); }
+  .test-option-btn.disabled-option{ pointer-events:none; opacity:.6; }
+
+  .matching-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:14px; }
+  .matching-col{ display:flex; flex-direction:column; gap:8px; }
+  .matching-card{
+    border:2px solid #c9c2a8; background:#fffdf5; border-radius:8px; padding:12px 8px;
+    font-size:.9rem; font-weight:bold; text-align:center; cursor:pointer; word-break:break-word; min-height:44px;
+  }
+  .matching-card.en{ font-family:"Georgia",serif; direction:ltr; }
+  .matching-card.ar{ direction:rtl; }
+  .matching-card.selected{ border-color:var(--gold); background:#fff8e0; }
+  .matching-card.matched{ border-color:var(--ok); background:#e6f6ea; color:var(--green-d); pointer-events:none; opacity:.75; }
+  .matching-card.mismatch{ border-color:var(--bad); background:#fdeaea; animation:shake .3s; }
+
+  .broken-assembled{
+    min-height:56px; border:2px dashed #c9c2a8; border-radius:8px; padding:10px;
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px; background:#fbfaf3;
+  }
+  .broken-wordbank{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  .broken-chip{
+    border:2px solid var(--teal); background:#eafaf8; color:var(--teal); border-radius:20px;
+    padding:8px 14px; font-size:.95rem; font-family:"Georgia",serif; direction:ltr; cursor:pointer; font-weight:bold;
+  }
+  .broken-chip.placed{ border-color:var(--purple); background:#faf6ff; color:var(--purple); }
+  .broken-chip.used{ opacity:.3; pointer-events:none; }
+  .broken-chip:disabled{ opacity:.6; pointer-events:none; }
 </style>
 </head>
 <body>
+
+<div id="mainPage">
 
 <header class="top">
   <h1 class="en">English Grammar Basics</h1>
@@ -258,6 +361,31 @@
   <button id="btnEditToggle">تعديل الكلمات 🛠️</button>
   <button id="btnSaveOrder">حفظ التغييرات 💾</button>
   <button id="btnReset">ريسِت 🔄</button>
+  <button id="btnGoToTestPage">📝 صفحة الاختبار</button>
+  <button id="btnOpenImport">📥 استيراد كلمات بالجملة</button>
+</div>
+
+<div id="importPanel" class="test-card" style="display:none; max-width:800px;">
+  <div class="test-card-inner">
+    <p class="desc" style="text-align:center; font-weight:bold;">استيراد كلمات أو جمل بالجملة</p>
+    <p class="desc">اختار القسم اللي عايز تضيفله، وبعدين الصق البيانات أو ارفع ملف — سطر لكل كلمة، وكل سطر مقسّم بعلامة (|) أو فاصلة (,) بين الحقول. مثال لقسم كلمات: <code>book | كتاب | I read a book.</code> — مثال لقسم جمل: <code>How are you? | إزيك؟</code></p>
+    <div class="test-setup-row">
+      <label>القسم:
+        <select id="importSectionSelect"></select>
+      </label>
+    </div>
+    <div class="test-setup-row">
+      <label>أو ارفع ملف (txt/csv):
+        <input type="file" id="importFileInput" accept=".txt,.csv">
+      </label>
+    </div>
+    <textarea id="importTextarea" style="width:100%; min-height:160px; border:1.5px solid #c9c2a8; border-radius:8px; padding:10px; font-size:.9rem; direction:ltr; text-align:left;" placeholder="book | كتاب | I read a book every night.&#10;water | ماء | Can I have some water?"></textarea>
+    <div id="importStatus" class="selection-count" style="margin-top:8px;"></div>
+    <div class="longread-controls">
+      <button type="button" id="btnRunImport">📥 استورد الكل</button>
+      <button type="button" id="btnCloseImport">إغلاق ✖</button>
+    </div>
+  </div>
 </div>
 
 <div class="controlbar speechbar">
@@ -331,6 +459,101 @@
 </div>
 
 <footer>اكتب في الخانات الفاضية، وبعدين دوس "قارن" لتشوف إجابتك صح ولا لأ.</footer>
+
+</div>
+
+<div id="testPage" style="display:none;">
+  <header class="top">
+    <h1 class="en">Test Page</h1>
+    <p>اختبار مؤقّت للكلمات المحددة</p>
+  </header>
+
+  <div class="controlbar">
+    <button id="btnBackFromTest">⬅ رجوع للصفحة الرئيسية</button>
+  </div>
+
+  <div id="testSetupPanel" class="test-card">
+    <div class="test-card-inner">
+      <p id="testSelectedCount" class="test-selected-count"></p>
+      <p class="desc" style="text-align:center;">حدد الكلمات من الصفحة الرئيسية (علامة ✔ في عمود 🔊)، وبعدين ارجع هنا واضبط إعدادات الاختبار.</p>
+
+      <div class="test-setup-row">
+        <label>نوع الاختبار:
+          <select id="testTypeSelect">
+            <option value="word" selected>اختبار الكلمات (عربي/إنجليزي)</option>
+            <option value="sentence">اختبار الجمل (املأ الفراغ)</option>
+            <option value="mcq">اختيار من متعدد 🔘</option>
+            <option value="truefalse">صح أو خطأ ✅❌</option>
+            <option value="scramble">فك تشفير الحروف 🔤</option>
+            <option value="matching">مطابقة الأزواج 🧩</option>
+            <option value="survival">وضع البقاء (Survival) 🔥</option>
+            <option value="smart">المراجعة الذكية 🧠 (تتعلم نقاط ضعفك)</option>
+            <option value="oddone">الشاذ بينهم 🧩 (تحليل فئوي)</option>
+            <option value="antonym">تناظر الأضداد 🔗 (تفكير قياسي)</option>
+            <option value="hiddenrule">القاعدة الخفية 🕵️ (استنتاج منطقي)</option>
+            <option value="brokensentence">الجملة المعطوبة 🧨 (كلمة دخيلة + إعادة ترتيب)</option>
+          </select>
+        </label>
+      </div>
+      <p id="testTypeDesc" class="test-type-desc"></p>
+      <div class="test-setup-row" id="testDirectionRow">
+        <label>الاتجاه:
+          <select id="testDirectionSelect">
+            <option value="ar2en" selected>عربي → اكتب الإنجليزي</option>
+            <option value="en2ar">إنجليزي → اكتب العربي</option>
+          </select>
+        </label>
+      </div>
+      <div class="test-setup-row">
+        <label>الوقت لكل سؤال (بالثانية):
+          <input type="number" id="testSecondsInput" value="15" min="3" max="120" style="width:70px;">
+        </label>
+      </div>
+
+      <button type="button" id="btnStartTest" class="test-start-btn">▶ ابدأ الاختبار</button>
+    </div>
+  </div>
+
+  <div id="testQuizPanel" class="test-card" style="display:none;">
+    <div class="test-card-inner">
+      <div class="test-top-row">
+        <span id="testProgress" class="test-progress"></span>
+        <span id="testStreak" class="test-streak" style="display:none;"></span>
+        <span id="testTimer" class="test-timer"></span>
+      </div>
+      <div id="testPrompt" class="test-prompt"></div>
+      <input type="text" id="testAnswerInput" class="test-answer-input" placeholder="اكتب إجابتك هنا..." autocomplete="off">
+      <div id="testOptionsContainer" class="test-options-container" style="display:none;"></div>
+      <button type="button" id="btnSubmitTestAnswer" class="test-submit-btn">تأكيد ✅</button>
+    </div>
+  </div>
+
+  <div id="testMatchingPanel" class="test-card" style="display:none;">
+    <div class="test-card-inner">
+      <div class="test-top-row">
+        <span id="matchingProgress" class="test-progress"></span>
+        <span id="matchingTimer" class="test-timer"></span>
+      </div>
+      <p class="desc" style="text-align:center;">دوس على كلمة إنجليزي وبعدها على معناها العربي (أو العكس) عشان توصّل بينهم.</p>
+      <div id="matchingGrid" class="matching-grid"></div>
+    </div>
+  </div>
+
+  <div id="testBrokenPanel" class="test-card" style="display:none;">
+    <div class="test-card-inner">
+      <div class="test-top-row">
+        <span id="brokenProgress" class="test-progress"></span>
+        <span id="brokenTimer" class="test-timer"></span>
+      </div>
+      <p class="desc" style="text-align:center;">فيه كلمة دخيلة مش من الجملة الأصلية — دوس بس على الكلمات الصح بالترتيب الصح، وسيب الدخيلة من غير ما تضغط عليها.</p>
+      <div id="brokenAssembled" class="broken-assembled"></div>
+      <div id="brokenWordBank" class="broken-wordbank"></div>
+      <button type="button" id="btnBrokenSubmit" class="test-submit-btn">تأكيد ✅</button>
+    </div>
+  </div>
+
+  <div id="testResultPanel" class="test-card" style="display:none;"></div>
+</div>
 
 <script>
 /* ============ DEFAULT DATA ============ */
@@ -451,6 +674,117 @@ const conjunctions = [
 ["While","بينما","Listen to music while studying."],["Since","منذ","I have lived here since 2015."],
 ];
 
+const commonWords = [
+[1,"time","وقت","I don't have much time."],[2,"person","شخص","She is a kind person."],
+[3,"year","سنة","I moved here last year."],[4,"way","طريقة","This is the best way to do it."],
+[5,"day","يوم","Have a nice day."],[6,"thing","شيء","I need one more thing."],
+[7,"man","رجل","The man is waiting outside."],[8,"world","عالم","We live in a big world."],
+[9,"life","حياة","Life is beautiful."],[10,"hand","يد","Give me your hand."],
+[11,"part","جزء","This is part of the plan."],[12,"child","طفل","The child is sleeping."],
+[13,"eye","عين","She has beautiful eyes."],[14,"woman","امرأة","The woman is my teacher."],
+[15,"place","مكان","This is a nice place."],[16,"work","عمل","I have a lot of work today."],
+[17,"week","أسبوع","See you next week."],[18,"point","نقطة","That's a good point."],
+[19,"number","رقم","What is your phone number?"],[20,"group","مجموعة","We work in a small group."],
+[21,"house","بيت","I bought a new house."],[22,"home","منزل","I want to go home."],
+[23,"family","عائلة","I love my family."],[24,"friend","صديق","He is my best friend."],
+[25,"water","ماء","Can I have some water?"],[26,"food","طعام","The food was delicious."],
+[27,"money","فلوس","I don't have enough money."],[28,"book","كتاب","I'm reading a good book."],
+[29,"name","اسم","What's your name?"],[30,"school","مدرسة","My kids go to school."],
+[31,"city","مدينة","Cairo is a big city."],[32,"country","بلد","Egypt is my country."],
+[33,"music","موسيقى","I love listening to music."],[34,"phone","تليفون","My phone battery is low."],
+[35,"car","عربية","He bought a new car."],[36,"computer","كمبيوتر","I use my computer every day."],
+[37,"internet","إنترنت","The internet is very slow today."],[38,"health","صحة","Your health is important."],
+[39,"weather","جو","The weather is nice today."],[40,"animal","حيوان","This is a wild animal."],
+[41,"dog","كلب","The dog is barking."],[42,"cat","قطة","My cat sleeps all day."],
+[43,"tree","شجرة","There is a big tree in the garden."],[44,"sun","شمس","The sun is shining."],
+[45,"moon","قمر","The moon is beautiful tonight."],[46,"sky","سماء","The sky is blue."],
+[47,"sea","بحر","We swam in the sea."],[48,"river","نهر","The Nile is a famous river."],
+[49,"road","طريق","This road is very long."],[50,"door","باب","Please close the door."],
+[51,"window","شباك","Open the window, please."],[52,"table","طاولة","Put the food on the table."],
+[53,"chair","كرسي","Sit on this chair."],[54,"breakfast","فطار","I eat breakfast every morning."],
+[55,"lunch","غدا","Let's have lunch together."],[56,"dinner","عشا","What's for dinner tonight?"],
+[57,"morning","صباح","Good morning!"],[58,"night","ليل","Good night!"],
+[59,"room","أوضة","This is my room."],[60,"street","شارع","I live on this street."],
+[61,"shop","محل","I bought this from a shop."],[62,"market","سوق","We went to the market."],
+[63,"hospital","مستشفى","He is in the hospital."],[64,"doctor","دكتور","I need to see a doctor."],
+[65,"teacher","مدرس","She is my English teacher."],[66,"student","طالب","He is a good student."],
+[67,"job","وظيفة","I found a new job."],[68,"business","تجارة","He has his own business."],
+[69,"idea","فكرة","That's a great idea!"],[70,"question","سؤال","Can I ask you a question?"],
+[71,"answer","إجابة","I don't know the answer."],[72,"story","قصة","Tell me a story."],
+[73,"news","أخبار","Did you hear the news?"],[74,"letter","رسالة","I wrote him a letter."],
+[75,"word","كلمة","What does this word mean?"],[76,"language","لغة","English is a global language."],
+[77,"color","لون","What's your favorite color?"],[78,"price","سعر","The price is too high."],
+[79,"age","عمر","What's your age?"],[80,"party","حفلة","We're having a party tonight."],
+[81,"game","لعبة","Let's play a game."],[82,"team","فريق","We are one team."],
+[83,"movie","فيلم","Let's watch a movie."],[84,"song","أغنية","This is my favorite song."],
+[85,"picture","صورة","Take a picture of us."],[86,"be","يكون","I want to be a doctor."],
+[87,"have","يمتلك","I have two brothers."],[88,"do","يفعل","What do you do for fun?"],
+[89,"say","يقول","What did you say?"],[90,"get","يحصل على","I need to get some sleep."],
+[91,"make","يصنع","She made a cake."],[92,"go","يذهب","Let's go home."],
+[93,"know","يعرف","I know the answer."],[94,"take","يأخذ","Take this book with you."],
+[95,"see","يرى","I can see the mountains."],[96,"come","يأتي","Come here, please."],
+[97,"think","يفكر","I think you're right."],[98,"look","ينظر","Look at this picture."],
+[99,"want","يريد","I want a cup of tea."],[100,"give","يعطي","Can you give me a hand?"],
+[101,"use","يستخدم","You can use my phone."],[102,"find","يجد","I can't find my keys."],
+[103,"tell","يخبر","Tell me the truth."],[104,"ask","يسأل","I asked him a question."],
+[105,"feel","يشعر","I feel very happy today."],[106,"try","يحاول","Try again, you can do it."],
+[107,"leave","يغادر","I have to leave now."],[108,"call","يتصل","Call me later."],
+[109,"need","يحتاج","I need your help."],[110,"become","يصبح","He became a doctor."],
+[111,"put","يضع","Put the book on the table."],[112,"keep","يحتفظ بـ","Keep the change."],
+[113,"begin","يبدأ","The movie will begin soon."],[114,"help","يساعد","Can you help me, please?"],
+[115,"talk","يتكلم","Let's talk about it."],[116,"start","يبدأ","The class starts at nine."],
+[117,"show","يعرض","Show me your work."],[118,"hear","يسمع","I can't hear you."],
+[119,"play","يلعب","The kids are playing outside."],[120,"run","يجري","He runs every morning."],
+[121,"move","يتحرك","Please move your car."],[122,"live","يعيش","I live in Cairo."],
+[123,"believe","يصدق","I believe you."],[124,"write","يكتب","Write your name here."],
+[125,"read","يقرأ","I read every night."],[126,"speak","يتحدث","Do you speak English?"],
+[127,"buy","يشتري","I want to buy a new phone."],[128,"sell","يبيع","They sell fresh fruit."],
+[129,"learn","يتعلم","I want to learn English."],[130,"teach","يعلّم","She teaches math."],
+[131,"understand","يفهم","I don't understand this."],[132,"remember","يتذكر","Do you remember me?"],
+[133,"forget","ينسى","Don't forget your keys."],[134,"open","يفتح","Open the door, please."],
+[135,"close","يغلق","Close the window."],[136,"wait","ينتظر","Wait for me here."],
+[137,"meet","يقابل","Nice to meet you."],[138,"send","يرسل","Send me the file."],
+[139,"wear","يرتدي","She is wearing a red dress."],[140,"drive","يقود","He drives to work every day."],
+[141,"good","جيد","This is a good idea."],[142,"bad","سيء","The weather is bad today."],
+[143,"new","جديد","I bought a new car."],[144,"old","قديم","This is an old house."],
+[145,"big","كبير","This is a big city."],[146,"small","صغير","It's a small room."],
+[147,"happy","سعيد","I am happy today."],[148,"sad","حزين","She looks sad."],
+[149,"easy","سهل","This test is easy."],[150,"difficult","صعب","This question is difficult."],
+[151,"beautiful","جميل","What a beautiful view!"],[152,"hot","حار","It's very hot today."],
+[153,"cold","بارد","The water is cold."],[154,"fast","سريع","He is a fast runner."],
+[155,"slow","بطيء","The internet is very slow."],[156,"strong","قوي","He is very strong."],
+[157,"important","مهم","This meeting is important."],[158,"different","مختلف","We have different opinions."],
+[159,"expensive","غالي","This car is expensive."],[160,"cheap","رخيص","I bought a cheap phone."],
+];
+
+const commonSentences = [
+[1,"How are you?","إزيك؟ / كيف حالك؟"],[2,"What is your name?","ما اسمك؟"],
+[3,"Nice to meet you.","سعيد بلقائك."],[4,"Where do you live?","أين تعيش؟"],
+[5,"I don't understand.","أنا مش فاهم."],[6,"Can you help me?","ممكن تساعدني؟"],
+[7,"What time is it?","الساعة كام؟"],[8,"I am hungry.","أنا جعان."],
+[9,"I am tired.","أنا تعبان."],[10,"See you later.","أشوفك بعدين."],
+[11,"Thank you very much.","شكرًا جزيلاً."],[12,"You're welcome.","العفو."],
+[13,"I'm sorry.","أنا آسف."],[14,"Excuse me.","لو سمحت."],
+[15,"How much does this cost?","بكام ده؟"],[16,"Where is the bathroom?","فين الحمام؟"],
+[17,"I would like some coffee.","عايز قهوة من فضلك."],[18,"What do you do for a living?","بتشتغل إيه؟"],
+[19,"I need some help.","محتاج مساعدة."],[20,"Let's go.","يلا بينا."],
+[21,"I have no idea.","معنديش فكرة."],[22,"It's not a big deal.","مش مشكلة كبيرة."],
+[23,"Take care of yourself.","خد بالك من نفسك."],[24,"I miss you.","مشتاقلك."],
+[25,"Congratulations!","مبروك!"],[26,"Good luck!","بالتوفيق!"],
+[27,"I agree with you.","أنا موافقك."],[28,"I disagree.","أنا مش موافق."],
+[29,"What's the weather like today?","الجو عامل إيه النهاردة؟"],[30,"It's raining outside.","بتمطر برة."],
+[31,"I'm on my way.","أنا في طريقي."],[32,"Can you repeat that, please?","ممكن تعيد تاني؟"],
+[33,"I don't know.","مش عارف."],[34,"That's a good idea.","ده فكرة كويسة."],
+[35,"I'm looking forward to it.","متحمس للموضوع ده."],[36,"Please wait a moment.","استنى لحظة من فضلك."],
+[37,"Have a nice day!","يوم سعيد!"],[38,"I need to go now.","لازم أمشي دلوقتي."],
+[39,"Are you free tomorrow?","إنت فاضي بكرة؟"],[40,"Let me think about it.","خليني أفكر في الموضوع."],
+[41,"I'll call you later.","هكلمك بعدين."],[42,"It doesn't matter.","مش فارقة."],
+[43,"I'm not sure.","مش متأكد."],[44,"What happened?","حصل إيه؟"],
+[45,"Everything is fine.","كل حاجة تمام."],[46,"I'm proud of you.","أنا فخور بيك."],
+[47,"Take it easy.","خليك هادي."],[48,"I promise.","أعدك."],
+[49,"Believe me.","صدقني."],[50,"It was nice talking to you.","كان كلام جميل معاك."],
+];
+
 /* ============ SECTION DEFINITIONS ============ */
 // kinds: 'num' (auto position number), 'static', 'en', 'ar'
 
@@ -484,6 +818,12 @@ const sections = [
 
   {id:'conj', color:'magenta', title:'٨. Conjunctions — روابط',
    headers:['Word','Meaning','Example'], kinds:['en','ar','en'], data:conjunctions, sub:null, speakCols:[0,2], sentenceCol:2},
+
+  {id:'common_words', color:'green', title:'٩. Common Words — أكثر الكلمات شيوعًا',
+   headers:['#','Word','Meaning','Example'], kinds:['num','en','ar','en'], data:commonWords, sub:null, speakCols:[1,3], sentenceCol:3},
+
+  {id:'common_sentences', color:'purple', title:'١٠. Common Sentences — أكثر الجمل شيوعًا',
+   headers:['#','Sentence','Translation'], kinds:['num','en','ar'], data:commonSentences, sub:null, speakCols:[1], sentenceCol:null},
 ];
 
 /* ============ STATE ============ */
@@ -611,7 +951,13 @@ function renderSectionTable(section){
   const theadCells = `<th class="handle-col"></th>` + `<th class="speak-th">🔊</th>` +
     section.headers.map(h => `<th>${esc(h)}</th>`).join('') +
     `<th class="comment-th">ملاحظة</th>`;
-  return `<table id="table-${section.id}">
+  const allSelected = section.rows.length > 0 && section.rows.every(r => selectedRows.has(section.id + '::' + r.id));
+  const toolbar = `<div class="section-toolbar">
+    <button type="button" class="select-all-btn" data-section="${section.id}">${allSelected ? '✖ إلغاء تحديد الكل' : '✔ تحديد كل المجموعة'}</button>
+    <button type="button" class="export-btn" data-section="${section.id}">⬇ تصدير لملف</button>
+    <button type="button" class="import-section-btn" data-section="${section.id}">📥 استيراد لهذا القسم</button>
+  </div>`;
+  return `${toolbar}<table id="table-${section.id}">
     <thead><tr>${theadCells}</tr></thead>
     <tbody id="tbody-${section.id}">${renderTbody(section)}</tbody>
   </table>`;
@@ -640,6 +986,7 @@ function buildApp(){
   sections.forEach(section => {
     const tbody = document.getElementById('tbody-' + section.id);
     if(tbody) wireTbody(tbody, section);
+    wireSectionToolbar(section);
   });
 
   applyMode();
@@ -1569,6 +1916,1039 @@ function resetReadAlong(){
   document.getElementById('readStatus').textContent = "";
 }
 
+// ---- IQ-style puzzle generators (odd-one-out, antonym analogy, hidden-rule induction) ----
+
+const ANTONYM_PAIRS = [
+  ['above', 'below'], ['over', 'under'], ['before', 'after'],
+  ['behind', 'in front of'], ['with', 'without'], ['near', 'far from'], ['like', 'unlike']
+];
+
+function buildOddOneOutRound(){
+  const candidateSections = sections.filter(s => s.rows.length >= 4 && getQuizWordColumn(s) != null);
+  if(candidateSections.length < 2) return null;
+  const targetSection = candidateSections[Math.floor(Math.random() * candidateSections.length)];
+  const wordCol = getQuizWordColumn(targetSection);
+  const fourRows = shuffleArray(targetSection.rows).slice(0, 4);
+  const otherSections = candidateSections.filter(s => s.id !== targetSection.id);
+  if(otherSections.length === 0) return null;
+  const oddSection = otherSections[Math.floor(Math.random() * otherSections.length)];
+  const oddCol = getQuizWordColumn(oddSection);
+  const oddRow = oddSection.rows[Math.floor(Math.random() * oddSection.rows.length)];
+
+  const items = fourRows.map(r => ({ text: r.values[wordCol], isOdd: false }));
+  items.push({ text: oddRow.values[oddCol], isOdd: true });
+  return { items: shuffleArray(items) };
+}
+
+function buildAntonymRound(){
+  if(ANTONYM_PAIRS.length < 2) return null;
+  const shuffledPairs = shuffleArray(ANTONYM_PAIRS);
+  const pairA = shuffledPairs[0], pairB = shuffledPairs[1];
+  const flipA = Math.random() < 0.5, flipB = Math.random() < 0.5;
+  const shownA1 = flipA ? pairA[0] : pairA[1];
+  const shownA2 = flipA ? pairA[1] : pairA[0];
+  const shownB1 = flipB ? pairB[0] : pairB[1];
+  const correctB2 = flipB ? pairB[1] : pairB[0];
+
+  const allWords = ANTONYM_PAIRS.flat();
+  const distractorPool = shuffleArray(allWords.filter(w => w !== correctB2 && w !== shownB1));
+  const options = shuffleArray([correctB2].concat(distractorPool.slice(0, 3)));
+  return { shownA1: shownA1, shownA2: shownA2, shownB1: shownB1, correctB2: correctB2, options: options };
+}
+
+function buildHiddenRuleRound(){
+  const candidateSections = sections.filter(s => s.rows.length >= 4 && getQuizWordColumn(s) != null);
+  if(candidateSections.length < 2) return null;
+  const hiddenSection = candidateSections[Math.floor(Math.random() * candidateSections.length)];
+  const col = getQuizWordColumn(hiddenSection);
+  const shuffledRows = shuffleArray(hiddenSection.rows);
+  const examples = shuffledRows.slice(0, 3).map(r => r.values[col]);
+  const isSameCategory = Math.random() < 0.5;
+  let testWord;
+  if(isSameCategory){
+    const remaining = shuffledRows.slice(3);
+    const pick = remaining.length ? remaining[0] : hiddenSection.rows[0];
+    testWord = pick.values[col];
+  } else {
+    const otherSections = candidateSections.filter(s => s.id !== hiddenSection.id);
+    const otherSec = otherSections[Math.floor(Math.random() * otherSections.length)];
+    const otherCol = getQuizWordColumn(otherSec);
+    const pick = otherSec.rows[Math.floor(Math.random() * otherSec.rows.length)];
+    testWord = pick.values[otherCol];
+  }
+  return { examples: examples, testWord: testWord, isSameCategory: isSameCategory };
+}
+
+function handlePuzzleOptionClick(btn, round){
+  clearInterval(testTimerInterval);
+  document.querySelectorAll('#testOptionsContainer .test-option-btn').forEach(b => b.classList.add('disabled-option'));
+  let isCorrect, label;
+
+  if(testType === 'oddone'){
+    isCorrect = btn.dataset.correct === '1';
+    btn.classList.add(isCorrect ? 'correct' : 'wrong');
+    if(!isCorrect){
+      document.querySelectorAll('#testOptionsContainer .test-option-btn').forEach(b => { if(b.dataset.correct === '1') b.classList.add('correct'); });
+    }
+    label = `الشاذ بين: ${round.items.map(i => i.text).join('، ')}`;
+  } else if(testType === 'antonym'){
+    isCorrect = btn.dataset.val === round.correctB2;
+    btn.classList.add(isCorrect ? 'correct' : 'wrong');
+    if(!isCorrect){
+      document.querySelectorAll('#testOptionsContainer .test-option-btn').forEach(b => { if(b.dataset.val === round.correctB2) b.classList.add('correct'); });
+    }
+    label = `"${round.shownB1}" ↔ "${round.correctB2}"`;
+  } else {
+    const userSaidSame = btn.dataset.tf === 'true';
+    isCorrect = userSaidSame === round.isSameCategory;
+    btn.classList.add(isCorrect ? 'correct' : 'wrong');
+    label = `الكلمة "${round.testWord}" (${round.isSameCategory ? 'نفس القاعدة' : 'مختلفة'})`;
+  }
+
+  testResults.push({ puzzleType: true, label: label, correct: isCorrect });
+  setTimeout(() => { testIndex++; runTestQuestion(); }, 900);
+}
+
+/* ============ PER-SECTION TOOLBAR (select all / export / import) ============ */
+
+function wireSectionToolbar(section){
+  const selectBtn = document.querySelector(`.select-all-btn[data-section="${section.id}"]`);
+  if(selectBtn){
+    selectBtn.addEventListener('click', () => toggleSelectAllSection(section, selectBtn));
+  }
+  const exportBtn = document.querySelector(`.export-btn[data-section="${section.id}"]`);
+  if(exportBtn){
+    exportBtn.addEventListener('click', () => exportSectionToFile(section));
+  }
+  const importBtn = document.querySelector(`.import-section-btn[data-section="${section.id}"]`);
+  if(importBtn){
+    importBtn.addEventListener('click', () => openImportPanel(section.id));
+  }
+}
+
+function toggleSelectAllSection(section, btn){
+  const allSelected = section.rows.length > 0 && section.rows.every(r => selectedRows.has(section.id + '::' + r.id));
+  const newState = !allSelected;
+  section.rows.forEach(r => {
+    const key = section.id + '::' + r.id;
+    if(newState) selectedRows.add(key); else selectedRows.delete(key);
+  });
+  document.querySelectorAll(`#tbody-${section.id} .speak-check`).forEach(chk => { chk.checked = newState; });
+  if(btn) btn.textContent = newState ? '✖ إلغاء تحديد الكل' : '✔ تحديد كل المجموعة';
+  updateSelectionCount();
+}
+
+function exportSectionToFile(section){
+  const rows = getRowsInOrder(section);
+  const nonNumCols = section.kinds.map((k, i) => ({ k: k, i: i })).filter(o => o.k !== 'num');
+  const lines = rows.map(r => nonNumCols.map(o => (r.values[o.i] || '')).join(' | '));
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const safeName = (section.title || section.sub || section.id).replace(/[^\w\u0600-\u06FF]+/g, '_');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safeName + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ============ BULK IMPORT (paste word|meaning|example lines into any section, or upload a file) ============ */
+
+function populateImportSectionSelect(){
+  const sel = document.getElementById('importSectionSelect');
+  sel.innerHTML = sections.map(s => {
+    const label = s.title ? s.title : (s.sub ? `${s.id} — ${s.sub}` : s.id);
+    return `<option value="${s.id}">${esc(label)}</option>`;
+  }).join('');
+  // default to common_words if present, since that's the main use case
+  if(sections.some(s => s.id === 'common_words')) sel.value = 'common_words';
+}
+
+function openImportPanel(preselectSectionId){
+  populateImportSectionSelect();
+  if(preselectSectionId) document.getElementById('importSectionSelect').value = preselectSectionId;
+  document.getElementById('importStatus').textContent = '';
+  document.getElementById('importPanel').style.display = 'block';
+  document.getElementById('importPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeImportPanel(){
+  document.getElementById('importPanel').style.display = 'none';
+}
+
+function runImport(){
+  const sectionId = document.getElementById('importSectionSelect').value;
+  const section = findSection(sectionId);
+  if(!section) return;
+  const text = document.getElementById('importTextarea').value;
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const nonNumKindsCount = section.kinds.filter(k => k !== 'num').length;
+
+  let added = 0, skipped = 0;
+  lines.forEach(line => {
+    const parts = (line.includes('|') ? line.split('|') : line.split(',')).map(p => p.trim());
+    if(parts.length < nonNumKindsCount || !parts[0]){ skipped++; return; }
+    const values = [];
+    let pi = 0;
+    section.kinds.forEach(k => {
+      if(k === 'num'){ values.push(null); }
+      else { values.push(parts[pi] !== undefined ? parts[pi] : ''); pi++; }
+    });
+    const newId = section.id + '-import-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '-' + added;
+    section.rows.push({ id: newId, values: values, comment: '', extraSentences: [] });
+    if(!orderState[section.id]) orderState[section.id] = section.rows.map(r => r.id);
+    else orderState[section.id].push(newId);
+    added++;
+  });
+
+  const label = section.title ? section.title : (section.sub || section.id);
+  document.getElementById('importStatus').textContent =
+    `تم إضافة ${added} صف لقسم "${label}"` + (skipped > 0 ? ` (اتجاهل ${skipped} سطر ناقص البيانات)` : '') + '. متنساش تدوس "حفظ التغييرات 💾" بعدها.';
+  document.getElementById('importTextarea').value = '';
+  rerenderSectionBody(section);
+}
+
+document.getElementById('btnOpenImport').addEventListener('click', () => openImportPanel());
+document.getElementById('importFileInput').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById('importTextarea').value = reader.result;
+    document.getElementById('importStatus').textContent = `تم تحميل الملف "${file.name}" — راجع البيانات ودوس "استورد الكل".`;
+  };
+  reader.onerror = () => {
+    document.getElementById('importStatus').textContent = 'حصل خطأ في قراءة الملف.';
+  };
+  reader.readAsText(file);
+});
+document.getElementById('btnCloseImport').addEventListener('click', closeImportPanel);
+document.getElementById('btnRunImport').addEventListener('click', runImport);
+
+/* ============ TEST PAGE (many test modes over a selected word set) ============ */
+
+let testType = 'word';
+let testDirection = 'ar2en';
+let testSeconds = 15;
+let testQueue = [];
+let testIndex = 0;
+let testResults = [];
+let testTimerInterval = null;
+let testTimeLeft = 0;
+
+// persisted per-word mastery stats, used by "smart review" (spaced-repetition style) mode
+let wordStats = {}; // "sectionId::rowId" -> {correct, wrong, box(1-5), lastSeenTs}
+
+function recordAnswerStat(section, row, isCorrect){
+  const key = section.id + '::' + row.id;
+  if(!wordStats[key]) wordStats[key] = { correct: 0, wrong: 0, box: 1, lastSeenTs: 0 };
+  const s = wordStats[key];
+  if(isCorrect){ s.correct++; s.box = Math.min(5, s.box + 1); }
+  else { s.wrong++; s.box = 1; }
+  s.lastSeenTs = Date.now();
+}
+
+function getWordBox(section, row){
+  const key = section.id + '::' + row.id;
+  return (wordStats[key] && wordStats[key].box) || 1;
+}
+
+function buildSmartQueue(pool){
+  return pool.slice().sort((a, b) => {
+    const sa = wordStats[a.section.id + '::' + a.row.id] || { box: 1, wrong: 0 };
+    const sb = wordStats[b.section.id + '::' + b.row.id] || { box: 1, wrong: 0 };
+    const scoreA = sa.box - (sa.wrong * 0.5);
+    const scoreB = sb.box - (sb.wrong * 0.5);
+    return scoreA - scoreB; // weaker words (lower box, more mistakes) come first
+  });
+}
+
+function getAdaptiveSeconds(section, row, baseSeconds){
+  const box = getWordBox(section, row);
+  const factors = [1.5, 1.2, 1.0, 0.8, 0.6];
+  return Math.max(4, Math.round(baseSeconds * factors[Math.min(box - 1, 4)]));
+}
+
+function scrambleWord(word){
+  const letters = word.split('');
+  let scrambled, attempts = 0;
+  do{
+    scrambled = shuffleArray(letters).join('');
+    attempts++;
+  } while(scrambled.toLowerCase() === word.toLowerCase() && attempts < 12);
+  return scrambled;
+}
+
+function buildMCQOptions(item, direction){
+  const useEnglish = direction === 'ar2en';
+  const correctVal = useEnglish ? item.english : item.arabic;
+  const correctKind = useEnglish ? 'en' : 'ar';
+  const colFor = (sec) => useEnglish ? getQuizWordColumn(sec) : sec.kinds.indexOf('ar');
+
+  const sameSectionVals = [];
+  const col0 = colFor(item.section);
+  if(col0 != null && col0 !== -1){
+    item.section.rows.forEach(r => {
+      const v = r.values[col0];
+      if(v && normalize(v, correctKind) !== normalize(correctVal, correctKind)) sameSectionVals.push(v);
+    });
+  }
+
+  let distractors = shuffleArray(sameSectionVals).slice(0, 3);
+  if(distractors.length < 3){
+    const allVals = [];
+    sections.forEach(sec => {
+      const col = colFor(sec);
+      if(col == null || col === -1) return;
+      sec.rows.forEach(r => {
+        const v = r.values[col];
+        if(v && normalize(v, correctKind) !== normalize(correctVal, correctKind)) allVals.push(v);
+      });
+    });
+    const more = shuffleArray(allVals);
+    for(const candidate of more){
+      if(distractors.length >= 3) break;
+      if(!distractors.includes(candidate)) distractors.push(candidate);
+    }
+  }
+  return shuffleArray([correctVal].concat(distractors));
+}
+
+function buildTestPool(){
+  const pool = [];
+  sections.forEach(section => {
+    const arIdx = section.kinds.indexOf('ar');
+    const wordCol = getQuizWordColumn(section);
+    if(arIdx === -1 || wordCol == null) return;
+    const rows = getRowsInOrder(section);
+    rows.forEach(row => {
+      const key = section.id + '::' + row.id;
+      if(selectedRows.has(key)){
+        pool.push({
+          section: section,
+          row: row,
+          english: row.values[wordCol],
+          arabic: row.values[arIdx],
+          sentence: (section.sentenceCol != null) ? row.values[section.sentenceCol] : null
+        });
+      }
+    });
+  });
+  return pool;
+}
+
+function makeClozeSentence(englishWord, sentence){
+  if(!sentence || !englishWord) return null;
+  const escaped = String(englishWord).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('\\b' + escaped + '\\b', 'i');
+  if(!re.test(sentence)) return null;
+  return sentence.replace(re, '_____');
+}
+
+function showTestPage(){
+  document.getElementById('mainPage').style.display = 'none';
+  document.getElementById('testPage').style.display = 'block';
+  document.getElementById('testSetupPanel').style.display = 'block';
+  document.getElementById('testQuizPanel').style.display = 'none';
+  document.getElementById('testMatchingPanel').style.display = 'none';
+  document.getElementById('testResultPanel').style.display = 'none';
+  document.getElementById('testSelectedCount').textContent = `عدد الكلمات المحددة حاليًا: ${selectedRows.size}`;
+  window.scrollTo(0, 0);
+}
+
+function showMainPage(){
+  clearInterval(testTimerInterval);
+  clearInterval(matchingTimerInterval);
+  document.getElementById('testPage').style.display = 'none';
+  document.getElementById('mainPage').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function updateTestTypeUI(){
+  const t = document.getElementById('testTypeSelect').value;
+  const hideDirection = (t === 'sentence' || t === 'scramble' || t === 'matching' || t === 'smart' ||
+    t === 'oddone' || t === 'antonym' || t === 'hiddenrule' || t === 'brokensentence');
+  document.getElementById('testDirectionRow').style.display = hideDirection ? 'none' : 'flex';
+  const descriptions = {
+    word: 'اكتب الترجمة الصح في الاتجاه اللي اخترته.',
+    sentence: 'هياخد جملة المثال ويشيل منها الكلمة ويسيبها فاضية لتكتبها.',
+    mcq: 'اختار الإجابة الصح من 4 اختيارات.',
+    truefalse: 'هيوريك كلمة مع معنى مقترح، وانت تحدد هو صح ولا غلط.',
+    scramble: 'حروف الكلمة هتتقلب عشوائي وانت ترتبها وتكتبها صح.',
+    matching: 'دوّر وصل كل كلمة بمعناها، مفيش وقت لكل سؤال بس فيه ساعة توقيت إجمالية.',
+    survival: 'بيستمر لحد أول إجابة غلط أو انتهاء الوقت — شوف أطول سلسلة تقدر توصلها.',
+    smart: 'بيحلل نقاط ضعفك من محاولاتك السابقة (محفوظة)، ويقدّم الكلمات الصعبة أكتر ويدّيلك وقت أطول فيها.',
+    oddone: 'هيوريك 5 كلمات، 4 منهم من نفس النوع النحوي وواحدة مختلفة — لازم تكتشفها بنفسك من غير ما نقولك النوع.',
+    antonym: 'تناظر لفظي: "فوق تقابل تحت، إذن X تقابل...؟" — لازم تفهم العلاقة وتطبقها على زوج تاني.',
+    hiddenrule: 'هيوريك 3 كلمات بتتبع قاعدة نحوية واحدة مخفية (من غير ما يقولك هي إيه)، وكلمة رابعة — خمّن هل بتتبع نفس القاعدة ولا لأ.',
+    brokensentence: 'جملة اتقلبت حروفها وفيها كلمة دخيلة زيادة — اكتشف الدخيلة ورتب الباقي صح، بس بالضغط مش بالكتابة.'
+  };
+  document.getElementById('testTypeDesc').textContent = descriptions[t] || '';
+}
+document.getElementById('testTypeSelect').addEventListener('change', updateTestTypeUI);
+
+function startTest(){
+  if(selectedRows.size === 0){
+    alert('حدد كلمات الأول من الصفحة الرئيسية (علامة ✔ في عمود 🔊) قبل ما تبدأ الاختبار.');
+    return;
+  }
+  const pool = buildTestPool();
+  testType = document.getElementById('testTypeSelect').value;
+  testDirection = document.getElementById('testDirectionSelect').value;
+  testSeconds = parseInt(document.getElementById('testSecondsInput').value, 10) || 15;
+
+  if(testType === 'matching'){ startMatchingRound(pool); return; }
+  if(testType === 'survival'){ startSurvivalMode(pool); return; }
+  if(testType === 'brokensentence'){ startBrokenSentenceMode(pool); return; }
+
+  if(testType === 'sentence'){
+    testQueue = pool.map(item => {
+      const cloze = makeClozeSentence(item.english, item.sentence);
+      return cloze ? Object.assign({}, item, { cloze: cloze }) : null;
+    }).filter(Boolean);
+  } else if(testType === 'scramble'){
+    testQueue = pool.filter(item => item.english && !/\s/.test(item.english))
+      .map(item => Object.assign({}, item, { scrambled: scrambleWord(item.english) }));
+  } else if(testType === 'smart'){
+    testQueue = buildSmartQueue(pool);
+  } else if(testType === 'oddone' || testType === 'antonym' || testType === 'hiddenrule'){
+    const rounds = [];
+    const desiredCount = 8;
+    for(let i = 0; i < desiredCount; i++){
+      let r = null;
+      if(testType === 'oddone') r = buildOddOneOutRound();
+      else if(testType === 'antonym') r = buildAntonymRound();
+      else r = buildHiddenRuleRound();
+      if(r) rounds.push(r);
+    }
+    testQueue = rounds;
+  } else {
+    testQueue = pool.slice();
+  }
+
+  if(testType !== 'smart' && testType !== 'oddone' && testType !== 'antonym' && testType !== 'hiddenrule'){
+    testQueue = shuffleArray(testQueue);
+  }
+
+  if(testQueue.length === 0){
+    alert(testType === 'sentence'
+      ? 'مفيش جمل مناسبة تحتوي على الكلمات المحددة عشان اختبار الجمل.'
+      : (testType === 'scramble'
+        ? 'مفيش كلمات مفردة (بدون مسافات) مناسبة لفك التشفير في المحدد.'
+        : (testType === 'oddone' || testType === 'antonym' || testType === 'hiddenrule'
+          ? 'محتاج تنوع أكبر في الأقسام عشان يقدر يبني اللغز ده — جرب نوع تاني.'
+          : 'مفيش كلمات مناسبة للاختبار في المحدد دلوقتي.')));
+    return;
+  }
+
+  testIndex = 0;
+  testResults = [];
+
+  document.getElementById('testSetupPanel').style.display = 'none';
+  document.getElementById('testResultPanel').style.display = 'none';
+  document.getElementById('testMatchingPanel').style.display = 'none';
+  document.getElementById('testBrokenPanel').style.display = 'none';
+  document.getElementById('testQuizPanel').style.display = 'block';
+  document.getElementById('testStreak').style.display = 'none';
+  runTestQuestion();
+}
+
+function runTestQuestion(){
+  if(testIndex >= testQueue.length){ finishTest(); return; }
+
+  if(testType === 'oddone' || testType === 'antonym' || testType === 'hiddenrule'){
+    runPuzzleQuestion();
+    return;
+  }
+
+  const item = testQueue[testIndex];
+  document.getElementById('testProgress').textContent = `سؤال ${testIndex + 1} من ${testQueue.length}`;
+  const promptEl = document.getElementById('testPrompt');
+  const inputEl = document.getElementById('testAnswerInput');
+  const optionsEl = document.getElementById('testOptionsContainer');
+  const submitBtn = document.getElementById('btnSubmitTestAnswer');
+
+  inputEl.value = '';
+  inputEl.disabled = false;
+  inputEl.className = 'test-answer-input';
+  optionsEl.innerHTML = '';
+  optionsEl.style.display = 'none';
+  inputEl.style.display = 'block';
+  submitBtn.style.display = 'block';
+
+  let direction = testDirection;
+  if(testType === 'smart') direction = Math.random() < 0.5 ? 'ar2en' : 'en2ar';
+  item.__direction = direction;
+
+  let seconds = testSeconds;
+  if(testType === 'smart') seconds = getAdaptiveSeconds(item.section, item.row, testSeconds);
+
+  if(testType === 'sentence'){
+    promptEl.innerHTML = `<div class="test-sentence">${esc(item.cloze)}</div>`;
+    inputEl.placeholder = 'اكتب الكلمة الناقصة بالإنجليزي...';
+  } else if(testType === 'scramble'){
+    promptEl.innerHTML = `<div class="test-word en" style="letter-spacing:4px;">${esc(item.scrambled)}</div><p class="desc">رتب الحروف وحل الكلمة</p>`;
+    inputEl.placeholder = 'اكتب الكلمة الصحيحة...';
+  } else if(testType === 'mcq' || testType === 'truefalse'){
+    inputEl.style.display = 'none';
+    submitBtn.style.display = 'none';
+    optionsEl.style.display = 'grid';
+    const claimCls = direction === 'ar2en' ? 'en' : 'ar';
+    if(direction === 'ar2en'){
+      promptEl.innerHTML = `<div class="test-word ar">${esc(item.arabic)}</div>`;
+    } else {
+      promptEl.innerHTML = `<div class="test-word en">${esc(item.english)}</div>`;
+    }
+    if(testType === 'mcq'){
+      const options = buildMCQOptions(item, direction);
+      optionsEl.innerHTML = options.map(opt =>
+        `<button type="button" class="test-option-btn ${claimCls}">${esc(opt)}</button>`
+      ).join('');
+    } else {
+      const isTrueClaim = Math.random() < 0.5;
+      let shownVal;
+      if(isTrueClaim){
+        shownVal = direction === 'ar2en' ? item.english : item.arabic;
+      } else {
+        const candidates = item.section.rows.filter(r => r.id !== item.row.id);
+        const pick = candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : null;
+        const col = direction === 'ar2en' ? getQuizWordColumn(item.section) : item.section.kinds.indexOf('ar');
+        shownVal = (pick && col != null && col !== -1 && pick.values[col]) ? pick.values[col] : (direction === 'ar2en' ? item.english : item.arabic);
+      }
+      item.__tfIsTrue = isTrueClaim;
+      promptEl.innerHTML += `<div class="test-word ${claimCls}" style="font-size:1.4rem; margin-top:6px;">${esc(shownVal)}</div>`;
+      optionsEl.innerHTML = `
+        <button type="button" class="test-option-btn" data-tf="true">✅ صح</button>
+        <button type="button" class="test-option-btn" data-tf="false">❌ غلط</button>`;
+    }
+    optionsEl.querySelectorAll('.test-option-btn').forEach(btn => {
+      btn.addEventListener('click', () => handleOptionClick(btn, item, direction));
+    });
+  } else if(direction === 'ar2en'){
+    promptEl.innerHTML = `<div class="test-word ar">${esc(item.arabic)}</div>`;
+    inputEl.placeholder = 'اكتب الكلمة بالإنجليزي...';
+  } else {
+    promptEl.innerHTML = `<div class="test-word en">${esc(item.english)}</div>`;
+    inputEl.placeholder = 'اكتب المعنى بالعربي...';
+  }
+
+  if(testType !== 'mcq' && testType !== 'truefalse') inputEl.focus();
+  startTestTimer(seconds);
+}
+
+function runPuzzleQuestion(){
+  const round = testQueue[testIndex];
+  document.getElementById('testProgress').textContent = `لغز ${testIndex + 1} من ${testQueue.length}`;
+  const promptEl = document.getElementById('testPrompt');
+  const inputEl = document.getElementById('testAnswerInput');
+  const optionsEl = document.getElementById('testOptionsContainer');
+  const submitBtn = document.getElementById('btnSubmitTestAnswer');
+
+  inputEl.style.display = 'none';
+  submitBtn.style.display = 'none';
+  optionsEl.style.display = 'grid';
+  optionsEl.innerHTML = '';
+
+  if(testType === 'oddone'){
+    promptEl.innerHTML = `<p class="desc" style="font-size:1rem;">أي كلمة من دول <b>مختلفة</b> عن الباقي في نوعها النحوي؟</p>`;
+    optionsEl.innerHTML = round.items.map(it =>
+      `<button type="button" class="test-option-btn en" data-correct="${it.isOdd ? '1' : '0'}">${esc(it.text)}</button>`
+    ).join('');
+  } else if(testType === 'antonym'){
+    promptEl.innerHTML = `
+      <div class="test-word en" style="font-size:1.2rem;">"${esc(round.shownA1)}" تقابل "${esc(round.shownA2)}"</div>
+      <div class="test-word en" style="font-size:1.5rem; margin-top:10px;">إذن "${esc(round.shownB1)}" تقابل...؟</div>`;
+    optionsEl.innerHTML = round.options.map(opt =>
+      `<button type="button" class="test-option-btn en" data-val="${esc(opt)}">${esc(opt)}</button>`
+    ).join('');
+  } else {
+    promptEl.innerHTML = `
+      <p class="desc">الكلمات دي بتتبع قاعدة نحوية واحدة مخفية:</p>
+      <div class="test-word en" style="font-size:1.2rem;">${round.examples.map(esc).join(' — ')}</div>
+      <p class="desc" style="margin-top:14px;">هل الكلمة دي بتتبع نفس القاعدة؟</p>
+      <div class="test-word en" style="font-size:1.5rem;">${esc(round.testWord)}</div>`;
+    optionsEl.innerHTML = `
+      <button type="button" class="test-option-btn" data-tf="true">✅ نفس القاعدة</button>
+      <button type="button" class="test-option-btn" data-tf="false">❌ مختلفة</button>`;
+  }
+
+  optionsEl.querySelectorAll('.test-option-btn').forEach(btn => {
+    btn.addEventListener('click', () => handlePuzzleOptionClick(btn, round));
+  });
+
+  startTestTimer(testSeconds);
+}
+
+function handleOptionClick(btn, item, direction){
+  clearInterval(testTimerInterval);
+  document.querySelectorAll('#testOptionsContainer .test-option-btn').forEach(b => b.classList.add('disabled-option'));
+
+  let isCorrect, correctVal, kind, userVal;
+  if(testType === 'mcq'){
+    correctVal = direction === 'ar2en' ? item.english : item.arabic;
+    kind = direction === 'ar2en' ? 'en' : 'ar';
+    userVal = btn.textContent;
+    isCorrect = normalize(userVal, kind) === normalize(correctVal, kind);
+    btn.classList.add(isCorrect ? 'correct' : 'wrong');
+    if(!isCorrect){
+      document.querySelectorAll('#testOptionsContainer .test-option-btn').forEach(b => {
+        if(normalize(b.textContent, kind) === normalize(correctVal, kind)) b.classList.add('correct');
+      });
+    }
+  } else {
+    const userSaidTrue = btn.dataset.tf === 'true';
+    isCorrect = userSaidTrue === item.__tfIsTrue;
+    correctVal = item.__tfIsTrue ? 'صح' : 'غلط';
+    userVal = userSaidTrue ? 'صح' : 'غلط';
+    btn.classList.add(isCorrect ? 'correct' : 'wrong');
+  }
+
+  recordAnswerStat(item.section, item.row, isCorrect);
+  testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: isCorrect, timedOut: false });
+
+  setTimeout(() => { testIndex++; runTestQuestion(); }, 900);
+}
+
+function startTestTimer(seconds){
+  clearInterval(testTimerInterval);
+  testTimeLeft = seconds != null ? seconds : testSeconds;
+  updateTestTimerDisplay();
+  testTimerInterval = setInterval(() => {
+    testTimeLeft--;
+    updateTestTimerDisplay();
+    if(testTimeLeft <= 0){
+      clearInterval(testTimerInterval);
+      if(testType === 'survival') handleSurvivalAnswer(true);
+      else submitTestAnswer(true);
+    }
+  }, 1000);
+}
+
+function updateTestTimerDisplay(){
+  const el = document.getElementById('testTimer');
+  el.textContent = `⏱ ${testTimeLeft}s`;
+  el.classList.toggle('test-timer-warning', testTimeLeft <= 3);
+}
+
+function submitTestAnswer(timedOut){
+  if(testType === 'mcq' || testType === 'truefalse') return; // answered via option buttons instead
+  clearInterval(testTimerInterval);
+  const item = testQueue[testIndex];
+  const inputEl = document.getElementById('testAnswerInput');
+  const userVal = timedOut ? '' : inputEl.value;
+  const direction = item.__direction || testDirection;
+
+  let correctVal, kind;
+  if(testType === 'sentence' || testType === 'scramble'){ correctVal = item.english; kind = 'en'; }
+  else if(direction === 'ar2en'){ correctVal = item.english; kind = 'en'; }
+  else { correctVal = item.arabic; kind = 'ar'; }
+
+  const isCorrect = !timedOut && normalize(userVal, kind) === normalize(correctVal, kind);
+  recordAnswerStat(item.section, item.row, isCorrect);
+  testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: isCorrect, timedOut: timedOut });
+
+  inputEl.disabled = true;
+  inputEl.classList.add(isCorrect ? 'correct' : 'wrong');
+  if(!isCorrect) inputEl.value = correctVal;
+
+  setTimeout(() => {
+    testIndex++;
+    runTestQuestion();
+  }, 900);
+}
+
+function finishTest(){
+  clearInterval(testTimerInterval);
+  const total = testResults.length;
+  const correctCount = testResults.filter(r => r.correct).length;
+  const wrongList = testResults.filter(r => !r.correct);
+  const pct = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+
+  document.getElementById('testQuizPanel').style.display = 'none';
+  const resultPanel = document.getElementById('testResultPanel');
+  resultPanel.style.display = 'block';
+
+  let html = `<div class="test-card-inner"><div class="test-score">النتيجة: ${correctCount} من ${total} (${pct}%)</div>`;
+  const isPuzzle = testResults.length > 0 && testResults[0].puzzleType;
+  if(wrongList.length > 0){
+    if(isPuzzle){
+      html += `<div class="test-wrong-title">الألغاز اللي جاوبتها غلط:</div><ul style="text-align:right; padding-right:18px;">` +
+        wrongList.map(r => `<li>${esc(r.label || 'لغز')}</li>`).join('') + `</ul>`;
+    } else {
+      html += `<div class="test-wrong-title">الكلمات اللي محتاجة مراجعة:</div>
+        <table class="test-wrong-table"><thead><tr><th>عربي</th><th>إنجليزي</th><th>إجابتك</th></tr></thead><tbody>`;
+      wrongList.forEach(r => {
+        const yourAnswer = r.timedOut ? '(خلص الوقت)' : (r.userVal || '—');
+        html += `<tr><td>${esc(r.item.arabic || '')}</td><td>${esc(r.item.english || '')}</td><td>${esc(yourAnswer)}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+  } else {
+    html += `<div class="test-perfect">مبروك! جاوبت كل حاجة صح 🎉</div>`;
+  }
+  html += `<div class="test-result-actions">
+      <button type="button" id="btnRetakeTest">🔁 أعد نفس الاختبار</button>
+      <button type="button" id="btnBackFromResult">⬅ رجوع للرئيسية</button>
+    </div></div>`;
+  resultPanel.innerHTML = html;
+  document.getElementById('btnRetakeTest').addEventListener('click', startTest);
+  document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
+}
+
+/* ---- Broken sentence puzzle: decoy word detection + click-to-reorder reconstruction ---- */
+let brokenQueue = [];
+let brokenIndex = 0;
+let brokenAssembledWords = [];
+let brokenResults = [];
+
+function startBrokenSentenceMode(pool){
+  const usable = pool.filter(item => item.sentence && item.sentence.trim().length > 0);
+  if(usable.length === 0){
+    alert('مفيش جمل مرتبطة بالكلمات المحددة، حدد كلمات ليها أمثلة الأول.');
+    return;
+  }
+  const roundCount = Math.min(6, usable.length);
+  brokenQueue = shuffleArray(usable).slice(0, roundCount).map(item => {
+    const originalWords = item.sentence.trim().split(/\s+/);
+    const decoySource = pool.filter(p => p.row.id !== item.row.id && p.english);
+    let decoyWord;
+    if(decoySource.length > 0){
+      decoyWord = decoySource[Math.floor(Math.random() * decoySource.length)].english;
+    } else {
+      const sec = sections[Math.floor(Math.random() * sections.length)];
+      const col = getQuizWordColumn(sec);
+      decoyWord = (col != null && sec.rows.length) ? sec.rows[Math.floor(Math.random() * sec.rows.length)].values[col] : 'quickly';
+    }
+    return { item: item, originalWords: originalWords, decoyWord: decoyWord };
+  });
+  brokenIndex = 0;
+  brokenResults = [];
+
+  document.getElementById('testSetupPanel').style.display = 'none';
+  document.getElementById('testResultPanel').style.display = 'none';
+  document.getElementById('testQuizPanel').style.display = 'none';
+  document.getElementById('testMatchingPanel').style.display = 'none';
+  document.getElementById('testBrokenPanel').style.display = 'block';
+  runBrokenRound();
+}
+
+function runBrokenRound(){
+  if(brokenIndex >= brokenQueue.length){ finishBroken(); return; }
+  const round = brokenQueue[brokenIndex];
+  document.getElementById('brokenProgress').textContent = `جملة ${brokenIndex + 1} من ${brokenQueue.length}`;
+  brokenAssembledWords = [];
+  renderBrokenAssembled();
+
+  const bankWords = shuffleArray(round.originalWords.concat([round.decoyWord]));
+  const bank = document.getElementById('brokenWordBank');
+  bank.innerHTML = bankWords.map((w, i) => `<button type="button" class="broken-chip" data-bankidx="${i}">${esc(w)}</button>`).join('');
+  bank.querySelectorAll('.broken-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if(chip.disabled) return;
+      brokenAssembledWords.push({ word: chip.textContent, chip: chip });
+      chip.disabled = true;
+      chip.classList.add('used');
+      renderBrokenAssembled();
+    });
+  });
+
+  startBrokenTimer(testSeconds * 3); // extra time — this puzzle needs more thinking
+}
+
+function renderBrokenAssembled(){
+  const el = document.getElementById('brokenAssembled');
+  if(brokenAssembledWords.length === 0){
+    el.innerHTML = '<span class="read-hint">دوس على الكلمات بالترتيب هنا...</span>';
+    return;
+  }
+  el.innerHTML = brokenAssembledWords.map((w, i) => `<button type="button" class="broken-chip placed" data-placedidx="${i}">${esc(w.word)}</button>`).join('');
+  el.querySelectorAll('.broken-chip.placed').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const idx = parseInt(chip.dataset.placedidx, 10);
+      const removed = brokenAssembledWords.splice(idx, 1)[0];
+      if(removed && removed.chip){ removed.chip.disabled = false; removed.chip.classList.remove('used'); }
+      renderBrokenAssembled();
+    });
+  });
+}
+
+function startBrokenTimer(seconds){
+  clearInterval(testTimerInterval);
+  testTimeLeft = seconds;
+  updateBrokenTimerDisplay();
+  testTimerInterval = setInterval(() => {
+    testTimeLeft--;
+    updateBrokenTimerDisplay();
+    if(testTimeLeft <= 0){
+      clearInterval(testTimerInterval);
+      submitBrokenRound(true);
+    }
+  }, 1000);
+}
+
+function updateBrokenTimerDisplay(){
+  const el = document.getElementById('brokenTimer');
+  el.textContent = `⏱ ${testTimeLeft}s`;
+  el.classList.toggle('test-timer-warning', testTimeLeft <= 5);
+}
+
+function submitBrokenRound(timedOut){
+  clearInterval(testTimerInterval);
+  const round = brokenQueue[brokenIndex];
+  const stripPunct = (w) => normalize(w, 'en').replace(/[^\w']/g, '');
+  const userSeq = brokenAssembledWords.map(w => stripPunct(w.word));
+  const correctSeq = round.originalWords.map(stripPunct);
+  const isCorrect = !timedOut && userSeq.length === correctSeq.length && userSeq.every((w, i) => w === correctSeq[i]);
+
+  document.querySelectorAll('.broken-chip').forEach(c => { c.disabled = true; });
+  const assembledEl = document.getElementById('brokenAssembled');
+  assembledEl.style.borderColor = isCorrect ? 'var(--ok)' : 'var(--bad)';
+
+  brokenResults.push({
+    correct: isCorrect,
+    original: round.originalWords.join(' '),
+    yours: brokenAssembledWords.map(w => w.word).join(' ') || '(محصلش وقت)'
+  });
+
+  setTimeout(() => { brokenIndex++; runBrokenRound(); }, 1300);
+}
+
+function finishBroken(){
+  clearInterval(testTimerInterval);
+  const total = brokenResults.length;
+  const correctCount = brokenResults.filter(r => r.correct).length;
+  const wrongList = brokenResults.filter(r => !r.correct);
+  document.getElementById('testBrokenPanel').style.display = 'none';
+  const resultPanel = document.getElementById('testResultPanel');
+  resultPanel.style.display = 'block';
+  let html = `<div class="test-card-inner"><div class="test-score">النتيجة: ${correctCount} من ${total}</div>`;
+  if(wrongList.length > 0){
+    html += `<div class="test-wrong-title">الجمل اللي محتاجة مراجعة:</div>
+      <table class="test-wrong-table"><thead><tr><th>الجملة الصح</th><th>إجابتك</th></tr></thead><tbody>`;
+    wrongList.forEach(r => {
+      html += `<tr><td class="en" style="direction:ltr;">${esc(r.original)}</td><td class="en" style="direction:ltr;">${esc(r.yours)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  } else {
+    html += `<div class="test-perfect">مبروك! حليت كل الجمل صح 🎉</div>`;
+  }
+  html += `<div class="test-result-actions">
+      <button type="button" id="btnRetakeTest">🔁 جرب تاني</button>
+      <button type="button" id="btnBackFromResult">⬅ رجوع للرئيسية</button>
+    </div></div>`;
+  resultPanel.innerHTML = html;
+  document.getElementById('btnRetakeTest').addEventListener('click', startTest);
+  document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
+}
+document.getElementById('btnBrokenSubmit').addEventListener('click', () => submitBrokenRound(false));
+
+/* ---- Survival mode: endless random draws, ends on first wrong answer or timeout ---- */
+let survivalPool = [];
+let survivalStreak = 0;
+let survivalCurrentItem = null;
+
+function startSurvivalMode(pool){
+  if(pool.length === 0){ alert('مفيش كلمات كفاية في المحدد.'); return; }
+  survivalPool = pool;
+  survivalStreak = 0;
+  testResults = [];
+
+  document.getElementById('testSetupPanel').style.display = 'none';
+  document.getElementById('testResultPanel').style.display = 'none';
+  document.getElementById('testMatchingPanel').style.display = 'none';
+  document.getElementById('testQuizPanel').style.display = 'block';
+  document.getElementById('testStreak').style.display = 'inline-block';
+  runSurvivalQuestion();
+}
+
+function runSurvivalQuestion(){
+  const item = survivalPool[Math.floor(Math.random() * survivalPool.length)];
+  survivalCurrentItem = item;
+  document.getElementById('testProgress').textContent = 'وضع البقاء 🔥';
+  document.getElementById('testStreak').textContent = `🔥 السلسلة: ${survivalStreak}`;
+
+  const inputEl = document.getElementById('testAnswerInput');
+  const optionsEl = document.getElementById('testOptionsContainer');
+  const submitBtn = document.getElementById('btnSubmitTestAnswer');
+  optionsEl.style.display = 'none';
+  inputEl.style.display = 'block';
+  submitBtn.style.display = 'block';
+  inputEl.value = '';
+  inputEl.disabled = false;
+  inputEl.className = 'test-answer-input';
+
+  const direction = testDirection;
+  item.__direction = direction;
+  const promptEl = document.getElementById('testPrompt');
+  if(direction === 'ar2en'){
+    promptEl.innerHTML = `<div class="test-word ar">${esc(item.arabic)}</div>`;
+    inputEl.placeholder = 'اكتب الكلمة بالإنجليزي...';
+  } else {
+    promptEl.innerHTML = `<div class="test-word en">${esc(item.english)}</div>`;
+    inputEl.placeholder = 'اكتب المعنى بالعربي...';
+  }
+  inputEl.focus();
+  startTestTimer(testSeconds);
+}
+
+function handleSurvivalAnswer(timedOut){
+  clearInterval(testTimerInterval);
+  const item = survivalCurrentItem;
+  const inputEl = document.getElementById('testAnswerInput');
+  const userVal = timedOut ? '' : inputEl.value;
+  const direction = item.__direction;
+  const correctVal = direction === 'ar2en' ? item.english : item.arabic;
+  const kind = direction === 'ar2en' ? 'en' : 'ar';
+  const isCorrect = !timedOut && normalize(userVal, kind) === normalize(correctVal, kind);
+
+  recordAnswerStat(item.section, item.row, isCorrect);
+  inputEl.disabled = true;
+  inputEl.classList.add(isCorrect ? 'correct' : 'wrong');
+  if(!isCorrect) inputEl.value = correctVal;
+
+  if(isCorrect){
+    survivalStreak++;
+    setTimeout(runSurvivalQuestion, 700);
+  } else {
+    testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: false, timedOut: timedOut });
+    setTimeout(finishSurvival, 1000);
+  }
+}
+
+function finishSurvival(){
+  clearInterval(testTimerInterval);
+  document.getElementById('testQuizPanel').style.display = 'none';
+  const resultPanel = document.getElementById('testResultPanel');
+  resultPanel.style.display = 'block';
+  resultPanel.innerHTML = `<div class="test-card-inner">
+    <div class="test-score">وضع البقاء انتهى! 🔥 أطول سلسلة: ${survivalStreak}</div>
+    <div class="test-result-actions">
+      <button type="button" id="btnRetakeTest">🔁 جرب تاني</button>
+      <button type="button" id="btnBackFromResult">⬅ رجوع للرئيسية</button>
+    </div></div>`;
+  document.getElementById('btnRetakeTest').addEventListener('click', startTest);
+  document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
+}
+
+/* ---- Matching pairs mode ---- */
+let matchingPairs = [];
+let matchingSelectedEn = null;
+let matchingSelectedAr = null;
+let matchingMatchedCount = 0;
+let matchingTimerInterval = null;
+let matchingStartTs = 0;
+
+function startMatchingRound(pool){
+  const usable = pool.filter(item => item.english && item.arabic);
+  if(usable.length < 3){ alert('محتاج 3 كلمات على الأقل فيها معنى عربي وإنجليزي للمطابقة.'); return; }
+  const roundSize = Math.min(8, usable.length);
+  matchingPairs = shuffleArray(usable).slice(0, roundSize);
+  matchingMatchedCount = 0;
+  matchingSelectedEn = null;
+  matchingSelectedAr = null;
+
+  document.getElementById('testSetupPanel').style.display = 'none';
+  document.getElementById('testResultPanel').style.display = 'none';
+  document.getElementById('testQuizPanel').style.display = 'none';
+  document.getElementById('testMatchingPanel').style.display = 'block';
+  document.getElementById('matchingProgress').textContent = `0 من ${matchingPairs.length} تم المطابقة`;
+
+  const enCards = shuffleArray(matchingPairs.map(p => ({ id: p.row.id, text: p.english })));
+  const arCards = shuffleArray(matchingPairs.map(p => ({ id: p.row.id, text: p.arabic })));
+
+  const grid = document.getElementById('matchingGrid');
+  grid.innerHTML = `
+    <div class="matching-col">
+      ${enCards.map(c => `<div class="matching-card en" data-id="${c.id}" data-side="en">${esc(c.text)}</div>`).join('')}
+    </div>
+    <div class="matching-col">
+      ${arCards.map(c => `<div class="matching-card ar" data-id="${c.id}" data-side="ar">${esc(c.text)}</div>`).join('')}
+    </div>`;
+
+  grid.querySelectorAll('.matching-card').forEach(card => {
+    card.addEventListener('click', () => handleMatchingCardClick(card));
+  });
+
+  matchingStartTs = Date.now();
+  clearInterval(matchingTimerInterval);
+  matchingTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - matchingStartTs) / 1000);
+    document.getElementById('matchingTimer').textContent = `⏱ ${elapsed}s`;
+  }, 1000);
+}
+
+function handleMatchingCardClick(card){
+  if(card.classList.contains('matched')) return;
+  const side = card.dataset.side;
+  if(side === 'en'){
+    if(matchingSelectedEn) matchingSelectedEn.classList.remove('selected');
+    matchingSelectedEn = card;
+    card.classList.add('selected');
+  } else {
+    if(matchingSelectedAr) matchingSelectedAr.classList.remove('selected');
+    matchingSelectedAr = card;
+    card.classList.add('selected');
+  }
+
+  if(matchingSelectedEn && matchingSelectedAr){
+    const isMatch = matchingSelectedEn.dataset.id === matchingSelectedAr.dataset.id;
+    if(isMatch){
+      matchingSelectedEn.classList.remove('selected'); matchingSelectedEn.classList.add('matched');
+      matchingSelectedAr.classList.remove('selected'); matchingSelectedAr.classList.add('matched');
+      const pairItem = matchingPairs.find(p => p.row.id === matchingSelectedEn.dataset.id);
+      if(pairItem) recordAnswerStat(pairItem.section, pairItem.row, true);
+      matchingMatchedCount++;
+      document.getElementById('matchingProgress').textContent = `${matchingMatchedCount} من ${matchingPairs.length} تم المطابقة`;
+      matchingSelectedEn = null; matchingSelectedAr = null;
+      if(matchingMatchedCount >= matchingPairs.length) finishMatching();
+    } else {
+      matchingSelectedEn.classList.add('mismatch');
+      matchingSelectedAr.classList.add('mismatch');
+      const en = matchingSelectedEn, ar = matchingSelectedAr;
+      setTimeout(() => {
+        en.classList.remove('selected', 'mismatch');
+        ar.classList.remove('selected', 'mismatch');
+      }, 500);
+      matchingSelectedEn = null; matchingSelectedAr = null;
+    }
+  }
+}
+
+function finishMatching(){
+  clearInterval(matchingTimerInterval);
+  const elapsed = Math.floor((Date.now() - matchingStartTs) / 1000);
+  document.getElementById('testMatchingPanel').style.display = 'none';
+  const resultPanel = document.getElementById('testResultPanel');
+  resultPanel.style.display = 'block';
+  resultPanel.innerHTML = `<div class="test-card-inner">
+    <div class="test-score">مبروك! طابقت كل الأزواج في ${elapsed} ثانية 🎉</div>
+    <div class="test-result-actions">
+      <button type="button" id="btnRetakeTest">🔁 جرب تاني</button>
+      <button type="button" id="btnBackFromResult">⬅ رجوع للرئيسية</button>
+    </div></div>`;
+  document.getElementById('btnRetakeTest').addEventListener('click', startTest);
+  document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
+}
+
+document.getElementById('btnGoToTestPage').addEventListener('click', showTestPage);
+document.getElementById('btnBackFromTest').addEventListener('click', showMainPage);
+document.getElementById('btnStartTest').addEventListener('click', startTest);
+document.getElementById('btnSubmitTestAnswer').addEventListener('click', () => {
+  if(testType === 'survival') handleSurvivalAnswer(false);
+  else submitTestAnswer(false);
+});
+document.getElementById('testAnswerInput').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    if(testType === 'survival') handleSurvivalAnswer(false);
+    else submitTestAnswer(false);
+  }
+});
+updateTestTypeUI();
+
 /* ============ PERSISTENT STORAGE ============ */
 
 async function storageSet(key, value){
@@ -1595,7 +2975,7 @@ async function storageGet(key){
 }
 
 async function saveEverything(){
-  const state = { sections: {}, longText: document.getElementById('longTextInput').value };
+  const state = { sections: {}, longText: document.getElementById('longTextInput').value, wordStats: wordStats };
   sections.forEach(section => {
     const ord = ensureOrder(section);
     const rowsObj = {};
@@ -1614,6 +2994,9 @@ function applySavedState(saved){
   if(typeof saved.longText === 'string'){
     const ta = document.getElementById('longTextInput');
     if(ta) ta.value = saved.longText;
+  }
+  if(saved.wordStats && typeof saved.wordStats === 'object'){
+    wordStats = saved.wordStats;
   }
   sections.forEach(section => {
     const s = saved.sections[section.id];
