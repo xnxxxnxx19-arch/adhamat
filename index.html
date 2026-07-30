@@ -377,6 +377,12 @@
     box-shadow:0 3px 0 rgba(0,0,0,.2);
   }
   .review-check{ width:16px; height:16px; cursor:pointer; accent-color:var(--purple); }
+  .bar-list{ display:flex; flex-direction:column; gap:8px; }
+  .bar-row{ display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; font-size:.82rem; }
+  .bar-label{ min-width:110px; color:#4a4536; }
+  .bar-track{ background:#f0ead4; border-radius:6px; height:14px; overflow:hidden; }
+  .bar-fill{ height:100%; border-radius:6px; transition:width .3s; }
+  .bar-value{ min-width:46px; text-align:left; color:#6b6450; font-weight:bold; }
   #btnReviewMistakes{
     display:block; width:100%; margin-top:10px; border:none; border-radius:10px; padding:12px;
     font-size:.95rem; font-weight:bold; cursor:pointer; color:#fff; background:var(--purple);
@@ -407,6 +413,20 @@
   <h1 class="en">English Grammar Basics</h1>
   <p>PREPOSITIONS • TENSES • ESSENTIAL RULES — تمرين تفاعلي</p>
 </header>
+
+<div id="visitorWidget" class="progress-card" style="max-width:700px; margin:0 auto 16px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div id="visitorCountDisplay" style="font-size:.85rem; color:#6b6450;">⏳ جاري حساب عدد الزوار...</div>
+    <button type="button" id="btnToggleGuestbook" style="background:var(--teal); color:#fff; border:none; border-radius:8px; padding:6px 14px; font-size:.8rem; cursor:pointer;">👥 سجل الزوار</button>
+  </div>
+  <div id="guestbookPanel" style="display:none; margin-top:12px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="text" id="guestbookNameInput" placeholder="اكتب اسمك عشان تتسجل في سجل الزوار..." style="flex:1; min-width:180px; padding:8px 10px; border:1.5px solid #c9c2a8; border-radius:8px; font-size:.85rem;">
+      <button type="button" id="btnGuestbookSubmit" style="background:var(--purple); color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:.85rem; cursor:pointer;">تسجيل ✅</button>
+    </div>
+    <div id="guestbookList" style="margin-top:10px; font-size:.82rem; color:#4a4536;"></div>
+  </div>
+</div>
 
 <div class="controlbar">
   <button id="btnNoEn">شيل كل الإنجليزي ✏️</button>
@@ -632,6 +652,26 @@
     <div class="progress-card">
       <h3>🎯 تحليل نقاط ضعفك (الكلمات اللي بتغلط فيها أكتر)</h3>
       <div id="progressWeakPoints"></div>
+    </div>
+    <div class="progress-card">
+      <h3>⏱ سرعة استجابتك</h3>
+      <div id="progressResponseTime"></div>
+    </div>
+    <div class="progress-card">
+      <h3>🧠 تحليل نوعية أخطائك</h3>
+      <div id="progressErrorTypes"></div>
+    </div>
+    <div class="progress-card">
+      <h3>📵 التركيز والتشتت أثناء الاختبار</h3>
+      <div id="progressDistraction"></div>
+    </div>
+    <div class="progress-card">
+      <h3>🎓 سرعة حفظك للكلمات</h3>
+      <div id="progressMemorization"></div>
+    </div>
+    <div class="progress-card">
+      <h3>🕐 أداءك حسب وقت اليوم</h3>
+      <div id="progressTimeOfDay"></div>
     </div>
   </div>
 </div>
@@ -2122,7 +2162,7 @@ function handlePuzzleOptionClick(btn, round){
     label = `الكلمة "${round.testWord}" (${round.isSameCategory ? 'نفس القاعدة' : 'مختلفة'})`;
   }
 
-  testResults.push({ puzzleType: true, label: label, correct: isCorrect });
+  testResults.push({ puzzleType: true, label: label, correct: isCorrect, responseMs: Date.now() - questionShownAt });
   setTimeout(() => { testIndex++; runTestQuestion(); }, 900);
 }
 
@@ -2262,7 +2302,7 @@ let wordStats = {}; // "sectionId::rowId" -> {correct, wrong, box(1-5), lastSeen
 // persisted history of finished tests/rounds, used to power the progress dashboard chart
 let testHistory = []; // { ts, testType, total, correct, pct, wrongItems:[{sectionId,rowId,arabic,english}] }
 
-function pushTestHistory(testTypeLabel, total, correct, wrongItemsRaw){
+function pushTestHistory(testTypeLabel, total, correct, wrongItemsRaw, meta){
   if(total <= 0) return;
   const pct = Math.round((correct / total) * 100);
   const wrongItems = (wrongItemsRaw || []).map(r => {
@@ -2270,12 +2310,32 @@ function pushTestHistory(testTypeLabel, total, correct, wrongItemsRaw){
     if(!it || !it.section || !it.row) return null;
     return { sectionId: it.section.id, rowId: it.row.id, arabic: it.arabic || '', english: it.english || '' };
   }).filter(Boolean);
-  testHistory.push({ ts: Date.now(), testType: testTypeLabel, total: total, correct: correct, pct: pct, wrongItems: wrongItems });
+  const m = meta || {};
+  testHistory.push({
+    ts: Date.now(), testType: testTypeLabel, total: total, correct: correct, pct: pct, wrongItems: wrongItems,
+    avgResponseMs: typeof m.avgResponseMs === 'number' ? m.avgResponseMs : null,
+    distractionMs: m.distractionMs || 0,
+    tabSwitches: m.tabSwitches || 0,
+    errorTypeCounts: m.errorTypeCounts || {}
+  });
   if(testHistory.length > 200) testHistory.shift();
   persistStats();
 }
 
 // lightweight auto-save for stats only (doesn't require the user to press "save changes")
+function buildTestMeta(resultsArr){
+  const responseTimes = (resultsArr || []).map(r => r.responseMs).filter(v => typeof v === 'number' && v >= 0);
+  const avgResponseMs = responseTimes.length ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length) : null;
+  const errorTypeCounts = {};
+  (resultsArr || []).forEach(r => { if(!r.correct && r.errorType) errorTypeCounts[r.errorType] = (errorTypeCounts[r.errorType] || 0) + 1; });
+  return {
+    avgResponseMs: avgResponseMs,
+    distractionMs: sessionDistraction.hiddenMs,
+    tabSwitches: sessionDistraction.switches,
+    errorTypeCounts: errorTypeCounts
+  };
+}
+
 async function persistStats(){
   try{
     const payload = JSON.stringify({ wordStats: wordStats, testHistory: testHistory });
@@ -2334,11 +2394,73 @@ function wrongListToReviewItems(wrongList){
 
 function recordAnswerStat(section, row, isCorrect){
   const key = section.id + '::' + row.id;
-  if(!wordStats[key]) wordStats[key] = { correct: 0, wrong: 0, box: 1, lastSeenTs: 0 };
+  if(!wordStats[key]) wordStats[key] = { correct: 0, wrong: 0, box: 1, lastSeenTs: 0, history: [] };
   const s = wordStats[key];
+  if(!s.history) s.history = [];
   if(isCorrect){ s.correct++; s.box = Math.min(5, s.box + 1); }
   else { s.wrong++; s.box = 1; }
   s.lastSeenTs = Date.now();
+  s.history.push({ ts: s.lastSeenTs, correct: isCorrect, box: s.box });
+  if(s.history.length > 40) s.history.shift(); // cap growth, keeps recent learning-curve data
+}
+
+/* ---- deep-analytics helpers: response time, hesitation/edits, distraction, error typing ---- */
+let questionShownAt = 0;
+let answerEditCount = 0;
+let sessionDistraction = { hiddenMs: 0, switches: 0, hiddenSince: null };
+
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){
+    sessionDistraction.switches++;
+    sessionDistraction.hiddenSince = Date.now();
+  } else if(sessionDistraction.hiddenSince){
+    sessionDistraction.hiddenMs += Date.now() - sessionDistraction.hiddenSince;
+    sessionDistraction.hiddenSince = null;
+  }
+});
+
+function levenshtein(a, b){
+  a = a || ''; b = b || '';
+  const m = a.length, n = b.length;
+  if(m === 0) return n;
+  if(n === 0) return m;
+  const dp = new Array(n + 1);
+  for(let j = 0; j <= n; j++) dp[j] = j;
+  for(let i = 1; i <= m; i++){
+    let prev = dp[0];
+    dp[0] = i;
+    for(let j = 1; j <= n; j++){
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+const ERROR_TYPE_LABELS = {
+  timeout: '⏱ خلص الوقت من غير إجابة',
+  empty: '🈳 سايب الإجابة فاضية',
+  typo: '✏️ قريب من الصح (خطأ إملائي بسيط)',
+  wronglang: '🔤 كتب بلغة مختلفة عن المطلوب',
+  partial: '🧩 إجابة ناقصة أو فيها حروف زيادة',
+  unknown: '❓ إجابة مختلفة تمامًا (يبدو إنه مش فاكر الكلمة)',
+  mcq_wrong: '🔘 اختيار غلط من الاختيارات',
+  tf_wrong: '☑️ تقييم غلط لصح/خطأ'
+};
+
+function classifyTextError(userVal, correctVal, kind, timedOut){
+  if(timedOut) return 'timeout';
+  const u = normalize(userVal || '', kind);
+  const c = normalize(correctVal || '', kind);
+  if(!u) return 'empty';
+  const looksReversedLang = /[\u0600-\u06FF]/.test(u) !== /[\u0600-\u06FF]/.test(c);
+  if(looksReversedLang) return 'wronglang';
+  const dist = levenshtein(u, c);
+  const maxLen = Math.max(u.length, c.length, 1);
+  if((dist / maxLen) <= 0.34) return 'typo';
+  if(u.length && c.length && (c.includes(u) || u.includes(c))) return 'partial';
+  return 'unknown';
 }
 
 function getWordBox(section, row){
@@ -2521,6 +2643,173 @@ function renderWeakPointsList(){
     `</tbody></table>`;
 }
 
+function buildBarListHtml(items){
+  if(!items || items.length === 0) return `<div class="chart-empty">مفيش بيانات كفاية لسه.</div>`;
+  const max = Math.max.apply(null, items.map(i => i.value).concat([1]));
+  return `<div class="bar-list">` + items.map(i => `
+    <div class="bar-row">
+      <div class="bar-label">${esc(i.label)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, (i.value / max * 100))}%; background:${i.color || '#1f6f4e'};"></div></div>
+      <div class="bar-value">${esc(String(i.sub != null ? i.sub : i.value))}</div>
+    </div>`).join('') + `</div>`;
+}
+
+const TEST_TYPE_LABELS = {
+  word: 'كلمة', sentence: 'جملة', mcq: 'اختيار من متعدد', truefalse: 'صح/خطأ',
+  scramble: 'فك تشفير', smart: 'مراجعة ذكية', oddone: 'الشاذ', antonym: 'الأضداد',
+  hiddenrule: 'القاعدة المخفية', brokensentence: 'الجملة المعطوبة', survival: 'وضع البقاء', matching: 'مطابقة'
+};
+
+function computeResponseTimeStats(){
+  const withTime = testHistory.filter(t => typeof t.avgResponseMs === 'number' && t.avgResponseMs != null);
+  if(withTime.length === 0) return null;
+  const overallAvg = Math.round(withTime.reduce((s, t) => s + t.avgResponseMs, 0) / withTime.length);
+  const byType = {};
+  withTime.forEach(t => {
+    if(!byType[t.testType]) byType[t.testType] = { sum: 0, count: 0 };
+    byType[t.testType].sum += t.avgResponseMs; byType[t.testType].count++;
+  });
+  const perType = Object.keys(byType).map(k => ({ type: k, avg: Math.round(byType[k].sum / byType[k].count) }));
+  perType.sort((a, b) => a.avg - b.avg);
+  return { overallAvg: overallAvg, perType: perType };
+}
+
+function computeErrorTypeBreakdown(){
+  const totals = {};
+  testHistory.forEach(t => {
+    Object.keys(t.errorTypeCounts || {}).forEach(k => { totals[k] = (totals[k] || 0) + t.errorTypeCounts[k]; });
+  });
+  return Object.keys(totals).map(k => ({ key: k, label: ERROR_TYPE_LABELS[k] || k, value: totals[k] })).sort((a, b) => b.value - a.value);
+}
+
+function computeDistractionStats(){
+  const withData = testHistory.filter(t => t.total > 0);
+  if(withData.length === 0) return null;
+  const totalDistractionMs = withData.reduce((s, t) => s + (t.distractionMs || 0), 0);
+  const totalSwitches = withData.reduce((s, t) => s + (t.tabSwitches || 0), 0);
+  const distracted = withData.filter(t => (t.distractionMs || 0) > 0 || (t.tabSwitches || 0) > 0);
+  const focused = withData.filter(t => !((t.distractionMs || 0) > 0 || (t.tabSwitches || 0) > 0));
+  const avgPct = arr => arr.length ? Math.round(arr.reduce((s, t) => s + t.pct, 0) / arr.length) : null;
+  return {
+    totalDistractionMs: totalDistractionMs, totalSwitches: totalSwitches,
+    avgPctDistracted: avgPct(distracted), avgPctFocused: avgPct(focused),
+    hasBoth: distracted.length > 0 && focused.length > 0
+  };
+}
+
+function computeTimeOfDayStats(){
+  const buckets = {};
+  const order = ['الفجر (12-6ص)', 'الصبح (6-12ص)', 'بعد الضهر (12-6م)', 'بالليل (6م-12ص)'];
+  testHistory.forEach(t => {
+    const h = new Date(t.ts).getHours();
+    const label = h < 6 ? order[0] : h < 12 ? order[1] : h < 18 ? order[2] : order[3];
+    if(!buckets[label]) buckets[label] = { sum: 0, count: 0 };
+    buckets[label].sum += t.pct; buckets[label].count++;
+  });
+  return order.filter(l => buckets[l]).map(label => ({ label: label, avg: Math.round(buckets[label].sum / buckets[label].count), count: buckets[label].count }));
+}
+
+function computeMemorizationStats(){
+  let totalAttempts = 0, masteredCount = 0;
+  const perWord = [];
+  Object.keys(wordStats).forEach(key => {
+    const s = wordStats[key];
+    if(!s || !s.history) return;
+    const idx = s.history.findIndex(h => h.box === 5);
+    if(idx !== -1){
+      masteredCount++;
+      totalAttempts += (idx + 1);
+      perWord.push({ key: key, attempts: idx + 1 });
+    }
+  });
+  perWord.sort((a, b) => a.attempts - b.attempts);
+  const withLabel = (arr) => arr.map(w => {
+    const sepIdx = w.key.indexOf('::');
+    const sectionId = w.key.slice(0, sepIdx), rowId = w.key.slice(sepIdx + 2);
+    const section = sections.find(s => s.id === sectionId);
+    if(!section) return null;
+    const row = section.rows.find(r => r.id === rowId);
+    if(!row) return null;
+    const arIdx = section.kinds.indexOf('ar');
+    const wordCol = getQuizWordColumn(section);
+    return {
+      arabic: arIdx !== -1 ? (row.values[arIdx] || '') : '',
+      english: wordCol != null ? (row.values[wordCol] || '') : '',
+      attempts: w.attempts
+    };
+  }).filter(Boolean);
+  return {
+    avgAttempts: masteredCount > 0 ? (totalAttempts / masteredCount) : null,
+    masteredCount: masteredCount,
+    fastest: withLabel(perWord.slice(0, 5)),
+    slowest: withLabel(perWord.slice(-5).reverse())
+  };
+}
+
+function renderDeepAnalytics(){
+  const rtEl = document.getElementById('progressResponseTime');
+  const rt = computeResponseTimeStats();
+  if(!rt){
+    rtEl.innerHTML = `<div class="chart-empty">لسه مفيش بيانات كفاية عن سرعة إجابتك — جاوب على شوية أسئلة نصّية (مش اختيار من متعدد) وهيظهر هنا.</div>`;
+  } else {
+    rtEl.innerHTML = `
+      <div class="progress-stat-grid" style="grid-template-columns:repeat(2,1fr);">
+        <div class="progress-stat-card"><div class="progress-stat-num">${(rt.overallAvg / 1000).toFixed(1)}ث</div><div class="progress-stat-label">متوسط زمن إجابتك العام</div></div>
+        <div class="progress-stat-card"><div class="progress-stat-num">${rt.perType[0] ? (TEST_TYPE_LABELS[rt.perType[0].type] || rt.perType[0].type) : '—'}</div><div class="progress-stat-label">أسرع نوع اختبار بالنسبة لك</div></div>
+      </div>
+      ${buildBarListHtml(rt.perType.map(p => ({ label: TEST_TYPE_LABELS[p.type] || p.type, value: p.avg, sub: (p.avg / 1000).toFixed(1) + 'ث' })))}
+    `;
+  }
+
+  const errBreak = computeErrorTypeBreakdown();
+  document.getElementById('progressErrorTypes').innerHTML = errBreak.length
+    ? buildBarListHtml(errBreak.map(e => ({ label: e.label, value: e.value, sub: e.value, color: '#c9660a' })))
+    : `<div class="chart-empty">مفيش أخطاء مسجلة كفاية لتحليل نوعيتها لسه.</div>`;
+
+  const distEl = document.getElementById('progressDistraction');
+  const dist = computeDistractionStats();
+  if(!dist){
+    distEl.innerHTML = `<div class="chart-empty">هيظهر هنا تحليل تركيزك بعد أول اختبار.</div>`;
+  } else {
+    const mins = Math.round(dist.totalDistractionMs / 60000 * 10) / 10;
+    distEl.innerHTML = `
+      <div class="progress-stat-grid" style="grid-template-columns:repeat(2,1fr);">
+        <div class="progress-stat-card"><div class="progress-stat-num">${mins} د</div><div class="progress-stat-label">إجمالي وقت خروجك من صفحة الاختبار</div></div>
+        <div class="progress-stat-card"><div class="progress-stat-num">${dist.totalSwitches}</div><div class="progress-stat-label">عدد مرات الخروج أثناء الاختبارات</div></div>
+      </div>
+      ${dist.hasBoth ? `<p class="review-hint" style="margin-top:12px;">دقتك في الاختبارات اللي فضلت مركّز فيها من غير ما تسيب الصفحة: <b>${dist.avgPctFocused}%</b> — مقابل <b>${dist.avgPctDistracted}%</b> في اللي اتشتت فيها.</p>` : ''}
+    `;
+  }
+
+  const memEl = document.getElementById('progressMemorization');
+  const mem = computeMemorizationStats();
+  if(!mem.masteredCount){
+    memEl.innerHTML = `<div class="chart-empty">لسه محدش وصل لمستوى الإتقان الكامل (مستوى 5) — استمر في التدريب وهيظهر هنا تحليل سرعة حفظك.</div>`;
+  } else {
+    memEl.innerHTML = `
+      <div class="progress-stat-grid" style="grid-template-columns:repeat(2,1fr);">
+        <div class="progress-stat-card"><div class="progress-stat-num">${mem.avgAttempts.toFixed(1)}</div><div class="progress-stat-label">متوسط عدد المحاولات عشان تتقن كلمة</div></div>
+        <div class="progress-stat-card"><div class="progress-stat-num">${mem.masteredCount}</div><div class="progress-stat-label">كلمات وصلت لإتقان كامل</div></div>
+      </div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:12px;">
+        <div style="flex:1; min-width:220px;">
+          <b style="font-size:.85rem; color:#1f8a4c;">⚡ أسرع كلمات اتقنتها</b>
+          <table class="test-wrong-table"><tbody>${mem.fastest.map(w => `<tr><td>${esc(w.arabic)}</td><td class="en" style="direction:ltr;">${esc(w.english)}</td><td>${w.attempts} محاولة</td></tr>`).join('')}</tbody></table>
+        </div>
+        <div style="flex:1; min-width:220px;">
+          <b style="font-size:.85rem; color:#c73535;">🐢 أبطأ كلمات اتقنتها</b>
+          <table class="test-wrong-table"><tbody>${mem.slowest.map(w => `<tr><td>${esc(w.arabic)}</td><td class="en" style="direction:ltr;">${esc(w.english)}</td><td>${w.attempts} محاولة</td></tr>`).join('')}</tbody></table>
+        </div>
+      </div>
+    `;
+  }
+
+  const tod = computeTimeOfDayStats();
+  document.getElementById('progressTimeOfDay').innerHTML = tod.length
+    ? buildBarListHtml(tod.map(b => ({ label: b.label, value: b.avg, sub: b.avg + '% (' + b.count + ')', color: '#3d7fc9' })))
+    : `<div class="chart-empty">لسه مفيش اختبارات كفاية لتحليل أدائك حسب وقت اليوم.</div>`;
+}
+
 function renderProgressPage(){
   const allStats = Object.values(wordStats);
   const totalAnswered = allStats.reduce((s, v) => s + (v.correct || 0) + (v.wrong || 0), 0);
@@ -2544,6 +2833,7 @@ function renderProgressPage(){
   `;
   document.getElementById('progressChart').innerHTML = buildProgressChartSvg();
   renderWeakPointsList();
+  renderDeepAnalytics();
 }
 
 let reviewCurrentItems = [];
@@ -2627,6 +2917,7 @@ function startTest(){
     alert('حدد كلمات الأول من الصفحة الرئيسية (علامة ✔ في عمود 🔊) قبل ما تبدأ الاختبار.');
     return;
   }
+  sessionDistraction = { hiddenMs: 0, switches: 0, hiddenSince: null };
   const pool = buildTestPool();
   testType = document.getElementById('testTypeSelect').value;
   testDirection = document.getElementById('testDirectionSelect').value;
@@ -2710,6 +3001,8 @@ function runTestQuestion(){
   optionsEl.style.display = 'none';
   inputEl.style.display = 'block';
   submitBtn.style.display = 'block';
+  answerEditCount = 0;
+  questionShownAt = Date.now();
 
   let direction = testDirection;
   if(testType === 'smart') direction = Math.random() < 0.5 ? 'ar2en' : 'en2ar';
@@ -2783,6 +3076,7 @@ function runPuzzleQuestion(){
   submitBtn.style.display = 'none';
   optionsEl.style.display = 'grid';
   optionsEl.innerHTML = '';
+  questionShownAt = Date.now();
 
   if(testType === 'oddone'){
     promptEl.innerHTML = `<p class="desc" style="font-size:1rem;">أي كلمة من دول <b>مختلفة</b> عن الباقي في نوعها النحوي؟</p>`;
@@ -2839,7 +3133,9 @@ function handleOptionClick(btn, item, direction){
   }
 
   recordAnswerStat(item.section, item.row, isCorrect);
-  testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: isCorrect, timedOut: false });
+  const responseMs = Date.now() - questionShownAt;
+  const errorType = isCorrect ? null : (testType === 'mcq' ? 'mcq_wrong' : 'tf_wrong');
+  testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: isCorrect, timedOut: false, responseMs: responseMs, editCount: 0, errorType: errorType });
 
   setTimeout(() => { testIndex++; runTestQuestion(); }, 900);
 }
@@ -2880,7 +3176,9 @@ function submitTestAnswer(timedOut){
 
   const isCorrect = !timedOut && normalize(userVal, kind) === normalize(correctVal, kind);
   recordAnswerStat(item.section, item.row, isCorrect);
-  testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: isCorrect, timedOut: timedOut });
+  const responseMs = Date.now() - questionShownAt;
+  const errorType = isCorrect ? null : classifyTextError(userVal, correctVal, kind, timedOut);
+  testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: isCorrect, timedOut: timedOut, responseMs: responseMs, editCount: answerEditCount, errorType: errorType });
 
   inputEl.disabled = true;
   inputEl.classList.add(isCorrect ? 'correct' : 'wrong');
@@ -2932,7 +3230,7 @@ function finishTest(){
   document.getElementById('btnReviewMistakes').addEventListener('click', () => {
     showReviewPage(isPuzzle ? [] : wrongListToReviewItems(wrongList));
   });
-  pushTestHistory(testType, total, correctCount, isPuzzle ? [] : wrongList);
+  pushTestHistory(testType, total, correctCount, isPuzzle ? [] : wrongList, buildTestMeta(testResults));
 }
 
 /* ---- Broken sentence puzzle: decoy word detection + click-to-reorder reconstruction ---- */
@@ -2993,6 +3291,7 @@ function runBrokenRound(){
   });
 
   startBrokenTimer(testSeconds * 3); // extra time — this puzzle needs more thinking
+  questionShownAt = Date.now();
 }
 
 function renderBrokenAssembled(){
@@ -3048,7 +3347,8 @@ function submitBrokenRound(timedOut){
     correct: isCorrect,
     original: round.originalWords.join(' '),
     yours: brokenAssembledWords.map(w => w.word).join(' ') || '(محصلش وقت)',
-    item: round.item
+    item: round.item,
+    responseMs: Date.now() - questionShownAt
   });
 
   setTimeout(() => { brokenIndex++; runBrokenRound(); }, 1300);
@@ -3084,7 +3384,7 @@ function finishBroken(){
   document.getElementById('btnReviewMistakes').addEventListener('click', () => {
     showReviewPage(wrongListToReviewItems(wrongList));
   });
-  pushTestHistory('brokensentence', total, correctCount, wrongList);
+  pushTestHistory('brokensentence', total, correctCount, wrongList, buildTestMeta(brokenResults));
 }
 document.getElementById('btnBrokenSubmit').addEventListener('click', () => submitBrokenRound(false));
 
@@ -3134,6 +3434,8 @@ function runSurvivalQuestion(){
     inputEl.placeholder = 'اكتب المعنى بالعربي...';
   }
   inputEl.focus();
+  answerEditCount = 0;
+  questionShownAt = Date.now();
   startTestTimer(testSeconds);
 }
 
@@ -3156,7 +3458,8 @@ function handleSurvivalAnswer(timedOut){
     survivalStreak++;
     setTimeout(runSurvivalQuestion, 700);
   } else {
-    testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: false, timedOut: timedOut });
+    const errorType = classifyTextError(userVal, correctVal, kind, timedOut);
+    testResults.push({ item: item, userVal: userVal, correctVal: correctVal, correct: false, timedOut: timedOut, responseMs: Date.now() - questionShownAt, editCount: answerEditCount, errorType: errorType });
     setTimeout(finishSurvival, 1000);
   }
 }
@@ -3178,7 +3481,7 @@ function finishSurvival(){
   document.getElementById('btnReviewMistakes').addEventListener('click', () => {
     showReviewPage(wrongListToReviewItems(testResults));
   });
-  pushTestHistory('survival', survivalStreak + 1, survivalStreak, testResults);
+  pushTestHistory('survival', survivalStreak + 1, survivalStreak, testResults, buildTestMeta(testResults));
 }
 
 /* ---- Matching pairs mode ---- */
@@ -3281,7 +3584,7 @@ function finishMatching(){
   document.getElementById('btnRetakeTest').addEventListener('click', startTest);
   document.getElementById('btnBackFromResult').addEventListener('click', showMainPage);
   document.getElementById('btnReviewMistakes').addEventListener('click', showProgressPage);
-  pushTestHistory('matching', matchingPairs.length, matchingMatchedCount, []);
+  pushTestHistory('matching', matchingPairs.length, matchingMatchedCount, [], buildTestMeta([]));
 }
 
 document.getElementById('btnGoToTestPage').addEventListener('click', showTestPage);
@@ -3298,6 +3601,7 @@ document.getElementById('testAnswerInput').addEventListener('keydown', (e) => {
     else submitTestAnswer(false);
   }
 });
+document.getElementById('testAnswerInput').addEventListener('input', () => { answerEditCount++; });
 updateTestTypeUI();
 
 /* ============ PERSISTENT STORAGE ============ */
@@ -3465,12 +3769,108 @@ document.getElementById('btnReset').addEventListener('click', () => {
   document.getElementById('scoreboard').textContent = "";
 });
 
+/* ============ VISITOR COUNTER & GUESTBOOK ============ */
+// هذا الجزء الوحيد اللي محتاج بيانات فعلية بتتشارك بين كل زوار موقعك (مش مجرد حفظ محلي في متصفحك)،
+// فمحتاج خدمة مجانية بسيطة تخزن العداد والأسماء. اتبع الخطوات دي مرة واحدة بس:
+//
+// 1) عداد الزيارات (شغال فورًا من غير أي إعداد): بيستخدم CountAPI.xyz المجانية.
+//    غيّر القيمة دي لاسم فريد بتاعك (مثلاً اسم مستودع GitHub بتاعك) عشان محدش يشارك نفس العداد معاك:
+const VISIT_COUNTER_NAMESPACE = 'ahmed-grammar-app-2026'; // <-- غيّرها لاسم فريد بتاعك
+//
+// 2) سجل الأسماء (اختياري): محتاج حساب مجاني على jsonbin.io (دقيقة واحدة، من غير كارت ائتمان):
+//    - روح https://jsonbin.io وسجل حساب مجاني
+//    - من لوحة التحكم اعمل "Create Bin" وحط فيه المحتوى ده بالظبط: {"visitors":[]}
+//    - من صفحة الـ API Keys انسخ الـ "X-Master-Key"
+//    - انسخ الـ Bin ID اللي هيظهر في رابط البن بعد ما تعمله
+//    - حط القيمتين هنا:
+const GUESTBOOK_BIN_ID = '';   // <-- حط هنا الـ Bin ID
+const GUESTBOOK_API_KEY = '';  // <-- حط هنا الـ X-Master-Key
+
+async function initVisitCounter(){
+  const el = document.getElementById('visitorCountDisplay');
+  try{
+    const res = await fetch(`https://api.countapi.xyz/hit/${encodeURIComponent(VISIT_COUNTER_NAMESPACE)}/visits`);
+    if(!res.ok) throw new Error('bad response');
+    const data = await res.json();
+    el.textContent = `👁️ إجمالي الزيارات: ${data.value}`;
+  }catch(e){
+    // fallback: عداد محلي تقريبي (خاص بالمتصفح ده بس) لو الخدمة مش متاحة
+    let local = parseInt(localStorage.getItem('local-visit-fallback') || '0', 10) + 1;
+    localStorage.setItem('local-visit-fallback', String(local));
+    el.textContent = `👁️ زياراتك من الجهاز ده: ${local} (تعذر الوصول لعداد الزوار العام)`;
+  }
+}
+
+function guestbookConfigured(){
+  return !!(GUESTBOOK_BIN_ID && GUESTBOOK_API_KEY);
+}
+
+async function loadGuestbook(){
+  const listEl = document.getElementById('guestbookList');
+  if(!guestbookConfigured()){
+    listEl.innerHTML = `<div class="chart-empty" style="padding:10px 4px;">سجل الزوار محتاج إعداد بسيط لمرة واحدة (خدمة مجانية) — راجع التعليقات في أول كود الصفحة (VISITOR COUNTER & GUESTBOOK) عشان تفعّله.</div>`;
+    document.getElementById('guestbookNameInput').disabled = true;
+    document.getElementById('btnGuestbookSubmit').disabled = true;
+    return;
+  }
+  try{
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${GUESTBOOK_BIN_ID}/latest`, {
+      headers: { 'X-Master-Key': GUESTBOOK_API_KEY }
+    });
+    const data = await res.json();
+    const visitors = (data.record && Array.isArray(data.record.visitors)) ? data.record.visitors : [];
+    if(visitors.length === 0){
+      listEl.innerHTML = `<div class="chart-empty" style="padding:10px 4px;">لسه محدش سجل — كن أول واحد! 👋</div>`;
+    } else {
+      listEl.innerHTML = `<b style="font-size:.8rem; color:#4a4536;">آخر الزوار (${visitors.length}):</b>` +
+        `<ul style="margin:6px 0 0; padding-right:18px;">` +
+        visitors.slice(-15).reverse().map(v => `<li>${esc(v.name)} <span style="color:#a09a82; font-size:.72rem;">— ${esc(new Date(v.ts).toLocaleDateString('ar-EG'))}</span></li>`).join('') +
+        `</ul>`;
+    }
+  }catch(e){
+    listEl.innerHTML = `<div class="chart-empty" style="padding:10px 4px;">حصل خطأ في تحميل سجل الزوار، جرب تاني بعدين.</div>`;
+  }
+}
+
+async function submitGuestbookEntry(){
+  const input = document.getElementById('guestbookNameInput');
+  const name = input.value.trim();
+  if(!name){ alert('اكتب اسمك الأول.'); return; }
+  if(!guestbookConfigured()){ alert('سجل الزوار لسه مش مفعّل — شوف التعليقات في أول كود الصفحة.'); return; }
+  try{
+    const getRes = await fetch(`https://api.jsonbin.io/v3/b/${GUESTBOOK_BIN_ID}/latest`, {
+      headers: { 'X-Master-Key': GUESTBOOK_API_KEY }
+    });
+    const getData = await getRes.json();
+    const visitors = (getData.record && Array.isArray(getData.record.visitors)) ? getData.record.visitors : [];
+    visitors.push({ name: name, ts: Date.now() });
+    await fetch(`https://api.jsonbin.io/v3/b/${GUESTBOOK_BIN_ID}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': GUESTBOOK_API_KEY },
+      body: JSON.stringify({ visitors: visitors })
+    });
+    input.value = '';
+    loadGuestbook();
+  }catch(e){
+    alert('حصل خطأ أثناء التسجيل، جرب تاني.');
+  }
+}
+
+document.getElementById('btnToggleGuestbook').addEventListener('click', () => {
+  const panel = document.getElementById('guestbookPanel');
+  const showing = panel.style.display === 'block';
+  panel.style.display = showing ? 'none' : 'block';
+  if(!showing) loadGuestbook();
+});
+document.getElementById('btnGuestbookSubmit').addEventListener('click', submitGuestbookEntry);
+
 /* ============ INIT ============ */
 
 (async function init(){
   sections.forEach(initSectionRows);
   await loadSavedState();
   await loadStatsOnly();
+  initVisitCounter();
   buildApp();
   buildReadingDisplay();
   if(supportsSpeech()){
