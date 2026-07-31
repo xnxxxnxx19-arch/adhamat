@@ -368,6 +368,14 @@
   .mastery-legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; font-size:.75rem; color:#6b6450; }
   .mastery-legend i{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-inline-end:4px; vertical-align:middle; }
   .chart-empty{ text-align:center; color:#8a8370; padding:24px 10px; font-size:.9rem; }
+  .history-file-row{
+    display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px;
+    background:#fbfaf3; border:1px solid #eee2c6; margin-bottom:6px; cursor:pointer; transition:background .12s;
+  }
+  .history-file-row:hover{ background:#f3edd8; }
+  .history-file-icon{ font-size:1.1rem; }
+  .history-file-name{ flex:1; font-size:.85rem; color:#4a4536; }
+  .history-file-score{ color:#fff; font-weight:bold; font-size:.75rem; padding:3px 10px; border-radius:12px; white-space:nowrap; }
   .progress-svg-chart{ width:100%; height:220px; display:block; }
   .review-hint{ text-align:center; color:#6b6450; font-size:.85rem; margin-bottom:12px; }
   #reviewList table, #progressWeakPoints table{ margin-top:6px; }
@@ -387,40 +395,6 @@
   .mastery-dot.filled{ background:var(--green-d,#1f8a4c); border-color:var(--green-d,#1f8a4c); }
   .diff-box{ font-size:1.3rem; direction:ltr; text-align:center; letter-spacing:1px; }
 
-  /* ---- Programming memorization system ---- */
-  #btnGoToProgPage{ background:#2d3a4f; }
-  .prog-tabbar{ display:flex; gap:8px; max-width:900px; margin:0 auto 16px; }
-  .prog-tabbar button{
-    flex:1; border:none; border-radius:8px; padding:10px; cursor:pointer; font-weight:bold;
-    font-size:.85rem; background:#e7e2d0; color:#4a4536;
-  }
-  .prog-tabbar button.active{ background:#2d3a4f; color:#fff; }
-  .prog-card-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:10px; margin-top:8px; }
-  .prog-flashcard{
-    background:#12161f; color:#e6e0cf; border-radius:10px; padding:14px 10px; cursor:pointer;
-    min-height:70px; display:flex; align-items:center; justify-content:center; text-align:center;
-    transition:transform .12s; direction:ltr; font-family:"JetBrains Mono","Consolas",monospace;
-  }
-  .prog-flashcard:hover{ transform:translateY(-2px); }
-  .prog-flashcard-term{ font-size:1rem; font-weight:bold; }
-  .prog-flashcard-back{ margin-top:8px; }
-  .prog-flashcard-meaning{ font-family:"Tahoma","Segoe UI",Arial,sans-serif; direction:rtl; font-size:.85rem; color:#c9c2a8; margin-bottom:8px; }
-  .prog-flashcard-example{
-    display:block; background:#0d1117; color:#7ee787; border-radius:6px; padding:8px;
-    font-size:.78rem; direction:ltr; text-align:left; white-space:pre-wrap; word-break:break-word;
-  }
-  .prog-quiz-format-row{ display:flex; gap:8px; max-width:500px; margin:0 auto 14px; flex-wrap:wrap; }
-  .prog-quiz-format-row button{
-    flex:1; min-width:140px; border:2px solid #2d3a4f; border-radius:8px; padding:12px; background:#fff;
-    color:#2d3a4f; font-weight:bold; cursor:pointer; font-size:.85rem;
-  }
-  .prog-quiz-format-row button:hover{ background:#2d3a4f; color:#fff; }
-  #progQuizOptions{ display:none; grid-template-columns:1fr; gap:10px; margin-top:14px; }
-  #progQuizOptions button{
-    border:1.5px solid #c9c2a8; border-radius:8px; padding:12px; background:#fbfaf3; cursor:pointer;
-    font-size:.9rem; text-align:right;
-  }
-  #progQuizOptions button:hover{ background:#f0ead4; }
   #btnReviewMistakes{
     display:block; width:100%; margin-top:10px; border:none; border-radius:10px; padding:12px;
     font-size:.95rem; font-weight:bold; cursor:pointer; color:#fff; background:var(--purple);
@@ -486,7 +460,6 @@
   <button id="btnGoToTestPage">📝 صفحة الاختبار</button>
   <button id="btnGoToProgressPage">📊 تقدمي وتحليل أخطائي</button>
   <button id="btnGoToNotesPage">📓 دفتر ملاحظاتي</button>
-  <button id="btnGoToProgPage">💻 حفظ البرمجة</button>
   <button id="btnOpenImport">📥 استيراد كلمات بالجملة</button>
 </div>
 
@@ -680,64 +653,6 @@
   <div id="testResultPanel" class="test-card" style="display:none;"></div>
 </div>
 
-<div id="progPage" style="display:none; padding:0 10px;">
-  <header class="top">
-    <h1 class="en">Programming Memorization</h1>
-    <p>نظام متكامل لتعلّم وفهم وحفظ مصطلحات وتعليمات البرمجة</p>
-  </header>
-  <div class="controlbar">
-    <button id="btnBackFromProg">⬅ رجوع للرئيسية</button>
-  </div>
-  <div class="prog-tabbar">
-    <button type="button" id="progTabBrowse" class="active">📖 تصفح وفهم</button>
-    <button type="button" id="progTabQuiz">🧪 اختبار نفسي</button>
-    <button type="button" id="progTabProgress">📊 تقدمي في البرمجة</button>
-  </div>
-
-  <div id="progBrowsePanel" class="progress-wrap">
-    <div class="progress-card">
-      <p class="review-hint">دوس على أي بطاقة عشان تقلبها وتشوف الشرح ومثال كود عليها. ده أسلوب الحفظ بالبطاقات (Flashcards) — من أقوى طرق تثبيت المصطلحات في الذاكرة.</p>
-    </div>
-    <div id="progBrowseList"></div>
-  </div>
-
-  <div id="progQuizChoicePanel" class="progress-wrap" style="display:none;">
-    <div class="progress-card">
-      <h3>اختار طريقة الاختبار</h3>
-      <p class="review-hint">كل طريقة بتثبّت المعلومة بشكل مختلف — جرب أكتر من طريقة على نفس المصطلحات لتثبيت أقوى.</p>
-      <div class="prog-quiz-format-row">
-        <button type="button" data-format="mcq">🔘 اختيار من متعدد<br><span style="font-weight:normal; font-size:.75rem;">(المصطلح → المعنى)</span></button>
-        <button type="button" data-format="type">⌨️ اكتب المصطلح<br><span style="font-weight:normal; font-size:.75rem;">(المعنى → المصطلح — استدعاء نشط)</span></button>
-        <button type="button" data-format="reverse">🔄 اختيار عكسي<br><span style="font-weight:normal; font-size:.75rem;">(المعنى → المصطلح)</span></button>
-      </div>
-    </div>
-  </div>
-
-  <div id="progQuizPanel" class="progress-wrap" style="display:none;">
-    <div class="progress-card">
-      <div id="progQuizProgress" style="font-weight:bold; color:#4a4536; margin-bottom:10px;"></div>
-      <div id="progQuizPrompt" style="text-align:center; margin:10px 0;"></div>
-      <input type="text" id="progQuizInput" class="test-answer-input" placeholder="اكتب المصطلح بالإنجليزي..." autocomplete="off" style="display:none;">
-      <div id="progQuizOptions"></div>
-      <button type="button" id="progQuizSubmit" class="test-submit-btn" style="display:none;">تأكيد ✅</button>
-      <div id="progQuizFeedback" style="margin-top:14px; text-align:center; font-size:1.05rem;"></div>
-    </div>
-  </div>
-
-  <div id="progResultPanel" class="progress-wrap" style="display:none;"></div>
-
-  <div id="progProgressPanel" class="progress-wrap" style="display:none;">
-    <div class="progress-card">
-      <h3>📊 تقدمك في حفظ البرمجة</h3>
-      <div id="progProgressSummary"></div>
-    </div>
-    <div class="progress-card">
-      <h3>🎯 المصطلحات اللي محتاجة مراجعة أكتر</h3>
-      <div id="progWeakPoints"></div>
-    </div>
-  </div>
-</div>
-
 <div id="masteryPage" style="display:none; padding:0 10px;">
   <header class="top">
     <h1 class="en">Re-Memorization System</h1>
@@ -786,8 +701,13 @@
       <div id="progressOverview"></div>
     </div>
     <div class="progress-card">
-      <h3>📊 تقدمك في آخر الاختبارات (النسبة المئوية لكل اختبار)</h3>
+      <h3>📈 الترند العام لأدائك (عدد الاختبارات وأدائك التعليمي بشكل عام)</h3>
       <div id="progressChart"></div>
+    </div>
+    <div class="progress-card">
+      <h3>🗂️ سجل الاختبارات — ملفات كل جلسة اختبار</h3>
+      <p class="review-hint">كل اختبار عملته اتسجل كملف منفصل بتاريخه واسمه — دوس على أي ملف عشان تشوف تفاصيله الكاملة (كل سؤال، إجابتك، الصح، وزمن الاستجابة).</p>
+      <div id="progressHistoryFiles"></div>
     </div>
     <div class="progress-card">
       <h3>🎯 تحليل نقاط ضعفك (الكلمات اللي بتغلط فيها أكتر)</h3>
@@ -817,6 +737,16 @@
       <h3>🎧 جلسات الإتقان الصوتي</h3>
       <div id="progressMasteryDrill"></div>
     </div>
+  </div>
+</div>
+
+<div id="historyFileModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:2000; padding:16px; overflow-y:auto;">
+  <div style="max-width:700px; margin:0 auto; background:#fbfaf3; border-radius:14px; padding:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h3 id="historyFileModalTitle" style="margin:0; color:#4a4536;"></h3>
+      <button type="button" id="btnCloseHistoryFile" style="background:#8a8370; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer;">✖ إغلاق</button>
+    </div>
+    <div id="historyFileModalBody"></div>
   </div>
 </div>
 
@@ -1086,6 +1016,84 @@ const commonSentences = [
 [49,"Believe me.","صدقني."],[50,"It was nice talking to you.","كان كلام جميل معاك."],
 ];
 
+/* ============ PROGRAMMING INSTRUCTIONS — same schema as commonWords, reuses ALL existing test types ============ */
+
+const progFund = [
+[1,"variable","مكان في الذاكرة له اسم، بيتخزن فيه قيمة ممكن تتغير أثناء تنفيذ البرنامج","let age = 25;"],
+[2,"constant","زي المتغير بس قيمته ثابتة ومينفعش تتغير بعد ما تتحدد","const PI = 3.14;"],
+[3,"syntax","القواعد اللي لازم تتبعها عشان اللغة البرمجية تفهم الكود بتاعك","Every language has its own syntax."],
+[4,"comment","سطر بتكتبه للشرح، والكمبيوتر بيتجاهله تمامًا وما بينفذوش","// this line is ignored"],
+[5,"algorithm","سلسلة خطوات منطقية ومرتبة لحل مشكلة معينة، زي وصفة الطبخ بس للكمبيوتر","Step 1: take input. Step 2: process. Step 3: output."],
+[6,"compile","تحويل الكود اللي كتبته بلغة برمجة لصيغة يفهمها الكمبيوتر مباشرة قبل التشغيل","gcc main.c -o main"],
+];
+const progTypes = [
+[1,"integer","رقم صحيح من غير فاصلة عشرية، زي 5 أو -12","let count = 10;"],
+[2,"float","رقم عشري فيه فاصلة، زي 3.14","let price = 19.99;"],
+[3,"string","سلسلة نصية — أي كلام أو حروف محاطة بعلامات تنصيص","let name = \"Ahmed\";"],
+[4,"boolean","قيمة منطقية، إما صح (true) أو غلط (false) بس","let isActive = true;"],
+[5,"array","قائمة مرتبة من القيم بتتخزن جنب بعض تحت اسم واحد","let nums = [1, 2, 3];"],
+[6,"null","قيمة بتعبر عن مفيش قيمة أو فاضي عن قصد","let result = null;"],
+];
+const progOps = [
+[1,"arithmetic operator","عمليات حسابية: جمع وطرح وضرب وقسمة وباقي القسمة","let sum = 5 + 3;"],
+[2,"equality operator","بيقارن هل القيمتين متساويين ولا لأ، وبيرجع true أو false","if(x == 5){ ... }"],
+[3,"not equal operator","بيقارن هل القيمتين مختلفين عن بعض","if(x != 0){ ... }"],
+[4,"logical AND","شرط منطقي، لازم الشرطين يكونوا صح مع بعض عشان الناتج يبقى صح","if(age > 18 && hasID){ ... }"],
+[5,"logical OR","شرط منطقي، يكفي واحد بس من الشرطين يكون صح","if(isAdmin || isOwner){ ... }"],
+[6,"assignment operator","بيحط قيمة جوه متغير، مختلف تمامًا عن المقارنة","x = 10;"],
+];
+const progControl = [
+[1,"if statement","بينفذ جزء من الكود بس لو الشرط اللي جنبه كان صح","if(score >= 50){ pass(); }"],
+[2,"else statement","الجزء اللي بينفذ لو شرط الـ if قبله كان غلط","else{ fail(); }"],
+[3,"else if statement","بتضيف شرط إضافي تاني لو الشرط الأول كان غلط","else if(score >= 40){ retry(); }"],
+[4,"switch case","بديل لسلسلة طويلة من else if لما يكون عندك حالات كتير لمتغير واحد","switch(day){ case 1: ...; }"],
+[5,"ternary operator","اختصار لجملة if/else في سطر واحد بس","let msg = age >= 18 ? \"adult\" : \"minor\";"],
+];
+const progLoops = [
+[1,"for loop","بيكرر تنفيذ كود عدد مرات محدد ومعروف مقدمًا","for(let i=0;i<5;i++){ print(i); }"],
+[2,"while loop","بيكرر تنفيذ كود طول ما الشرط لسه صح","while(hasNext){ readNext(); }"],
+[3,"do-while loop","زي الـ while بس بينفذ الكود مرة واحدة الأول قبل ما يتحقق من الشرط","do{ ask(); } while(!answered);"],
+[4,"break statement","بيوقف الحلقة التكرارية فورًا حتى لو لسه فيه تكرارات باقية","if(found) break;"],
+[5,"continue statement","بيتخطى باقي الكود في التكرار الحالي وينتقل للتكرار اللي بعده","if(isEven) continue;"],
+];
+const progFuncs = [
+[1,"function","كتلة كود ليها اسم بتعمل مهمة معينة، وبتقدر تناديها أي وقت من غير ما تعيد كتابتها","function greet(name){ return \"Hi \" + name; }"],
+[2,"parameter","المتغير اللي بتستقبله الدالة كمدخل، معرّف في تعريفها","function add(a, b){ ... }"],
+[3,"argument","القيمة الفعلية اللي بتبعتها للدالة وقت ما بتناديها","add(5, 3);"],
+[4,"return statement","بيرجّع قيمة من جوه الدالة لمكان استدعائها، وبيوقف تنفيذ الدالة فورًا","return total;"],
+[5,"recursive function","دالة بتنادي نفسها جوه جسمها عشان تحل مشكلة عن طريق تقسيمها لأجزاء أصغر","function fact(n){ return n<=1 ? 1 : n*fact(n-1); }"],
+[6,"scope","النطاق اللي المتغير يكون معروف وشغال جواه بس، جوه الدالة أو برّه","let x = 1; // local scope"],
+];
+const progStructs = [
+[1,"array structure","مجموعة عناصر مرتبة بترقيم يبدأ من صفر، سريعة الوصول لأي عنصر برقمه","arr[0]"],
+[2,"object / dictionary","مجموعة بيانات على شكل أزواج مفتاح وقيمة، بتوصل للقيمة بالاسم مش بالرقم","{ name: \"Ali\", age: 20 }"],
+[3,"stack","هيكل بيانات آخر عنصر يتضاف هو أول واحد يتشال، زي رصة أطباق","stack.push(x); stack.pop();"],
+[4,"queue","هيكل بيانات أول عنصر يتضاف هو أول واحد يتشال، زي طابور الانتظار","queue.enqueue(x); queue.dequeue();"],
+[5,"set","مجموعة عناصر فريدة، مفيش فيها أي تكرار خالص","new Set([1,2,2,3])"],
+];
+const progOop = [
+[1,"class","قالب أو مخطط بتعرف بيه شكل الكائنات اللي هتتعمل منه","class Car{ constructor(color){ this.color=color; } }"],
+[2,"object instance","نسخة حقيقية اتعملت من الكلاس وليها قيم فعلية","let myCar = new Car(\"red\");"],
+[3,"inheritance","كلاس جديد بياخد كل خصائص ووظائف كلاس تاني ويضيف عليها","class ElectricCar extends Car{ ... }"],
+[4,"encapsulation","إخفاء التفاصيل الداخلية للكائن وإتاحة تعامل محدود ومنظم معاه بس","private balance; getBalance(){ return balance; }"],
+[5,"polymorphism","إن نفس الدالة أو الاسم يتصرف بشكل مختلف حسب نوع الكائن اللي بينفذها","shape.draw(); // different per shape type"],
+];
+const progErrors = [
+[1,"try catch","بتجرب تنفذ كود ممكن يفشل جوه try، ولو حصل خطأ بتمسكه جوه catch","try{ risky(); } catch(e){ handle(e); }"],
+[2,"finally block","كود بينفذ دايمًا سواء حصل خطأ ولا لأ، بيتحط في الآخر","finally{ closeConnection(); }"],
+[3,"throw statement","بتستخدمها عشان تطلق خطأ بنفسك يدويًا لما تكتشف مشكلة في الكود","throw new Error(\"invalid value\");"],
+[4,"debugging","عملية اكتشاف وإصلاح الأخطاء الموجودة في الكود","use breakpoints to trace the bug"],
+[5,"exception","حدث غير متوقع بيحصل أثناء تنفيذ البرنامج ويوقف التنفيذ العادي","NullPointerException"],
+];
+const progDevterms = [
+[1,"API","واجهة بتسمح لبرنامجين مختلفين يتكلموا مع بعض ويتبادلوا بيانات","fetch(\"https://api.example.com/users\")"],
+[2,"repository","مكان بيتخزن فيه كود المشروع كله مع تاريخ كل التعديلات عليه","git clone https://github.com/user/repo"],
+[3,"commit","حفظ لقطة من التغييرات اللي عملتها في الكود مع رسالة توضحها","git commit -m \"fix login bug\""],
+[4,"branch","نسخة موازية من الكود بتقدر تشتغل عليها من غير ما تأثر على النسخة الأساسية","git checkout -b new-feature"],
+[5,"IDE","برنامج متكامل لكتابة وتشغيل وتصحيح الكود، فيه أدوات مساعدة كتير","VS Code, PyCharm, IntelliJ"],
+[6,"framework","هيكل جاهز مبني عليه قواعد وأدوات بتسهّل بناء تطبيقات من نوع معين بسرعة","React, Django, Laravel"],
+];
+
 /* ============ SECTION DEFINITIONS ============ */
 // kinds: 'num' (auto position number), 'static', 'en', 'ar'
 
@@ -1125,6 +1133,27 @@ const sections = [
 
   {id:'common_sentences', color:'purple', title:'١٠. Common Sentences — أكثر الجمل شيوعًا',
    headers:['#','Sentence','Translation'], kinds:['num','en','ar'], data:commonSentences, sub:null, speakCols:[1], sentenceCol:null},
+
+  {id:'prog_fund', color:'teal', title:'💻 ١. Programming — أساسيات البرمجة',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progFund, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_types', color:'blue', title:'💻 ٢. Programming — أنواع البيانات',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progTypes, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_ops', color:'orange', title:'💻 ٣. Programming — العمليات والمقارنات',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progOps, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_control', color:'magenta', title:'💻 ٤. Programming — الشروط والتحكم',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progControl, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_loops', color:'green', title:'💻 ٥. Programming — الحلقات التكرارية',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progLoops, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_funcs', color:'purple', title:'💻 ٦. Programming — الدوال',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progFuncs, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_structs', color:'teal', title:'💻 ٧. Programming — هياكل البيانات',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progStructs, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_oop', color:'blue', title:'💻 ٨. Programming — البرمجة الكائنية (OOP)',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progOop, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_errors', color:'orange', title:'💻 ٩. Programming — التعامل مع الأخطاء',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progErrors, sub:null, speakCols:[1,3], sentenceCol:3},
+  {id:'prog_devterms', color:'magenta', title:'💻 ١٠. Programming — مصطلحات عامة للمطورين',
+   headers:['#','Instruction','Meaning','Example'], kinds:['num','en','ar','en'], data:progDevterms, sub:null, speakCols:[1,3], sentenceCol:3},
 ];
 
 /* ============ STATE ============ */
@@ -1144,6 +1173,32 @@ function esc(s){
 
 function initSectionRows(section){
   section.rows = section.data.map((vals, i) => ({ id: section.id + '-' + i, values: vals.slice(), comment: '', extraSentences: [] }));
+}
+
+/**
+ * جسر أحادي الاتجاه من المحرر البرمجي: أي تعليمة يحددها المستخدم هناك (زرار 🎓) بتوصل هنا
+ * كقسم عادي بيشتغل عليه كل نظام الاختبارات بنفس التفاصيل. القراءة فقط من مفتاح localStorage
+ * مشترك — التطبيقين شغالين في iframes منفصلة، ومفيش أي بيانات تانية بتتشارك غير الجسر ده.
+ */
+function loadEditorBridgeSection(){
+  let bridgeItems = [];
+  try{
+    const raw = localStorage.getItem('bridge-editor-instructions');
+    if(raw) bridgeItems = JSON.parse(raw);
+  }catch(e){ bridgeItems = []; }
+
+  const existingIdx = sections.findIndex(s => s.id === 'editor_bridge');
+  if(existingIdx !== -1) sections.splice(existingIdx, 1);
+  if(!Array.isArray(bridgeItems) || bridgeItems.length === 0) return;
+
+  const data = bridgeItems.map((it, i) => [i + 1, it.term || '', it.meaning || '', it.example || '(مفيش مثال متسجل)']);
+  const bridgeSection = {
+    id: 'editor_bridge', color: 'magenta', title: '🖥️ تعليمات محددة من المحرر البرمجي',
+    headers: ['#', 'Instruction', 'Meaning', 'Example'], kinds: ['num', 'en', 'ar', 'en'],
+    data: data, sub: null, speakCols: [1, 3], sentenceCol: 3
+  };
+  sections.push(bridgeSection);
+  initSectionRows(bridgeSection);
 }
 
 function ensureOrder(section){
@@ -2446,7 +2501,28 @@ let wordStats = {}; // "sectionId::rowId" -> {correct, wrong, box(1-5), lastSeen
 // persisted history of finished tests/rounds, used to power the progress dashboard chart
 let testHistory = []; // { ts, testType, total, correct, pct, wrongItems:[{sectionId,rowId,arabic,english}] }
 
-function pushTestHistory(testTypeLabel, total, correct, wrongItemsRaw, meta){
+// يحول نتائج الاختبار الخام (بأشكالها المختلفة حسب النوع) لصيغة موحدة قابلة للعرض في ملف السجل
+function serializeTestResults(resultsArr){
+  return (resultsArr || []).map(r => {
+    if(r.puzzleType){
+      return { kind: 'puzzle', label: r.label || 'لغز', correct: !!r.correct, responseMs: r.responseMs || null };
+    }
+    if(r.item && r.item.section && r.item.row){
+      return {
+        kind: 'word', arabic: r.item.arabic || '', english: r.item.english || '',
+        userVal: r.userVal || '', correctVal: r.correctVal || '', correct: !!r.correct,
+        timedOut: !!r.timedOut, responseMs: typeof r.responseMs === 'number' ? r.responseMs : null,
+        errorType: r.errorType || null
+      };
+    }
+    if(r.original !== undefined){
+      return { kind: 'brokensentence', original: r.original, yours: r.yours, correct: !!r.correct, responseMs: r.responseMs || null };
+    }
+    return { kind: 'other', correct: !!r.correct };
+  });
+}
+
+function pushTestHistory(testTypeLabel, total, correct, wrongItemsRaw, meta, fullResultsArr){
   if(total <= 0) return;
   const pct = Math.round((correct / total) * 100);
   const wrongItems = (wrongItemsRaw || []).map(r => {
@@ -2455,8 +2531,14 @@ function pushTestHistory(testTypeLabel, total, correct, wrongItemsRaw, meta){
     return { sectionId: it.section.id, rowId: it.row.id, arabic: it.arabic || '', english: it.english || '' };
   }).filter(Boolean);
   const m = meta || {};
+  const now = new Date();
+  const dateLabel = now.toLocaleString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const typeName = TEST_TYPE_LABELS[testTypeLabel] || testTypeLabel;
   testHistory.push({
+    id: 'test_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+    label: `${typeName} — ${dateLabel}`,
     ts: Date.now(), testType: testTypeLabel, total: total, correct: correct, pct: pct, wrongItems: wrongItems,
+    records: serializeTestResults(fullResultsArr),
     avgResponseMs: typeof m.avgResponseMs === 'number' ? m.avgResponseMs : null,
     distractionMs: m.distractionMs || 0,
     tabSwitches: m.tabSwitches || 0,
@@ -2709,7 +2791,6 @@ function showTestPage(){
   document.getElementById('mainPage').style.display = 'none';
   document.getElementById('testPage').style.display = 'block';
   document.getElementById('masteryPage').style.display = 'none';
-  document.getElementById('progPage').style.display = 'none';
   document.getElementById('testSetupPanel').style.display = 'block';
   document.getElementById('testQuizPanel').style.display = 'none';
   document.getElementById('testMatchingPanel').style.display = 'none';
@@ -2726,7 +2807,6 @@ function showMainPage(){
   document.getElementById('reviewPage').style.display = 'none';
   document.getElementById('notesPage').style.display = 'none';
   document.getElementById('masteryPage').style.display = 'none';
-  document.getElementById('progPage').style.display = 'none';
   document.getElementById('mainPage').style.display = 'block';
   window.scrollTo(0, 0);
 }
@@ -2736,319 +2816,7 @@ function showNotesPage(){
   document.getElementById('testPage').style.display = 'none';
   document.getElementById('progressPage').style.display = 'none';
   document.getElementById('reviewPage').style.display = 'none';
-  document.getElementById('progPage').style.display = 'none';
   document.getElementById('notesPage').style.display = 'block';
-  window.scrollTo(0, 0);
-}
-
-/* ============ PROGRAMMING MEMORIZATION SYSTEM ============ */
-// نظام مستقل تمامًا (تخزين منفصل: prog-stats) — أي تعديل هنا أو أي استخدام له
-// لا يلمس wordStats / testHistory / masteryHistory بتاعة تطبيق الإنجليزي إطلاقًا.
-
-const progSections = [
-  { id: 'fund', title: '🧩 أساسيات البرمجة', items: [
-    { term: 'Variable', meaning: 'مكان في الذاكرة له اسم، بيتخزن فيه قيمة ممكن تتغير أثناء تنفيذ البرنامج', example: 'let age = 25;' },
-    { term: 'Constant', meaning: 'زي المتغير بس قيمته ثابتة ومينفعش تتغير بعد ما تتحدد', example: 'const PI = 3.14;' },
-    { term: 'Syntax', meaning: 'القواعد اللي لازم تتبعها عشان اللغة البرمجية تفهم الكود بتاعك', example: '// كل لغة ليها Syntax مختلف لنفس الفكرة' },
-    { term: 'Comment', meaning: 'سطر بتكتبه للشرح، والكمبيوتر بيتجاهله تمامًا وما بينفذوش', example: '// ده تعليق مش بينفذ' },
-    { term: 'Algorithm', meaning: 'سلسلة خطوات منطقية ومرتبة لحل مشكلة معينة، زي وصفة الطبخ بس للكمبيوتر', example: '١) خد رقمين ٢) اجمعهم ٣) اطبع الناتج' },
-    { term: 'Compile', meaning: 'تحويل الكود اللي كتبته بلغة برمجة لصيغة يفهمها الكمبيوتر مباشرة قبل التشغيل', example: 'gcc main.c -o main' }
-  ]},
-  { id: 'types', title: '🔢 أنواع البيانات (Data Types)', items: [
-    { term: 'Integer (int)', meaning: 'رقم صحيح من غير فاصلة عشرية، زي 5 أو -12', example: 'let count = 10;' },
-    { term: 'Float / Double', meaning: 'رقم عشري فيه فاصلة، زي 3.14', example: 'let price = 19.99;' },
-    { term: 'String', meaning: 'سلسلة نصية — أي كلام أو حروف محاطة بعلامات تنصيص', example: 'let name = "Ahmed";' },
-    { term: 'Boolean', meaning: 'قيمة منطقية، إما صح (true) أو غلط (false) بس', example: 'let isActive = true;' },
-    { term: 'Array / List', meaning: 'قائمة مرتبة من القيم بتتخزن جنب بعض تحت اسم واحد', example: 'let nums = [1, 2, 3];' },
-    { term: 'Null / None', meaning: 'قيمة بتعبر عن "مفيش قيمة" أو "فاضي" عن قصد', example: 'let result = null;' }
-  ]},
-  { id: 'ops', title: '➕ العمليات والمقارنات (Operators)', items: [
-    { term: 'Arithmetic Operators', meaning: 'عمليات حسابية: جمع (+) وطرح (-) وضرب (*) وقسمة (/) وباقي القسمة (%)', example: 'let sum = 5 + 3; // 8' },
-    { term: '== (Equality)', meaning: 'بيقارن هل القيمتين متساويين ولا لأ، وبيرجع true أو false', example: 'if(x == 5) { ... }' },
-    { term: '!= (Not Equal)', meaning: 'بيقارن هل القيمتين مختلفين', example: 'if(x != 0) { ... }' },
-    { term: '&& (AND)', meaning: 'شرط منطقي — لازم الشرطين يكونوا صح مع بعض عشان الناتج يبقى صح', example: 'if(age > 18 && hasID) { ... }' },
-    { term: '|| (OR)', meaning: 'شرط منطقي — يكفي واحد بس من الشرطين يكون صح عشان الناتج يبقى صح', example: 'if(isAdmin || isOwner) { ... }' },
-    { term: '= (Assignment)', meaning: 'بيحط قيمة جوه متغير — مختلف تمامًا عن == اللي بتقارن', example: 'x = 10; // تخزين مش مقارنة' }
-  ]},
-  { id: 'control', title: '🔀 الشروط والتحكم (Control Flow)', items: [
-    { term: 'if', meaning: 'بينفذ جزء من الكود بس لو الشرط اللي جنبه كان صح', example: 'if(score >= 50) { pass(); }' },
-    { term: 'else', meaning: 'الجزء اللي بينفذ لو شرط الـ if قبله كان غلط', example: 'else { fail(); }' },
-    { term: 'else if', meaning: 'بتضيف شرط إضافي تاني لو الشرط الأول كان غلط', example: 'else if(score >= 40) { retry(); }' },
-    { term: 'switch / case', meaning: 'بديل لسلسلة طويلة من else if لما يكون عندك حالات كتير لمتغير واحد', example: 'switch(day){ case 1: ...; }' },
-    { term: 'Ternary Operator', meaning: 'اختصار لجملة if/else في سطر واحد بس', example: 'let msg = age >= 18 ? "بالغ" : "قاصر";' }
-  ]},
-  { id: 'loops', title: '🔁 الحلقات التكرارية (Loops)', items: [
-    { term: 'for loop', meaning: 'بيكرر تنفيذ كود عدد مرات محدد ومعروف مقدمًا', example: 'for(let i=0; i<5; i++){ print(i); }' },
-    { term: 'while loop', meaning: 'بيكرر تنفيذ كود طول ما الشرط لسه صح، من غير ما تعرف كام مرة بالظبط', example: 'while(hasNext){ readNext(); }' },
-    { term: 'do-while loop', meaning: 'زي الـ while بس بينفذ الكود مرة واحدة الأول قبل ما يتحقق من الشرط', example: 'do{ ask(); } while(!answered);' },
-    { term: 'break', meaning: 'بيوقف الحلقة التكرارية فورًا حتى لو لسه فيه تكرارات باقية', example: 'if(found) break;' },
-    { term: 'continue', meaning: 'بيتخطى باقي الكود في التكرار الحالي وينتقل للتكرار اللي بعده مباشرة', example: 'if(isEven) continue;' }
-  ]},
-  { id: 'funcs', title: '🧠 الدوال (Functions)', items: [
-    { term: 'Function', meaning: 'كتلة كود ليها اسم بتعمل مهمة معينة، وبتقدر تناديها أي وقت من غير ما تعيد كتابتها', example: 'function greet(name){ return "Hi " + name; }' },
-    { term: 'Parameter', meaning: 'المتغير اللي بتستقبله الدالة كمدخل، معرّف في تعريفها', example: 'function add(a, b){ ... } // a,b بارامترات' },
-    { term: 'Argument', meaning: 'القيمة الفعلية اللي بتبعتها للدالة وقت ما بتناديها', example: 'add(5, 3); // 5 و3 هما الـ arguments' },
-    { term: 'Return', meaning: 'بيرجّع قيمة من جوه الدالة لمكان استدعائها، وبيوقف تنفيذ الدالة فورًا', example: 'return total;' },
-    { term: 'Recursive Function', meaning: 'دالة بتنادي نفسها جوه جسمها عشان تحل مشكلة عن طريق تقسيمها لأجزاء أصغر', example: 'function fact(n){ return n<=1 ? 1 : n*fact(n-1); }' },
-    { term: 'Scope', meaning: 'النطاق اللي المتغير يكون معروف وشغال جواه بس، جوه الدالة أو برّه', example: 'let x = 1; // موجود بس جوه الدالة دي لو اتعرف جواها' }
-  ]},
-  { id: 'structs', title: '🗂️ هياكل البيانات (Data Structures)', items: [
-    { term: 'Array', meaning: 'مجموعة عناصر مرتبة بترقيم يبدأ من صفر، سريعة الوصول لأي عنصر برقمه', example: 'arr[0] // أول عنصر' },
-    { term: 'Object / Dictionary', meaning: 'مجموعة بيانات على شكل أزواج (مفتاح: قيمة)، بتوصل للقيمة بالاسم مش بالرقم', example: '{ name: "Ali", age: 20 }' },
-    { term: 'Stack', meaning: 'هيكل بيانات آخر عنصر يتضاف هو أول واحد يتشال (LIFO)، زي رصة أطباق', example: 'stack.push(x); stack.pop();' },
-    { term: 'Queue', meaning: 'هيكل بيانات أول عنصر يتضاف هو أول واحد يتشال (FIFO)، زي طابور الانتظار', example: 'queue.enqueue(x); queue.dequeue();' },
-    { term: 'Set', meaning: 'مجموعة عناصر فريدة، مفيش فيها أي تكرار خالص', example: 'new Set([1,2,2,3]) // {1,2,3}' }
-  ]},
-  { id: 'oop', title: '🏗️ البرمجة الكائنية (OOP)', items: [
-    { term: 'Class', meaning: 'قالب أو مخطط بتعرف بيه شكل الكائنات (Objects) اللي هتتعمل منه', example: 'class Car { constructor(color){ this.color=color; } }' },
-    { term: 'Object (instance)', meaning: 'نسخة حقيقية اتعملت من الـ Class وليها قيم فعلية', example: 'let myCar = new Car("red");' },
-    { term: 'Inheritance', meaning: 'كلاس جديد بياخد كل خصائص ووظائف كلاس تاني ويضيف عليها', example: 'class ElectricCar extends Car { ... }' },
-    { term: 'Encapsulation', meaning: 'إخفاء التفاصيل الداخلية للكائن وإتاحة تعامل محدود ومنظم معاه بس', example: 'private balance; getBalance(){ return balance; }' },
-    { term: 'Polymorphism', meaning: 'إن نفس الدالة أو الاسم يتصرف بشكل مختلف حسب نوع الكائن اللي بينفذها', example: 'shape.draw(); // مختلف لو Circle أو Square' }
-  ]},
-  { id: 'errors', title: '⚠️ التعامل مع الأخطاء', items: [
-    { term: 'try / catch', meaning: 'بتجرب تنفذ كود ممكن يفشل جوه try، ولو حصل خطأ بتمسكه وتتعامل معاه جوه catch', example: 'try{ risky(); } catch(e){ handle(e); }' },
-    { term: 'finally', meaning: 'كود بينفذ دايمًا سواء حصل خطأ ولا لأ، بيتحط في الآخر', example: 'finally{ closeConnection(); }' },
-    { term: 'throw', meaning: 'بتستخدمها عشان تطلق خطأ بنفسك يدويًا لما تكتشف مشكلة في الكود', example: 'throw new Error("قيمة غير صالحة");' },
-    { term: 'Debugging', meaning: 'عملية اكتشاف وإصلاح الأخطاء (bugs) الموجودة في الكود', example: '// استخدام breakpoints ومتابعة القيم خطوة بخطوة' },
-    { term: 'Exception', meaning: 'حدث غير متوقع بيحصل أثناء تنفيذ البرنامج ويوقف التنفيذ العادي', example: 'NullPointerException, IndexOutOfRange' }
-  ]},
-  { id: 'devterms', title: '🛠️ مصطلحات عامة للمطورين', items: [
-    { term: 'API', meaning: 'واجهة بتسمح لبرنامجين مختلفين يتكلموا مع بعض ويتبادلوا بيانات', example: 'fetch("https://api.example.com/users")' },
-    { term: 'Repository (repo)', meaning: 'مكان بيتخزن فيه كود المشروع كله مع تاريخ كل التعديلات عليه', example: 'git clone https://github.com/user/repo' },
-    { term: 'Commit', meaning: 'حفظ لقطة من التغييرات اللي عملتها في الكود مع رسالة توضحها', example: 'git commit -m "fix login bug"' },
-    { term: 'Branch', meaning: 'نسخة موازية من الكود بتقدر تشتغل عليها من غير ما تأثر على النسخة الأساسية', example: 'git checkout -b new-feature' },
-    { term: 'IDE', meaning: 'برنامج متكامل لكتابة وتشغيل وتصحيح الكود، فيه أدوات مساعدة كتير', example: 'VS Code, PyCharm, IntelliJ' },
-    { term: 'Framework', meaning: 'هيكل جاهز مبني عليه قواعد وأدوات بتسهّل بناء تطبيقات من نوع معين بسرعة', example: 'React, Django, Laravel' }
-  ]}
-];
-
-function getAllProgItems(){
-  const all = [];
-  progSections.forEach(sec => sec.items.forEach((it, i) => {
-    all.push({ key: sec.id + '::' + i, category: sec.title, term: it.term, meaning: it.meaning, example: it.example });
-  }));
-  return all;
-}
-
-let progStats = {}; // key -> { correct, wrong, box(1-5), srStage, nextReviewDue }
-const PROG_SR_INTERVALS = [1, 3, 7, 16, 35];
-
-async function loadProgStats(){
-  try{
-    const raw = await storageGet('prog-stats');
-    if(!raw) return;
-    const parsed = JSON.parse(raw);
-    if(parsed && typeof parsed === 'object') progStats = parsed;
-  }catch(e){ /* best-effort only */ }
-}
-async function persistProgStats(){
-  try{ await storageSet('prog-stats', JSON.stringify(progStats)); }catch(e){ /* best-effort only */ }
-}
-
-function updateProgStat(key, isCorrect){
-  if(!progStats[key]) progStats[key] = { correct: 0, wrong: 0, box: 1, srStage: 0, nextReviewDue: 0 };
-  const s = progStats[key];
-  if(isCorrect){
-    s.correct++; s.box = Math.min(5, s.box + 1);
-    s.srStage = Math.min((s.srStage || 0) + 1, PROG_SR_INTERVALS.length - 1);
-  } else {
-    s.wrong++; s.box = 1; s.srStage = 0;
-  }
-  s.nextReviewDue = Date.now() + PROG_SR_INTERVALS[s.srStage] * 24 * 60 * 60 * 1000;
-  persistProgStats();
-}
-
-/* ---- تصفح وفهم (Flashcards) ---- */
-function renderProgBrowse(){
-  const el = document.getElementById('progBrowseList');
-  el.innerHTML = progSections.map(sec => `
-    <div class="progress-card">
-      <h3>${esc(sec.title)}</h3>
-      <div class="prog-card-grid">
-        ${sec.items.map((it, i) => `
-          <div class="prog-flashcard" data-key="${sec.id}::${i}">
-            <div>
-              <div class="prog-flashcard-term">${esc(it.term)}</div>
-              <div class="prog-flashcard-back" style="display:none;">
-                <div class="prog-flashcard-meaning">${esc(it.meaning)}</div>
-                <code class="prog-flashcard-example">${esc(it.example)}</code>
-              </div>
-            </div>
-          </div>`).join('')}
-      </div>
-    </div>
-  `).join('');
-  el.querySelectorAll('.prog-flashcard').forEach(card => {
-    card.addEventListener('click', () => {
-      const back = card.querySelector('.prog-flashcard-back');
-      back.style.display = back.style.display === 'none' ? 'block' : 'none';
-    });
-  });
-}
-
-/* ---- اختبار نفسي (multiple formats — تقنيات حفظ مختلفة) ---- */
-let progQueue = [];
-let progIndex = 0;
-let progResults = [];
-let progQuizFormat = 'mcq';
-
-function startProgQuiz(format){
-  progQuizFormat = format;
-  progQueue = shuffleArray(getAllProgItems()).slice(0, 12);
-  progIndex = 0;
-  progResults = [];
-  document.getElementById('progQuizChoicePanel').style.display = 'none';
-  document.getElementById('progResultPanel').style.display = 'none';
-  document.getElementById('progQuizPanel').style.display = 'block';
-  runProgQuestion();
-}
-
-function runProgQuestion(){
-  if(progIndex >= progQueue.length){ finishProgQuiz(); return; }
-  const it = progQueue[progIndex];
-  document.getElementById('progQuizProgress').textContent = `سؤال ${progIndex + 1} من ${progQueue.length} — ${it.category}`;
-  const promptEl = document.getElementById('progQuizPrompt');
-  const inputEl = document.getElementById('progQuizInput');
-  const optionsEl = document.getElementById('progQuizOptions');
-  const submitBtn = document.getElementById('progQuizSubmit');
-  inputEl.value = ''; inputEl.style.display = 'none';
-  optionsEl.innerHTML = ''; optionsEl.style.display = 'none';
-  submitBtn.style.display = 'none';
-  document.getElementById('progQuizFeedback').innerHTML = '';
-
-  if(progQuizFormat === 'mcq'){
-    promptEl.innerHTML = `<p class="desc">إيه معنى/وظيفة:</p><div class="test-word en" style="direction:ltr; font-family:'JetBrains Mono',monospace;">${esc(it.term)}</div>`;
-    const distractors = shuffleArray(getAllProgItems().filter(x => x.key !== it.key)).slice(0, 3).map(x => x.meaning);
-    const options = shuffleArray([it.meaning].concat(distractors));
-    optionsEl.style.display = 'grid';
-    optionsEl.innerHTML = options.map(opt => `<button type="button" data-correct="${opt === it.meaning}">${esc(opt)}</button>`).join('');
-    optionsEl.querySelectorAll('button').forEach(btn => {
-      btn.addEventListener('click', () => submitProgAnswer(btn.dataset.correct === 'true', it.meaning));
-    });
-  } else if(progQuizFormat === 'reverse'){
-    promptEl.innerHTML = `<p class="desc">إيه المصطلح البرمجي اللي معناه:</p><div style="margin-top:6px; font-weight:bold;">${esc(it.meaning)}</div>`;
-    const distractors = shuffleArray(getAllProgItems().filter(x => x.key !== it.key)).slice(0, 3).map(x => x.term);
-    const options = shuffleArray([it.term].concat(distractors));
-    optionsEl.style.display = 'grid';
-    optionsEl.innerHTML = options.map(opt => `<button type="button" style="direction:ltr; text-align:center; font-family:'JetBrains Mono',monospace;" data-correct="${opt === it.term}">${esc(opt)}</button>`).join('');
-    optionsEl.querySelectorAll('button').forEach(btn => {
-      btn.addEventListener('click', () => submitProgAnswer(btn.dataset.correct === 'true', it.term));
-    });
-  } else { // type — active recall: هي أقوى تقنية حفظ لأنك بتستدعي المعلومة من دماغك مش بس بتتعرف عليها
-    promptEl.innerHTML = `<p class="desc">اكتب المصطلح البرمجي المناسب لهذا الشرح:</p><div style="margin-top:6px;">${esc(it.meaning)}</div>`;
-    inputEl.style.display = 'block';
-    submitBtn.style.display = 'block';
-    inputEl.focus();
-  }
-}
-
-function submitProgAnswer(isCorrect, correctVal){
-  const it = progQueue[progIndex];
-  progResults.push({ item: it, correct: isCorrect });
-  updateProgStat(it.key, isCorrect);
-  const feedbackEl = document.getElementById('progQuizFeedback');
-  feedbackEl.innerHTML = isCorrect
-    ? `<div style="color:#1f8a4c; font-weight:bold;">✅ صح!</div>`
-    : `<div style="color:#c73535; font-weight:bold;">❌ غلط — الصح: <span style="direction:ltr; display:inline-block;">${esc(correctVal)}</span></div>`;
-  setTimeout(() => { progIndex++; runProgQuestion(); }, 1300);
-}
-
-function finishProgQuiz(){
-  const total = progResults.length;
-  const correct = progResults.filter(r => r.correct).length;
-  document.getElementById('progQuizPanel').style.display = 'none';
-  const panel = document.getElementById('progResultPanel');
-  panel.style.display = 'block';
-  panel.innerHTML = `<div class="test-card-inner">
-    <div class="test-score">النتيجة: ${correct} من ${total}</div>
-    <div class="test-result-actions">
-      <button type="button" id="btnProgRetake">🔁 جرب تاني بنفس الطريقة</button>
-      <button type="button" id="btnProgChangeFormat">🔀 جرب طريقة حفظ تانية</button>
-    </div>
-    <button type="button" id="btnProgBackToBrowse">📖 رجوع للتصفح</button>
-  </div>`;
-  document.getElementById('btnProgRetake').addEventListener('click', () => startProgQuiz(progQuizFormat));
-  document.getElementById('btnProgChangeFormat').addEventListener('click', showProgQuizChoice);
-  document.getElementById('btnProgBackToBrowse').addEventListener('click', showProgBrowse);
-}
-
-/* ---- تقدمي في البرمجة ---- */
-function renderProgProgress(){
-  const all = getAllProgItems();
-  const statsArr = all.map(it => progStats[it.key] || { correct: 0, wrong: 0, box: 1 });
-  const totalAnswered = statsArr.reduce((s, v) => s + (v.correct || 0) + (v.wrong || 0), 0);
-  const totalCorrect = statsArr.reduce((s, v) => s + (v.correct || 0), 0);
-  const acc = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-  const mastered = statsArr.filter(v => (v.box || 1) >= 5).length;
-  const now = Date.now();
-  const dueCount = all.filter(it => progStats[it.key] && progStats[it.key].nextReviewDue && progStats[it.key].nextReviewDue <= now).length;
-
-  document.getElementById('progProgressSummary').innerHTML = `
-    <div class="progress-stat-grid">
-      <div class="progress-stat-card"><div class="progress-stat-num">${all.length}</div><div class="progress-stat-label">إجمالي المصطلحات</div></div>
-      <div class="progress-stat-card"><div class="progress-stat-num">${mastered}</div><div class="progress-stat-label">مصطلح متقن بالكامل</div></div>
-      <div class="progress-stat-card"><div class="progress-stat-num">${acc}%</div><div class="progress-stat-label">دقتك الكلية</div></div>
-      <div class="progress-stat-card"><div class="progress-stat-num">${dueCount}</div><div class="progress-stat-label">مستحق مراجعة النهاردة (تكرار متباعد)</div></div>
-    </div>
-  `;
-
-  const weak = all
-    .map(it => ({ it: it, s: progStats[it.key] }))
-    .filter(x => x.s && x.s.wrong > 0)
-    .sort((a, b) => (b.s.wrong - a.s.wrong) || (a.s.box - b.s.box))
-    .slice(0, 10);
-  const weakEl = document.getElementById('progWeakPoints');
-  weakEl.innerHTML = weak.length === 0
-    ? `<div class="chart-empty">مفيش نقاط ضعف مسجلة لسه — استمر في الاختبار وهنجمعلك هنا أكتر المصطلحات اللي بتغلط فيها.</div>`
-    : `<table class="test-wrong-table"><thead><tr><th>المصطلح</th><th>القسم</th><th>مرات الغلط</th><th>مستوى الإتقان</th></tr></thead><tbody>` +
-      weak.map(x => `<tr><td class="en" style="direction:ltr;">${esc(x.it.term)}</td><td>${esc(x.it.category)}</td><td>${x.s.wrong}</td><td>${x.s.box}/5</td></tr>`).join('') +
-      `</tbody></table>`;
-}
-
-/* ---- التنقل بين تبويبات الصفحة ---- */
-function showProgBrowse(){
-  document.getElementById('progBrowsePanel').style.display = 'block';
-  document.getElementById('progQuizChoicePanel').style.display = 'none';
-  document.getElementById('progQuizPanel').style.display = 'none';
-  document.getElementById('progResultPanel').style.display = 'none';
-  document.getElementById('progProgressPanel').style.display = 'none';
-  document.getElementById('progTabBrowse').classList.add('active');
-  document.getElementById('progTabQuiz').classList.remove('active');
-  document.getElementById('progTabProgress').classList.remove('active');
-  renderProgBrowse();
-}
-function showProgQuizChoice(){
-  document.getElementById('progBrowsePanel').style.display = 'none';
-  document.getElementById('progQuizChoicePanel').style.display = 'block';
-  document.getElementById('progQuizPanel').style.display = 'none';
-  document.getElementById('progResultPanel').style.display = 'none';
-  document.getElementById('progProgressPanel').style.display = 'none';
-  document.getElementById('progTabBrowse').classList.remove('active');
-  document.getElementById('progTabQuiz').classList.add('active');
-  document.getElementById('progTabProgress').classList.remove('active');
-}
-function showProgProgress(){
-  document.getElementById('progBrowsePanel').style.display = 'none';
-  document.getElementById('progQuizChoicePanel').style.display = 'none';
-  document.getElementById('progQuizPanel').style.display = 'none';
-  document.getElementById('progResultPanel').style.display = 'none';
-  document.getElementById('progProgressPanel').style.display = 'block';
-  document.getElementById('progTabBrowse').classList.remove('active');
-  document.getElementById('progTabQuiz').classList.remove('active');
-  document.getElementById('progTabProgress').classList.add('active');
-  renderProgProgress();
-}
-
-function showProgPage(){
-  document.getElementById('mainPage').style.display = 'none';
-  document.getElementById('testPage').style.display = 'none';
-  document.getElementById('progressPage').style.display = 'none';
-  document.getElementById('reviewPage').style.display = 'none';
-  document.getElementById('notesPage').style.display = 'none';
-  document.getElementById('masteryPage').style.display = 'none';
-  document.getElementById('progPage').style.display = 'block';
-  showProgBrowse();
   window.scrollTo(0, 0);
 }
 
@@ -3358,7 +3126,7 @@ function masteryColor(box){
 }
 
 function buildProgressChartSvg(){
-  const data = testHistory.slice(-20);
+  const data = testHistory.slice(-60);
   if(data.length === 0){
     return `<div class="chart-empty">لسه معملتش أي اختبار. اعمل اختبار من صفحة الاختبار عشان تبدأ تشوف تقدمك هنا 📈</div>`;
   }
@@ -3613,8 +3381,67 @@ function renderProgressPage(){
     <div class="mastery-legend">${[1, 2, 3, 4, 5].map(b => `<span><i style="background:${masteryColor(b)};"></i>مستوى ${b} (${boxCounts[b]})</span>`).join('')}</div>
   `;
   document.getElementById('progressChart').innerHTML = buildProgressChartSvg();
+  renderHistoryFiles();
   renderWeakPointsList();
   renderDeepAnalytics();
+}
+
+function renderHistoryFiles(){
+  const el = document.getElementById('progressHistoryFiles');
+  if(testHistory.length === 0){
+    el.innerHTML = `<div class="chart-empty">لسه معملتش أي اختبار — كل اختبار تعمله هيتسجل هنا كملف مستقل بتاريخه.</div>`;
+    return;
+  }
+  const items = testHistory.slice().reverse(); // الأحدث الأول
+  el.innerHTML = items.map(t => {
+    const scoreColor = t.pct >= 70 ? '#1f8a4c' : (t.pct >= 40 ? '#c9660a' : '#c73535');
+    return `<div class="history-file-row" data-id="${esc(t.id || '')}">
+      <span class="history-file-icon">📄</span>
+      <span class="history-file-name">${esc(t.label || t.testType)}</span>
+      <span class="history-file-score" style="background:${scoreColor};">${t.correct}/${t.total} (${t.pct}%)</span>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.history-file-row').forEach(row => {
+    row.addEventListener('click', () => openHistoryFile(row.dataset.id));
+  });
+}
+
+function openHistoryFile(id){
+  const t = testHistory.find(x => x.id === id);
+  if(!t) return;
+  document.getElementById('historyFileModalTitle').textContent = t.label || t.testType;
+  const metaLines = [];
+  if(typeof t.avgResponseMs === 'number') metaLines.push(`⏱ متوسط زمن الإجابة: ${(t.avgResponseMs / 1000).toFixed(1)} ثانية`);
+  if(t.distractionMs) metaLines.push(`📵 وقت التشتت: ${Math.round(t.distractionMs / 60000 * 10) / 10} دقيقة (${t.tabSwitches || 0} مرة خروج)`);
+  const records = t.records || [];
+  let recordsHtml;
+  if(records.length === 0){
+    recordsHtml = `<div class="chart-empty">مفيش تفاصيل أسئلة محفوظة لهذا النوع من الاختبار.</div>`;
+  } else {
+    recordsHtml = `<table class="test-wrong-table"><thead><tr><th>#</th><th>السؤال</th><th>إجابتك</th><th>النتيجة</th></tr></thead><tbody>` +
+      records.map((r, i) => {
+        let question = '', yourAnswer = '';
+        if(r.kind === 'word'){ question = `${esc(r.arabic)} <span class="en" style="direction:ltr;">(${esc(r.english)})</span>`; yourAnswer = r.timedOut ? '(خلص الوقت)' : esc(r.userVal || '—'); }
+        else if(r.kind === 'puzzle'){ question = esc(r.label); yourAnswer = '—'; }
+        else if(r.kind === 'brokensentence'){ question = esc(r.original); yourAnswer = esc(r.yours); }
+        else { question = '—'; yourAnswer = '—'; }
+        const badge = r.correct ? `<span style="color:#1f8a4c; font-weight:bold;">✅</span>` : `<span style="color:#c73535; font-weight:bold;">❌</span>`;
+        return `<tr><td>${i + 1}</td><td>${question}</td><td>${yourAnswer}</td><td>${badge}</td></tr>`;
+      }).join('') + `</tbody></table>`;
+  }
+  document.getElementById('historyFileModalBody').innerHTML = `
+    <div class="progress-stat-grid" style="grid-template-columns:repeat(2,1fr); margin-bottom:12px;">
+      <div class="progress-stat-card"><div class="progress-stat-num">${t.correct}/${t.total}</div><div class="progress-stat-label">النتيجة</div></div>
+      <div class="progress-stat-card"><div class="progress-stat-num">${t.pct}%</div><div class="progress-stat-label">النسبة</div></div>
+    </div>
+    ${metaLines.length ? `<p class="review-hint">${metaLines.join(' — ')}</p>` : ''}
+    ${recordsHtml}
+  `;
+  document.getElementById('historyFileModal').style.display = 'block';
+}
+
+function closeHistoryFile(){
+  document.getElementById('historyFileModal').style.display = 'none';
 }
 
 let reviewCurrentItems = [];
@@ -3650,7 +3477,6 @@ function showProgressPage(){
   document.getElementById('testPage').style.display = 'none';
   document.getElementById('reviewPage').style.display = 'none';
   document.getElementById('masteryPage').style.display = 'none';
-  document.getElementById('progPage').style.display = 'none';
   document.getElementById('progressPage').style.display = 'block';
   renderProgressPage();
   window.scrollTo(0, 0);
@@ -3661,30 +3487,15 @@ function showReviewPage(prefillItems){
   document.getElementById('testPage').style.display = 'none';
   document.getElementById('progressPage').style.display = 'none';
   document.getElementById('masteryPage').style.display = 'none';
-  document.getElementById('progPage').style.display = 'none';
   document.getElementById('reviewPage').style.display = 'block';
   renderReviewPage(prefillItems);
   window.scrollTo(0, 0);
 }
 
-document.getElementById('btnGoToProgPage').addEventListener('click', showProgPage);
-document.getElementById('btnBackFromProg').addEventListener('click', showMainPage);
-document.getElementById('progTabBrowse').addEventListener('click', showProgBrowse);
-document.getElementById('progTabQuiz').addEventListener('click', showProgQuizChoice);
-document.getElementById('progTabProgress').addEventListener('click', showProgProgress);
-document.querySelectorAll('.prog-quiz-format-row button').forEach(btn => {
-  btn.addEventListener('click', () => startProgQuiz(btn.dataset.format));
+document.getElementById('btnCloseHistoryFile').addEventListener('click', closeHistoryFile);
+document.getElementById('historyFileModal').addEventListener('click', (e) => {
+  if(e.target.id === 'historyFileModal') closeHistoryFile();
 });
-document.getElementById('progQuizSubmit').addEventListener('click', () => {
-  const it = progQueue[progIndex];
-  const val = document.getElementById('progQuizInput').value.trim();
-  const isCorrect = normalize(val, 'en') === normalize(it.term, 'en');
-  submitProgAnswer(isCorrect, it.term);
-});
-document.getElementById('progQuizInput').addEventListener('keydown', (e) => {
-  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('progQuizSubmit').click(); }
-});
-
 document.getElementById('btnGoToProgressPage').addEventListener('click', showProgressPage);
 document.getElementById('btnBackFromProgress').addEventListener('click', showMainPage);
 document.getElementById('btnGoToReviewFromProgress').addEventListener('click', () => showReviewPage());
@@ -4046,7 +3857,7 @@ function finishTest(){
     });
     wireMasteryButton('btnMasteryDrillEntry', isPuzzle ? [] : wrongListToReviewItems(wrongList), testType, testDirection);
   }
-  pushTestHistory(wasMasteryResume ? 'masterygroup' : testType, total, correctCount, isPuzzle ? [] : wrongList, buildTestMeta(testResults));
+  pushTestHistory(wasMasteryResume ? 'masterygroup' : testType, total, correctCount, isPuzzle ? [] : wrongList, buildTestMeta(testResults), testResults);
 }
 
 /* ---- Broken sentence puzzle: decoy word detection + click-to-reorder reconstruction ---- */
@@ -4202,7 +4013,7 @@ function finishBroken(){
     showReviewPage(wrongListToReviewItems(wrongList));
   });
   wireMasteryButton('btnMasteryDrillEntry', wrongListToReviewItems(wrongList), 'brokensentence', testDirection);
-  pushTestHistory('brokensentence', total, correctCount, wrongList, buildTestMeta(brokenResults));
+  pushTestHistory('brokensentence', total, correctCount, wrongList, buildTestMeta(brokenResults), brokenResults);
 }
 document.getElementById('btnBrokenSubmit').addEventListener('click', () => submitBrokenRound(false));
 
@@ -4301,7 +4112,7 @@ function finishSurvival(){
     showReviewPage(wrongListToReviewItems(testResults));
   });
   wireMasteryButton('btnMasteryDrillEntry', wrongListToReviewItems(testResults), 'survival', testDirection);
-  pushTestHistory('survival', survivalStreak + 1, survivalStreak, testResults, buildTestMeta(testResults));
+  pushTestHistory('survival', survivalStreak + 1, survivalStreak, testResults, buildTestMeta(testResults), testResults);
 }
 
 /* ---- Matching pairs mode ---- */
@@ -4703,7 +4514,7 @@ document.getElementById('btnGuestbookSubmit').addEventListener('click', submitGu
   sections.forEach(initSectionRows);
   await loadSavedState();
   await loadStatsOnly();
-  await loadProgStats();
+  loadEditorBridgeSection();
   initVisitCounter();
   renderSrDueWidget();
   buildApp();
@@ -4713,6 +4524,15 @@ document.getElementById('btnGuestbookSubmit').addEventListener('click', submitGu
     window.speechSynthesis.onvoiceschanged = populateVoiceList;
   }
 })();
+
+// live sync: لو المحرر البرمجي (في iframe التاني) عدّل أو حدد/ألغى تعليمة، الجرس ده بيوصلنا فورًا
+// من غير ما نحتاج نعمل ريفريش للصفحة — بيأثر بس على قسم "تعليمات محددة من المحرر" ومفيش حاجة تانية
+window.addEventListener('storage', (e) => {
+  if(e.key === 'bridge-editor-instructions'){
+    loadEditorBridgeSection();
+    buildApp();
+  }
+});
 </script>
 </body>
 </html>

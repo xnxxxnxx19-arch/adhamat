@@ -680,6 +680,7 @@ select { cursor: pointer; }
 .inst-action-btn:hover { background: var(--bg-hover); color: var(--fg); }
 .inst-action-btn.has-note { color: var(--primary); }
 .inst-action-btn.delete-btn:hover { background: var(--danger-bg); color: var(--danger); }
+.inst-action-btn.inst-mark-btn.marked { background:#1f8a4c; color:#fff; }
 
 /* Edit Form */
 .edit-form {
@@ -3764,6 +3765,7 @@ function saveState() {
   clearTimeout(saveDebounce);
   saveDebounce = setTimeout(() => {
     localStorage.setItem('ced_state_v2', JSON.stringify(state));
+    syncMarkedInstructionsToEnglishApp();
     setSaveStatus('saved');
   }, 800);
 }
@@ -3772,7 +3774,34 @@ function saveState() {
 function saveNow() {
   clearTimeout(saveDebounce);
   localStorage.setItem('ced_state_v2', JSON.stringify(state));
+  syncMarkedInstructionsToEnglishApp();
   setSaveStatus('saved');
+}
+
+/**
+ * Bridge to the English-learning app: any instruction across any language that's been
+ * marked (🎓) gets pushed into a shared localStorage key. Both apps are same-origin
+ * iframes, so this is the only data that ever crosses between them — everything else
+ * (this app's own state, the English app's words/tests/stats) stays completely separate.
+ */
+function syncMarkedInstructionsToEnglishApp(){
+  try{
+    const bridge = [];
+    state.languages.forEach(lang => {
+      lang.instructions.forEach(inst => {
+        if(inst.markedForEnglish){
+          bridge.push({
+            id: inst.id,
+            term: inst.keyword,
+            meaning: inst.description,
+            example: inst.comment || '',
+            lang: lang.name
+          });
+        }
+      });
+    });
+    localStorage.setItem('bridge-editor-instructions', JSON.stringify(bridge));
+  }catch(e){ /* storage unavailable (e.g. private browsing) — fail silently */ }
 }
 
 function setSaveStatus(status) {
@@ -4448,6 +4477,7 @@ function renderInstructionsList() {
       if (action === 'edit')    { editingInstId = (editingInstId === id) ? null : id; renderInstructionsList(); }
       if (action === 'delete')  { deleteInstruction(id); }
       if (action === 'comment') { toggleInstComment(id); }
+      if (action === 'mark-english') { toggleMarkForEnglish(id); }
     });
   });
 
@@ -4494,6 +4524,7 @@ function buildInstRow(inst, idx) {
         (inst.comment ? `<span class="inst-comment-preview" title="${esc(inst.comment)}">${esc(inst.comment)}</span>` : '') +
       `</div>` +
       `<div class="inst-actions">` +
+        `<button class="inst-action-btn inst-mark-btn${inst.markedForEnglish ? ' marked' : ''}" data-action="mark-english" data-id="${inst.id}" title="${inst.markedForEnglish ? 'مُحدد — شغال في تطبيق الإنجليزي (دوس تاني للإلغاء)' : 'حدده عشان تشتغل عليه في تطبيق الإنجليزي بكل أنواع الاختبارات'}">${inst.markedForEnglish ? '🎓✓' : '🎓'}</button>` +
         `<button class="inst-action-btn${inst.comment ? ' has-note' : ''}" data-action="comment" data-id="${inst.id}" title="${inst.comment ? 'Edit note' : 'Add note'}">\uD83D\uDCAC</button>` +
         `<button class="inst-action-btn" data-action="edit" data-id="${inst.id}" title="Edit">\u270F\uFE0F</button>` +
         `<button class="inst-action-btn delete-btn" data-action="delete" data-id="${inst.id}" title="Delete">\uD83D\uDDD1\uFE0F</button>` +
@@ -4605,6 +4636,15 @@ function updateInstruction(id, updates) {
     };
   });
   saveState();
+}
+
+/** Toggle whether an instruction is marked to be studied/tested in the English-learning app. */
+function toggleMarkForEnglish(id) {
+  const lang = getActiveLang();
+  const inst = lang.instructions.find(i => i.id === id);
+  if (!inst) return;
+  updateInstruction(id, { markedForEnglish: !inst.markedForEnglish });
+  renderInstructionsList();
 }
 
 /** Delete an instruction by id. */
@@ -4980,6 +5020,8 @@ function renderAddInstColorPickers() {
    INIT — wire everything up
 ══════════════════════════════════════════════════════════════ */
 function init() {
+  syncMarkedInstructionsToEnglishApp(); // populate the bridge immediately in case marks already exist from a previous session
+
   /* ── Textarea initial value ── */
   const ta = getTA();
   ta.value = state.code;
