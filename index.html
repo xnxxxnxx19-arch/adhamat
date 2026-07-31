@@ -12,7 +12,7 @@
   }
   #switchBar button{
     flex:1; height:38px; border:none; border-radius:8px; cursor:pointer;
-    font-size:.95rem; font-weight:bold; font-family:inherit;
+    font-size:.9rem; font-weight:bold; font-family:inherit;
     background:#2a303a; color:#c9c2a8; transition:background .15s, color .15s;
   }
   #switchBar button.active{ background:#1f8a4c; color:#fff; }
@@ -28,35 +28,46 @@
 <div id="switchBar">
   <button type="button" id="btnShowEnglish" class="active">🔤 تطبيق الإنجليزي</button>
   <button type="button" id="btnShowEditor">📘 المحرر البرمجي</button>
+  <button type="button" id="btnShowMeals">🍽️ متتبع الوجبات</button>
+  <button type="button" id="btnShowVocab">🃏 بطاقاتي</button>
 </div>
 
 <div id="frameWrap">
   <!-- كل تطبيق شغال جوه iframe منفصل تمامًا — نفس المستند، نفس الجافاسكريبت، نفس الـ CSS
-       بتاعته بس، ومفيش أي مشاركة أو تعارض بين الاتنين خالص -->
+       بتاعته بس، ومفيش أي مشاركة أو تعارض بين التطبيقات خالص. كل تطبيق بيحفظ بياناته
+       أوتوماتيك بمجرد أي إضافة أو تعديل (مش محتاج زرار حفظ يدوي) وبيفضل محفوظ حتى لو
+       قفلت المتصفح أو رجعت تاني بعد فترة -->
   <iframe id="frameEnglish" src="english.html" style="display:block;"></iframe>
   <iframe id="frameEditor" src="editor.html" style="display:none;"></iframe>
+  <iframe id="frameMeals" src="meal-tracker.html" style="display:none;"></iframe>
+  <iframe id="frameVocab" src="vocab-app.html" style="display:none;"></iframe>
 </div>
 
 <script>
-  const btnEnglish = document.getElementById('btnShowEnglish');
-  const btnEditor = document.getElementById('btnShowEditor');
-  const frameEnglish = document.getElementById('frameEnglish');
-  const frameEditor = document.getElementById('frameEditor');
+  const buttons = {
+    english: document.getElementById('btnShowEnglish'),
+    editor: document.getElementById('btnShowEditor'),
+    meals: document.getElementById('btnShowMeals'),
+    vocab: document.getElementById('btnShowVocab'),
+  };
+  const frames = {
+    english: document.getElementById('frameEnglish'),
+    editor: document.getElementById('frameEditor'),
+    meals: document.getElementById('frameMeals'),
+    vocab: document.getElementById('frameVocab'),
+  };
 
-  function showEnglish(){
-    frameEnglish.style.display = 'block';
-    frameEditor.style.display = 'none';
-    btnEnglish.classList.add('active');
-    btnEditor.classList.remove('active');
+  function showApp(key){
+    Object.keys(frames).forEach(k => {
+      frames[k].style.display = (k === key) ? 'block' : 'none';
+      buttons[k].classList.toggle('active', k === key);
+    });
   }
-  function showEditor(){
-    frameEditor.style.display = 'block';
-    frameEnglish.style.display = 'none';
-    btnEditor.classList.add('active');
-    btnEnglish.classList.remove('active');
-  }
-  btnEnglish.addEventListener('click', showEnglish);
-  btnEditor.addEventListener('click', showEditor);
+
+  buttons.english.addEventListener('click', () => showApp('english'));
+  buttons.editor.addEventListener('click', () => showApp('editor'));
+  buttons.meals.addEventListener('click', () => showApp('meals'));
+  buttons.vocab.addEventListener('click', () => showApp('vocab'));
 </script>
 
 </body>

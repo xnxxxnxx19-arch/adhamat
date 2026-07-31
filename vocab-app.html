@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>بطاقاتي — دفتر مفردات إنجليزي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EAE3CC;
+    --card:#FBF8F0;
+    --ink:#1C2541;
+    --ink-soft:#4A5169;
+    --gold:#C89B3C;
+    --gold-deep:#A97F26;
+    --red:#A3333D;
+    --teal:#2E6E62;
+    --line:#D8CFAE;
+    --shadow: 0 10px 30px rgba(28,37,65,.12);
+    --radius: 3px;
+  }
+  [data-theme="dark"]{
+    --paper:#12172A;
+    --card:#1E2740;
+    --ink:#EFE9D8;
+    --ink-soft:#AEB4C9;
+    --gold:#D9AE4E;
+    --gold-deep:#E8C46B;
+    --red:#E0707B;
+    --teal:#5FBBA6;
+    --line:#333F5E;
+    --shadow: 0 10px 30px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Tajawal',sans-serif;
+    min-height:100vh;
+    transition:background .3s, color .3s;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(28,37,65,.06) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  [data-theme="dark"] body{
+    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,.04) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .mono{font-family:'Space Mono',monospace;}
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 26px; border-bottom:2px solid var(--ink);
+    flex-wrap:wrap; gap:10px;
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand .stamp{
+    width:40px;height:40px; border:2px solid var(--ink); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    transform:rotate(-8deg); font-family:'Space Mono',monospace; font-weight:700; font-size:12px;
+    color:var(--red); border-color:var(--red);
+  }
+  .brand h1{font-size:20px; margin:0; font-weight:900;}
+  .brand p{margin:0; font-size:12px; color:var(--ink-soft);}
+  .top-actions{display:flex; gap:8px; align-items:center;}
+
+  button{
+    font-family:'Tajawal',sans-serif; cursor:pointer; border:none;
+    border-radius:var(--radius); font-weight:700; font-size:14px;
+  }
+  .btn{
+    background:var(--ink); color:var(--card); padding:9px 16px;
+    box-shadow:2px 2px 0 var(--gold);
+    transition:transform .15s;
+  }
+  .btn:hover{transform:translate(-1px,-1px);}
+  .btn:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--gold);}
+  .btn.ghost{background:transparent; color:var(--ink); box-shadow:none; border:2px solid var(--ink);}
+  .btn.small{padding:6px 10px; font-size:12px;}
+  .icon-btn{
+    width:36px;height:36px; border-radius:50%; background:var(--card);
+    border:2px solid var(--ink); display:flex; align-items:center; justify-content:center;
+    font-size:16px;
+  }
+
+  nav.tabs{
+    display:flex; gap:0; padding:0 26px; overflow-x:auto; border-bottom:1px solid var(--line);
+  }
+  nav.tabs button{
+    background:transparent; padding:12px 18px; color:var(--ink-soft);
+    border-bottom:3px solid transparent; white-space:nowrap; font-size:14px;
+  }
+  nav.tabs button.active{color:var(--ink); border-bottom-color:var(--red);}
+
+  main{max-width:760px; margin:0 auto; padding:30px 20px 80px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* ---- Category chips (catalog tabs) ---- */
+  .catalog-tabs{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; justify-content:center;}
+  .chip{
+    padding:6px 14px; border-radius:16px 16px 4px 4px; border:1.5px solid var(--gold-deep);
+    background:var(--card); color:var(--ink); font-size:12px; font-weight:700;
+  }
+  .chip.active{background:var(--gold); color:var(--ink); border-color:var(--ink);}
+
+  /* ---- Flashcard stage ---- */
+  .stage{position:relative; height:340px; display:flex; align-items:center; justify-content:center; margin-bottom:22px;}
+  .deck-shadow{
+    position:absolute; width:88%; height:88%; background:var(--card);
+    border:1.5px solid var(--line); border-radius:8px; transform:rotate(4deg); opacity:.6;
+  }
+  .deck-shadow.two{transform:rotate(-3deg); opacity:.4;}
+  .card3d{
+    width:92%; max-width:420px; height:280px; perspective:1400px; z-index:2;
+  }
+  .card-inner{
+    position:relative; width:100%; height:100%; transition:transform .5s cubic-bezier(.4,.2,.2,1);
+    transform-style:preserve-3d; cursor:pointer;
+  }
+  .card-inner.flipped{transform:rotateY(180deg);}
+  .face{
+    position:absolute; inset:0; backface-visibility:hidden;
+    background:var(--card); border-radius:8px; box-shadow:var(--shadow);
+    border:1px solid var(--line); padding:26px; display:flex; flex-direction:column;
+  }
+  .face.back{transform:rotateY(180deg);}
+  .punch{
+    position:absolute; top:14px; right:14px; width:16px; height:16px; border-radius:50%;
+    background:var(--paper); border:1px solid var(--line); box-shadow: inset 0 0 4px rgba(0,0,0,.15);
+  }
+  .rule{border-bottom:1.5px solid var(--red); opacity:.5; margin:10px 0;}
+  .card-cat{font-size:11px; color:var(--gold-deep); font-weight:700; letter-spacing:1px;}
+  .card-word{font-family:'Space Mono',monospace; font-size:32px; font-weight:700; margin:6px 0 2px; direction:ltr; text-align:left;}
+  .card-pron{font-family:'Space Mono',monospace; font-size:13px; color:var(--ink-soft); direction:ltr; text-align:left;}
+  .card-example{margin-top:auto; font-size:13px; color:var(--ink-soft); direction:ltr; text-align:left; font-style:italic; line-height:1.5;}
+  .card-meaning{font-size:26px; font-weight:900; margin:8px 0;}
+  .flip-hint{font-size:11px; color:var(--ink-soft); text-align:center; margin-top:auto;}
+
+  .rate-row{display:flex; gap:10px; justify-content:center; margin-top:6px;}
+  .rate-btn{padding:10px 18px; border-radius:20px; font-size:13px; color:#fff;}
+  .rate-btn.hard{background:var(--red);}
+  .rate-btn.medium{background:var(--gold-deep);}
+  .rate-btn.easy{background:var(--teal);}
+
+  .progress-line{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:12px; color:var(--ink-soft);}
+  .bar{height:5px; background:var(--line); border-radius:3px; overflow:hidden; margin-bottom:18px;}
+  .bar-fill{height:100%; background:var(--gold);}
+
+  .empty{text-align:center; padding:60px 20px; color:var(--ink-soft);}
+  .empty h3{color:var(--ink); font-size:18px;}
+
+  /* ---- Manage list ---- */
+  .word-row{
+    display:flex; align-items:center; gap:12px; background:var(--card);
+    border:1px solid var(--line); border-radius:6px; padding:12px 14px; margin-bottom:8px;
+  }
+  .word-row .w{font-family:'Space Mono',monospace; font-weight:700; min-width:110px; direction:ltr;}
+  .word-row .m{flex:1; color:var(--ink-soft); font-size:14px;}
+  .word-row .cat-tag{font-size:10px; background:var(--paper); padding:3px 8px; border-radius:10px; color:var(--gold-deep); font-weight:700;}
+  .row-actions{display:flex; gap:6px;}
+  .row-actions button{background:transparent; border:1px solid var(--line); border-radius:4px; padding:5px 8px; font-size:12px;}
+
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; background:var(--card); border:1px solid var(--line); padding:18px; border-radius:8px; margin-bottom:20px;}
+  .form-grid label{font-size:12px; color:var(--ink-soft); display:block; margin-bottom:4px;}
+  .form-grid input, .form-grid select{
+    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:4px;
+    background:var(--paper); color:var(--ink); font-family:'Tajawal',sans-serif; font-size:14px;
+  }
+  .form-grid .full{grid-column:1/-1;}
+  .form-actions{grid-column:1/-1; display:flex; gap:10px; justify-content:flex-end;}
+
+  /* ---- Quiz ---- */
+  .quiz-card{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:26px; box-shadow:var(--shadow);}
+  .quiz-q{font-size:14px; color:var(--ink-soft); margin-bottom:6px;}
+  .quiz-word{font-family:'Space Mono',monospace; font-size:28px; font-weight:700; margin-bottom:18px; direction:ltr;}
+  .options{display:grid; gap:10px;}
+  .opt{
+    text-align:right; padding:12px 14px; border:1.5px solid var(--line); border-radius:6px;
+    background:var(--paper); color:var(--ink); font-size:14px;
+  }
+  .opt.correct{border-color:var(--teal); background:rgba(46,110,98,.15);}
+  .opt.wrong{border-color:var(--red); background:rgba(163,51,61,.15);}
+  .type-row{display:flex; gap:10px; margin-top:6px;}
+  .type-row input{flex:1; padding:12px; border:1.5px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font-size:15px;}
+  .type-live{
+    font-family:"Consolas","Courier New",monospace; font-size:20px; letter-spacing:2px; direction:ltr;
+    text-align:center; min-height:30px; margin:10px 0; padding:8px; border-radius:6px; background:var(--card);
+  }
+  .type-live .ok{color:var(--teal);}
+  .type-live .bad{color:var(--red); text-decoration:underline;}
+  .type-live .pending{color:var(--ink-soft); opacity:.55;}
+  .type-diff{font-family:"Consolas","Courier New",monospace; font-size:18px; direction:ltr; text-align:center; letter-spacing:1px; margin-top:8px;}
+  .type-diff .match{color:var(--teal);}
+  .type-diff .sub{color:var(--red); text-decoration:line-through;}
+  .type-diff .add{color:var(--teal); font-weight:900;}
+  .type-diff .missing{color:var(--gold-deep); text-decoration:underline; font-weight:900;}
+  .type-diff .extra{color:var(--red); text-decoration:line-through;}
+  .speak-btn{
+    border:1.5px solid var(--line); background:var(--card); color:var(--ink); border-radius:50%;
+    width:34px; height:34px; cursor:pointer; font-size:16px; line-height:1; margin-inline-start:8px;
+  }
+  .speak-btn:hover{ border-color:var(--gold); }
+  .typo-note{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+  .feedback{margin-top:14px; font-size:14px; font-weight:700;}
+  .feedback.ok{color:var(--teal);}
+  .feedback.no{color:var(--red);}
+
+  /* ---- Stats ---- */
+  .stat-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:20px;}
+  .stat-box{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; text-align:center;}
+  .stat-box .n{font-family:'Space Mono',monospace; font-size:28px; font-weight:700; color:var(--gold-deep);}
+  .stat-box .l{font-size:12px; color:var(--ink-soft); margin-top:4px;}
+  canvas{width:100%; max-height:180px;}
+
+  /* ---- Writing / handwriting practice ---- */
+  .wpanel{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:18px; box-shadow:var(--shadow);}
+  .pad-wrap{
+    position:relative; width:100%; height:180px; margin:14px 0;
+    border:2px dashed var(--line); border-radius:8px; background:var(--paper);
+    touch-action:none; overflow:hidden;
+  }
+  .pad-wrap canvas{position:absolute; inset:0; width:100%; height:100%; cursor:crosshair;}
+  .pad-controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:6px;}
+  .score-row{display:flex; gap:12px; justify-content:center; margin:12px 0;}
+  .score-box{background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 18px; text-align:center;}
+  .score-box .n{display:block; font-family:'Space Mono',monospace; font-size:22px; font-weight:700; color:var(--gold-deep);}
+  .score-box .l{font-size:11px; color:var(--ink-soft);}
+  .typed-target{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+
+  footer{text-align:center; padding:20px; font-size:11px; color:var(--ink-soft);}
+
+  @media (max-width:480px){
+    .form-grid{grid-template-columns:1fr;}
+    .stat-grid{grid-template-columns:repeat(2,1fr);}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important; animation:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="stamp">EN</div>
+    <div>
+      <h1>بطاقاتي</h1>
+      <p>دفتر حفظ المفردات الإنجليزية</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="icon-btn" id="themeToggle" title="الوضع الليلي">🌙</button>
+    <input type="file" id="importFile" accept=".json" style="display:none">
+    <button class="btn ghost small" id="importBtn">استيراد</button>
+    <button class="btn ghost small" id="exportBtn">تصدير</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button data-view="review" class="active">المراجعة</button>
+  <button data-view="quiz">اختبار</button>
+  <button data-view="writing">الكتابة</button>
+  <button data-view="manage">الكلمات</button>
+  <button data-view="stats">الإحصائيات</button>
+</nav>
+
+<main>
+
+  <!-- REVIEW / FLASHCARDS -->
+  <section class="view active" id="view-review">
+    <div class="catalog-tabs" id="catTabs"></div>
+    <div class="progress-line">
+      <span id="dueCount">0 كلمة للمراجعة اليوم</span>
+      <span id="cardPos"></span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="progressFill" style="width:0%"></div></div>
+
+    <div id="reviewArea">
+      <div class="stage">
+        <div class="deck-shadow two"></div>
+        <div class="deck-shadow"></div>
+        <div class="card3d">
+          <div class="card-inner" id="cardInner">
+            <div class="face front">
+              <div class="punch"></div>
+              <div class="card-cat" id="frontCat">FOOD</div>
+              <div class="card-word" id="frontWord">apple</div>
+              <div class="card-pron" id="frontPron">/ˈæpəl/</div>
+              <div class="rule"></div>
+              <div class="flip-hint">اضغط لقلب البطاقة</div>
+            </div>
+            <div class="face back">
+              <div class="punch"></div>
+              <div class="card-cat">المعنى</div>
+              <div class="card-meaning" id="backMeaning">تفاحة</div>
+              <div class="rule"></div>
+              <div class="card-example" id="backExample">I eat an apple every day.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="rate-row">
+        <button class="rate-btn hard" data-rate="hard">صعبة</button>
+        <button class="rate-btn medium" data-rate="medium">متوسطة</button>
+        <button class="rate-btn easy" data-rate="easy">سهلة</button>
+      </div>
+    </div>
+    <div class="empty" id="reviewEmpty" style="display:none;">
+      <h3>لا توجد كلمات للمراجعة الآن 🎉</h3>
+      <p>أضف كلمات جديدة من تبويب «الكلمات» أو عد لاحقاً.</p>
+    </div>
+  </section>
+
+  <!-- QUIZ -->
+  <section class="view" id="view-quiz">
+    <div class="catalog-tabs">
+      <span class="chip" id="quizModeChoice-mc" data-mode="mc">اختيار من متعدد</span>
+      <span class="chip" id="quizModeChoice-type" data-mode="type">اكتب الترجمة</span>
+      <span class="chip" id="quizModeChoice-en" data-mode="en">اكتب الكلمة الإنجليزية</span>
+    </div>
+    <div class="quiz-card" id="quizArea"></div>
+  </section>
+
+  <!-- WRITING / HANDWRITING -->
+  <section class="view" id="view-writing">
+    <div class="catalog-tabs">
+      <span class="chip" data-wmode="trace">تتبّع بخط اليد</span>
+      <span class="chip" data-wmode="recall">استرجاع حر (ارسم)</span>
+      <span class="chip" data-wmode="typed">تكرار كتابي</span>
+    </div>
+
+    <div id="writingNoWords" class="empty" style="display:none;">
+      <h3>أضف كلمات أولاً</h3>
+      <p>تحتاج إلى كلمة واحدة على الأقل لبدء تمارين الكتابة.</p>
+    </div>
+
+    <!-- TRACE MODE -->
+    <div id="wTrace" class="wpanel">
+      <div class="progress-line">
+        <span id="traceWordCat">التصنيف</span>
+        <span id="traceRepCount">0 / 3 تكرارات ناجحة</span>
+      </div>
+      <div class="pad-wrap" id="tracePad">
+        <canvas id="traceGuideCanvas" width="320" height="180"></canvas>
+        <canvas id="traceInkCanvas" width="320" height="180"></canvas>
+      </div>
+      <div class="pad-controls">
+        <button class="btn ghost small" id="traceClear">مسح</button>
+        <button class="btn small" id="traceCheck">تحقّق من التتبّع</button>
+        <button class="btn ghost small" id="traceNext">كلمة أخرى ⟵</button>
+      </div>
+      <div class="score-row" id="traceScoreRow" style="display:none;">
+        <div class="score-box"><span class="n" id="traceCoverage">0%</span><span class="l">تغطية الحروف</span></div>
+        <div class="score-box"><span class="n" id="tracePrecision">0%</span><span class="l">دقة المسار</span></div>
+      </div>
+      <div class="feedback" id="traceFeedback"></div>
+    </div>
+
+    <!-- RECALL MODE -->
+    <div id="wRecall" class="wpanel" style="display:none;">
+      <div class="quiz-q">اكتب هذه الكلمة بخط يدك من الذاكرة، ثم اكشف الإجابة لتقارن:</div>
+      <div class="quiz-word" id="recallMeaning" style="direction:rtl; font-family:'Tajawal'; font-size:24px;">تفاحة</div>
+      <div class="pad-wrap" id="recallPad">
+        <canvas id="recallGuideCanvas" width="320" height="180"></canvas>
+        <canvas id="recallInkCanvas" width="320" height="180"></canvas>
+      </div>
+      <div class="pad-controls">
+        <button class="btn ghost small" id="recallClear">مسح</button>
+        <button class="btn small" id="recallReveal">إظهار الإجابة</button>
+      </div>
+      <div class="rate-row" id="recallRateRow" style="display:none;">
+        <button class="rate-btn hard" data-rrate="hard">لم أعرفها</button>
+        <button class="rate-btn easy" data-rrate="easy">عرفتها ✔</button>
+      </div>
+    </div>
+
+    <!-- TYPED REPETITION MODE -->
+    <div id="wTyped" class="wpanel" style="display:none;">
+      <div class="quiz-q">اكتب الكلمة الصحيحة عدة مرات متتالية لترسيخها في الذاكرة العضلية:</div>
+      <div class="typed-target">
+        <span class="card-meaning" id="typedMeaning" style="font-size:20px;">تفاحة</span>
+        <span>
+          <button type="button" class="speak-btn" id="typedSpeak" title="اسمع نطق الكلمة">🔊</button>
+          <span class="progress-line" id="typedStreakLabel">0 / 5</span>
+        </span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="typedBarFill" style="width:0%"></div></div>
+      <div class="type-row">
+        <input type="text" id="typedInput" autocomplete="off" dir="ltr" placeholder="type the word here">
+        <button class="btn small" id="typedSubmit">تحقّق</button>
+      </div>
+      <div class="type-live" id="typedLive"></div>
+      <div class="feedback" id="typedFeedback"></div>
+      <div class="type-diff" id="typedDiff"></div>
+      <div class="typo-note" id="typedTypoNote"></div>
+    </div>
+  </section>
+
+  <!-- MANAGE -->
+  <section class="view" id="view-manage">
+    <button class="btn" id="addWordBtn" style="margin-bottom:16px;">+ إضافة كلمة جديدة</button>
+    <div id="wordForm" style="display:none;"></div>
+    <div id="wordList"></div>
+  </section>
+
+  <!-- STATS -->
+  <section class="view" id="view-stats">
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="quiz-card">
+      <div class="card-cat" style="margin-bottom:10px;">توزيع مستوى الإتقان</div>
+      <canvas id="statChart" height="160"></canvas>
+    </div>
+  </section>
+
+</main>
+
+<footer>يعمل بالكامل داخل متصفحك — لا اتصال إنترنت مطلوب، وبياناتك محفوظة محلياً.</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  const DEFAULT_WORDS = [
+    {word:"Apple", meaning:"تفاحة", example:"I eat an apple every day.", pronunciation:"ˈæpəl", category:"Food"},
+    {word:"Journey", meaning:"رحلة", example:"Our journey to the mountains was long.", pronunciation:"ˈdʒɜːrni", category:"Travel"},
+    {word:"Brave", meaning:"شجاع", example:"The firefighter was very brave.", pronunciation:"breɪv", category:"Feelings"},
+    {word:"Kitchen", meaning:"مطبخ", example:"She is cooking in the kitchen.", pronunciation:"ˈkɪtʃɪn", category:"Home"},
+    {word:"Decide", meaning:"يقرر", example:"You need to decide now.", pronunciation:"dɪˈsaɪd", category:"Verbs"},
+    {word:"Ocean", meaning:"محيط", example:"The ocean is deep and blue.", pronunciation:"ˈoʊʃən", category:"Nature"},
+    {word:"Patient", meaning:"صبور", example:"Be patient with your students.", pronunciation:"ˈpeɪʃənt", category:"Feelings"},
+    {word:"Suitcase", meaning:"حقيبة سفر", example:"Pack your suitcase early.", pronunciation:"ˈsuːtkeɪs", category:"Travel"},
+  ];
+
+  const STORAGE_KEY = "vocab_app_v1";
+  const INTERVALS = [0, 1, 3, 7, 14, 30, 60]; // days, indexed by srs level
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return {
+      words: DEFAULT_WORDS.map(seedWord),
+      theme: "light",
+      history: [] // {date, correct, total}
+    };
+  }
+  function seedWord(w){
+    return Object.assign({
+      id: cryptoId(),
+      srs: {level:0, due: todayStr(), correct:0, wrong:0},
+      writing: {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0}
+    }, w);
+  }
+  function ensureWriting(w){
+    if(!w.writing) w.writing = {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0};
+    return w.writing;
+  }
+  function cryptoId(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
+  function addDays(dateStr, days){
+    const d = new Date(dateStr); d.setDate(d.getDate()+days);
+    return d.toISOString().slice(0,10);
+  }
+
+  let state = loadState();
+  function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+  // ---------- THEME ----------
+  const themeToggle = document.getElementById("themeToggle");
+  function applyTheme(){
+    document.documentElement.setAttribute("data-theme", state.theme);
+    themeToggle.textContent = state.theme === "dark" ? "☀️" : "🌙";
+  }
+  themeToggle.addEventListener("click", ()=>{
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    applyTheme(); save();
+  });
+  applyTheme();
+
+  // ---------- TABS / VIEWS ----------
+  const tabButtons = document.querySelectorAll("nav.tabs button");
+  const views = document.querySelectorAll(".view");
+  tabButtons.forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      tabButtons.forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      views.forEach(v=>v.classList.remove("active"));
+      document.getElementById("view-"+btn.dataset.view).classList.add("active");
+      if(btn.dataset.view === "review") renderReview();
+      if(btn.dataset.view === "quiz") renderQuiz();
+      if(btn.dataset.view === "writing") renderWriting();
+      if(btn.dataset.view === "manage") renderManage();
+      if(btn.dataset.view === "stats") renderStats();
+    });
+  });
+
+  // ---------- CATEGORY FILTER ----------
+  let activeCategory = "all";
+  function categories(){
+    const set = new Set(state.words.map(w=>w.category || "عام"));
+    return ["all", ...Array.from(set)];
+  }
+  function renderCatTabs(){
+    const wrap = document.getElementById("catTabs");
+    wrap.innerHTML = "";
+    categories().forEach(cat=>{
+      const el = document.createElement("span");
+      el.className = "chip" + (cat===activeCategory ? " active":"");
+      el.textContent = cat === "all" ? "الكل" : cat;
+      el.addEventListener("click", ()=>{ activeCategory = cat; renderReview(); });
+      wrap.appendChild(el);
+    });
+  }
+
+  function filteredWords(){
+    return activeCategory==="all" ? state.words : state.words.filter(w=>(w.category||"عام")===activeCategory);
+  }
+  function dueWords(){
+    const t = todayStr();
+    return filteredWords().filter(w=> w.srs.due <= t);
+  }
+
+  // ---------- REVIEW / FLASHCARDS ----------
+  let reviewQueue = [];
+  let reviewIndex = 0;
+  let flipped = false;
+
+  function renderReview(){
+    renderCatTabs();
+    reviewQueue = dueWords();
+    reviewIndex = 0;
+    flipped = false;
+    updateReviewCard();
+  }
+
+  function updateReviewCard(){
+    const total = reviewQueue.length;
+    const empty = document.getElementById("reviewEmpty");
+    const area = document.getElementById("reviewArea");
+    document.getElementById("dueCount").textContent = total + " كلمة للمراجعة" + (activeCategory!=="all" ? " — "+activeCategory : "");
+
+    if(total === 0){
+      empty.style.display = "block";
+      area.style.display = "none";
+      document.getElementById("cardPos").textContent = "";
+      document.getElementById("progressFill").style.width = "0%";
+      return;
+    }
+    empty.style.display = "none";
+    area.style.display = "block";
+
+    if(reviewIndex >= total){ reviewIndex = 0; }
+    const w = reviewQueue[reviewIndex];
+    document.getElementById("frontCat").textContent = (w.category||"عام").toUpperCase();
+    document.getElementById("frontWord").textContent = w.word;
+    document.getElementById("frontPron").textContent = w.pronunciation ? "/"+w.pronunciation+"/" : "";
+    document.getElementById("backMeaning").textContent = w.meaning;
+    document.getElementById("backExample").textContent = w.example || "";
+    document.getElementById("cardPos").textContent = (reviewIndex+1)+" / "+total;
+    document.getElementById("progressFill").style.width = Math.round(((reviewIndex)/total)*100)+"%";
+    flipped = false;
+    document.getElementById("cardInner").classList.remove("flipped");
+  }
+
+  document.getElementById("cardInner").addEventListener("click", ()=>{
+    flipped = !flipped;
+    document.getElementById("cardInner").classList.toggle("flipped", flipped);
+  });
+
+  document.querySelectorAll(".rate-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      if(reviewQueue.length===0) return;
+      const w = reviewQueue[reviewIndex];
+      const rate = btn.dataset.rate;
+      applyRating(w, rate);
+      save();
+      reviewQueue.splice(reviewIndex, 1);
+      if(reviewIndex >= reviewQueue.length) reviewIndex = 0;
+      updateReviewCard();
+    });
+  });
+
+  function applyRating(w, rate){
+    if(rate === "hard"){
+      w.srs.level = Math.max(0, w.srs.level - 1);
+      w.srs.wrong += 1;
+      w.srs.due = addDays(todayStr(), INTERVALS[0]);
+    } else if(rate === "medium"){
+      w.srs.correct += 1;
+      w.srs.due = addDays(todayStr(), INTERVALS[Math.min(w.srs.level, INTERVALS.length-1)] || 1);
+    } else {
+      w.srs.level = Math.min(INTERVALS.length-1, w.srs.level + 1);
+      w.srs.correct += 1;
+      w.srs.due = addDays(todayStr(), INTERVALS[w.srs.level]);
+    }
+    recordHistory(rate !== "hard");
+  }
+
+  function recordHistory(correct){
+    const t = todayStr();
+    let entry = state.history.find(h=>h.date===t);
+    if(!entry){ entry = {date:t, correct:0, total:0}; state.history.push(entry); }
+    entry.total += 1;
+    if(correct) entry.correct += 1;
+  }
+
+  // ---------- QUIZ ----------
+  let quizMode = "mc";
+  document.querySelectorAll("[id^='quizModeChoice']").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      document.querySelectorAll("[id^='quizModeChoice']").forEach(e=>e.classList.remove("active"));
+      el.classList.add("active");
+      quizMode = el.dataset.mode;
+      renderQuiz();
+    });
+  });
+
+  let quizWord = null;
+  function pickQuizWord(){
+    const pool = state.words;
+    if(pool.length===0) return null;
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
+
+  function renderQuiz(){
+    document.querySelector("[id^='quizModeChoice-"+quizMode+"']")?.classList.add("active");
+    const area = document.getElementById("quizArea");
+    if(state.words.length < 2){
+      area.innerHTML = "<div class='empty'><h3>أضف كلمتين على الأقل لبدء الاختبار</h3></div>";
+      return;
+    }
+    quizWord = pickQuizWord();
+    if(quizMode === "mc") renderMCQuiz(area);
+    else if(quizMode === "type") renderTypeQuiz(area, "en-to-ar");
+    else renderTypeQuiz(area, "ar-to-en");
+  }
+
+  function renderMCQuiz(area){
+    const correct = quizWord;
+    const distractors = shuffle(state.words.filter(w=>w.id!==correct.id)).slice(0,3).map(w=>w.meaning);
+    const options = shuffle([correct.meaning, ...distractors]);
+    area.innerHTML = `
+      <div class="quiz-q">ما معنى هذه الكلمة؟</div>
+      <div class="quiz-word">${escapeHtml(correct.word)}</div>
+      <div class="options" id="optsWrap"></div>
+      <div class="feedback" id="quizFeedback"></div>
+    `;
+    const wrap = document.getElementById("optsWrap");
+    options.forEach(opt=>{
+      const b = document.createElement("button");
+      b.className = "opt";
+      b.textContent = opt;
+      b.addEventListener("click", ()=>{
+        const isCorrect = opt === correct.meaning;
+        Array.from(wrap.children).forEach(c=>c.disabled = true);
+        b.classList.add(isCorrect ? "correct":"wrong");
+        if(!isCorrect){
+          Array.from(wrap.children).find(c=>c.textContent===correct.meaning)?.classList.add("correct");
+        }
+        applyRating(correct, isCorrect ? "medium" : "hard");
+        save();
+        showFeedback(isCorrect);
+        setTimeout(renderQuiz, 1100);
+      });
+      wrap.appendChild(b);
+    });
+  }
+
+  function renderTypeQuiz(area, direction){
+    const correct = quizWord;
+    const prompt = direction === "en-to-ar" ? correct.word : correct.meaning;
+    const answerIsEnglish = direction === "ar-to-en";
+    area.innerHTML = `
+      <div class="quiz-q">${answerIsEnglish ? "اكتب الكلمة الإنجليزية:" : "اكتب المعنى بالعربية:"}</div>
+      <div class="quiz-word" style="direction:${answerIsEnglish ? 'rtl':'ltr'}; font-family:${answerIsEnglish ? "'Tajawal'" : "'Space Mono'"}">${escapeHtml(prompt)}</div>
+      <div class="type-row">
+        <input type="text" id="typeInput" autocomplete="off" dir="${answerIsEnglish ? 'ltr':'rtl'}" placeholder="${answerIsEnglish ? 'type in English' : 'اكتب هنا'}">
+        <button class="btn small" id="typeSubmit">تحقق</button>
+      </div>
+      <div class="feedback" id="quizFeedback"></div>
+    `;
+    const input = document.getElementById("typeInput");
+    input.focus();
+    function check(){
+      const val = input.value.trim().toLowerCase();
+      const target = (answerIsEnglish ? correct.word : correct.meaning).trim().toLowerCase();
+      const isCorrect = val === target;
+      applyRating(correct, isCorrect ? "medium" : "hard");
+      save();
+      showFeedback(isCorrect, isCorrect ? null : (answerIsEnglish ? correct.word : correct.meaning));
+      input.disabled = true;
+      document.getElementById("typeSubmit").disabled = true;
+      setTimeout(renderQuiz, 1300);
+    }
+    document.getElementById("typeSubmit").addEventListener("click", check);
+    input.addEventListener("keydown", e=>{ if(e.key==="Enter") check(); });
+  }
+
+  function showFeedback(isCorrect, correctAnswer){
+    const el = document.getElementById("quizFeedback");
+    if(isCorrect){
+      el.textContent = "✔ إجابة صحيحة";
+      el.className = "feedback ok";
+    } else {
+      el.textContent = "✘ غير صحيح" + (correctAnswer ? " — الصواب: " + correctAnswer : "");
+      el.className = "feedback no";
+    }
+  }
+
+  function shuffle(arr){
+    const a = arr.slice();
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]] = [a[j],a[i]];
+    }
+    return a;
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  // ---------- WRITING / HANDWRITING PRACTICE ----------
+  const TRACE_TARGET_REPS = 3;
+  const TYPED_TARGET_REPS = 5;
+  let writingMode = "trace";
+  let traceWord = null, recallWord = null, typedWord = null;
+  let typedStreak = 0;
+
+  document.querySelectorAll("[data-wmode]").forEach(chip=>{
+    chip.addEventListener("click", ()=>{
+      document.querySelectorAll("[data-wmode]").forEach(c=>c.classList.remove("active"));
+      chip.classList.add("active");
+      writingMode = chip.dataset.wmode;
+      document.getElementById("wTrace").style.display = writingMode==="trace" ? "block":"none";
+      document.getElementById("wRecall").style.display = writingMode==="recall" ? "block":"none";
+      document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
+      if(writingMode==="trace") startTraceRound();
+      if(writingMode==="recall") startRecallRound();
+      if(writingMode==="typed") startTypedRound();
+    });
+  });
+  document.querySelector("[data-wmode='trace']").classList.add("active");
+
+  function renderWriting(){
+    const has = state.words.length > 0;
+    document.getElementById("writingNoWords").style.display = has ? "none":"block";
+    document.querySelectorAll("#view-writing .wpanel").forEach(p=> p.style.display = has ? "" : "none");
+    if(!has) return;
+    if(writingMode==="trace") startTraceRound();
+    else if(writingMode==="recall") startRecallRound();
+    else startTypedRound();
+    // re-apply visibility per current mode (renderWriting may run while a non-default mode is selected)
+    document.getElementById("wTrace").style.display = writingMode==="trace" ? "block":"none";
+    document.getElementById("wRecall").style.display = writingMode==="recall" ? "block":"none";
+    document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
+  }
+
+  function pickPracticeWord(excludeId){
+    const pool = state.words.filter(w=> w.id !== excludeId);
+    const arr = pool.length ? pool : state.words;
+    return arr[Math.floor(Math.random()*arr.length)];
+  }
+
+  // ---- Generic two-layer canvas drawing pad (guide layer + ink layer) ----
+  function makePad(guideCanvas, inkCanvas){
+    const gCtx = guideCanvas.getContext("2d");
+    const iCtx = inkCanvas.getContext("2d");
+    let drawing = false, lastX=0, lastY=0;
+
+    function toCanvasCoords(e){
+      const rect = inkCanvas.getBoundingClientRect();
+      const scaleX = inkCanvas.width / rect.width;
+      const scaleY = inkCanvas.height / rect.height;
+      return { x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY };
+    }
+    function down(e){
+      drawing = true;
+      const p = toCanvasCoords(e);
+      lastX=p.x; lastY=p.y;
+      inkCanvas.setPointerCapture(e.pointerId);
+    }
+    function move(e){
+      if(!drawing) return;
+      const p = toCanvasCoords(e);
+      iCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || "#1C2541";
+      iCtx.lineWidth = 7;
+      iCtx.lineCap = "round"; iCtx.lineJoin = "round";
+      iCtx.beginPath();
+      iCtx.moveTo(lastX,lastY);
+      iCtx.lineTo(p.x,p.y);
+      iCtx.stroke();
+      lastX=p.x; lastY=p.y;
+    }
+    function up(e){ drawing = false; }
+
+    inkCanvas.addEventListener("pointerdown", down);
+    inkCanvas.addEventListener("pointermove", move);
+    inkCanvas.addEventListener("pointerup", up);
+    inkCanvas.addEventListener("pointerleave", up);
+
+    return {
+      gCtx, iCtx,
+      clearInk(){ iCtx.clearRect(0,0,inkCanvas.width,inkCanvas.height); },
+      clearGuide(){ gCtx.clearRect(0,0,guideCanvas.width,guideCanvas.height); },
+      drawGuideText(text, opacity){
+        gCtx.clearRect(0,0,guideCanvas.width,guideCanvas.height);
+        gCtx.save();
+        gCtx.globalAlpha = opacity==null ? 0.35 : opacity;
+        gCtx.font = "700 46px 'Space Mono', monospace";
+        gCtx.textAlign = "center";
+        gCtx.textBaseline = "middle";
+        gCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--gold-deep').trim() || "#A97F26";
+        gCtx.lineWidth = 16;
+        gCtx.lineJoin = "round";
+        gCtx.strokeText(text, guideCanvas.width/2, guideCanvas.height/2);
+        gCtx.restore();
+      },
+      hasInk(){
+        const data = iCtx.getImageData(0,0,inkCanvas.width,inkCanvas.height).data;
+        for(let i=3;i<data.length;i+=4){ if(data[i]>10) return true; }
+        return false;
+      },
+      computeCoverage(){
+        const w = guideCanvas.width, h = guideCanvas.height;
+        const guide = gCtx.getImageData(0,0,w,h).data;
+        const ink = iCtx.getImageData(0,0,w,h).data;
+        let target=0, hit=0, inkTotal=0, inkOnTarget=0;
+        for(let i=0;i<w*h;i++){
+          const gi = guide[i*4+3], ii = ink[i*4+3];
+          if(gi>40){ target++; if(ii>40) hit++; }
+          if(ii>40){ inkTotal++; if(gi>40) inkOnTarget++; }
+        }
+        const coverage = target ? Math.round((hit/target)*100) : 0;
+        const precision = inkTotal ? Math.round((inkOnTarget/inkTotal)*100) : 0;
+        return {coverage, precision};
+      }
+    };
+  }
+
+  let tracePad = null, recallPad = null;
+
+  // ---- TRACE MODE ----
+  function startTraceRound(){
+    if(!tracePad) tracePad = makePad(document.getElementById("traceGuideCanvas"), document.getElementById("traceInkCanvas"));
+    traceWord = pickPracticeWord();
+    if(!traceWord) return;
+    tracePad.clearInk();
+    tracePad.drawGuideText(traceWord.word, 0.35);
+    document.getElementById("traceWordCat").textContent = "التصنيف: " + (traceWord.category || "عام");
+    updateTraceRepLabel();
+    document.getElementById("traceScoreRow").style.display = "none";
+    document.getElementById("traceFeedback").textContent = "";
+  }
+  function updateTraceRepLabel(){
+    const reps = traceWord ? ensureWriting(traceWord).traceReps : 0;
+    document.getElementById("traceRepCount").textContent = Math.min(reps, TRACE_TARGET_REPS) + " / " + TRACE_TARGET_REPS + " تكرارات ناجحة";
+  }
+  document.getElementById("traceClear").addEventListener("click", ()=> tracePad && tracePad.clearInk());
+  document.getElementById("traceNext").addEventListener("click", startTraceRound);
+  document.getElementById("traceCheck").addEventListener("click", ()=>{
+    if(!tracePad || !traceWord) return;
+    if(!tracePad.hasInk()){
+      document.getElementById("traceFeedback").className = "feedback no";
+      document.getElementById("traceFeedback").textContent = "ارسم فوق الكلمة أولاً.";
+      return;
+    }
+    const {coverage, precision} = tracePad.computeCoverage();
+    document.getElementById("traceScoreRow").style.display = "flex";
+    document.getElementById("traceCoverage").textContent = coverage + "%";
+    document.getElementById("tracePrecision").textContent = precision + "%";
+    const overall = Math.round((coverage+precision)/2);
+    const ws = ensureWriting(traceWord);
+    ws.bestTraceScore = Math.max(ws.bestTraceScore||0, overall);
+    const fb = document.getElementById("traceFeedback");
+    if(overall >= 70){
+      ws.traceReps = (ws.traceReps||0) + 1;
+      updateTraceRepLabel();
+      if(ws.traceReps >= TRACE_TARGET_REPS){
+        applyRating(traceWord, "easy");
+        fb.className = "feedback ok";
+        fb.textContent = "ممتاز! أتقنت كتابة هذه الكلمة يدويًا ✔";
+        ws.traceReps = 0;
+        save();
+        setTimeout(startTraceRound, 1400);
+        return;
+      } else {
+        fb.className = "feedback ok";
+        fb.textContent = "تتبّع جيد! جرّب مرة أخرى لترسيخها أكثر.";
+      }
+    } else {
+      fb.className = "feedback no";
+      fb.textContent = "حاول التتبّع بدقة أكبر فوق الحروف الذهبية.";
+    }
+    save();
+  });
+
+  // ---- RECALL MODE (freehand from memory) ----
+  function startRecallRound(){
+    if(!recallPad) recallPad = makePad(document.getElementById("recallGuideCanvas"), document.getElementById("recallInkCanvas"));
+    recallWord = pickPracticeWord();
+    if(!recallWord) return;
+    recallPad.clearInk();
+    recallPad.clearGuide();
+    document.getElementById("recallMeaning").textContent = recallWord.meaning;
+    document.getElementById("recallRateRow").style.display = "none";
+    document.getElementById("recallReveal").style.display = "inline-block";
+  }
+  document.getElementById("recallClear").addEventListener("click", ()=> recallPad && recallPad.clearInk());
+  document.getElementById("recallReveal").addEventListener("click", ()=>{
+    if(!recallPad || !recallWord) return;
+    recallPad.drawGuideText(recallWord.word, 0.5);
+    document.getElementById("recallRateRow").style.display = "flex";
+    document.getElementById("recallReveal").style.display = "none";
+  });
+  document.querySelectorAll("[data-rrate]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      if(!recallWord) return;
+      const ws = ensureWriting(recallWord);
+      const good = btn.dataset.rrate === "easy";
+      if(good) ws.recallCorrect = (ws.recallCorrect||0)+1; else ws.recallWrong = (ws.recallWrong||0)+1;
+      applyRating(recallWord, good ? "easy" : "hard");
+      save();
+      startRecallRound();
+    });
+  });
+
+  // ---- TYPED REPETITION MODE ----
+  function startTypedRound(){
+    typedWord = pickPracticeWord();
+    typedStreak = 0;
+    if(!typedWord) return;
+    document.getElementById("typedMeaning").textContent = typedWord.meaning;
+    updateTypedProgress();
+    document.getElementById("typedInput").value = "";
+    document.getElementById("typedFeedback").textContent = "";
+    document.getElementById("typedFeedback").className = "feedback";
+    document.getElementById("typedDiff").innerHTML = "";
+    document.getElementById("typedTypoNote").textContent = "";
+    document.getElementById("typedLive").innerHTML = "";
+    document.getElementById("typedInput").focus();
+  }
+  function updateTypedProgress(){
+    document.getElementById("typedStreakLabel").textContent = typedStreak + " / " + TYPED_TARGET_REPS;
+    document.getElementById("typedBarFill").style.width = Math.round((typedStreak/TYPED_TARGET_REPS)*100) + "%";
+  }
+
+  // تغذية راجعة حية أثناء الكتابة: كل حرف بيتلون فور كتابته (صح/غلط) قبل حتى ما تضغط "تحقّق"
+  function renderTypedLive(){
+    if(!typedWord) return;
+    const input = document.getElementById("typedInput");
+    const val = input.value;
+    const target = typedWord.word;
+    let html = "";
+    for(let i=0; i<target.length; i++){
+      const ch = target[i];
+      if(i >= val.length){
+        html += '<span class="pending">'+escapeHtml(ch)+'</span>';
+      } else if(val[i].toLowerCase() === ch.toLowerCase()){
+        html += '<span class="ok">'+escapeHtml(val[i])+'</span>';
+      } else {
+        html += '<span class="bad">'+escapeHtml(val[i])+'</span>';
+      }
+    }
+    // أي حروف زيادة كتبها المستخدم أكتر من طول الكلمة
+    if(val.length > target.length){
+      html += '<span class="bad">'+escapeHtml(val.slice(target.length))+'</span>';
+    }
+    document.getElementById("typedLive").innerHTML = html;
+  }
+  document.getElementById("typedInput").addEventListener("input", renderTypedLive);
+
+  // فارق دقيق حرف بحرف بين اللي كتبه المستخدم والكلمة الصحيحة (خوارزمية Levenshtein مع تتبّع العمليات)
+  function diffChars(a, b){
+    const m = a.length, n = b.length;
+    const dp = [];
+    for(let i=0;i<=m;i++){ dp.push(new Array(n+1).fill(0)); dp[i][0]=i; }
+    for(let j=0;j<=n;j++) dp[0][j]=j;
+    for(let i=1;i<=m;i++){
+      for(let j=1;j<=n;j++){
+        dp[i][j] = a[i-1].toLowerCase()===b[j-1].toLowerCase() ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
+      }
+    }
+    let i=m, j=n; const ops=[];
+    while(i>0 || j>0){
+      if(i>0 && j>0 && a[i-1].toLowerCase()===b[j-1].toLowerCase()){ ops.push({t:"match", ch:b[j-1]}); i--; j--; }
+      else if(i>0 && j>0 && dp[i][j]===dp[i-1][j-1]+1){ ops.push({t:"sub", from:a[i-1], to:b[j-1]}); i--; j--; }
+      else if(j>0 && dp[i][j]===dp[i][j-1]+1){ ops.push({t:"missing", ch:b[j-1]}); j--; }
+      else { ops.push({t:"extra", ch:a[i-1]}); i--; }
+    }
+    ops.reverse();
+    return {ops, distance: dp[m][n]};
+  }
+  function renderDiffHtml(ops){
+    return ops.map(op=>{
+      if(op.t==="match") return '<span class="match">'+escapeHtml(op.ch)+'</span>';
+      if(op.t==="sub") return '<span class="sub">'+escapeHtml(op.from)+'</span><span class="add">'+escapeHtml(op.to)+'</span>';
+      if(op.t==="missing") return '<span class="missing">'+escapeHtml(op.ch)+'</span>';
+      if(op.t==="extra") return '<span class="extra">'+escapeHtml(op.ch)+'</span>';
+      return "";
+    }).join("");
+  }
+
+  function speakWord(w){
+    if(!w || !("speechSynthesis" in window)) return;
+    try{
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(w.word);
+      utter.lang = "en-US";
+      utter.rate = 0.9;
+      window.speechSynthesis.speak(utter);
+    }catch(e){ /* speech not available — silently ignore */ }
+  }
+  document.getElementById("typedSpeak").addEventListener("click", ()=> speakWord(typedWord));
+
+  function submitTyped(){
+    if(!typedWord) return;
+    const input = document.getElementById("typedInput");
+    const rawVal = input.value.trim();
+    const val = rawVal.toLowerCase();
+    const target = typedWord.word.trim().toLowerCase();
+    const fb = document.getElementById("typedFeedback");
+    const diffEl = document.getElementById("typedDiff");
+    const noteEl = document.getElementById("typedTypoNote");
+    const ws = ensureWriting(typedWord);
+
+    if(val === target){
+      typedStreak++;
+      updateTypedProgress();
+      fb.className = "feedback ok";
+      diffEl.innerHTML = "";
+      noteEl.textContent = "";
+      if(typedStreak >= TYPED_TARGET_REPS){
+        ws.typedCompletions = (ws.typedCompletions||0)+1;
+        applyRating(typedWord, "easy");
+        save();
+        fb.textContent = "أتممت " + TYPED_TARGET_REPS + " مرات صحيحة متتالية! ✔";
+        setTimeout(startTypedRound, 1200);
+      } else {
+        fb.textContent = "صحيح، استمر!";
+      }
+    } else {
+      const {ops, distance} = diffChars(rawVal, typedWord.word);
+      const maxLen = Math.max(rawVal.length, typedWord.word.length, 1);
+      const isCloseTypo = rawVal.length > 0 && (distance / maxLen) <= 0.34;
+
+      diffEl.innerHTML = renderDiffHtml(ops);
+      fb.className = "feedback no";
+
+      if(isCloseTypo){
+        // خطأ إملائي بسيط: بيخصم تكرار واحد بس مش يصفّر العدّاد كله، عشان يفرّق بين
+        // "قريب جدًا من الصح" و"مش فاكر الكلمة خالص"
+        ws.typedTypos = (ws.typedTypos||0) + 1;
+        typedStreak = Math.max(0, typedStreak - 1);
+        fb.textContent = "قريب جدًا! فيه خطأ إملائي بسيط — بص على الفرق تحت:";
+        noteEl.textContent = "الخطأ ده اتحسب كـ«شبه صحيح» فخصمنا تكرار واحد بس مش كل التقدم.";
+      } else {
+        ws.typedMisses = (ws.typedMisses||0) + 1;
+        typedStreak = 0;
+        fb.textContent = "غير صحيح تمامًا — الكلمة الصحيحة: " + typedWord.word;
+        noteEl.textContent = "العدّاد بدأ من جديد لأن الإجابة بعيدة عن الكلمة الصحيحة.";
+      }
+      updateTypedProgress();
+      save();
+    }
+    input.value = "";
+    document.getElementById("typedLive").innerHTML = "";
+    input.focus();
+  }
+  document.getElementById("typedSubmit").addEventListener("click", submitTyped);
+  document.getElementById("typedInput").addEventListener("keydown", e=>{ if(e.key==="Enter") submitTyped(); });
+
+  // ---------- MANAGE ----------
+  const addWordBtn = document.getElementById("addWordBtn");
+  const wordFormEl = document.getElementById("wordForm");
+  addWordBtn.addEventListener("click", ()=> openForm(null));
+
+  function openForm(word){
+    wordFormEl.style.display = "block";
+    wordFormEl.innerHTML = `
+      <div class="form-grid">
+        <div><label>الكلمة الإنجليزية</label><input id="f_word" value="${word ? escapeAttr(word.word):''}" dir="ltr"></div>
+        <div><label>المعنى بالعربية</label><input id="f_meaning" value="${word ? escapeAttr(word.meaning):''}"></div>
+        <div><label>النطق (IPA اختياري)</label><input id="f_pron" value="${word ? escapeAttr(word.pronunciation||''):''}" dir="ltr"></div>
+        <div><label>التصنيف</label><input id="f_cat" value="${word ? escapeAttr(word.category||''):''}" placeholder="Food, Travel..."></div>
+        <div class="full"><label>مثال جملة</label><input id="f_example" value="${word ? escapeAttr(word.example||''):''}" dir="ltr"></div>
+        <div class="form-actions">
+          <button class="btn ghost small" id="cancelForm">إلغاء</button>
+          <button class="btn small" id="saveForm">${word ? 'حفظ التعديل':'إضافة الكلمة'}</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("cancelForm").addEventListener("click", ()=>{ wordFormEl.style.display="none"; wordFormEl.innerHTML=""; });
+    document.getElementById("saveForm").addEventListener("click", ()=>{
+      const w = document.getElementById("f_word").value.trim();
+      const m = document.getElementById("f_meaning").value.trim();
+      if(!w || !m){ alert("يرجى إدخال الكلمة والمعنى على الأقل"); return; }
+      const data = {
+        word:w, meaning:m,
+        pronunciation: document.getElementById("f_pron").value.trim(),
+        category: document.getElementById("f_cat").value.trim() || "عام",
+        example: document.getElementById("f_example").value.trim()
+      };
+      if(word){
+        Object.assign(word, data);
+      } else {
+        state.words.push(seedWord(data));
+      }
+      save();
+      wordFormEl.style.display = "none"; wordFormEl.innerHTML = "";
+      renderManage();
+    });
+  }
+  function escapeAttr(s){ return String(s).replace(/"/g,"&quot;"); }
+
+  function renderManage(){
+    const list = document.getElementById("wordList");
+    list.innerHTML = "";
+    if(state.words.length === 0){
+      list.innerHTML = "<div class='empty'><h3>لا توجد كلمات بعد</h3><p>اضغط «إضافة كلمة جديدة» للبدء.</p></div>";
+      return;
+    }
+    state.words.slice().reverse().forEach(w=>{
+      const row = document.createElement("div");
+      row.className = "word-row";
+      row.innerHTML = `
+        <span class="w">${escapeHtml(w.word)}</span>
+        <span class="m">${escapeHtml(w.meaning)}</span>
+        <span class="cat-tag">${escapeHtml(w.category||'عام')}</span>
+        <span class="row-actions">
+          <button data-act="edit">تعديل</button>
+          <button data-act="del">حذف</button>
+        </span>
+      `;
+      row.querySelector("[data-act='edit']").addEventListener("click", ()=> openForm(w));
+      row.querySelector("[data-act='del']").addEventListener("click", ()=>{
+        if(confirm("حذف هذه الكلمة؟")){
+          state.words = state.words.filter(x=>x.id!==w.id);
+          save(); renderManage();
+        }
+      });
+      list.appendChild(row);
+    });
+  }
+
+  // ---------- IMPORT / EXPORT ----------
+  document.getElementById("exportBtn").addEventListener("click", ()=>{
+    const exportData = state.words.map(w=>({
+      word:w.word, meaning:w.meaning, example:w.example, pronunciation:w.pronunciation, category:w.category
+    }));
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "vocab-words.json"; a.click();
+    URL.revokeObjectURL(url);
+  });
+  // ---- Smart import: understands many JSON shapes, not just our own export ----
+  const ALIASES = {
+    word: ['word','term','keyword','english','en','vocab','vocabulary','name','title','key','front'],
+    meaning: ['meaning','translation','desc','description','ar','arabic','def','definition','answer','back','value'],
+    example: ['example','sentence','comment','note','notes','usage','details','info'],
+    pronunciation: ['pronunciation','ipa','phonetic','pron','phonetics'],
+    category: ['category','tag','tags','type','group','topic','section','chapter']
+  };
+
+  function normKey(k){ return String(k).toLowerCase().replace(/[\s_\-]/g,''); }
+
+  function findFieldKey(obj, aliasList){
+    const keys = Object.keys(obj);
+    // exact match first
+    for(const alias of aliasList){
+      const hit = keys.find(k => normKey(k) === alias.replace(/[\s_\-]/g,''));
+      if(hit) return hit;
+    }
+    // partial/contains match
+    for(const alias of aliasList){
+      const hit = keys.find(k => normKey(k).includes(alias.replace(/[\s_\-]/g,'')));
+      if(hit) return hit;
+    }
+    return null;
+  }
+
+  function scoreCandidateArray(arr){
+    if(!Array.isArray(arr) || arr.length===0) return -1;
+    const sampleSize = Math.min(arr.length, 25);
+    let wordHits=0, meaningHits=0, objCount=0;
+    for(let i=0;i<sampleSize;i++){
+      const it = arr[i];
+      if(!it || typeof it!=="object" || Array.isArray(it)) continue;
+      objCount++;
+      if(findFieldKey(it, ALIASES.word)) wordHits++;
+      if(findFieldKey(it, ALIASES.meaning)) meaningHits++;
+    }
+    if(objCount===0) return -1;
+    const ratio = (wordHits+meaningHits) / (objCount*2);
+    // favor arrays where most items look like word entries, then favor longer arrays
+    return ratio*1000 + Math.min(arr.length, 500);
+  }
+
+  function collectCandidateArrays(node, depth, out){
+    if(depth>10 || out.length>400) return;
+    if(Array.isArray(node)){
+      out.push(node);
+      node.forEach(child=> collectCandidateArrays(child, depth+1, out));
+    } else if(node && typeof node==="object"){
+      Object.values(node).forEach(v=> collectCandidateArrays(v, depth+1, out));
+    }
+  }
+
+  function findRootLabel(json){
+    // try to find a sensible default category/name near the root (e.g. language.name)
+    const paths = [
+      j=>j?.language?.name, j=>j?.language?.title, j=>j?.name, j=>j?.title,
+      j=>j?.category, j=>j?.topic, j=>j?.subject
+    ];
+    for(const getter of paths){
+      try{
+        const v = getter(json);
+        if(typeof v === "string" && v.trim()) return v.trim();
+      }catch(e){}
+    }
+    return null;
+  }
+
+  function firstStringField(obj, excludeKeys){
+    for(const [k,v] of Object.entries(obj)){
+      if(excludeKeys.has(k)) continue;
+      if(typeof v === "string" && v.trim() && v.trim().length < 400) return v.trim();
+    }
+    return null;
+  }
+
+  function smartExtractWords(json){
+    let candidates = [];
+    collectCandidateArrays(json, 0, candidates);
+    if(candidates.length===0){
+      // maybe the file itself is a single word object
+      if(json && typeof json==="object" && !Array.isArray(json)) candidates = [[json]];
+    }
+    if(candidates.length===0) return {items:[], skipped:0, fieldsUsed:null};
+
+    let best = null, bestScore = -1;
+    candidates.forEach(arr=>{
+      const s = scoreCandidateArray(arr);
+      if(s > bestScore){ bestScore = s; best = arr; }
+    });
+    if(!best || bestScore < 0) return {items:[], skipped:0, fieldsUsed:null};
+
+    const defaultCategory = findRootLabel(json);
+    const items = [];
+    let skipped = 0;
+    let usedKeys = null;
+
+    best.forEach(raw=>{
+      if(!raw || typeof raw!=="object" || Array.isArray(raw)){ skipped++; return; }
+      const wKey = findFieldKey(raw, ALIASES.word);
+      const mKey = findFieldKey(raw, ALIASES.meaning);
+      const eKey = findFieldKey(raw, ALIASES.example);
+      const pKey = findFieldKey(raw, ALIASES.pronunciation);
+      const cKey = findFieldKey(raw, ALIASES.category);
+
+      let word = wKey ? String(raw[wKey]).trim() : null;
+      let meaning = mKey ? String(raw[mKey]).trim() : null;
+
+      const excluded = new Set([wKey,mKey,eKey,pKey,cKey].filter(Boolean));
+      if(!word) word = firstStringField(raw, excluded);
+      if(word) excluded.add(Object.keys(raw).find(k=>raw[k]===word) || "");
+      if(!meaning) meaning = firstStringField(raw, excluded);
+
+      if(!word || !meaning){ skipped++; return; }
+
+      if(!usedKeys) usedKeys = {word:wKey, meaning:mKey, example:eKey, pronunciation:pKey, category:cKey};
+
+      items.push({
+        word: word,
+        meaning: meaning,
+        example: eKey ? String(raw[eKey]).trim() : "",
+        pronunciation: pKey ? String(raw[pKey]).trim() : "",
+        category: (cKey ? String(raw[cKey]).trim() : "") || defaultCategory || "عام"
+      });
+    });
+
+    return {items, skipped, fieldsUsed: usedKeys};
+  }
+
+  document.getElementById("importBtn").addEventListener("click", ()=> document.getElementById("importFile").click());
+  document.getElementById("importFile").addEventListener("change", (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      let json;
+      try{
+        json = JSON.parse(reader.result);
+      }catch(err){
+        alert("تعذّرت قراءة الملف: هذا ليس ملف JSON صالحًا.");
+        e.target.value = "";
+        return;
+      }
+      const {items, skipped, fieldsUsed} = smartExtractWords(json);
+      if(items.length === 0){
+        alert("لم أتمكن من العثور على كلمات داخل هذا الملف. تأكد أن الملف يحتوي على قائمة عناصر بها نص للكلمة والمعنى على الأقل.");
+        e.target.value = "";
+        return;
+      }
+      const imported = items.map(seedWord);
+      state.words = state.words.concat(imported);
+      save();
+      renderManage(); renderReview();
+      let msg = "تم استيراد " + imported.length + " عنصر بنجاح.";
+      if(skipped>0) msg += "\nتم تجاهل " + skipped + " عنصر لعدم احتوائه على بيانات كافية.";
+      alert(msg);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  // ---------- STATS ----------
+  function renderStats(){
+    const total = state.words.length;
+    const mastered = state.words.filter(w=>w.srs.level>=4).length;
+    const dueToday = dueWordsAll().length;
+    const totalReviews = state.words.reduce((s,w)=>s+w.srs.correct+w.srs.wrong,0);
+    const totalCorrect = state.words.reduce((s,w)=>s+w.srs.correct,0);
+    const accuracy = totalReviews ? Math.round((totalCorrect/totalReviews)*100) : 0;
+    const streak = computeStreak();
+
+    const totalTraceReps = state.words.reduce((s,w)=> s+((w.writing&&w.writing.traceReps)||0),0);
+    const totalTypedDone = state.words.reduce((s,w)=> s+((w.writing&&w.writing.typedCompletions)||0),0);
+    const recallCorrect = state.words.reduce((s,w)=> s+((w.writing&&w.writing.recallCorrect)||0),0);
+    const recallWrong = state.words.reduce((s,w)=> s+((w.writing&&w.writing.recallWrong)||0),0);
+    const recallTotal = recallCorrect+recallWrong;
+    const recallAcc = recallTotal ? Math.round((recallCorrect/recallTotal)*100) : 0;
+    const typedTypos = state.words.reduce((s,w)=> s+((w.writing&&w.writing.typedTypos)||0),0);
+    const typedMisses = state.words.reduce((s,w)=> s+((w.writing&&w.writing.typedMisses)||0),0);
+    const avgTraceScore = (()=>{
+      const scores = state.words.map(w=> (w.writing&&w.writing.bestTraceScore)||0).filter(v=>v>0);
+      return scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+    })();
+
+    document.getElementById("statGrid").innerHTML = `
+      <div class="stat-box"><div class="n">${total}</div><div class="l">إجمالي الكلمات</div></div>
+      <div class="stat-box"><div class="n">${mastered}</div><div class="l">كلمات متقنة</div></div>
+      <div class="stat-box"><div class="n">${dueToday}</div><div class="l">تحتاج مراجعة اليوم</div></div>
+      <div class="stat-box"><div class="n">${accuracy}%</div><div class="l">نسبة الدقة</div></div>
+      <div class="stat-box"><div class="n">${totalReviews}</div><div class="l">مراجعات منجزة</div></div>
+      <div class="stat-box"><div class="n">${streak}</div><div class="l">أيام متتالية 🔥</div></div>
+      <div class="stat-box"><div class="n">${avgTraceScore}%</div><div class="l">متوسط دقة التتبّع اليدوي</div></div>
+      <div class="stat-box"><div class="n">${recallAcc}%</div><div class="l">دقة الاسترجاع الحر</div></div>
+      <div class="stat-box"><div class="n">${totalTypedDone}</div><div class="l">دورات كتابة مكتملة</div></div>
+      <div class="stat-box"><div class="n">${totalTraceReps}</div><div class="l">تكرارات تتبّع ناجحة</div></div>
+      <div class="stat-box"><div class="n">${typedTypos}</div><div class="l">أخطاء إملائية بسيطة (كتابة)</div></div>
+      <div class="stat-box"><div class="n">${typedMisses}</div><div class="l">أخطاء كتابة كاملة</div></div>
+    `;
+    drawLevelChart();
+  }
+  function dueWordsAll(){
+    const t = todayStr();
+    return state.words.filter(w=>w.srs.due<=t);
+  }
+  function computeStreak(){
+    let streak = 0;
+    let d = new Date();
+    while(true){
+      const ds = d.toISOString().slice(0,10);
+      const entry = state.history.find(h=>h.date===ds);
+      if(entry && entry.total>0){ streak++; d.setDate(d.getDate()-1); }
+      else break;
+    }
+    return streak;
+  }
+  function drawLevelChart(){
+    const canvas = document.getElementById("statChart");
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = 160;
+    canvas.width = w*dpr; canvas.height = h*dpr;
+    ctx.scale(dpr,dpr);
+    ctx.clearRect(0,0,w,h);
+
+    const buckets = new Array(INTERVALS.length).fill(0);
+    state.words.forEach(word=> buckets[word.srs.level] = (buckets[word.srs.level]||0)+1);
+    const max = Math.max(1, ...buckets);
+    const barW = w / buckets.length;
+    const styles = getComputedStyle(document.documentElement);
+    const gold = styles.getPropertyValue('--gold').trim() || '#C89B3C';
+    const ink = styles.getPropertyValue('--ink-soft').trim() || '#4A5169';
+
+    ctx.font = "11px Space Mono";
+    ctx.fillStyle = ink;
+    buckets.forEach((val,i)=>{
+      const barH = (val/max) * (h-30);
+      const x = i*barW + barW*0.2;
+      const y = h - barH - 20;
+      ctx.fillStyle = gold;
+      ctx.fillRect(x, y, barW*0.6, barH);
+      ctx.fillStyle = ink;
+      ctx.textAlign = "center";
+      ctx.fillText("L"+i, x+barW*0.3, h-6);
+      if(val>0) ctx.fillText(String(val), x+barW*0.3, y-4);
+    });
+  }
+
+  // ---------- INIT ----------
+  renderReview();
+  window.addEventListener("resize", ()=>{
+    if(document.getElementById("view-stats").classList.contains("active")) drawLevelChart();
+  });
+
+})();
+</script>
+</body>
+</html>
