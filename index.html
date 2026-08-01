@@ -7,12 +7,12 @@
 <style>
   html, body{ margin:0; padding:0; height:100%; overflow:hidden; font-family:"Tahoma","Segoe UI",Arial,sans-serif; }
   #switchBar{
-    display:flex; align-items:center; gap:8px; height:52px; box-sizing:border-box;
-    padding:0 10px; background:#1c2128; border-bottom:1px solid #30363d;
+    display:flex; align-items:center; gap:6px; height:52px; box-sizing:border-box;
+    padding:0 8px; background:#1c2128; border-bottom:1px solid #30363d; overflow-x:auto;
   }
   #switchBar button{
-    flex:1; height:38px; border:none; border-radius:8px; cursor:pointer;
-    font-size:.9rem; font-weight:bold; font-family:inherit;
+    flex:1; min-width:110px; height:38px; border:none; border-radius:8px; cursor:pointer;
+    font-size:.85rem; font-weight:bold; font-family:inherit; white-space:nowrap;
     background:#2a303a; color:#c9c2a8; transition:background .15s, color .15s;
   }
   #switchBar button.active{ background:#1f8a4c; color:#fff; }
@@ -30,17 +30,19 @@
   <button type="button" id="btnShowEditor">📘 المحرر البرمجي</button>
   <button type="button" id="btnShowMeals">🍽️ متتبع الوجبات</button>
   <button type="button" id="btnShowVocab">🃏 بطاقاتي</button>
+  <button type="button" id="btnShowCodeLib">🗒️ مذكرة الأكواد</button>
 </div>
 
 <div id="frameWrap">
   <!-- كل تطبيق شغال جوه iframe منفصل تمامًا — نفس المستند، نفس الجافاسكريبت، نفس الـ CSS
        بتاعته بس، ومفيش أي مشاركة أو تعارض بين التطبيقات خالص. كل تطبيق بيحفظ بياناته
-       أوتوماتيك بمجرد أي إضافة أو تعديل (مش محتاج زرار حفظ يدوي) وبيفضل محفوظ حتى لو
-       قفلت المتصفح أو رجعت تاني بعد فترة -->
+       بطريقته الخاصة (أغلبهم أوتوماتيك، ومذكرة الأكواد ليها زرار ربط حفظ تلقائي لملف
+       حقيقي على جهازك بالإضافة لزرار تنزيل نسخة يدوي) -->
   <iframe id="frameEnglish" src="english.html" style="display:block;"></iframe>
   <iframe id="frameEditor" src="editor.html" style="display:none;"></iframe>
   <iframe id="frameMeals" src="meal-tracker.html" style="display:none;"></iframe>
   <iframe id="frameVocab" src="vocab-app.html" style="display:none;"></iframe>
+  <iframe id="frameCodeLib" src="code_library.html" style="display:none;"></iframe>
 </div>
 
 <script>
@@ -49,12 +51,14 @@
     editor: document.getElementById('btnShowEditor'),
     meals: document.getElementById('btnShowMeals'),
     vocab: document.getElementById('btnShowVocab'),
+    codelib: document.getElementById('btnShowCodeLib'),
   };
   const frames = {
     english: document.getElementById('frameEnglish'),
     editor: document.getElementById('frameEditor'),
     meals: document.getElementById('frameMeals'),
     vocab: document.getElementById('frameVocab'),
+    codelib: document.getElementById('frameCodeLib'),
   };
 
   function showApp(key){
@@ -68,6 +72,7 @@
   buttons.editor.addEventListener('click', () => showApp('editor'));
   buttons.meals.addEventListener('click', () => showApp('meals'));
   buttons.vocab.addEventListener('click', () => showApp('vocab'));
+  buttons.codelib.addEventListener('click', () => showApp('codelib'));
 </script>
 
 </body>

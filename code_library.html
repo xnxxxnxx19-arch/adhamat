@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مذكرة الأكواد | AVR Concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f2e9d8;
+    --paper-card:#f9f3e6;
+    --paper-shadow:#d8c9a8;
+    --ink:#2e2a22;
+    --ink-soft:#6c6250;
+    --rule:#c9b896;
+    --accent:#5c7a52;     /* موس أخضر - قلم تصحيح */
+    --accent-dark:#41592e;
+    --marker:#f2c94c;     /* هايلايتر أصفر */
+    --danger:#a63a3a;
+    --tab:#8a7355;        /* لون شريط الفهرس (بوكماركة) */
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%; overflow-x:hidden; max-width:100%;}
+  body{
+    margin:0; color:var(--ink);
+    font-family:"Cairo","Tahoma",sans-serif;
+    background:
+      radial-gradient(ellipse at top left, #fbf5e8 0%, transparent 55%),
+      var(--paper);
+    background-attachment:fixed;
+    min-height:100vh; position:relative;
+  }
+  h1,h2,.serif{font-family:"Amiri","Cairo",serif;}
+  code, pre, textarea.codearea{
+    font-family:"Fira Code","Consolas","SFMono-Regular",monospace;
+    direction:ltr; text-align:left;
+  }
+  ::selection{background:var(--marker); color:var(--ink);}
+
+  /* ============ header ============ */
+  header{
+    background:var(--paper-card);
+    border-bottom:2px solid var(--rule);
+    padding:14px 22px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    box-shadow:0 2px 6px rgba(60,45,20,.06);
+    position:sticky; top:0; z-index:20;
+  }
+  header h1{font-size:20px; margin:0; letter-spacing:.2px; white-space:nowrap; font-weight:700;}
+  header h1 span{color:var(--accent-dark); border-bottom:3px solid var(--marker);}
+  .toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-inline-start:auto;}
+
+  button{
+    background:#fff; color:var(--ink); border:1.5px solid var(--rule);
+    padding:7px 12px; border-radius:8px; cursor:pointer; font-size:13px; font-family:inherit;
+    transition:border-color .15s, transform .1s, background .15s;
+  }
+  button:hover{border-color:var(--accent);}
+  button:active{transform:scale(.97);}
+  button.primary{background:var(--accent); color:#fff; border-color:var(--accent-dark); font-weight:700;}
+  button.primary:hover{background:var(--accent-dark);}
+  button.ghost{background:transparent;}
+  button.danger{color:var(--danger); border-color:#e0bcbc;}
+  button.small{padding:3px 9px; font-size:11px;}
+  input[type=text], input[type=search]{
+    background:#fff; border:1.5px solid var(--rule); color:var(--ink);
+    padding:7px 10px; border-radius:8px; font-size:13px; font-family:inherit;
+  }
+  .autosave-status{font-size:12px; color:var(--ink-soft); white-space:nowrap;}
+  .autosave-status.on{color:var(--accent-dark); font-weight:700;}
+
+  /* ============ layout ============ */
+  main{padding:24px; max-width:980px; margin:0 auto;}
+
+  /* ---- sliding index drawer ---- */
+  #tocToggle{
+    position:fixed; top:96px; inset-inline-end:16px; z-index:40;
+    width:38px; height:38px; padding:0; display:flex; align-items:center; justify-content:center;
+    background:var(--paper-card); color:var(--tab); border:1.5px solid var(--rule);
+    border-radius:50%; font-size:15px; cursor:pointer;
+    box-shadow:0 2px 6px rgba(60,45,20,.12); opacity:.55;
+    transition:opacity .2s, transform .15s, box-shadow .2s;
+  }
+  #tocToggle:hover{opacity:1; transform:scale(1.06); box-shadow:0 3px 10px rgba(60,45,20,.2);}
+  #tocToggle.open{opacity:1; background:var(--accent); color:#fff; border-color:var(--accent-dark);}
+
+  #backdrop{
+    position:fixed; inset:0; background:rgba(30,25,15,.32); z-index:30;
+    opacity:0; pointer-events:none; transition:opacity .25s;
+  }
+  #backdrop.show{opacity:1; pointer-events:auto;}
+
+  aside#drawer{
+    position:fixed; top:0; bottom:0; inset-inline-end:0; width:300px; max-width:85vw;
+    background:var(--paper-card); z-index:35; box-shadow:-8px 0 24px rgba(30,25,15,.18);
+    border-inline-start:1.5px solid var(--rule);
+    display:flex; flex-direction:column; overflow:hidden;
+    transform:translateX(105%);
+    visibility:hidden; pointer-events:none;
+    transition:transform .28s ease, visibility 0s linear .28s;
+  }
+  aside#drawer.open{
+    transform:translateX(0);
+    visibility:visible; pointer-events:auto;
+    transition:transform .28s ease, visibility 0s linear 0s;
+  }
+  .drawer-scroll{flex:1; overflow:auto; padding:16px; display:flex; flex-direction:column; gap:14px;}
+
+  .drawer-title{
+    font-size:14px; font-weight:700; color:#fff; background:var(--tab);
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 16px; flex-shrink:0;
+  }
+  .drawer-title button{background:rgba(255,255,255,.15); color:#fff; border:none;}
+  .drawer-title button:hover{background:rgba(255,255,255,.28); border-color:transparent;}
+
+  .drawer-block{background:#fff; border:1.5px solid var(--rule); border-radius:10px; padding:12px;}
+  .drawer-block h3{margin:0 0 10px; font-size:12px; color:var(--accent-dark); font-weight:700; letter-spacing:.2px;}
+
+  .side-search{display:flex; gap:6px;}
+  .side-search input{flex:1;}
+  .side-controls{display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--ink-soft); align-items:center; margin-top:10px;}
+  .side-controls label{display:flex; align-items:center; gap:5px; cursor:pointer;}
+
+  #tocList{list-style:none; margin:10px 0 0; padding:0; display:flex; flex-direction:column; gap:4px;}
+  #tocList li{
+    display:flex; align-items:center; gap:8px; padding:8px 9px; border-radius:8px;
+    cursor:pointer; font-size:13px; color:var(--ink-soft); border:1px solid var(--rule);
+    background:var(--paper);
+  }
+  #tocList li:hover{border-color:var(--accent);}
+  #tocList li.active{background:#eef3ea; color:var(--accent-dark); border-color:var(--accent); font-weight:700;}
+  #tocList li.dragging{opacity:.4;}
+  #tocList li.drag-over{border-color:var(--accent); border-style:dashed; border-width:2px;}
+  #tocList li .draghandle{cursor:grab; color:var(--ink-soft); flex-shrink:0; font-size:12px; user-select:none;}
+  #tocList li .posnum{
+    width:30px; flex-shrink:0; text-align:center; font-size:11px; border:1px solid var(--rule);
+    border-radius:5px; background:#fff; color:var(--ink-soft); padding:2px 0; cursor:text;
+  }
+  #tocList li .star{color:#d8cdb4; cursor:pointer; flex-shrink:0;}
+  #tocList li .star.on{color:var(--marker); text-shadow:0 0 1px #b8860b;}
+  #tocList li .ttl{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  #tocList li .count{font-size:10px; color:var(--ink-soft); background:#fff; padding:1px 6px; border-radius:20px;}
+
+  /* language rules manager */
+  .langrow{display:flex; align-items:center; gap:8px; background:var(--paper); border:1px solid var(--rule); border-radius:8px; padding:6px 10px; font-size:12.5px; margin-bottom:6px;}
+  .langrow .name{flex:1; font-weight:600;}
+  .langrow .cnt{color:var(--ink-soft); font-size:11px;}
+  .upload-lang{font-size:12px; color:var(--ink-soft); display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+
+  .empty-hint{color:var(--ink-soft); font-size:13.5px; line-height:1.9; padding:40px 10px; text-align:center; background:var(--paper-card); border:1.5px dashed var(--rule); border-radius:14px;}
+
+  /* ---- add-text panel ---- */
+  details.addbox{background:var(--paper-card); border:1.5px solid var(--rule); border-radius:12px; margin-bottom:20px;}
+  details.addbox summary{padding:12px 16px; cursor:pointer; font-size:14.5px; color:var(--accent-dark); font-weight:700; list-style:none;}
+  details.addbox summary::-webkit-details-marker{display:none;}
+  .addbox-body{padding:0 16px 16px;}
+  textarea.rawinput{
+    width:100%; min-height:160px; background:#fffdf7; border:1.5px solid var(--rule);
+    color:var(--ink); border-radius:8px; padding:10px; font-size:13px; direction:rtl; font-family:inherit;
+  }
+  .addbox-actions{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .status-msg{font-size:12.5px; margin-top:8px; color:var(--ink-soft);}
+  .status-msg.err{color:var(--danger);}
+  .status-msg.ok{color:var(--accent-dark); font-weight:700;}
+
+  /* ============ cards (index-card look) ============ */
+  #cards{display:flex; flex-direction:column; gap:20px;}
+  .card{
+    background:var(--paper-card);
+    border:1.5px solid var(--rule); border-radius:4px;
+    padding:20px 22px; position:relative;
+    box-shadow:3px 4px 0 var(--paper-shadow);
+  }
+  .card::before{ /* folder-tab accent */
+    content:""; position:absolute; top:-2px; inset-inline-start:18px; width:46px; height:8px;
+    background:var(--marker); border-radius:0 0 4px 4px;
+  }
+  .card-head{display:flex; align-items:flex-start; gap:10px; margin-bottom:12px; padding-top:4px;}
+  .card-head input.titlein{
+    flex:1; font-size:19px; font-weight:700; background:transparent; border:none;
+    color:var(--ink); border-bottom:1.5px dashed transparent; padding:2px 0; font-family:"Amiri","Cairo",serif;
+  }
+  .card-head input.titlein:focus{outline:none; border-bottom-color:var(--accent);}
+  .card-actions{display:flex; gap:6px; flex-shrink:0;}
+  .starbtn{cursor:pointer; font-size:20px; color:#d8cdb4; user-select:none;}
+  .starbtn.on{color:var(--marker); text-shadow:0 0 1px #b8860b;}
+  .tag{font-size:10.5px; color:#fff; background:var(--tab); padding:2px 9px; border-radius:20px; font-weight:700;}
+
+  .section-label{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.6px; margin:14px 0 6px; border-bottom:1px dotted var(--rule); padding-bottom:3px;}
+  textarea.explain{
+    width:100%; min-height:80px; background:
+      repeating-linear-gradient(#fffdf7 0 31px, #eadfc4 31px 32px);
+    background-attachment:local;
+    border:1px solid var(--rule);
+    color:var(--ink); border-radius:6px; padding:10px 12px; font-size:14px; line-height:32px; direction:rtl;
+    resize:vertical; font-family:"Cairo",sans-serif;
+  }
+
+  .codeblock{border:1.5px solid var(--rule); border-radius:8px; margin-bottom:10px; overflow:hidden;}
+  .codeblock-head{
+    display:flex; align-items:center; gap:8px; background:#efe4cc; padding:6px 10px;
+    border-bottom:1.5px solid var(--rule); font-size:12px;
+  }
+  .codeblock-head input{background:transparent; border:none; color:var(--ink); font-size:12px; max-width:160px; font-family:inherit;}
+  .codeblock-head select{background:#fff; color:var(--ink); border:1px solid var(--rule); border-radius:6px; padding:3px 6px; font-size:12px;}
+  .codeblock-head .spacer{flex:1;}
+  .codeblock-head button{padding:3px 9px; font-size:11px;}
+  pre.codeview{margin:0; padding:12px 14px; overflow:auto; font-size:13px; line-height:1.6; background:#211f1a; color:#e7e2d4;}
+  textarea.codearea{
+    display:none; width:100%; min-height:120px; background:#211f1a; color:#e7e2d4;
+    border:none; padding:12px 14px; font-size:13px; line-height:1.6; resize:vertical;
+  }
+  .codeblock.editing pre.codeview{display:none;}
+  .codeblock.editing textarea.codearea{display:block;}
+
+  .addcode-btn{margin-top:4px;}
+  .card-footer{display:flex; gap:8px; margin-top:14px; border-top:1.5px dashed var(--rule); padding-top:12px;}
+
+  .drawpanel{border:1px solid var(--rule); border-radius:8px; overflow:hidden; background:#fff;}
+  .draw-toolbar{
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px; background:var(--paper);
+    border-bottom:1px solid var(--rule);
+  }
+  .draw-toolbar select, .draw-toolbar input[type="number"]{
+    font-size:12px; border:1px solid var(--rule); border-radius:5px; padding:4px 6px; background:#fff; color:var(--ink);
+  }
+  .draw-toolbar input[type="color"]{width:32px; height:28px; border:1px solid var(--rule); border-radius:5px; padding:1px; cursor:pointer;}
+  .draw-toolbar input[type="range"]{width:70px;}
+  .draw-toolbar button{font-size:12px;}
+  .draw-canvas{display:block; width:100%; height:320px; background:#fdfcf7; cursor:crosshair; touch-action:none;}
+
+  footer{padding:16px 20px; font-size:11.5px; color:var(--ink-soft); text-align:center;}
+
+  @media (max-width: 720px){
+    main{padding:16px;}
+    aside#drawer{width:88vw;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>مذكرة <span>الأكواد</span></h1>
+  <div class="toolbar">
+    <span class="autosave-status" id="autosaveStatus">⚪ غير مرتبط بحفظ تلقائي</span>
+    <button id="linkAutosaveBtn" title="اختر ملفًا يتم حفظ كل تعديل فيه تلقائيًا">🔗 ربط حفظ تلقائي</button>
+    <button id="exportBtn" title="تنزيل نسخة كاملة الآن">💾 تنزيل نسخة</button>
+    <button id="importBtn" title="استرجاع نسخة محفوظة">📂 استيراد نسخة</button>
+    <input type="file" id="importFileInput" accept=".json" style="display:none;">
+  </div>
+</header>
+
+<button id="tocToggle" title="الفهرس">📑</button>
+<div id="backdrop"></div>
+
+<aside id="drawer">
+  <div class="drawer-title">
+    <span>📑 الفهرس</span>
+    <button class="small" id="closeDrawerBtn">✕</button>
+  </div>
+
+  <div class="drawer-scroll">
+    <div class="drawer-block">
+      <h3>البحث والعرض</h3>
+      <div class="side-search">
+        <input type="search" id="searchBox" placeholder="ابحث في العناوين…">
+      </div>
+      <div class="side-controls">
+        <label><input type="checkbox" id="multiToggle"> اختيار متعدد</label>
+        <label><input type="checkbox" id="starOnlyToggle"> المفضلة فقط</label>
+      </div>
+      <ul id="tocList"></ul>
+    </div>
+
+    <div class="drawer-block">
+      <h3>🎨 قواعد تلوين الأكواد</h3>
+      <div id="langManager"></div>
+      <label class="upload-lang">
+        ارفع ملف/ملفات JSON لإضافة لغات جديدة
+        <input type="file" id="langFileInput" accept=".json" multiple>
+      </label>
+    </div>
+  </div>
+</aside>
+
+<main>
+  <details class="addbox" id="addBox">
+    <summary>➕ إضافة نص جديد (يدعم لصق أكثر من نص بدون فقد القديم)</summary>
+    <div class="addbox-body">
+      <textarea class="rawinput" id="rawInput" placeholder="الصق هنا نص السكشنات (عنوان + شرح + كود)…"></textarea>
+      <div class="addbox-actions">
+        <button class="primary" id="parseAddBtn">تحليل وإضافة كسكشنات جديدة</button>
+        <label class="ghost" style="display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--rule);padding:7px 12px;border-radius:8px;cursor:pointer;background:#fff;">
+          📄 استيراد ملف نصي
+          <input type="file" id="txtFileInput" accept=".txt,.md" multiple style="display:none;">
+        </label>
+        <button class="ghost" id="clearRawBtn">تفريغ الصندوق</button>
+      </div>
+      <div class="status-msg" id="statusMsg"></div>
+    </div>
+  </details>
+
+  <div id="cards"></div>
+  <div class="empty-hint" id="emptyHint" style="display:none;">
+    لا يوجد سكشن محدد للعرض — افتح «📑 الفهرس» من الزر الجانبي واختر عنوانًا، أو أضف نصًا جديدًا من الأعلى.
+  </div>
+</main>
+
+<footer>
+  إذا ربطت ملف الحفظ التلقائي (متاح في Chrome / Edge) فكل تعديل يُكتب فورًا في ذلك الملف على جهازك.
+  في المتصفحات التي لا تدعم هذه الميزة، استخدم «تنزيل نسخة» يدويًا للحفاظ على عملك.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================== STATE ============================== */
+  let sections = [];
+  let langRules = {};
+  let selected = new Set();
+  let idCounter = 1;
+  const uid = () => "s" + (idCounter++) + "_" + Math.random().toString(36).slice(2,7);
+
+  const genericRules = {
+    displayName:"نص عادي (تلقائي)",
+    rules:[
+      {type:"comment", pattern:"//.*|#.*|;.*", flags:"g", color:"#9cdcfe"},
+      {type:"string",  pattern:"\"[^\"]*\"|'[^']*'", flags:"g", color:"#ce9178"},
+      {type:"number",  pattern:"\\b0[xX][0-9A-Fa-f]+\\b|\\b\\d+\\b", flags:"g", color:"#b5cea8"}
+    ]
+  };
+  langRules["plain"] = genericRules;
+
+  langRules["asm"] = {
+    displayName: "AVR Assembly",
+    rules: [
+      {type:"comment",  pattern:";.*",                                   flags:"g",  color:"#6a9955"},
+      {type:"string",   pattern:"\"[^\"]*\"",                            flags:"g",  color:"#ce9178"},
+      {type:"directive",pattern:"\\.[A-Za-z_]+",                         flags:"g",  color:"#c586c0"},
+      {type:"label",    pattern:"^[A-Za-z_][A-Za-z0-9_]*:",              flags:"gm", color:"#dcdcaa"},
+      {type:"keyword",  pattern:"\\b(ldi|mov|movw|add|adc|adiw|sub|subi|sbc|sbci|sbiw|and|andi|or|ori|eor|com|neg|inc|dec|tst|clr|ser|mul|lsl|lsr|asr|rol|ror|swap|cp|cpc|cpi|cpse|sbrc|sbrs|sbic|sbis|sbi|cbi|in|out|lds|sts|ld|st|lpm|push|pop|rjmp|jmp|rcall|call|icall|ijmp|ret|reti|breq|brne|brcs|brcc|brsh|brlo|brmi|brpl|brge|brlt|brhs|brhc|brts|brtc|brvs|brvc|brie|brid|sec|clc|sen|cln|sez|clz|sei|cli|ses|cls|sev|clv|set|clt|seh|clh|nop|sleep|wdr|break)\\b",flags:"gi", color:"#569cd6"},
+      {type:"register", pattern:"\\b[Rr]\\d{1,2}\\b|\\b[XYZxyz][LlHh]\\b|\\bSPL\\b|\\bSPH\\b|\\bSREG\\b",flags:"g", color:"#4ec9b0"},
+      {type:"number",   pattern:"\\b0[xX][0-9A-Fa-f]+\\b|\\b0[bB][01]+\\b|\\b\\d+\\b",flags:"g", color:"#b5cea8"}
+    ]
+  };
+  langRules["c"] = {
+    displayName:"C",
+    rules:[
+      {type:"comment", pattern:"//.*|/\\*[\\s\\S]*?\\*/", flags:"g", color:"#6a9955"},
+      {type:"string",  pattern:"\"(?:[^\"\\\\]|\\\\.)*\"", flags:"g", color:"#ce9178"},
+      {type:"keyword", pattern:"\\b(if|else|for|while|do|switch|case|break|continue|return|void|int|char|float|double|unsigned|signed|struct|typedef|const|static|volatile|sizeof|include|define)\\b", flags:"g", color:"#569cd6"},
+      {type:"number",  pattern:"\\b0[xX][0-9A-Fa-f]+\\b|\\b\\d+\\b", flags:"g", color:"#b5cea8"}
+    ]
+  };
+
+  /* ============================== PARSER ============================== */
+  function parseText(raw){
+    const results = [];
+    if(!raw || !raw.trim()) return results;
+    raw = raw.replace(/\r\n/g,"\n");
+    const blocks = raw.split(/\n\s*-{3,}\s*\n/);
+
+    blocks.forEach((block)=>{
+      try{
+        block = block.trim();
+        if(!block) return;
+        const lines = block.split("\n");
+        let titleLineIdx = -1;
+        for(let i=0;i<lines.length;i++){
+          if(lines[i].trim()){ titleLineIdx = i; break; }
+        }
+        if(titleLineIdx === -1) return;
+
+        let titleRaw = lines[titleLineIdx].trim();
+        let title = titleRaw
+          .replace(/^#+\s*/,"")
+          .replace(/^\*\*/,"").replace(/\*\*$/,"")
+          .replace(/^\d+[\.\)]\s*/,"")
+          .trim();
+        if(!title) title = "سكشن بدون عنوان";
+
+        const rest = lines.slice(titleLineIdx+1).join("\n");
+
+        const codes = [];
+        const fenceRe = /```([A-Za-z0-9_+-]*)\n([\s\S]*?)```/g;
+        let m, lastIndex = 0;
+        const explanationParts = [];
+        while((m = fenceRe.exec(rest)) !== null){
+          const before = rest.slice(lastIndex, m.index);
+          explanationParts.push(before);
+          const labelMatch = before.match(/\*\*([^*]*?)\*\*\s*:?\s*$/);
+          const label = labelMatch ? labelMatch[1].trim() : ("كود " + (codes.length+1));
+          codes.push({
+            lang: (m[1] || "").toLowerCase() || "asm",
+            label: label,
+            code: m[2].replace(/\n$/,"")
+          });
+          lastIndex = fenceRe.lastIndex;
+        }
+        explanationParts.push(rest.slice(lastIndex));
+
+        let explanation = explanationParts.join("\n")
+          .replace(/\*\*الشرح:\*\*/g,"")
+          .replace(/\*\*كود[^*]*\*\*/g,"")
+          .replace(/\*\*/g,"")
+          .split("\n")
+          .map(l=>l.trim())
+          .filter(l=>l.length>0 && !/^#+\s*$/.test(l))
+          .join("\n")
+          .trim();
+
+        results.push({
+          id: uid(),
+          title: title,
+          explanation: explanation || "(لا يوجد شرح مستخرج — يمكنك إضافته يدويًا)",
+          codes: codes,
+          starred:false
+        });
+      }catch(e){
+        console.warn("تخطي جزء غير قابل للتحليل:", e);
+      }
+    });
+    return results;
+  }
+
+  /* ============================== HIGHLIGHT ============================== */
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+  function getRuleset(langKey){
+    return langRules[langKey] || langRules["plain"] || genericRules;
+  }
+  function highlight(code, langKey){
+    const ruleset = getRuleset(langKey);
+    let result = escapeHtml(code);
+    ruleset.rules.forEach(rule=>{
+      try{
+        const flags = (rule.flags && rule.flags.includes("g")) ? rule.flags : (rule.flags||"")+"g";
+        const re = new RegExp(rule.pattern, flags);
+        result = result.replace(re, (match)=>{
+          if(match.indexOf("\u0000")!==-1) return match;
+          return "\u0000<span style=\"color:"+rule.color+"\">"+match+"</span>\u0000";
+        });
+      }catch(e){ /* ignore bad user regex */ }
+    });
+    return result.replace(/\u0000/g,"");
+  }
+
+  /* ============================== DRAWER (slide index) ============================== */
+  const drawer = document.getElementById("drawer");
+  const backdrop = document.getElementById("backdrop");
+  const tocToggleBtn = document.getElementById("tocToggle");
+  function openDrawer(){ drawer.classList.add("open"); backdrop.classList.add("show"); tocToggleBtn.classList.add("open"); }
+  function closeDrawer(){ drawer.classList.remove("open"); backdrop.classList.remove("show"); tocToggleBtn.classList.remove("open"); }
+  tocToggleBtn.addEventListener("click", ()=>{
+    drawer.classList.contains("open") ? closeDrawer() : openDrawer();
+  });
+  document.getElementById("closeDrawerBtn").addEventListener("click", closeDrawer);
+  backdrop.addEventListener("click", closeDrawer);
+
+  /* ============================== RENDER: SIDEBAR ============================== */
+  const tocList = document.getElementById("tocList");
+  const searchBox = document.getElementById("searchBox");
+  const multiToggle = document.getElementById("multiToggle");
+  const starOnlyToggle = document.getElementById("starOnlyToggle");
+
+  function renderToc(){
+    const q = searchBox.value.trim().toLowerCase();
+    const starOnly = starOnlyToggle.checked;
+    tocList.innerHTML = "";
+    sections
+      .filter(s => !q || s.title.toLowerCase().includes(q))
+      .filter(s => !starOnly || s.starred)
+      .forEach(s=>{
+        const li = document.createElement("li");
+        li.className = selected.has(s.id) ? "active" : "";
+        li.draggable = true;
+        const pos = sections.indexOf(s) + 1;
+        li.innerHTML = `
+          <span class="draghandle" title="اسحب لإعادة الترتيب">⠿</span>
+          <input type="number" class="posnum" value="${pos}" min="1" max="${sections.length}" title="غيّر الرقم للانتقال لموضع جديد في الفهرس">
+          <span class="star ${s.starred?'on':''}" data-star="${s.id}">${s.starred?'★':'☆'}</span>
+          <span class="ttl">${escapeHtml(s.title)}</span>
+          <span class="count">${s.codes.length}</span>
+        `;
+        li.addEventListener("click",(e)=>{
+          if(e.target.closest(".star") || e.target.closest(".posnum") || e.target.closest(".draghandle")) return;
+          if(multiToggle.checked || e.ctrlKey || e.metaKey || e.shiftKey){
+            if(selected.has(s.id)) selected.delete(s.id); else selected.add(s.id);
+          }else{
+            selected = new Set([s.id]);
+            closeDrawer();
+          }
+          renderAll();
+        });
+        li.querySelector(".star").addEventListener("click",()=>{
+          s.starred = !s.starred;
+          renderAll();
+        });
+
+        /* ---- إعادة ترتيب بالكتابة المباشرة في رقم الموضع ---- */
+        const posInput = li.querySelector(".posnum");
+        posInput.addEventListener("click", e=> e.stopPropagation());
+        posInput.addEventListener("change", (e)=>{
+          let newPos = parseInt(e.target.value, 10);
+          if(isNaN(newPos)) { renderToc(); return; }
+          newPos = Math.min(Math.max(newPos, 1), sections.length);
+          const curIndex = sections.indexOf(s);
+          if(curIndex === -1) return;
+          sections.splice(curIndex, 1);
+          sections.splice(newPos - 1, 0, s);
+          scheduleAutoSave();
+          renderAll();
+        });
+
+        /* ---- إعادة ترتيب بالسحب والإفلات ---- */
+        li.addEventListener("dragstart", (e)=>{
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", s.id);
+          li.classList.add("dragging");
+        });
+        li.addEventListener("dragend", ()=> li.classList.remove("dragging"));
+        li.addEventListener("dragover", (e)=>{ e.preventDefault(); li.classList.add("drag-over"); });
+        li.addEventListener("dragleave", ()=> li.classList.remove("drag-over"));
+        li.addEventListener("drop", (e)=>{
+          e.preventDefault();
+          li.classList.remove("drag-over");
+          const draggedId = e.dataTransfer.getData("text/plain");
+          if(!draggedId || draggedId === s.id) return;
+          const fromIndex = sections.findIndex(x=>x.id===draggedId);
+          const toIndex = sections.findIndex(x=>x.id===s.id);
+          if(fromIndex===-1 || toIndex===-1) return;
+          const [moved] = sections.splice(fromIndex, 1);
+          sections.splice(toIndex, 0, moved);
+          scheduleAutoSave();
+          renderAll();
+        });
+
+        tocList.appendChild(li);
+      });
+  }
+
+  /* ============================== RENDER: LANGUAGE MANAGER ============================== */
+  const langManager = document.getElementById("langManager");
+  function renderLangManager(){
+    langManager.innerHTML = "";
+    Object.keys(langRules).forEach(key=>{
+      const row = document.createElement("div");
+      row.className = "langrow";
+      const protectedLang = (key === "plain");
+      row.innerHTML = `
+        <span class="name">${escapeHtml(langRules[key].displayName || key)}</span>
+        <span class="cnt">${langRules[key].rules.length} قاعدة</span>
+        ${protectedLang ? "" : '<button class="small danger" data-removelang="'+key+'">حذف</button>'}
+      `;
+      langManager.appendChild(row);
+    });
+    langManager.querySelectorAll("[data-removelang]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        delete langRules[btn.dataset.removelang];
+        scheduleAutoSave();
+        renderAll();
+      });
+    });
+  }
+
+  /* ============================== RENDER: CARDS ============================== */
+  const cardsWrap = document.getElementById("cards");
+  const emptyHint = document.getElementById("emptyHint");
+
+  function langOptions(selectedLang){
+    return Object.keys(langRules).map(k=>{
+      const d = langRules[k].displayName || k;
+      return `<option value="${k}" ${k===selectedLang?"selected":""}>${d}</option>`;
+    }).join("");
+  }
+
+  function renderCards(){
+    cardsWrap.innerHTML = "";
+    const visible = sections.filter(s=>selected.has(s.id));
+    emptyHint.style.display = visible.length ? "none" : "block";
+
+    visible.forEach(s=>{
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.id = s.id;
+
+      card.innerHTML = `
+        <div class="card-head">
+          <span class="starbtn ${s.starred?'on':''}" data-act="star">${s.starred?'★':'☆'}</span>
+          <input class="titlein" data-act="title" value="${escapeHtml(s.title).replace(/"/g,'&quot;')}">
+          <span class="tag">${s.codes.length} كود</span>
+          <div class="card-actions">
+            <button class="ghost" data-act="close" title="إخفاء الكرت">✕</button>
+          </div>
+        </div>
+
+        <div class="section-label">الشرح</div>
+        <textarea class="explain" data-act="explain">${escapeHtml(s.explanation)}</textarea>
+
+        <div class="section-label">الأكواد</div>
+        <div class="codes-holder"></div>
+        <button class="ghost addcode-btn" data-act="addcode">➕ إضافة كتلة كود</button>
+
+        <div class="section-label">📐 رسم توضيحي (لتثبيت المعلومة)</div>
+        <div class="drawing-holder"></div>
+
+        <div class="card-footer">
+          <button class="danger ghost" data-act="delete">🗑 حذف السكشن نهائيًا</button>
+        </div>
+      `;
+
+      const holder = card.querySelector(".codes-holder");
+      s.codes.forEach((c, ci)=>{
+        holder.appendChild(buildCodeBlock(s, c, ci));
+      });
+      card.querySelector(".drawing-holder").appendChild(buildDrawingPanel(s));
+
+      cardsWrap.appendChild(card);
+    });
+
+    cardsWrap.querySelectorAll(".card").forEach(card=>{
+      const id = card.dataset.id;
+      const s = sections.find(x=>x.id===id);
+
+      card.querySelector('[data-act="star"]').addEventListener("click", ()=>{ s.starred=!s.starred; scheduleAutoSave(); renderAll(); });
+      card.querySelector('[data-act="title"]').addEventListener("input", (e)=>{ s.title = e.target.value; scheduleAutoSave(); renderToc(); });
+      card.querySelector('[data-act="explain"]').addEventListener("input", (e)=>{ s.explanation = e.target.value; scheduleAutoSave(); });
+      card.querySelector('[data-act="close"]').addEventListener("click", ()=>{ selected.delete(id); renderAll(); });
+      card.querySelector('[data-act="delete"]').addEventListener("click", ()=>{
+        if(confirm("حذف هذا السكشن نهائيًا؟")){
+          sections = sections.filter(x=>x.id!==id);
+          selected.delete(id);
+          scheduleAutoSave();
+          renderAll();
+        }
+      });
+      card.querySelector('[data-act="addcode"]').addEventListener("click", ()=>{
+        s.codes.push({lang:"asm", label:"كود جديد", code:""});
+        scheduleAutoSave();
+        renderAll();
+      });
+    });
+  }
+
+  function buildCodeBlock(section, c, index){
+    const box = document.createElement("div");
+    box.className = "codeblock";
+    box.innerHTML = `
+      <div class="codeblock-head">
+        <input value="${escapeHtml(c.label).replace(/"/g,'&quot;')}" data-act="label">
+        <select data-act="lang">${langOptions(c.lang)}</select>
+        <span class="spacer"></span>
+        <button data-act="toggle">✏️ تعديل</button>
+        <button data-act="remove" class="danger">حذف</button>
+      </div>
+      <pre class="codeview"><code>${highlight(c.code, c.lang)}</code></pre>
+      <textarea class="codearea">${escapeHtml(c.code)}</textarea>
+    `;
+    const pre = box.querySelector(".codeview code");
+    const ta = box.querySelector(".codearea");
+    const toggleBtn = box.querySelector('[data-act="toggle"]');
+
+    toggleBtn.addEventListener("click", ()=>{
+      box.classList.toggle("editing");
+      toggleBtn.textContent = box.classList.contains("editing") ? "✅ حفظ العرض" : "✏️ تعديل";
+      if(!box.classList.contains("editing")){
+        c.code = ta.value;
+        pre.innerHTML = highlight(c.code, c.lang);
+        scheduleAutoSave();
+      }
+    });
+    box.querySelector('[data-act="label"]').addEventListener("input",(e)=>{ c.label = e.target.value; scheduleAutoSave(); });
+    box.querySelector('[data-act="lang"]').addEventListener("change",(e)=>{
+      c.lang = e.target.value;
+      pre.innerHTML = highlight(c.code, c.lang);
+      scheduleAutoSave();
+    });
+    box.querySelector('[data-act="remove"]').addEventListener("click", ()=>{
+      section.codes.splice(index,1);
+      scheduleAutoSave();
+      renderAll();
+    });
+    return box;
+  }
+
+  /* ============================== DRAWING PANEL (per card) ============================== */
+  function buildDrawingPanel(section){
+    if(!section.drawing) section.drawing = { shapes: [] };
+
+    const wrap = document.createElement("div");
+    wrap.className = "drawpanel";
+    wrap.innerHTML = `
+      <div class="draw-toolbar">
+        <select class="draw-tool" title="الأداة">
+          <option value="pen">✏️ رسم حر</option>
+          <option value="line">📏 خط مستقيم</option>
+          <option value="dotted">┄ خط منقط</option>
+          <option value="curve">〰️ خط منحني</option>
+          <option value="zigzag">⚡ خط متعرج</option>
+          <option value="rect">▭ مستطيل</option>
+          <option value="triangle">▲ مثلث</option>
+          <option value="circle">◯ دائرة / بيضاوي</option>
+          <option value="text">🔤 نص</option>
+        </select>
+        <input type="color" class="draw-color" value="#1e2519" title="اللون">
+        <input type="range" class="draw-width" min="1" max="14" value="2" title="سُمك الخط">
+        <input type="number" class="draw-fontsize" min="8" max="60" value="16" title="حجم الخط (للنص)" style="width:52px;">
+        <button type="button" class="ghost draw-undo" title="تراجع عن آخر شكل">↩️ تراجع</button>
+        <button type="button" class="ghost danger draw-clear" title="مسح كل الرسم">🗑 مسح الكل</button>
+      </div>
+      <canvas class="draw-canvas" width="640" height="320"></canvas>
+    `;
+
+    const canvas = wrap.querySelector(".draw-canvas");
+    const ctx = canvas.getContext("2d");
+    const toolSel = wrap.querySelector(".draw-tool");
+    const colorInput = wrap.querySelector(".draw-color");
+    const widthInput = wrap.querySelector(".draw-width");
+    const fontInput = wrap.querySelector(".draw-fontsize");
+
+    function redraw(){
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      section.drawing.shapes.forEach(sh => drawShape(ctx, sh));
+    }
+    redraw();
+
+    let dragging = false;
+    let startPt = null;
+    let penPoints = null;
+
+    function getPos(e){
+      const rect = canvas.getBoundingClientRect();
+      const t = e.touches && e.touches[0];
+      const clientX = t ? t.clientX : e.clientX;
+      const clientY = t ? t.clientY : e.clientY;
+      return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
+      };
+    }
+
+    function commitShape(shape){
+      section.drawing.shapes.push(shape);
+      scheduleAutoSave();
+      redraw();
+    }
+
+    function startDraw(e){
+      e.preventDefault();
+      const tool = toolSel.value;
+      const pos = getPos(e);
+      if(tool === "text"){
+        const txt = prompt("اكتب النص:");
+        if(txt && txt.trim()){
+          commitShape({ type:"text", x:pos.x, y:pos.y, text:txt.trim(), color:colorInput.value, fontSize:parseInt(fontInput.value,10)||16 });
+        }
+        return;
+      }
+      dragging = true;
+      startPt = pos;
+      if(tool === "pen") penPoints = [pos];
+    }
+    function moveDraw(e){
+      if(!dragging) return;
+      e.preventDefault();
+      const tool = toolSel.value;
+      const pos = getPos(e);
+      const width = parseInt(widthInput.value, 10) || 2;
+      redraw();
+      if(tool === "pen"){
+        penPoints.push(pos);
+        drawShape(ctx, { type:"freehand", points: penPoints, color: colorInput.value, width });
+      } else {
+        drawShape(ctx, buildLiveShape(tool, startPt, pos, colorInput.value, width));
+      }
+    }
+    function endDraw(e){
+      if(!dragging) return;
+      dragging = false;
+      const tool = toolSel.value;
+      const width = parseInt(widthInput.value, 10) || 2;
+      const t = e.changedTouches && e.changedTouches[0];
+      const pos = getPos(t ? { clientX:t.clientX, clientY:t.clientY } : e);
+      if(tool === "pen"){
+        if(penPoints && penPoints.length > 1) commitShape({ type:"freehand", points: penPoints, color: colorInput.value, width });
+        else redraw();
+        penPoints = null;
+      } else {
+        const shape = buildLiveShape(tool, startPt, pos, colorInput.value, width);
+        if(Math.abs(shape.x2 - shape.x1) > 2 || Math.abs(shape.y2 - shape.y1) > 2) commitShape(shape);
+        else redraw();
+      }
+      startPt = null;
+    }
+
+    canvas.addEventListener("mousedown", startDraw);
+    canvas.addEventListener("mousemove", moveDraw);
+    window.addEventListener("mouseup", endDraw);
+    canvas.addEventListener("touchstart", startDraw, {passive:false});
+    canvas.addEventListener("touchmove", moveDraw, {passive:false});
+    canvas.addEventListener("touchend", endDraw);
+
+    wrap.querySelector(".draw-undo").addEventListener("click", ()=>{
+      section.drawing.shapes.pop();
+      scheduleAutoSave();
+      redraw();
+    });
+    wrap.querySelector(".draw-clear").addEventListener("click", ()=>{
+      if(section.drawing.shapes.length && confirm("مسح كل الرسم في هذا الكرت؟")){
+        section.drawing.shapes = [];
+        scheduleAutoSave();
+        redraw();
+      }
+    });
+
+    return wrap;
+  }
+
+  // يبني شكل "حي" أثناء السحب (قبل التأكيد) بناءً على نقطة البداية والنهاية الحاليتين
+  function buildLiveShape(tool, start, end, color, width){
+    const base = { x1:start.x, y1:start.y, x2:end.x, y2:end.y, color, width };
+    if(tool === "dotted") return Object.assign({type:"line", dashed:true}, base);
+    if(tool === "curve"){
+      const mx = (start.x+end.x)/2, my = (start.y+end.y)/2;
+      const dx = end.x-start.x, dy = end.y-start.y;
+      const len = Math.hypot(dx,dy) || 1;
+      const nx = -dy/len, ny = dx/len;
+      const bulge = Math.min(len*0.35, 60);
+      return Object.assign({type:"curve", cx:mx+nx*bulge, cy:my+ny*bulge}, base);
+    }
+    if(tool === "zigzag") return Object.assign({type:"zigzag"}, base);
+    if(tool === "rect") return Object.assign({type:"rect"}, base);
+    if(tool === "triangle") return Object.assign({type:"triangle"}, base);
+    if(tool === "circle") return Object.assign({type:"circle"}, base);
+    return Object.assign({type:"line"}, base); // "line" tool وأي حالة افتراضية
+  }
+
+  // يرسم شكل واحد على الكانفاس — نفس الدالة بتتستخدم للمعاينة الحية وللرسم النهائي المحفوظ
+  function drawShape(ctx, sh){
+    ctx.save();
+    ctx.strokeStyle = sh.color || "#1e2519";
+    ctx.fillStyle = sh.color || "#1e2519";
+    ctx.lineWidth = sh.width || 2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.setLineDash(sh.dashed ? [(sh.width||2)*2+4, (sh.width||2)*2+4] : []);
+
+    if(sh.type === "freehand"){
+      if(!sh.points || sh.points.length < 2){ ctx.restore(); return; }
+      ctx.beginPath();
+      ctx.moveTo(sh.points[0].x, sh.points[0].y);
+      for(let i=1;i<sh.points.length;i++) ctx.lineTo(sh.points[i].x, sh.points[i].y);
+      ctx.stroke();
+    } else if(sh.type === "line"){
+      ctx.beginPath();
+      ctx.moveTo(sh.x1, sh.y1);
+      ctx.lineTo(sh.x2, sh.y2);
+      ctx.stroke();
+    } else if(sh.type === "curve"){
+      ctx.beginPath();
+      ctx.moveTo(sh.x1, sh.y1);
+      ctx.quadraticCurveTo(sh.cx, sh.cy, sh.x2, sh.y2);
+      ctx.stroke();
+    } else if(sh.type === "zigzag"){
+      const segs = 8;
+      const dx = (sh.x2-sh.x1)/segs, dy = (sh.y2-sh.y1)/segs;
+      const len = Math.hypot(sh.x2-sh.x1, sh.y2-sh.y1) || 1;
+      const nx = -(sh.y2-sh.y1)/len, ny = (sh.x2-sh.x1)/len;
+      const amp = 10;
+      ctx.beginPath();
+      ctx.moveTo(sh.x1, sh.y1);
+      for(let i=1;i<segs;i++){
+        const sign = (i%2===0) ? 1 : -1;
+        ctx.lineTo(sh.x1 + dx*i + nx*amp*sign, sh.y1 + dy*i + ny*amp*sign);
+      }
+      ctx.lineTo(sh.x2, sh.y2);
+      ctx.stroke();
+    } else if(sh.type === "rect"){
+      ctx.strokeRect(Math.min(sh.x1,sh.x2), Math.min(sh.y1,sh.y2), Math.abs(sh.x2-sh.x1), Math.abs(sh.y2-sh.y1));
+    } else if(sh.type === "triangle"){
+      const x1=Math.min(sh.x1,sh.x2), x2=Math.max(sh.x1,sh.x2), y1=Math.min(sh.y1,sh.y2), y2=Math.max(sh.y1,sh.y2);
+      ctx.beginPath();
+      ctx.moveTo((x1+x2)/2, y1);
+      ctx.lineTo(x1, y2);
+      ctx.lineTo(x2, y2);
+      ctx.closePath();
+      ctx.stroke();
+    } else if(sh.type === "circle"){
+      const cx=(sh.x1+sh.x2)/2, cy=(sh.y1+sh.y2)/2;
+      const rx=Math.abs(sh.x2-sh.x1)/2, ry=Math.abs(sh.y2-sh.y1)/2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx||1, ry||1, 0, 0, Math.PI*2);
+      ctx.stroke();
+    } else if(sh.type === "text"){
+      ctx.font = (sh.fontSize||16) + "px Tahoma, Arial, sans-serif";
+      ctx.textBaseline = "top";
+      ctx.fillText(sh.text, sh.x, sh.y);
+    }
+    ctx.restore();
+  }
+
+  function renderAll(){
+    renderToc();
+    renderCards();
+    renderLangManager();
+  }
+
+  /* ============================== ADD TEXT ============================== */
+  const statusMsg = document.getElementById("statusMsg");
+  function setStatus(msg, kind){
+    statusMsg.textContent = msg;
+    statusMsg.className = "status-msg" + (kind ? " "+kind : "");
+  }
+
+  document.getElementById("parseAddBtn").addEventListener("click", ()=>{
+    const raw = document.getElementById("rawInput").value;
+    try{
+      const newOnes = parseText(raw);
+      if(newOnes.length === 0){
+        setStatus("لم يتم العثور على سكشنات قابلة للتحليل في هذا النص. تأكد من وجود عنوان و فواصل --- بين الأقسام.", "err");
+        return;
+      }
+      sections = sections.concat(newOnes);
+      newOnes.forEach(s=>selected.add(s.id));
+      document.getElementById("rawInput").value = "";
+      setStatus("تمت إضافة " + newOnes.length + " سكشن بنجاح ✅", "ok");
+      scheduleAutoSave();
+      renderAll();
+    }catch(e){
+      console.error(e);
+      setStatus("حدث خطأ غير متوقع، لكن لا تقلق — لم يتأثر أي محتوى سابق. جرّب لصق جزء أصغر من النص.", "err");
+    }
+  });
+
+  document.getElementById("clearRawBtn").addEventListener("click", ()=>{
+    document.getElementById("rawInput").value = "";
+    setStatus("");
+  });
+
+  document.getElementById("txtFileInput").addEventListener("change",(e)=>{
+    const files = Array.from(e.target.files || []);
+    let done = 0, allNew = [];
+    if(files.length===0) return;
+    files.forEach(f=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const newOnes = parseText(reader.result);
+          allNew = allNew.concat(newOnes);
+        }catch(err){ console.warn("فشل قراءة ملف:", f.name, err); }
+        done++;
+        if(done === files.length){
+          sections = sections.concat(allNew);
+          allNew.forEach(s=>selected.add(s.id));
+          setStatus("تمت إضافة " + allNew.length + " سكشن من " + files.length + " ملف/ملفات ✅", "ok");
+          scheduleAutoSave();
+          renderAll();
+        }
+      };
+      reader.readAsText(f, "utf-8");
+    });
+    e.target.value = "";
+  });
+
+  /* ============================== LANGUAGE JSON UPLOAD ============================== */
+  document.getElementById("langFileInput").addEventListener("change",(e)=>{
+    const files = Array.from(e.target.files || []);
+    let pending = files.length;
+    if(pending===0) return;
+    files.forEach(f=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const data = JSON.parse(reader.result);
+          const list = Array.isArray(data) ? data : [data];
+          list.forEach(item=>{
+            if(item && item.language && Array.isArray(item.rules)){
+              langRules[item.language.toLowerCase()] = {
+                displayName: item.displayName || item.language,
+                rules: item.rules
+              };
+            }
+          });
+        }catch(err){
+          alert("ملف " + f.name + " ليس JSON صالحًا لقواعد التلوين.");
+        }
+        pending--;
+        if(pending===0){ scheduleAutoSave(); renderAll(); }
+      };
+      reader.readAsText(f, "utf-8");
+    });
+    e.target.value = "";
+  });
+
+  /* ============================== EXPORT / IMPORT (manual) ============================== */
+  function currentPayload(){
+    return { sections, langRules, exportedAt: new Date().toISOString() };
+  }
+  document.getElementById("exportBtn").addEventListener("click", ()=>{
+    const blob = new Blob([JSON.stringify(currentPayload(), null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "code-library-backup.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById("importBtn").addEventListener("click", ()=>{
+    document.getElementById("importFileInput").click();
+  });
+  document.getElementById("importFileInput").addEventListener("change",(e)=>{
+    const f = e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const data = JSON.parse(reader.result);
+        if(Array.isArray(data.sections)) sections = data.sections;
+        if(data.langRules) langRules = Object.assign(langRules, data.langRules);
+        selected = new Set();
+        setStatus("تم استرجاع النسخة بنجاح ✅", "ok");
+        renderAll();
+      }catch(err){
+        alert("ملف النسخة غير صالح.");
+      }
+    };
+    reader.readAsText(f, "utf-8");
+    e.target.value = "";
+  });
+
+  /* ============================== REAL AUTO-SAVE (File System Access API) ============================== */
+  // NOTE: this writes to an actual file the user picks/creates on their device —
+  // it does NOT use localStorage/sessionStorage (those are unreliable/blocked in
+  // some hosting contexts). Supported in Chrome/Edge desktop; other browsers fall
+  // back to the manual "تنزيل نسخة" button.
+  let fileHandle = null;
+  let autoSaveTimer = null;
+  const autosaveStatusEl = document.getElementById("autosaveStatus");
+  const supportsFSAccess = "showSaveFilePicker" in window;
+
+  document.getElementById("linkAutosaveBtn").addEventListener("click", async ()=>{
+    if(!supportsFSAccess){
+      alert("متصفحك الحالي لا يدعم الحفظ التلقائي المباشر إلى ملف (متاح في Chrome/Edge على الكمبيوتر). استخدم زر «تنزيل نسخة» يدويًا بدل ذلك.");
+      return;
+    }
+    try{
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: "code-library-autosave.json",
+        types: [{ description: "JSON", accept: {"application/json": [".json"]} }]
+      });
+      autosaveStatusEl.textContent = "🟢 مرتبط — يُحفظ تلقائيًا";
+      autosaveStatusEl.classList.add("on");
+      await writeToHandle(); // initial save
+    }catch(err){
+      // user cancelled the picker — no error needed
+    }
+  });
+
+  async function writeToHandle(){
+    if(!fileHandle) return;
+    try{
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(currentPayload(), null, 2));
+      await writable.close();
+      const t = new Date();
+      autosaveStatusEl.textContent = "🟢 آخر حفظ: " + t.toLocaleTimeString("ar-EG",{hour:'2-digit',minute:'2-digit'});
+      autosaveStatusEl.classList.add("on");
+    }catch(err){
+      console.warn("تعذّر الحفظ التلقائي:", err);
+      autosaveStatusEl.textContent = "🟠 تعذّر الحفظ التلقائي — استخدم تنزيل نسخة";
+      autosaveStatusEl.classList.remove("on");
+    }
+  }
+
+  function scheduleAutoSave(){
+    if(!fileHandle) return; // not linked yet — nothing to write to
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(writeToHandle, 700);
+  }
+
+  /* ============================== search / toggles ============================== */
+  searchBox.addEventListener("input", renderToc);
+  starOnlyToggle.addEventListener("change", renderToc);
+
+  /* ============================== init ============================== */
+  renderAll();
+})();
+</script>
+</body>
+</html>
