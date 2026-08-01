@@ -243,8 +243,8 @@
 <header>
   <h1>مذكرة <span>الأكواد</span></h1>
   <div class="toolbar">
-    <span class="autosave-status" id="autosaveStatus">⚪ غير مرتبط بحفظ تلقائي</span>
-    <button id="linkAutosaveBtn" title="اختر ملفًا يتم حفظ كل تعديل فيه تلقائيًا">🔗 ربط حفظ تلقائي</button>
+    <span class="autosave-status on" id="autosaveStatus">🟢 يُحفظ تلقائيًا في المتصفح</span>
+    <button id="linkAutosaveBtn" title="اختياري: اربط كمان ملفًا حقيقيًا على جهازك كنسخة احتياطية إضافية">🔗 اربط ملف احتياطي (اختياري)</button>
     <button id="exportBtn" title="تنزيل نسخة كاملة الآن">💾 تنزيل نسخة</button>
     <button id="importBtn" title="استرجاع نسخة محفوظة">📂 استيراد نسخة</button>
     <input type="file" id="importFileInput" accept=".json" style="display:none;">
@@ -308,8 +308,8 @@
 </main>
 
 <footer>
-  إذا ربطت ملف الحفظ التلقائي (متاح في Chrome / Edge) فكل تعديل يُكتب فورًا في ذلك الملف على جهازك.
-  في المتصفحات التي لا تدعم هذه الميزة، استخدم «تنزيل نسخة» يدويًا للحفاظ على عملك.
+  كل تعديل (نص، ترتيب الفهرس، رسم توضيحي...) يُحفظ تلقائيًا في متصفحك فور حدوثه — مش محتاج تعمل أي حاجة.
+  لو عايز نسخة احتياطية حقيقية على جهازك كمان، اربط ملف تلقائي (Chrome/Edge) أو استخدم «تنزيل نسخة» يدويًا بين حين وآخر.
 </footer>
 
 <script>
@@ -1031,11 +1031,37 @@
     e.target.value = "";
   });
 
-  /* ============================== REAL AUTO-SAVE (File System Access API) ============================== */
-  // NOTE: this writes to an actual file the user picks/creates on their device —
-  // it does NOT use localStorage/sessionStorage (those are unreliable/blocked in
-  // some hosting contexts). Supported in Chrome/Edge desktop; other browsers fall
-  // back to the manual "تنزيل نسخة" button.
+  /* ============================== AUTO-SAVE ============================== */
+  // الطبقة الأساسية والدائمة: حفظ تلقائي صامت في localStorage بعد أي تعديل — شغالة فورًا
+  // من غير أي إعداد من المستخدم، وبتفضل محفوظة حتى لو قفل المتصفح أو رجع بعد فترة طويلة.
+  // ربط ملف حقيقي (File System Access API) طبقة اختيارية إضافية فوقها لمن يحب نسخة احتياطية
+  // فعلية على جهازه، ومتاحة بس على Chrome/Edge على الكمبيوتر.
+  const LOCAL_STORAGE_KEY = "code-library-autosave-v1";
+
+  function loadFromLocalStorage(){
+    try{
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if(!raw) return false;
+      const data = JSON.parse(raw);
+      if(Array.isArray(data.sections)) sections = data.sections;
+      if(data.langRules && typeof data.langRules === "object") langRules = Object.assign(langRules, data.langRules);
+      return true;
+    }catch(e){
+      console.warn("تعذّرت قراءة الحفظ التلقائي المحلي:", e);
+      return false;
+    }
+  }
+
+  function saveToLocalStorage(){
+    try{
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentPayload()));
+      return true;
+    }catch(e){
+      console.warn("تعذّر الحفظ التلقائي المحلي:", e);
+      return false;
+    }
+  }
+
   let fileHandle = null;
   let autoSaveTimer = null;
   const autosaveStatusEl = document.getElementById("autosaveStatus");
@@ -1043,7 +1069,7 @@
 
   document.getElementById("linkAutosaveBtn").addEventListener("click", async ()=>{
     if(!supportsFSAccess){
-      alert("متصفحك الحالي لا يدعم الحفظ التلقائي المباشر إلى ملف (متاح في Chrome/Edge على الكمبيوتر). استخدم زر «تنزيل نسخة» يدويًا بدل ذلك.");
+      alert("متصفحك الحالي لا يدعم ربط ملف حقيقي (متاح في Chrome/Edge على الكمبيوتر). تعديلاتك بتتحفظ تلقائيًا في المتصفح على أي حال، واستخدم «تنزيل نسخة» بين حين وآخر لنسخة احتياطية إضافية.");
       return;
     }
     try{
@@ -1051,8 +1077,6 @@
         suggestedName: "code-library-autosave.json",
         types: [{ description: "JSON", accept: {"application/json": [".json"]} }]
       });
-      autosaveStatusEl.textContent = "🟢 مرتبط — يُحفظ تلقائيًا";
-      autosaveStatusEl.classList.add("on");
       await writeToHandle(); // initial save
     }catch(err){
       // user cancelled the picker — no error needed
@@ -1065,20 +1089,28 @@
       const writable = await fileHandle.createWritable();
       await writable.write(JSON.stringify(currentPayload(), null, 2));
       await writable.close();
-      const t = new Date();
-      autosaveStatusEl.textContent = "🟢 آخر حفظ: " + t.toLocaleTimeString("ar-EG",{hour:'2-digit',minute:'2-digit'});
+      const t = new Date().toLocaleTimeString("ar-EG",{hour:'2-digit',minute:'2-digit'});
+      autosaveStatusEl.textContent = "🟢 محفوظ في المتصفح + الملف — آخر حفظ: " + t;
       autosaveStatusEl.classList.add("on");
     }catch(err){
-      console.warn("تعذّر الحفظ التلقائي:", err);
-      autosaveStatusEl.textContent = "🟠 تعذّر الحفظ التلقائي — استخدم تنزيل نسخة";
-      autosaveStatusEl.classList.remove("on");
+      console.warn("تعذّر الحفظ في الملف المرتبط:", err);
+      autosaveStatusEl.textContent = "🟠 المتصفح محفوظ، لكن تعذّر الحفظ في الملف المرتبط";
+      autosaveStatusEl.classList.add("on"); // localStorage layer still succeeded
     }
   }
 
   function scheduleAutoSave(){
-    if(!fileHandle) return; // not linked yet — nothing to write to
     clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(writeToHandle, 700);
+    autoSaveTimer = setTimeout(()=>{
+      const ok = saveToLocalStorage();
+      if(fileHandle){
+        writeToHandle(); // يحدّث نص الحالة بنفسه بعد ما يحاول الكتابة في الملف
+      } else {
+        const t = new Date().toLocaleTimeString("ar-EG",{hour:'2-digit',minute:'2-digit'});
+        autosaveStatusEl.textContent = ok ? ("🟢 يُحفظ تلقائيًا في المتصفح — آخر حفظ: " + t) : "🟠 تعذّر الحفظ التلقائي في المتصفح";
+        autosaveStatusEl.classList.toggle("on", ok);
+      }
+    }, 500);
   }
 
   /* ============================== search / toggles ============================== */
@@ -1086,6 +1118,7 @@
   starOnlyToggle.addEventListener("change", renderToc);
 
   /* ============================== init ============================== */
+  loadFromLocalStorage();
   renderAll();
 })();
 </script>
