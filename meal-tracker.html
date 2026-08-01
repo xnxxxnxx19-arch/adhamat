@@ -40,6 +40,8 @@
 
   .feedback{ margin-top:12px; padding:10px 12px; border-radius:10px; font-size:.86rem; line-height:1.7; background:var(--bg-soft); border:1px dashed var(--edge); display:none; }
   .feedback.show{ display:block; }
+  .feedback.ok{ display:block; border-color:var(--olive); color:var(--olive); }
+  .feedback.err{ display:block; border-color:var(--danger); color:var(--danger); }
   .feedback b{ color:var(--gold); }
   .feedback .warn{ color:var(--tomato); }
   details summary{ cursor:pointer; color:var(--ink-dim); font-size:.88rem; margin-top:4px; }
@@ -179,6 +181,7 @@
       <button data-t="foods" onclick="setTab('foods',this)">الأصناف الأكثر تكرارًا</button>
       <button data-t="macros" onclick="setTab('macros',this)">الماكروز</button>
       <button data-t="insights" onclick="setTab('insights',this)">رؤى وسلوك</button>
+      <button data-t="fooddb" onclick="setTab('fooddb',this)">قاعدة الأطعمة 🍽️</button>
     </div>
 
     <div id="panel-overview" class="panel"></div>
@@ -224,6 +227,8 @@
     </div>
 
     <div id="panel-insights" class="panel" style="display:none"></div>
+
+    <div id="panel-fooddb" class="panel" style="display:none"></div>
   </div>
 
   <!-- السجل -->
@@ -289,6 +294,46 @@ const FOOD_MACROS = {
   "عصير برتقال":[0.5,10,0.1],"كولا":[0,10.6,0],"زيت":[0,0,100],"سكر":[0,100,0],"دقيق":[10,76,1]
 };
 const DEFAULT_MACRO = [8,20,6];
+
+/* ================= تعديلات/إضافات المستخدم على قاعدة الأطعمة ================= */
+/* بتتخزن في مفتاح localStorage منفصل تمامًا (mt_food_overrides) عشان محدش يلمس
+   بيانات السجل اليومي (mt_data) ولا الإعدادات (mt_settings) — القاعدة الأصلية
+   فوق دي بتفضل زي ما هي، والتعديلات بتتطبّق فوقها في الذاكرة بس. */
+const FOOD_OVERRIDES_KEY = 'mt_food_overrides';
+function loadFoodOverrides(){
+  try{ return JSON.parse(localStorage.getItem(FOOD_OVERRIDES_KEY)||'{}'); }catch(e){ return {}; }
+}
+function saveFoodOverrides(ov){ localStorage.setItem(FOOD_OVERRIDES_KEY, JSON.stringify(ov)); }
+function applyFoodOverrides(){
+  const ov = loadFoodOverrides();
+  for(const name in ov){
+    const entry = ov[name];
+    if(entry.deleted){ delete FOOD_DB[name]; delete FOOD_MACROS[name]; continue; }
+    FOOD_DB[name] = entry.kcal;
+    FOOD_MACROS[name] = entry.macro || DEFAULT_MACRO;
+  }
+}
+applyFoodOverrides();
+
+function upsertFood(name, kcal, macro){
+  name = name.trim();
+  if(!name) return false;
+  FOOD_DB[name] = kcal;
+  FOOD_MACROS[name] = macro;
+  const ov = loadFoodOverrides();
+  ov[name] = {kcal, macro};
+  saveFoodOverrides(ov);
+  fillFoodDatalist();
+  return true;
+}
+function deleteFood(name){
+  delete FOOD_DB[name];
+  delete FOOD_MACROS[name];
+  const ov = loadFoodOverrides();
+  ov[name] = {deleted:true};
+  saveFoodOverrides(ov);
+  fillFoodDatalist();
+}
 
 /* ================= أدوات مساعدة ================= */
 function normalize(s){
@@ -470,6 +515,7 @@ function renderActivePanel(){
   else if(activeTab==='foods') renderTopFoods();
   else if(activeTab==='macros') renderMacros();
   else if(activeTab==='insights') renderInsights();
+  else if(activeTab==='fooddb') renderFoodDB();
 }
 
 /* ---------- حسابات عامة ---------- */
@@ -735,6 +781,102 @@ function fireReminder(meal){
   const body = `عدّى موعد ${MEAL_LABEL[meal]} المعتاد ولسه مسجلتش الوجبة في الدفتر.`;
   if('Notification' in window && Notification.permission==='granted') new Notification(title,{body});
   if(SETTINGS.webhookUrl){ fetch(SETTINGS.webhookUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,body,meal,date:todayKey()})}).catch(()=>{}); }
+}
+
+/* ================= لوحة قاعدة الأطعمة (عرض/تعديل/إضافة) ================= */
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let foodDBSearch = '';
+
+function renderFoodDB(){
+  const panel = document.getElementById('panel-fooddb');
+  const names = Object.keys(FOOD_DB).sort((a,b)=>a.localeCompare(b,'ar'));
+  const q = foodDBSearch.trim();
+  const filtered = q ? names.filter(n=>n.includes(q)) : names;
+
+  panel.innerHTML = `
+    <p class="legend-note">دي كل أنواع الطعام اللي التطبيق يعرفها ويقدر يتعرف عليها تلقائيًا من رسالتك النصية، مع تقدير السعرات والماكروز (بروتين/كارب/دهون) لكل 100 جرام. عدّل أي قيمة أو ضيف صنف جديد — أي تغيير بيتحفظ تلقائيًا فورًا وبيبقى متاح في التعرف التلقائي والإضافة اليدوية على طول، من غير ما يأثر على أي حاجة تانية في التطبيق.</p>
+    <div class="row" style="margin-bottom:12px;">
+      <div style="flex:2; min-width:200px;"><label>بحث في الأصناف</label><input id="foodDBSearch" placeholder="ابحث عن صنف..." value="${escapeHtml(q)}"></div>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="simple">
+      <thead><tr><th>الصنف</th><th>سعرات/100جم</th><th>بروتين</th><th>كارب</th><th>دهون</th><th></th></tr></thead>
+      <tbody id="foodDBRows">
+        ${filtered.map(n=>{
+          const m = FOOD_MACROS[n]||DEFAULT_MACRO;
+          return `<tr data-name="${escapeHtml(n)}">
+            <td>${escapeHtml(n)}</td>
+            <td><input type="number" class="fdb-kcal" value="${FOOD_DB[n]}" style="width:70px"></td>
+            <td><input type="number" step="0.1" class="fdb-p" value="${m[0]}" style="width:55px"></td>
+            <td><input type="number" step="0.1" class="fdb-c" value="${m[1]}" style="width:55px"></td>
+            <td><input type="number" step="0.1" class="fdb-f" value="${m[2]}" style="width:55px"></td>
+            <td style="white-space:nowrap;">
+              <button class="btn-ghost fdb-save-btn">حفظ</button>
+              <button class="btn-ghost fdb-del-btn">حذف</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>
+    <p class="legend-note">${filtered.length} صنف${q ? (' من إجمالي ' + names.length) : ''}</p>
+
+    <h3 style="margin-top:20px; font-size:.95rem; color:var(--ink);">➕ إضافة صنف جديد</h3>
+    <div class="row">
+      <div><label>اسم الصنف</label><input id="newFoodName" placeholder="مثال: كبسة"></div>
+      <div><label>سعرات/100جم</label><input id="newFoodKcal" type="number" placeholder="مثال: 180"></div>
+      <div><label>بروتين/100جم</label><input id="newFoodP" type="number" step="0.1" value="8"></div>
+      <div><label>كارب/100جم</label><input id="newFoodC" type="number" step="0.1" value="20"></div>
+      <div><label>دهون/100جم</label><input id="newFoodF" type="number" step="0.1" value="6"></div>
+    </div>
+    <div class="btn-row"><button class="btn-main" id="fdbAddBtn">إضافة الصنف</button></div>
+    <div id="foodDBFeedback" class="feedback"></div>
+  `;
+
+  const searchInput = document.getElementById('foodDBSearch');
+  searchInput.addEventListener('input', (e)=>{
+    foodDBSearch = e.target.value;
+    renderFoodDB();
+    const el = document.getElementById('foodDBSearch');
+    el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+  });
+
+  panel.querySelectorAll('.fdb-save-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const tr = btn.closest('tr');
+      const name = tr.dataset.name;
+      const kcal = parseFloat(tr.querySelector('.fdb-kcal').value) || 0;
+      const p = parseFloat(tr.querySelector('.fdb-p').value) || 0;
+      const c = parseFloat(tr.querySelector('.fdb-c').value) || 0;
+      const f = parseFloat(tr.querySelector('.fdb-f').value) || 0;
+      upsertFood(name, kcal, [p,c,f]);
+      const fb = document.getElementById('foodDBFeedback');
+      fb.textContent = 'تم حفظ «' + name + '» ✅'; fb.className = 'feedback ok';
+    });
+  });
+  panel.querySelectorAll('.fdb-del-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const tr = btn.closest('tr');
+      const name = tr.dataset.name;
+      if(!confirm('حذف «' + name + '» من قاعدة الأصناف؟ (مش هيأثر على وجبات مسجلة قبل كده)')) return;
+      deleteFood(name);
+      renderFoodDB();
+    });
+  });
+  document.getElementById('fdbAddBtn').addEventListener('click', ()=>{
+    const nameEl = document.getElementById('newFoodName');
+    const name = nameEl.value.trim();
+    const kcal = parseFloat(document.getElementById('newFoodKcal').value);
+    const p = parseFloat(document.getElementById('newFoodP').value) || 0;
+    const c = parseFloat(document.getElementById('newFoodC').value) || 0;
+    const f = parseFloat(document.getElementById('newFoodF').value) || 0;
+    const fb = document.getElementById('foodDBFeedback');
+    if(!name){ fb.textContent = 'اكتب اسم الصنف الأول.'; fb.className = 'feedback err'; return; }
+    if(isNaN(kcal) || kcal <= 0){ fb.textContent = 'اكتب عدد سعرات صحيح لكل 100 جرام.'; fb.className = 'feedback err'; return; }
+    upsertFood(name, kcal, [p,c,f]);
+    fb.textContent = 'تمت إضافة «' + name + '» بنجاح ✅'; fb.className = 'feedback ok';
+    renderFoodDB();
+  });
 }
 
 /* ================= تهيئة ================= */

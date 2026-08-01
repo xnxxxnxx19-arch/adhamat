@@ -1786,14 +1786,17 @@
     let dragMode = null; // "node" | "pan"
     let dragStart = null;
     let dragOrigins = null;
+    let dragDistance = 0;
+    let clickToEditId = null; // لو الضغطة دي على عقدة كانت أصلًا محددة لوحدها، وما حصلش سحب فعلي، نفتح وضع التعديل
 
     function onNodeDown(e, id){
       const div = e.currentTarget;
-      if(div.isContentEditable) return;
+      if(div.isContentEditable){ e.stopPropagation(); return; }
       e.stopPropagation();
       e.preventDefault();
       wrap.focus();
       const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+      const wasSoleSelected = !additive && state.selectedIds.size === 1 && state.selectedIds.has(id);
       let selectionChanged = false;
       if(additive){
         if(state.selectedIds.has(id)) state.selectedIds.delete(id); else state.selectedIds.add(id);
@@ -1809,6 +1812,8 @@
       // وده اللي كان مانع تعديل اسم العقدة (والدخول في وضع الكتابة بشكل عام).
       if(selectionChanged) render(); else renderProps();
       dragMode = "node";
+      dragDistance = 0;
+      clickToEditId = wasSoleSelected ? id : null;
       const t = e.touches ? e.touches[0] : e;
       dragStart = { x:t.clientX, y:t.clientY };
       dragOrigins = {};
@@ -1834,6 +1839,7 @@
       if(e.cancelable) e.preventDefault();
       const t = e.touches ? e.touches[0] : e;
       const dx = t.clientX - dragStart.x, dy = t.clientY - dragStart.y;
+      dragDistance = Math.max(dragDistance, Math.hypot(dx, dy));
       if(dragMode === "pan"){
         state.tx = dragStart.tx + dx; state.ty = dragStart.ty + dy;
         applyTransform();
@@ -1847,12 +1853,20 @@
       }
     }
     function onDragEnd(){
-      if(dragMode === "node") scheduleAutoSave();
+      const wasNodeDrag = dragMode === "node";
+      const editId = clickToEditId;
+      const moved = dragDistance;
+      if(wasNodeDrag) scheduleAutoSave();
       dragMode = null; svg.classList.remove("panning");
+      clickToEditId = null;
       window.removeEventListener("mousemove", onDragMove);
       window.removeEventListener("mouseup", onDragEnd);
       window.removeEventListener("touchmove", onDragMove);
       window.removeEventListener("touchend", onDragEnd);
+      // ضغطة عادية (من غير سحب) على عقدة كانت أصلًا محددة لوحدها = ادخل وضع التعديل مباشرة
+      if(wasNodeDrag && editId && moved < 4){
+        startEdit(editId);
+      }
     }
     svg.addEventListener("mousedown", onStageDown);
     svg.addEventListener("touchstart", onStageDown, {passive:false});
