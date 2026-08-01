@@ -42,13 +42,18 @@
   header{
     background:var(--paper-card);
     border-bottom:2px solid var(--rule);
-    padding:14px 22px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:7px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
     box-shadow:0 2px 6px rgba(60,45,20,.06);
     position:sticky; top:0; z-index:20;
+    transition:padding .2s, max-height .2s;
+    max-height:70px; overflow:hidden;
   }
-  header h1{font-size:20px; margin:0; letter-spacing:.2px; white-space:nowrap; font-weight:700;}
-  header h1 span{color:var(--accent-dark); border-bottom:3px solid var(--marker);}
-  .toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-inline-start:auto;}
+  header.collapsed{max-height:34px; padding:4px 16px;}
+  header.collapsed .toolbar > *:not(#headerToggleBtn){display:none;}
+  header h1{font-size:15px; margin:0; letter-spacing:.2px; white-space:nowrap; font-weight:700;}
+  header h1 span{color:var(--accent-dark); border-bottom:2px solid var(--marker);}
+  .toolbar{display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-inline-start:auto;}
+  #headerToggleBtn{padding:3px 8px; font-size:12px; flex-shrink:0;}
 
   button{
     background:#fff; color:var(--ink); border:1.5px solid var(--rule);
@@ -189,13 +194,69 @@
 
   .section-label{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.6px; margin:14px 0 6px; border-bottom:1px dotted var(--rule); padding-bottom:3px;}
   textarea.explain{
-    width:100%; min-height:80px; background:
+    width:100%; min-height:220px; background:
       repeating-linear-gradient(#fffdf7 0 31px, #eadfc4 31px 32px);
     background-attachment:local;
     border:1px solid var(--rule);
-    color:var(--ink); border-radius:6px; padding:10px 12px; font-size:14px; line-height:32px; direction:rtl;
+    color:var(--ink); border-radius:6px; padding:10px 12px; font-size:14.5px; line-height:32px; direction:rtl;
     resize:vertical; font-family:"Cairo",sans-serif;
   }
+  .label-row{display:flex; align-items:center; justify-content:space-between; margin:14px 0 6px;}
+  .label-row .section-label{margin:0;}
+  .expand-btn{padding:2px 9px; font-size:11px;}
+
+  /* ============================== خريطة ذهنية (mind map panel) ============================== */
+  .mindmap-panel{
+    border:1px solid var(--rule); border-radius:8px; overflow:hidden; background:#fff;
+    --mm-bg:#fbf9f2; --mm-node:#ffffff; --mm-node-border:#c9bd9a; --mm-text:#241f1a; --mm-line:#a99b74;
+  }
+  .mindmap-panel:focus{outline:none; box-shadow:inset 0 0 0 2px rgba(122,92,45,.25);}
+  .mindmap-panel.mm-dark{ --mm-bg:#1c1a16; --mm-node:#2a2620; --mm-node-border:#4a4436; --mm-text:#efe9da; --mm-line:#8a7f60; }
+  .mm-toolbar{
+    display:flex; gap:5px; flex-wrap:wrap; align-items:center; padding:7px 9px;
+    background:var(--paper); border-bottom:1px solid var(--rule);
+  }
+  .mm-toolbar button{font-size:11.5px; padding:4px 8px;}
+  .mm-toolbar select, .mm-toolbar input[type="text"]{font-size:11.5px; padding:3px 6px; border:1px solid var(--rule); border-radius:5px;}
+  .mm-toolbar input[type="text"].mm-search{width:110px;}
+  .mm-toolbar .mm-sep{width:1px; align-self:stretch; background:var(--rule); margin:0 2px;}
+  .mm-toolbar input[type="color"]{width:26px; height:24px; padding:1px; border:1px solid var(--rule); border-radius:4px; cursor:pointer;}
+  .mm-stage-wrap{position:relative; height:380px; background:var(--mm-bg); overflow:hidden; touch-action:none;}
+  .mm-stage-wrap svg{width:100%; height:100%; display:block; cursor:grab;}
+  .mm-stage-wrap svg.panning{cursor:grabbing;}
+  .mm-node-box{
+    width:100%; height:100%; box-sizing:border-box; display:flex; align-items:center; justify-content:center;
+    background:var(--mm-node); border:2px solid var(--mm-node-border); color:var(--mm-text);
+    border-radius:10px; font-size:13px; padding:4px 8px; text-align:center; outline:none;
+    cursor:default; overflow:hidden; word-break:break-word; user-select:text;
+  }
+  .mm-node-box.shape-ellipse{border-radius:999px;}
+  .mm-node-box.shape-rect{border-radius:2px;}
+  .mm-node-box.shape-none{border-color:transparent; background:transparent;}
+  .mm-node-box.mm-selected{box-shadow:0 0 0 3px rgba(122,92,45,.35);}
+  .mm-node-box.mm-match{box-shadow:0 0 0 3px #e0a92b;}
+  .mm-collapse-btn{
+    position:absolute; width:16px; height:16px; border-radius:50%; background:var(--accent-dark); color:#fff;
+    font-size:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:2px solid var(--mm-bg);
+  }
+  .mm-float-toolbar{
+    position:absolute; z-index:6; background:var(--paper-card); border:1px solid var(--rule); border-radius:8px;
+    padding:5px 6px; display:flex; gap:4px; align-items:center; box-shadow:0 3px 10px rgba(0,0,0,.15); font-size:11px;
+  }
+  .mm-float-toolbar button{font-size:11px; padding:3px 6px;}
+  .mm-status{font-size:10.5px; color:var(--ink-soft); padding:2px 10px;}
+  .fs-overlay{
+    position:fixed; inset:0; background:rgba(25,20,12,.5); z-index:200;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+  }
+  .fs-box{
+    background:var(--paper-card); border-radius:12px; width:100%; height:100%; max-width:1100px;
+    display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.35);
+  }
+  .fs-head{display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1.5px solid var(--rule); flex-shrink:0;}
+  .fs-head strong{font-size:14px;}
+  .fs-body{flex:1; overflow:auto; padding:14px;}
+  .fs-body textarea.explain{min-height:100%; height:100%;}
 
   .codeblock{border:1.5px solid var(--rule); border-radius:8px; margin-bottom:10px; overflow:hidden;}
   .codeblock-head{
@@ -257,7 +318,7 @@
 <body>
 <div id="toastWrap"></div>
 
-<header>
+<header id="mainHeader">
   <h1>مذكرة <span>الأكواد</span></h1>
   <div class="toolbar">
     <span class="autosave-status on" id="autosaveStatus">🟢 يُحفظ تلقائيًا في المتصفح</span>
@@ -265,6 +326,7 @@
     <button id="exportBtn" title="تنزيل نسخة كاملة الآن">💾 تنزيل نسخة</button>
     <button id="importBtn" title="استرجاع نسخة محفوظة">📂 استيراد نسخة</button>
     <input type="file" id="importFileInput" accept=".json" style="display:none;">
+    <button id="headerToggleBtn" title="طيّ/إظهار الشريط">▲</button>
   </div>
 </header>
 
@@ -360,7 +422,32 @@
     }, ms || 3200);
   }
 
-  /* ============================== تأكيد داخل الصفحة (بديل confirm) ============================== */
+  /* ============================== وضع ملء الشاشة العام ============================== */
+  function openFullscreen(title, mountFn, onClose){
+    const overlay = document.createElement("div");
+    overlay.className = "fs-overlay";
+    overlay.innerHTML = `
+      <div class="fs-box">
+        <div class="fs-head">
+          <strong>${escapeHtml(title)}</strong>
+          <button class="ghost" data-act="fs-close">✕ إغلاق (Esc)</button>
+        </div>
+        <div class="fs-body"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const body = overlay.querySelector(".fs-body");
+    mountFn(body);
+    function close(){
+      if(onClose) onClose();
+      document.removeEventListener("keydown", onKey);
+      overlay.remove();
+    }
+    function onKey(e){ if(e.key === "Escape") close(); }
+    document.addEventListener("keydown", onKey);
+    overlay.addEventListener("click", (e)=>{ if(e.target === overlay) close(); });
+    overlay.querySelector('[data-act="fs-close"]').addEventListener("click", close);
+  }
   // بعض المتصفحات/بيئات المعاينة بتحجب confirm()/alert() الأصليين فيسيبوا الزرار كأنه مش شغال.
   // البديل: ضغطة أولى "تسلّح" الزرار وتغيّر نصه، والضغطة التانية خلال 3 ثواني تنفّذ فعليًا.
   function armConfirm(btn, label){
@@ -518,6 +605,22 @@
   document.getElementById("closeDrawerBtn").addEventListener("click", closeDrawer);
   backdrop.addEventListener("click", closeDrawer);
 
+  /* ============================== طي/إظهار الهيدر ============================== */
+  const mainHeader = document.getElementById("mainHeader");
+  const headerToggleBtn = document.getElementById("headerToggleBtn");
+  const HEADER_COLLAPSE_KEY = "code-library-header-collapsed";
+  function applyHeaderState(collapsed){
+    mainHeader.classList.toggle("collapsed", collapsed);
+    headerToggleBtn.textContent = collapsed ? "▼" : "▲";
+    headerToggleBtn.title = collapsed ? "إظهار الشريط" : "طيّ الشريط";
+  }
+  applyHeaderState(localStorage.getItem(HEADER_COLLAPSE_KEY) === "1");
+  headerToggleBtn.addEventListener("click", ()=>{
+    const collapsed = !mainHeader.classList.contains("collapsed");
+    applyHeaderState(collapsed);
+    localStorage.setItem(HEADER_COLLAPSE_KEY, collapsed ? "1" : "0");
+  });
+
   /* ============================== RENDER: SIDEBAR ============================== */
   const tocList = document.getElementById("tocList");
   const searchBox = document.getElementById("searchBox");
@@ -657,15 +760,29 @@
           </div>
         </div>
 
-        <div class="section-label">الشرح</div>
+        <div class="label-row">
+          <div class="section-label">الشرح</div>
+          <button class="ghost expand-btn" data-act="expand-explain" title="تكبير لملء الشاشة">⛶ تكبير</button>
+        </div>
         <textarea class="explain" data-act="explain">${escapeHtml(s.explanation)}</textarea>
 
-        <div class="section-label">الأكواد</div>
+        <div class="label-row">
+          <div class="section-label">الأكواد</div>
+        </div>
         <div class="codes-holder"></div>
         <button class="ghost addcode-btn" data-act="addcode">➕ إضافة كتلة كود</button>
 
-        <div class="section-label">📐 رسم توضيحي (لتثبيت المعلومة)</div>
+        <div class="label-row">
+          <div class="section-label">📐 رسم توضيحي (لتثبيت المعلومة)</div>
+          <button class="ghost expand-btn" data-act="expand-draw" title="تكبير لملء الشاشة">⛶ تكبير</button>
+        </div>
         <div class="drawing-holder"></div>
+
+        <div class="label-row">
+          <div class="section-label">🧠 خريطة ذهنية</div>
+          <button class="ghost expand-btn" data-act="expand-mindmap" title="تكبير لملء الشاشة">⛶ تكبير</button>
+        </div>
+        <div class="mindmap-holder"></div>
 
         <div class="card-footer">
           <button class="danger ghost" data-act="delete">🗑 حذف السكشن نهائيًا</button>
@@ -677,6 +794,7 @@
         holder.appendChild(buildCodeBlock(s, c, ci));
       });
       card.querySelector(".drawing-holder").appendChild(buildDrawingPanel(s));
+      card.querySelector(".mindmap-holder").appendChild(buildMindMapPanel(s));
 
       cardsWrap.appendChild(card);
     });
@@ -702,6 +820,48 @@
         scheduleAutoSave();
         renderAll();
       });
+      card.querySelector('[data-act="expand-explain"]').addEventListener("click", ()=>{
+        openFullscreen("الشرح — " + s.title, (body)=>{
+          const ta = document.createElement("textarea");
+          ta.className = "explain";
+          ta.value = s.explanation;
+          ta.addEventListener("input", (e)=>{
+            s.explanation = e.target.value;
+            const inlineTa = card.querySelector('[data-act="explain"]');
+            if(inlineTa) inlineTa.value = e.target.value;
+            scheduleAutoSave();
+          });
+          body.appendChild(ta);
+          setTimeout(()=> ta.focus(), 50);
+        });
+      });
+      card.querySelector('[data-act="expand-draw"]').addEventListener("click", ()=>{
+        const panel = card.querySelector(".drawpanel");
+        const placeholder = document.createComment("drawpanel-placeholder");
+        panel.after(placeholder);
+        openFullscreen("رسم توضيحي — " + s.title, (body)=>{
+          body.appendChild(panel);
+          resizeDrawCanvas(panel.querySelector(".draw-canvas"), panel._drawState);
+        }, ()=>{
+          placeholder.replaceWith(panel);
+          resizeDrawCanvas(panel.querySelector(".draw-canvas"), panel._drawState);
+          placeholder.remove?.();
+        });
+      });
+      card.querySelector('[data-act="expand-mindmap"]').addEventListener("click", ()=>{
+        const panel = card.querySelector(".mindmap-panel");
+        const placeholder = document.createComment("mindmap-placeholder");
+        panel.after(placeholder);
+        openFullscreen("خريطة ذهنية — " + s.title, (body)=>{
+          body.style.padding = "0";
+          body.appendChild(panel);
+          panel._mmState && panel._mmState.onResize && panel._mmState.onResize();
+        }, ()=>{
+          placeholder.replaceWith(panel);
+          panel._mmState && panel._mmState.onResize && panel._mmState.onResize();
+          placeholder.remove?.();
+        });
+      });
     });
   }
 
@@ -713,6 +873,7 @@
         <input value="${escapeHtml(c.label).replace(/"/g,'&quot;')}" data-act="label">
         <select data-act="lang">${langOptions(c.lang)}</select>
         <span class="spacer"></span>
+        <button data-act="copy" title="نسخ الكود">📋 نسخ</button>
         <button data-act="toggle">✏️ تعديل</button>
         <button data-act="remove" class="danger">حذف</button>
       </div>
@@ -722,10 +883,33 @@
     const pre = box.querySelector(".codeview code");
     const ta = box.querySelector(".codearea");
     const toggleBtn = box.querySelector('[data-act="toggle"]');
+    const copyBtn = box.querySelector('[data-act="copy"]');
+
+    function autoGrow(){
+      ta.style.height = "auto";
+      ta.style.height = Math.max(120, ta.scrollHeight + 4) + "px";
+    }
+    ta.addEventListener("input", autoGrow);
+    setTimeout(autoGrow, 0);
+
+    copyBtn.addEventListener("click", async ()=>{
+      try{
+        await navigator.clipboard.writeText(c.code);
+        showToast("تم نسخ الكود ✅", "ok", 1600);
+      }catch(err){
+        // بديل لو الحافظة الحديثة محجوبة (زي بعض بيئات المعاينة)
+        ta.style.display = "block";
+        ta.focus(); ta.select();
+        try{ document.execCommand("copy"); showToast("تم نسخ الكود ✅", "ok", 1600); }
+        catch(e2){ showToast("تعذّر النسخ التلقائي — حدد النص وانسخه يدويًا.", "err"); }
+        if(!box.classList.contains("editing")) ta.style.display = "";
+      }
+    });
 
     toggleBtn.addEventListener("click", ()=>{
       box.classList.toggle("editing");
       toggleBtn.textContent = box.classList.contains("editing") ? "✅ حفظ العرض" : "✏️ تعديل";
+      if(box.classList.contains("editing")) setTimeout(autoGrow, 0);
       if(!box.classList.contains("editing")){
         c.code = ta.value;
         pre.innerHTML = highlight(c.code, c.lang);
@@ -738,7 +922,8 @@
       pre.innerHTML = highlight(c.code, c.lang);
       scheduleAutoSave();
     });
-    box.querySelector('[data-act="remove"]').addEventListener("click", ()=>{
+    box.querySelector('[data-act="remove"]').addEventListener("click", (e)=>{
+      if(!armConfirm(e.currentTarget, "اضغط تاني للحذف")) return;
       section.codes.splice(index,1);
       scheduleAutoSave();
       renderAll();
@@ -747,6 +932,23 @@
   }
 
   /* ============================== DRAWING PANEL (per card) ============================== */
+  function resizeDrawCanvas(canvas, state){
+    if(!canvas || !state) return;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const inFullscreen = !!canvas.closest(".fs-body");
+    const cssW = Math.max(280, rect.width);
+    const cssH = inFullscreen ? Math.max(460, rect.height || 460) : (state.cssHeight || 340);
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    state.cssWidth = cssW; state.cssHeight = cssH; state.dpr = dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    state.redraw();
+  }
+
   function buildDrawingPanel(section){
     if(!section.drawing) section.drawing = { shapes: [] };
 
@@ -757,6 +959,7 @@
         <select class="draw-tool" title="الأداة">
           <option value="pen">✏️ رسم حر</option>
           <option value="line">📏 خط مستقيم</option>
+          <option value="arrow">➡️ سهم</option>
           <option value="dotted">┄ خط منقط</option>
           <option value="curve">〰️ خط منحني</option>
           <option value="zigzag">⚡ خط متعرج</option>
@@ -764,28 +967,44 @@
           <option value="triangle">▲ مثلث</option>
           <option value="circle">◯ دائرة / بيضاوي</option>
           <option value="text">🔤 نص</option>
+          <option value="eraser">🧹 ممحاة</option>
         </select>
         <input type="color" class="draw-color" value="#1e2519" title="اللون">
         <input type="range" class="draw-width" min="1" max="14" value="2" title="سُمك الخط">
         <input type="number" class="draw-fontsize" min="8" max="60" value="16" title="حجم الخط (للنص)" style="width:52px;">
+        <label class="fill-toggle" style="display:flex; align-items:center; gap:3px; font-size:11.5px;">
+          <input type="checkbox" class="draw-fill"> تعبئة
+        </label>
         <button type="button" class="ghost draw-undo" title="تراجع عن آخر شكل">↩️ تراجع</button>
         <button type="button" class="ghost danger draw-clear" title="مسح كل الرسم">🗑 مسح الكل</button>
       </div>
-      <canvas class="draw-canvas" width="640" height="320"></canvas>
+      <div class="draw-canvas-wrap" style="position:relative;">
+        <canvas class="draw-canvas"></canvas>
+      </div>
     `;
 
     const canvas = wrap.querySelector(".draw-canvas");
+    const canvasWrap = wrap.querySelector(".draw-canvas-wrap");
     const ctx = canvas.getContext("2d");
     const toolSel = wrap.querySelector(".draw-tool");
     const colorInput = wrap.querySelector(".draw-color");
     const widthInput = wrap.querySelector(".draw-width");
     const fontInput = wrap.querySelector(".draw-fontsize");
+    const fillInput = wrap.querySelector(".draw-fill");
+
+    const state = { cssWidth: 640, cssHeight: 340, dpr: 1, redraw };
+    wrap._drawState = state;
 
     function redraw(){
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, state.cssWidth, state.cssHeight);
       section.drawing.shapes.forEach(sh => drawShape(ctx, sh));
     }
-    redraw();
+
+    // إعادة الضبط عند تغيير حجم الحاوية (مثلًا عند فتح/إغلاق وضع ملء الشاشة)
+    if(window.ResizeObserver){
+      new ResizeObserver(()=> resizeDrawCanvas(canvas, state)).observe(canvasWrap);
+    }
+    requestAnimationFrame(()=> resizeDrawCanvas(canvas, state));
 
     let dragging = false;
     let startPt = null;
@@ -797,8 +1016,8 @@
       const clientX = t ? t.clientX : e.clientX;
       const clientY = t ? t.clientY : e.clientY;
       return {
-        x: (clientX - rect.left) * (canvas.width / rect.width),
-        y: (clientY - rect.top) * (canvas.height / rect.height)
+        x: (clientX - rect.left) * (state.cssWidth / rect.width),
+        y: (clientY - rect.top) * (state.cssHeight / rect.height)
       };
     }
 
@@ -808,15 +1027,56 @@
       redraw();
     }
 
+    // مربع نص داخلي بديل prompt() (بعض المتصفحات بتحجب prompt الأصلي)
+    function askInlineText(pos, onDone){
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "اكتب النص واضغط Enter…";
+      input.style.cssText = `position:absolute; left:${pos.x * (canvas.getBoundingClientRect().width/state.cssWidth)}px; top:${pos.y * (canvas.getBoundingClientRect().height/state.cssHeight)}px; z-index:5; font-size:13px; padding:3px 6px; border:1.5px solid var(--accent); border-radius:5px; min-width:120px;`;
+      canvasWrap.appendChild(input);
+      input.focus();
+      function finish(commit){
+        const val = input.value.trim();
+        input.remove();
+        if(commit && val) onDone(val);
+      }
+      input.addEventListener("keydown", (e)=>{
+        if(e.key === "Enter") finish(true);
+        if(e.key === "Escape") finish(false);
+      });
+      input.addEventListener("blur", ()=> finish(true));
+    }
+
+    function eraseNear(pos){
+      // بيشيل أقرب شكل لمكان الضغط (تقريب بسيط بالمسافة لأقرب نقطة مرجعية للشكل)
+      let bestIdx = -1, bestDist = 26;
+      section.drawing.shapes.forEach((sh, i)=>{
+        const pts = shapeRefPoints(sh);
+        pts.forEach(p=>{
+          const d = Math.hypot(p.x - pos.x, p.y - pos.y);
+          if(d < bestDist){ bestDist = d; bestIdx = i; }
+        });
+      });
+      if(bestIdx !== -1){
+        section.drawing.shapes.splice(bestIdx, 1);
+        scheduleAutoSave();
+        redraw();
+      }
+    }
+
     function startDraw(e){
       e.preventDefault();
       const tool = toolSel.value;
       const pos = getPos(e);
       if(tool === "text"){
-        const txt = prompt("اكتب النص:");
-        if(txt && txt.trim()){
-          commitShape({ type:"text", x:pos.x, y:pos.y, text:txt.trim(), color:colorInput.value, fontSize:parseInt(fontInput.value,10)||16 });
-        }
+        askInlineText(pos, (txt)=>{
+          commitShape({ type:"text", x:pos.x, y:pos.y, text:txt, color:colorInput.value, fontSize:parseInt(fontInput.value,10)||16 });
+        });
+        return;
+      }
+      if(tool === "eraser"){
+        dragging = true;
+        eraseNear(pos);
         return;
       }
       dragging = true;
@@ -829,18 +1089,20 @@
       const tool = toolSel.value;
       const pos = getPos(e);
       const width = parseInt(widthInput.value, 10) || 2;
+      if(tool === "eraser"){ eraseNear(pos); return; }
       redraw();
       if(tool === "pen"){
         penPoints.push(pos);
         drawShape(ctx, { type:"freehand", points: penPoints, color: colorInput.value, width });
       } else {
-        drawShape(ctx, buildLiveShape(tool, startPt, pos, colorInput.value, width));
+        drawShape(ctx, buildLiveShape(tool, startPt, pos, colorInput.value, width, fillInput.checked));
       }
     }
     function endDraw(e){
       if(!dragging) return;
       dragging = false;
       const tool = toolSel.value;
+      if(tool === "eraser"){ return; }
       const width = parseInt(widthInput.value, 10) || 2;
       const t = e.changedTouches && e.changedTouches[0];
       const pos = getPos(t ? { clientX:t.clientX, clientY:t.clientY } : e);
@@ -849,7 +1111,7 @@
         else redraw();
         penPoints = null;
       } else {
-        const shape = buildLiveShape(tool, startPt, pos, colorInput.value, width);
+        const shape = buildLiveShape(tool, startPt, pos, colorInput.value, width, fillInput.checked);
         if(Math.abs(shape.x2 - shape.x1) > 2 || Math.abs(shape.y2 - shape.y1) > 2) commitShape(shape);
         else redraw();
       }
@@ -868,21 +1130,32 @@
       scheduleAutoSave();
       redraw();
     });
-    wrap.querySelector(".draw-clear").addEventListener("click", ()=>{
-      if(section.drawing.shapes.length && confirm("مسح كل الرسم في هذا الكرت؟")){
-        section.drawing.shapes = [];
-        scheduleAutoSave();
-        redraw();
-      }
+    wrap.querySelector(".draw-clear").addEventListener("click", (e)=>{
+      if(!section.drawing.shapes.length) return;
+      if(!armConfirm(e.currentTarget, "اضغط تاني لمسح كل الرسم")) return;
+      section.drawing.shapes = [];
+      scheduleAutoSave();
+      redraw();
+      showToast("تم مسح الرسم.", "ok");
     });
 
     return wrap;
   }
 
+  // نقاط مرجعية تقريبية لكل شكل — تُستخدم بأداة الممحاة لتحديد أقرب شكل لمكان الضغط
+  function shapeRefPoints(sh){
+    if(sh.type === "freehand") return sh.points || [];
+    if(sh.type === "text") return [{x:sh.x, y:sh.y}];
+    if(sh.type === "curve") return [{x:sh.x1,y:sh.y1},{x:sh.x2,y:sh.y2},{x:sh.cx,y:sh.cy}];
+    if("x1" in sh) return [{x:sh.x1,y:sh.y1},{x:sh.x2,y:sh.y2},{x:(sh.x1+sh.x2)/2,y:(sh.y1+sh.y2)/2}];
+    return [];
+  }
+
   // يبني شكل "حي" أثناء السحب (قبل التأكيد) بناءً على نقطة البداية والنهاية الحاليتين
-  function buildLiveShape(tool, start, end, color, width){
-    const base = { x1:start.x, y1:start.y, x2:end.x, y2:end.y, color, width };
+  function buildLiveShape(tool, start, end, color, width, filled){
+    const base = { x1:start.x, y1:start.y, x2:end.x, y2:end.y, color, width, filled: !!filled };
     if(tool === "dotted") return Object.assign({type:"line", dashed:true}, base);
+    if(tool === "arrow") return Object.assign({type:"arrow"}, base);
     if(tool === "curve"){
       const mx = (start.x+end.x)/2, my = (start.y+end.y)/2;
       const dx = end.x-start.x, dy = end.y-start.y;
@@ -919,6 +1192,19 @@
       ctx.moveTo(sh.x1, sh.y1);
       ctx.lineTo(sh.x2, sh.y2);
       ctx.stroke();
+    } else if(sh.type === "arrow"){
+      ctx.beginPath();
+      ctx.moveTo(sh.x1, sh.y1);
+      ctx.lineTo(sh.x2, sh.y2);
+      ctx.stroke();
+      const angle = Math.atan2(sh.y2-sh.y1, sh.x2-sh.x1);
+      const headLen = 8 + (sh.width||2)*2.2;
+      ctx.beginPath();
+      ctx.moveTo(sh.x2, sh.y2);
+      ctx.lineTo(sh.x2 - headLen*Math.cos(angle - Math.PI/7), sh.y2 - headLen*Math.sin(angle - Math.PI/7));
+      ctx.lineTo(sh.x2 - headLen*Math.cos(angle + Math.PI/7), sh.y2 - headLen*Math.sin(angle + Math.PI/7));
+      ctx.closePath();
+      ctx.fill();
     } else if(sh.type === "curve"){
       ctx.beginPath();
       ctx.moveTo(sh.x1, sh.y1);
@@ -939,7 +1225,8 @@
       ctx.lineTo(sh.x2, sh.y2);
       ctx.stroke();
     } else if(sh.type === "rect"){
-      ctx.strokeRect(Math.min(sh.x1,sh.x2), Math.min(sh.y1,sh.y2), Math.abs(sh.x2-sh.x1), Math.abs(sh.y2-sh.y1));
+      const x=Math.min(sh.x1,sh.x2), y=Math.min(sh.y1,sh.y2), w=Math.abs(sh.x2-sh.x1), h=Math.abs(sh.y2-sh.y1);
+      if(sh.filled) ctx.fillRect(x,y,w,h); else ctx.strokeRect(x,y,w,h);
     } else if(sh.type === "triangle"){
       const x1=Math.min(sh.x1,sh.x2), x2=Math.max(sh.x1,sh.x2), y1=Math.min(sh.y1,sh.y2), y2=Math.max(sh.y1,sh.y2);
       ctx.beginPath();
@@ -947,19 +1234,622 @@
       ctx.lineTo(x1, y2);
       ctx.lineTo(x2, y2);
       ctx.closePath();
-      ctx.stroke();
+      if(sh.filled) ctx.fill(); else ctx.stroke();
     } else if(sh.type === "circle"){
       const cx=(sh.x1+sh.x2)/2, cy=(sh.y1+sh.y2)/2;
       const rx=Math.abs(sh.x2-sh.x1)/2, ry=Math.abs(sh.y2-sh.y1)/2;
       ctx.beginPath();
       ctx.ellipse(cx, cy, rx||1, ry||1, 0, 0, Math.PI*2);
-      ctx.stroke();
+      if(sh.filled) ctx.fill(); else ctx.stroke();
     } else if(sh.type === "text"){
       ctx.font = (sh.fontSize||16) + "px Tahoma, Arial, sans-serif";
       ctx.textBaseline = "top";
       ctx.fillText(sh.text, sh.x, sh.y);
     }
     ctx.restore();
+  }
+
+  /* ============================== MIND MAP PANEL (per card) ============================== */
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs){
+    const el = document.createElementNS(SVGNS, tag);
+    if(attrs) for(const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  const MM_COLORS = ["#7a5c2d","#0f5c56","#b23b34","#3a5a8c","#8c5a9c","#6b6255"];
+  const MM_BASE_W = 132, MM_BASE_H = 46;
+
+  function buildMindMapPanel(section){
+    if(!section.mindmap || !section.mindmap.nodes || !Object.keys(section.mindmap.nodes).length){
+      const rootId = "m_root";
+      section.mindmap = {
+        nodes: { [rootId]: { id:rootId, text:"الفكرة الرئيسية", parentId:null, x:0, y:0, color:MM_COLORS[0], shape:"rounded", scale:1, collapsed:false, orderIndex:0 } },
+        rootId, dir:"rtl", dark:false
+      };
+    }
+    const mm = section.mindmap;
+
+    const wrap = document.createElement("div");
+    wrap.className = "mindmap-panel" + (mm.dark ? " mm-dark" : "");
+    wrap.innerHTML = `
+      <div class="mm-toolbar">
+        <button data-act="add-child" title="إضافة تابع (Tab)">➕ تابع</button>
+        <button data-act="add-sibling" title="إضافة شقيق (Enter)">➕ شقيق</button>
+        <button data-act="add-parent" title="إضافة أب">➕ أب</button>
+        <span class="mm-sep"></span>
+        <button data-act="dup" title="تكرار العقدة">⧉ تكرار</button>
+        <button data-act="del" title="حذف (Delete)">🗑 حذف</button>
+        <span class="mm-sep"></span>
+        <button data-act="undo" title="تراجع (Ctrl+Z)">↩️</button>
+        <button data-act="redo" title="إعادة (Ctrl+Y)">↪️</button>
+        <span class="mm-sep"></span>
+        <button data-act="collapse-toggle" title="طيّ/فرد الفرع المحدد">⊟ طيّ الفرع</button>
+        <button data-act="layout" title="ترتيب تلقائي">🧩 ترتيب تلقائي</button>
+        <span class="mm-sep"></span>
+        <button data-act="zoom-in">🔍+</button>
+        <button data-act="zoom-out">🔍−</button>
+        <button data-act="zoom-reset" title="ملائمة الكل">⤢ ملائمة</button>
+        <span class="mm-sep"></span>
+        <input type="text" class="mm-search" placeholder="🔎 بحث في الخريطة… (Ctrl+F)">
+        <span class="mm-sep"></span>
+        <button data-act="dir" title="تبديل اتجاه الخريطة">${mm.dir === "rtl" ? "⇦ RTL" : "⇨ LTR"}</button>
+        <button data-act="theme" title="تبديل الوضع الداكن/الفاتح">${mm.dark ? "☀️" : "🌙"}</button>
+        <span class="mm-sep"></span>
+        <button data-act="export-json" title="تصدير JSON">💾 JSON</button>
+        <button data-act="import-json" title="استيراد JSON">📂 JSON</button>
+        <input type="file" class="mm-import-input" accept=".json" style="display:none;">
+        <button data-act="export-png" title="تصدير صورة PNG">🖼 PNG</button>
+        <button data-act="export-svg" title="تصدير SVG">🎯 SVG</button>
+      </div>
+      <div class="mm-toolbar mm-props" style="display:none;"></div>
+      <div class="mm-stage-wrap">
+        <svg></svg>
+      </div>
+      <div class="mm-status"></div>
+    `;
+
+    const propsBar = wrap.querySelector(".mm-props");
+
+    const stageWrap = wrap.querySelector(".mm-stage-wrap");
+    const svg = wrap.querySelector("svg");
+    const searchInput = wrap.querySelector(".mm-search");
+    const statusEl = wrap.querySelector(".mm-status");
+    const importInput = wrap.querySelector(".mm-import-input");
+
+    const state = {
+      scale: 1, tx: 0, ty: 0,
+      selectedIds: new Set([mm.rootId]),
+      history: [], future: [],
+      searchIdx: 0, matches: [],
+      onResize: null,
+    };
+    wrap._mmState = state;
+
+    /* ---------- أدوات بيانات ---------- */
+    function childrenOf(id){
+      return Object.values(mm.nodes).filter(n=>n.parentId===id).sort((a,b)=>a.orderIndex-b.orderIndex);
+    }
+    function descendantsOf(id){
+      const out = [];
+      childrenOf(id).forEach(c=>{ out.push(c.id); out.push(...descendantsOf(c.id)); });
+      return out;
+    }
+    function isCollapsedAncestor(id){
+      let n = mm.nodes[id];
+      while(n && n.parentId){
+        n = mm.nodes[n.parentId];
+        if(n && n.collapsed) return true;
+      }
+      return false;
+    }
+    function snapshot(){ return JSON.stringify(mm); }
+    function pushHistory(){
+      state.history.push(snapshot());
+      if(state.history.length > 60) state.history.shift();
+      state.future = [];
+    }
+    function undo(){
+      if(!state.history.length){ showToast("مفيش خطوات للتراجع.", "err", 1600); return; }
+      state.future.push(snapshot());
+      const prev = state.history.pop();
+      Object.assign(mm, JSON.parse(prev));
+      normalizeSelection();
+      scheduleAutoSave();
+      render();
+    }
+    function redo(){
+      if(!state.future.length){ showToast("مفيش خطوات لإعادتها.", "err", 1600); return; }
+      state.history.push(snapshot());
+      const next = state.future.pop();
+      Object.assign(mm, JSON.parse(next));
+      normalizeSelection();
+      scheduleAutoSave();
+      render();
+    }
+    function normalizeSelection(){
+      state.selectedIds.forEach(id=>{ if(!mm.nodes[id]) state.selectedIds.delete(id); });
+      if(!state.selectedIds.size) state.selectedIds.add(mm.rootId);
+    }
+
+    function makeNode(text, parentId){
+      const id = "m" + Math.random().toString(36).slice(2,9);
+      const sibs = parentId ? childrenOf(parentId) : [];
+      const orderIndex = sibs.length ? Math.max(...sibs.map(s=>s.orderIndex)) + 1 : 0;
+      const parent = parentId ? mm.nodes[parentId] : null;
+      return {
+        id, text, parentId,
+        x: parent ? parent.x + (mm.dir === "rtl" ? -190 : 190) : 0,
+        y: parent ? parent.y + sibs.length * 60 : 0,
+        color: MM_COLORS[Object.keys(mm.nodes).length % MM_COLORS.length],
+        shape: "rounded", scale: 1, collapsed: false, orderIndex
+      };
+    }
+
+    function selectedSingle(){
+      const ids = [...state.selectedIds];
+      return ids.length ? mm.nodes[ids[ids.length-1]] : mm.nodes[mm.rootId];
+    }
+
+    function addChild(){
+      pushHistory();
+      const parent = selectedSingle();
+      const node = makeNode("فكرة جديدة", parent.id);
+      mm.nodes[node.id] = node;
+      state.selectedIds = new Set([node.id]);
+      scheduleAutoSave(); render(); startEdit(node.id);
+    }
+    function addSibling(){
+      const cur = selectedSingle();
+      if(cur.id === mm.rootId){ addChild(); return; }
+      pushHistory();
+      const node = makeNode("فكرة جديدة", cur.parentId);
+      mm.nodes[node.id] = node;
+      state.selectedIds = new Set([node.id]);
+      scheduleAutoSave(); render(); startEdit(node.id);
+    }
+    function addParent(){
+      pushHistory();
+      const cur = selectedSingle();
+      const oldParentId = cur.parentId;
+      const node = makeNode("فكرة جديدة", oldParentId);
+      node.x = cur.x + (mm.dir === "rtl" ? 190 : -190);
+      node.y = cur.y;
+      mm.nodes[node.id] = node;
+      cur.parentId = node.id;
+      if(cur.id === mm.rootId) mm.rootId = node.id;
+      state.selectedIds = new Set([node.id]);
+      scheduleAutoSave(); render(); startEdit(node.id);
+    }
+    function duplicateSelected(){
+      pushHistory();
+      const cur = selectedSingle();
+      const idMap = {};
+      function cloneSub(id, newParentId){
+        const src = mm.nodes[id];
+        const nid = "m" + Math.random().toString(36).slice(2,9);
+        idMap[id] = nid;
+        const clone = Object.assign({}, src, { id:nid, parentId:newParentId });
+        mm.nodes[nid] = clone;
+        childrenOf(id).forEach(c=> cloneSub(c.id, nid));
+        return nid;
+      }
+      const sibs = childrenOf(cur.parentId || null);
+      const newId = cloneSub(cur.id, cur.parentId);
+      mm.nodes[newId].orderIndex = (sibs.length ? Math.max(...sibs.map(s=>s.orderIndex)) : 0) + 1;
+      mm.nodes[newId].x += 24; mm.nodes[newId].y += 24;
+      state.selectedIds = new Set([newId]);
+      scheduleAutoSave(); render();
+      showToast("تم تكرار العقدة وفروعها.", "ok", 1600);
+    }
+    function deleteSelected(){
+      const ids = [...state.selectedIds].filter(id=>id !== mm.rootId);
+      if(!ids.length){ showToast("مينفعش تحذف العقدة الجذر.", "err"); return; }
+      pushHistory();
+      ids.forEach(id=>{
+        descendantsOf(id).forEach(d=> delete mm.nodes[d]);
+        delete mm.nodes[id];
+      });
+      state.selectedIds = new Set([mm.rootId]);
+      scheduleAutoSave(); render();
+    }
+    function toggleCollapse(id){
+      pushHistory();
+      mm.nodes[id].collapsed = !mm.nodes[id].collapsed;
+      scheduleAutoSave(); render();
+    }
+
+    function autoLayout(){
+      pushHistory();
+      const dir = mm.dir === "rtl" ? -1 : 1;
+      const levelGapX = 185, sibGapY = 58;
+      let cursorY = 0;
+      function measure(id, depth){
+        const node = mm.nodes[id];
+        const kids = node.collapsed ? [] : childrenOf(id);
+        if(!kids.length){
+          node.x = depth * levelGapX * dir;
+          node.y = cursorY;
+          cursorY += sibGapY;
+          return;
+        }
+        kids.forEach(k=> measure(k.id, depth+1));
+        const ys = kids.map(k=> mm.nodes[k.id].y);
+        node.x = depth * levelGapX * dir;
+        node.y = (Math.min(...ys) + Math.max(...ys)) / 2;
+      }
+      measure(mm.rootId, 0);
+      scheduleAutoSave(); fitToScreen(); render();
+      showToast("تم إعادة الترتيب التلقائي.", "ok", 1600);
+    }
+
+    /* ---------- pan / zoom ---------- */
+    function applyTransform(){
+      gLines.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.scale})`);
+      gNodes.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.scale})`);
+    }
+    function zoomAt(sx, sy, newScale){
+      newScale = Math.max(0.25, Math.min(3, newScale));
+      const wx = (sx - state.tx) / state.scale, wy = (sy - state.ty) / state.scale;
+      state.scale = newScale;
+      state.tx = sx - wx * newScale;
+      state.ty = sy - wy * newScale;
+      applyTransform();
+    }
+    function fitToScreen(){
+      const nodes = Object.values(mm.nodes);
+      if(!nodes.length) return;
+      const xs = nodes.map(n=>n.x), ys = nodes.map(n=>n.y);
+      const minX = Math.min(...xs)-MM_BASE_W, maxX = Math.max(...xs)+MM_BASE_W;
+      const minY = Math.min(...ys)-MM_BASE_H, maxY = Math.max(...ys)+MM_BASE_H;
+      const rect = stageWrap.getBoundingClientRect();
+      const w = Math.max(1, rect.width), h = Math.max(1, rect.height);
+      const scale = Math.max(0.3, Math.min(1.6, Math.min(w/(maxX-minX||1), h/(maxY-minY||1)) * 0.92));
+      state.scale = scale;
+      state.tx = w/2 - (minX+maxX)/2*scale;
+      state.ty = h/2 - (minY+maxY)/2*scale;
+      applyTransform();
+    }
+    function centerOn(id){
+      const n = mm.nodes[id];
+      const rect = stageWrap.getBoundingClientRect();
+      state.tx = rect.width/2 - n.x*state.scale;
+      state.ty = rect.height/2 - n.y*state.scale;
+      applyTransform();
+    }
+
+    /* ---------- بناء طبقات SVG ---------- */
+    svg.innerHTML = "";
+    const gLines = svgEl("g");
+    const gNodes = svgEl("g");
+    svg.appendChild(gLines);
+    svg.appendChild(gNodes);
+
+    function nodeSize(n){
+      const s = n.scale || 1;
+      return { w: MM_BASE_W*s, h: MM_BASE_H*s };
+    }
+
+    function renderStage(){
+      gLines.innerHTML = "";
+      gNodes.innerHTML = "";
+      const visible = Object.values(mm.nodes).filter(n=> !isCollapsedAncestor(n.id));
+
+      // خطوط الربط (منحنية)
+      visible.forEach(n=>{
+        if(!n.parentId) return;
+        const p = mm.nodes[n.parentId];
+        if(!p || isCollapsedAncestor(p.id)) return;
+        const mx = (p.x+n.x)/2;
+        const path = svgEl("path", {
+          d: `M ${p.x} ${p.y} C ${mx} ${p.y}, ${mx} ${n.y}, ${n.x} ${n.y}`,
+          stroke: "var(--mm-line)", "stroke-width": 2, fill: "none"
+        });
+        gLines.appendChild(path);
+      });
+
+      // العقد
+      visible.forEach(n=>{
+        const {w,h} = nodeSize(n);
+        const fo = svgEl("foreignObject", { x:n.x-w/2, y:n.y-h/2, width:w, height:h, style:"overflow:visible;" });
+        const div = document.createElement("div");
+        div.className = "mm-node-box shape-" + n.shape + (state.selectedIds.has(n.id) ? " mm-selected" : "") + (state.matches.includes(n.id) ? " mm-match" : "");
+        div.style.borderColor = n.color; div.style.color = n.color;
+        div.textContent = n.text;
+        div.dataset.id = n.id;
+        div.setAttribute("spellcheck", "false");
+        fo.appendChild(div);
+        gNodes.appendChild(fo);
+
+        div.addEventListener("mousedown", (e)=> onNodeDown(e, n.id));
+        div.addEventListener("touchstart", (e)=> onNodeDown(e, n.id), {passive:false});
+        div.addEventListener("dblclick", (e)=>{ e.stopPropagation(); startEdit(n.id); });
+        div.addEventListener("blur", ()=> commitEdit(n.id, div));
+        div.addEventListener("keydown", (e)=>{
+          if(e.key === "Enter" && div.isContentEditable){ e.preventDefault(); div.blur(); }
+          e.stopPropagation();
+        });
+
+        const kids = childrenOf(n.id);
+        if(kids.length){
+          const btn = svgEl("foreignObject", { x:n.x + (mm.dir==="rtl" ? -w/2-18 : w/2+2), y:n.y-9, width:18, height:18 });
+          const b = document.createElement("div");
+          b.className = "mm-collapse-btn"; b.textContent = n.collapsed ? "+" : "−";
+          b.style.position = "static";
+          b.addEventListener("mousedown", (e)=> e.stopPropagation());
+          b.addEventListener("click", (e)=>{ e.stopPropagation(); toggleCollapse(n.id); });
+          btn.appendChild(b);
+          gNodes.appendChild(btn);
+        }
+      });
+
+      applyTransform();
+      statusEl.textContent = Object.keys(mm.nodes).length + " عقدة" + (state.selectedIds.size>1 ? " — محدد: " + state.selectedIds.size : "");
+    }
+    function render(){ renderStage(); renderProps(); }
+
+    function renderProps(){
+      if(state.selectedIds.size !== 1){ propsBar.style.display = "none"; return; }
+      const n = mm.nodes[[...state.selectedIds][0]];
+      if(!n){ propsBar.style.display = "none"; return; }
+      propsBar.style.display = "flex";
+      propsBar.innerHTML = `
+        <span style="font-size:11px; color:var(--ink-soft);">خصائص العقدة:</span>
+        ${MM_COLORS.map(c=>`<button data-color="${c}" style="width:20px;height:20px;border-radius:50%;background:${c};border:2px solid ${n.color===c?'#000':'transparent'};padding:0;"></button>`).join("")}
+        <input type="color" class="mm-custom-color" value="${n.color}" title="لون مخصص">
+        <span class="mm-sep"></span>
+        <select class="mm-shape-sel" title="الشكل">
+          <option value="rounded" ${n.shape==="rounded"?"selected":""}>مستطيل مدوّر</option>
+          <option value="rect" ${n.shape==="rect"?"selected":""}>مستطيل حاد</option>
+          <option value="ellipse" ${n.shape==="ellipse"?"selected":""}>بيضاوي</option>
+          <option value="none" ${n.shape==="none"?"selected":""}>بدون إطار</option>
+        </select>
+        <span class="mm-sep"></span>
+        <span style="font-size:11px;">الحجم</span>
+        <input type="range" class="mm-size-range" min="0.7" max="1.8" step="0.1" value="${n.scale||1}">
+      `;
+      propsBar.querySelectorAll("[data-color]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{ pushHistory(); n.color = btn.dataset.color; scheduleAutoSave(); render(); });
+      });
+      propsBar.querySelector(".mm-custom-color").addEventListener("input", (e)=>{
+        n.color = e.target.value; scheduleAutoSave(); renderStage();
+      });
+      propsBar.querySelector(".mm-shape-sel").addEventListener("change", (e)=>{
+        pushHistory(); n.shape = e.target.value; scheduleAutoSave(); render();
+      });
+      propsBar.querySelector(".mm-size-range").addEventListener("input", (e)=>{
+        n.scale = parseFloat(e.target.value); scheduleAutoSave(); renderStage();
+      });
+    }
+
+    function startEdit(id){
+      render();
+      requestAnimationFrame(()=>{
+        const div = gNodes.querySelector(`[data-id="${id}"]`);
+        if(!div) return;
+        pushHistory();
+        div.contentEditable = "true";
+        div.focus();
+        document.execCommand && document.execCommand("selectAll", false, null);
+      });
+    }
+    function commitEdit(id, div){
+      if(div.isContentEditable){
+        div.contentEditable = "false";
+        const val = div.textContent.trim() || "بدون عنوان";
+        if(mm.nodes[id]) mm.nodes[id].text = val;
+        scheduleAutoSave();
+      }
+    }
+
+    /* ---------- تفاعل السحب والتحديد والتحريك ---------- */
+    let dragMode = null; // "node" | "pan"
+    let dragStart = null;
+    let dragOrigins = null;
+
+    function onNodeDown(e, id){
+      const div = e.currentTarget;
+      if(div.isContentEditable) return;
+      e.stopPropagation();
+      e.preventDefault();
+      wrap.focus();
+      const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+      if(additive){
+        if(state.selectedIds.has(id)) state.selectedIds.delete(id); else state.selectedIds.add(id);
+      } else if(!state.selectedIds.has(id)){
+        state.selectedIds = new Set([id]);
+      }
+      render();
+      pushHistory();
+      dragMode = "node";
+      const t = e.touches ? e.touches[0] : e;
+      dragStart = { x:t.clientX, y:t.clientY };
+      dragOrigins = {};
+      state.selectedIds.forEach(sid=>{ const n = mm.nodes[sid]; dragOrigins[sid] = {x:n.x, y:n.y}; });
+      window.addEventListener("mousemove", onDragMove);
+      window.addEventListener("mouseup", onDragEnd);
+      window.addEventListener("touchmove", onDragMove, {passive:false});
+      window.addEventListener("touchend", onDragEnd);
+    }
+    function onStageDown(e){
+      wrap.focus();
+      dragMode = "pan";
+      svg.classList.add("panning");
+      const t = e.touches ? e.touches[0] : e;
+      dragStart = { x:t.clientX, y:t.clientY, tx:state.tx, ty:state.ty };
+      window.addEventListener("mousemove", onDragMove);
+      window.addEventListener("mouseup", onDragEnd);
+      window.addEventListener("touchmove", onDragMove, {passive:false});
+      window.addEventListener("touchend", onDragEnd);
+    }
+    function onDragMove(e){
+      if(!dragMode) return;
+      if(e.cancelable) e.preventDefault();
+      const t = e.touches ? e.touches[0] : e;
+      const dx = t.clientX - dragStart.x, dy = t.clientY - dragStart.y;
+      if(dragMode === "pan"){
+        state.tx = dragStart.tx + dx; state.ty = dragStart.ty + dy;
+        applyTransform();
+      } else if(dragMode === "node"){
+        const wdx = dx/state.scale, wdy = dy/state.scale;
+        state.selectedIds.forEach(id=>{
+          const n = mm.nodes[id]; const o = dragOrigins[id];
+          if(n && o){ n.x = o.x + wdx; n.y = o.y + wdy; }
+        });
+        render();
+      }
+    }
+    function onDragEnd(){
+      if(dragMode === "node") scheduleAutoSave();
+      dragMode = null; svg.classList.remove("panning");
+      window.removeEventListener("mousemove", onDragMove);
+      window.removeEventListener("mouseup", onDragEnd);
+      window.removeEventListener("touchmove", onDragMove);
+      window.removeEventListener("touchend", onDragEnd);
+    }
+    svg.addEventListener("mousedown", onStageDown);
+    svg.addEventListener("touchstart", onStageDown, {passive:false});
+    svg.addEventListener("wheel", (e)=>{
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      zoomAt(e.clientX-rect.left, e.clientY-rect.top, state.scale * (e.deltaY<0 ? 1.12 : 0.89));
+    }, {passive:false});
+
+    /* ---------- بحث ---------- */
+    function runSearch(){
+      const q = searchInput.value.trim().toLowerCase();
+      state.matches = q ? Object.values(mm.nodes).filter(n=> n.text.toLowerCase().includes(q)).map(n=>n.id) : [];
+      state.searchIdx = 0;
+      render();
+      if(state.matches.length){ centerOn(state.matches[0]); }
+    }
+    searchInput.addEventListener("input", runSearch);
+    searchInput.addEventListener("keydown",(e)=>{
+      e.stopPropagation();
+      if(e.key === "Enter" && state.matches.length){
+        state.searchIdx = (state.searchIdx + 1) % state.matches.length;
+        centerOn(state.matches[state.searchIdx]);
+      }
+    });
+
+    /* ---------- تصدير/استيراد ---------- */
+    function downloadBlob(content, type, filename){
+      const blob = new Blob([content], {type});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+    function exportJSON(){
+      downloadBlob(JSON.stringify(mm, null, 2), "application/json", (section.title||"mindmap") + "-mindmap.json");
+    }
+    function exportSVG(){
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", SVGNS);
+      clone.querySelectorAll(".mm-node-box").forEach(d=> d.removeAttribute("contenteditable"));
+      const src = new XMLSerializer().serializeToString(clone);
+      downloadBlob(src, "image/svg+xml", (section.title||"mindmap") + "-mindmap.svg");
+    }
+    function exportPNG(){
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", SVGNS);
+      const rect = stageWrap.getBoundingClientRect();
+      clone.setAttribute("width", rect.width); clone.setAttribute("height", rect.height);
+      const src = new XMLSerializer().serializeToString(clone);
+      const img = new Image();
+      const svgBlob = new Blob([src], {type:"image/svg+xml;charset=utf-8"});
+      const url = URL.createObjectURL(svgBlob);
+      img.onload = ()=>{
+        const canvas = document.createElement("canvas");
+        const dpr = Math.min(window.devicePixelRatio||1, 3);
+        canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+        const cctx = canvas.getContext("2d");
+        cctx.scale(dpr,dpr);
+        cctx.fillStyle = mm.dark ? "#1c1a16" : "#fbf9f2";
+        cctx.fillRect(0,0,rect.width,rect.height);
+        cctx.drawImage(img, 0, 0, rect.width, rect.height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(blob=>{
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = (section.title||"mindmap") + "-mindmap.png";
+          document.body.appendChild(a); a.click(); a.remove();
+        });
+      };
+      img.onerror = ()=>{ showToast("تعذّر تصدير PNG في هذا المتصفح — جرّب SVG بدلًا منه.", "err"); URL.revokeObjectURL(url); };
+      img.src = url;
+    }
+
+    /* ---------- اختصارات لوحة المفاتيح (تعمل فقط أثناء التركيز داخل هذه اللوحة) ---------- */
+    wrap.tabIndex = 0;
+    wrap.addEventListener("keydown",(e)=>{
+      const editing = document.activeElement && document.activeElement.isContentEditable;
+      if(e.key === "Tab" && !editing){ e.preventDefault(); addChild(); }
+      else if(e.key === "Enter" && !editing && document.activeElement !== searchInput){ e.preventDefault(); addSibling(); }
+      else if(e.key === "F2"){ e.preventDefault(); startEdit(selectedSingle().id); }
+      else if(e.key === "Delete" && !editing){ e.preventDefault(); deleteSelected(); }
+      else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); undo(); }
+      else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); }
+      else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="s"){ e.preventDefault(); scheduleAutoSave(); showToast("تم الحفظ ✅", "ok", 1200); }
+      else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="f"){ e.preventDefault(); searchInput.focus(); }
+    });
+
+    /* ---------- ربط أزرار الشريط ---------- */
+    wrap.querySelector('[data-act="add-child"]').addEventListener("click", addChild);
+    wrap.querySelector('[data-act="add-sibling"]').addEventListener("click", addSibling);
+    wrap.querySelector('[data-act="add-parent"]').addEventListener("click", addParent);
+    wrap.querySelector('[data-act="dup"]').addEventListener("click", duplicateSelected);
+    wrap.querySelector('[data-act="del"]').addEventListener("click", deleteSelected);
+    wrap.querySelector('[data-act="undo"]').addEventListener("click", undo);
+    wrap.querySelector('[data-act="redo"]').addEventListener("click", redo);
+    wrap.querySelector('[data-act="collapse-toggle"]').addEventListener("click", ()=> toggleCollapse(selectedSingle().id));
+    wrap.querySelector('[data-act="layout"]').addEventListener("click", autoLayout);
+    wrap.querySelector('[data-act="zoom-in"]').addEventListener("click", ()=>{ const r=stageWrap.getBoundingClientRect(); zoomAt(r.width/2, r.height/2, state.scale*1.2); });
+    wrap.querySelector('[data-act="zoom-out"]').addEventListener("click", ()=>{ const r=stageWrap.getBoundingClientRect(); zoomAt(r.width/2, r.height/2, state.scale/1.2); });
+    wrap.querySelector('[data-act="zoom-reset"]').addEventListener("click", fitToScreen);
+    wrap.querySelector('[data-act="dir"]').addEventListener("click", (e)=>{
+      mm.dir = mm.dir === "rtl" ? "ltr" : "rtl";
+      wrap.dir = mm.dir;
+      e.currentTarget.textContent = mm.dir === "rtl" ? "⇦ RTL" : "⇨ LTR";
+      scheduleAutoSave();
+    });
+    wrap.querySelector('[data-act="theme"]').addEventListener("click", (e)=>{
+      mm.dark = !mm.dark;
+      wrap.classList.toggle("mm-dark", mm.dark);
+      e.currentTarget.textContent = mm.dark ? "☀️" : "🌙";
+      scheduleAutoSave();
+    });
+    wrap.querySelector('[data-act="export-json"]').addEventListener("click", exportJSON);
+    wrap.querySelector('[data-act="export-png"]').addEventListener("click", exportPNG);
+    wrap.querySelector('[data-act="export-svg"]').addEventListener("click", exportSVG);
+    wrap.querySelector('[data-act="import-json"]').addEventListener("click", ()=> importInput.click());
+    importInput.addEventListener("change",(e)=>{
+      const f = e.target.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const data = JSON.parse(reader.result);
+          if(data.nodes && data.rootId){
+            pushHistory();
+            Object.assign(mm, data);
+            normalizeSelection();
+            scheduleAutoSave(); fitToScreen(); render();
+            showToast("تم استيراد الخريطة ✅", "ok");
+          } else showToast("ملف غير صالح لخريطة ذهنية.", "err");
+        }catch(err){ showToast("تعذّر قراءة الملف: " + err.message, "err"); }
+      };
+      reader.readAsText(f, "utf-8");
+      e.target.value = "";
+    });
+
+    wrap.dir = mm.dir;
+    if(window.ResizeObserver) new ResizeObserver(()=> applyTransform()).observe(stageWrap);
+    state.onResize = ()=> requestAnimationFrame(fitToScreen);
+    requestAnimationFrame(fitToScreen);
+    render();
+
+    return wrap;
   }
 
   function renderAll(){
