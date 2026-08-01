@@ -146,6 +146,8 @@
   #tocList li .star.on{color:var(--marker); text-shadow:0 0 1px #b8860b;}
   #tocList li .ttl{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   #tocList li .count{font-size:10px; color:var(--ink-soft); background:#fff; padding:1px 6px; border-radius:20px;}
+  #tocList li .toc-comment{color:#d8cdb4; cursor:pointer; flex-shrink:0; font-size:12px;}
+  #tocList li .toc-comment.on{color:var(--accent-dark);}
 
   /* language rules manager */
   .langrow{display:flex; align-items:center; gap:8px; background:var(--paper); border:1px solid var(--rule); border-radius:8px; padding:6px 10px; font-size:12.5px; margin-bottom:6px;}
@@ -235,6 +237,11 @@
   .mm-node-box.shape-none{border-color:transparent; background:transparent;}
   .mm-node-box.mm-selected{box-shadow:0 0 0 3px rgba(122,92,45,.35);}
   .mm-node-box.mm-match{box-shadow:0 0 0 3px #e0a92b;}
+  .mm-note-badge{
+    width:18px; height:18px; border-radius:50%; background:var(--marker); color:#5c4a00;
+    font-size:11px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 1px 3px rgba(0,0,0,.25); user-select:none;
+  }
   .mm-collapse-btn{
     position:absolute; width:16px; height:16px; border-radius:50%; background:var(--accent-dark); color:#fff;
     font-size:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:2px solid var(--mm-bg);
@@ -377,8 +384,8 @@
       <div class="addbox-actions">
         <button class="primary" id="parseAddBtn">تحليل وإضافة كسكشنات جديدة</button>
         <label class="ghost" style="display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--rule);padding:7px 12px;border-radius:8px;cursor:pointer;background:#fff;">
-          📄 استيراد ملف نصي
-          <input type="file" id="txtFileInput" accept=".txt,.md" multiple style="display:none;">
+          📄 استيراد ملف نصي أو JSON
+          <input type="file" id="txtFileInput" accept=".txt,.md,.json" multiple style="display:none;">
         </label>
         <button class="ghost" id="clearRawBtn">تفريغ الصندوق</button>
       </div>
@@ -561,13 +568,46 @@
           title: title,
           explanation: explanation || "(لا يوجد شرح مستخرج — يمكنك إضافته يدويًا)",
           codes: codes,
-          starred:false
+          starred:false,
+          note: ""
         });
       }catch(e){
         console.warn("تخطي جزء غير قابل للتحليل:", e);
       }
     });
     return results;
+  }
+
+  /* ============================== استيراد سكشنات من JSON ============================== */
+  // بيتعرف على أكتر من شكل: مصفوفة سكشنات، سكشن واحد، أو ملف نسخة احتياطية كامل فيه sections[]
+  function normalizeImportedSection(item){
+    if(!item || typeof item !== "object" || typeof item.title !== "string" || !item.title.trim()) return null;
+    const codes = Array.isArray(item.codes) ? item.codes
+      .filter(c => c && typeof c === "object")
+      .map(c => ({
+        lang: (typeof c.lang === "string" ? c.lang : "asm").toLowerCase(),
+        label: typeof c.label === "string" ? c.label : "كود",
+        code: typeof c.code === "string" ? c.code : ""
+      })) : [];
+    return {
+      id: uid(),
+      title: item.title.trim(),
+      explanation: typeof item.explanation === "string" ? item.explanation : "(لا يوجد شرح — يمكنك إضافته يدويًا)",
+      codes: codes,
+      starred: !!item.starred,
+      note: typeof item.note === "string" ? item.note : ""
+    };
+  }
+  function sectionsFromJSON(raw){
+    let data;
+    try{ data = JSON.parse(raw); }
+    catch(e){ return null; } // مش JSON أصلًا — سيب المتصفح يجرب التحليل كنص عادي
+    let rawList = null;
+    if(Array.isArray(data)) rawList = data;
+    else if(data && Array.isArray(data.sections)) rawList = data.sections;
+    else if(data && typeof data === "object" && typeof data.title === "string") rawList = [data];
+    if(rawList === null) return {recognized:false, list:[]};
+    return {recognized:true, list: rawList.map(normalizeImportedSection).filter(Boolean)};
   }
 
   /* ============================== HIGHLIGHT ============================== */
@@ -646,10 +686,11 @@
           <input type="number" class="posnum" value="${pos}" min="1" max="${sections.length}" title="غيّر الرقم للانتقال لموضع جديد في الفهرس">
           <span class="star ${s.starred?'on':''}" data-star="${s.id}">${s.starred?'★':'☆'}</span>
           <span class="ttl">${escapeHtml(s.title)}</span>
+          <span class="toc-comment ${s.note && s.note.trim() ? 'on' : ''}" data-comment="${s.id}" title="${s.note ? escapeHtml(s.note) : 'أضف تعليق على هذا العنصر'}">💬</span>
           <span class="count">${s.codes.length}</span>
         `;
         li.addEventListener("click",(e)=>{
-          if(e.target.closest(".star") || e.target.closest(".posnum") || e.target.closest(".draghandle")) return;
+          if(e.target.closest(".star") || e.target.closest(".posnum") || e.target.closest(".draghandle") || e.target.closest(".toc-comment")) return;
           if(multiToggle.checked || e.ctrlKey || e.metaKey || e.shiftKey){
             if(selected.has(s.id)) selected.delete(s.id); else selected.add(s.id);
           }else{
@@ -661,6 +702,10 @@
         li.querySelector(".star").addEventListener("click",()=>{
           s.starred = !s.starred;
           renderAll();
+        });
+        li.querySelector(".toc-comment").addEventListener("click",(e)=>{
+          e.stopPropagation();
+          openTocCommentEditor(s);
         });
 
         /* ---- إعادة ترتيب بالكتابة المباشرة في رقم الموضع ---- */
@@ -703,6 +748,46 @@
 
         tocList.appendChild(li);
       });
+  }
+
+  function openTocCommentEditor(s){
+    const overlay = document.createElement("div");
+    overlay.className = "fs-overlay";
+    overlay.innerHTML = `
+      <div class="fs-box" style="max-width:420px;">
+        <div class="fs-head">
+          <strong>💬 تعليق على: ${escapeHtml(s.title)}</strong>
+          <button class="ghost" data-act="toc-note-close">✕ إغلاق</button>
+        </div>
+        <div class="fs-body">
+          <textarea class="rawinput" style="min-height:120px;" placeholder="اكتب تعليقك على هذا العنصر في الفهرس…">${escapeHtml(s.note||"")}</textarea>
+          <div class="addbox-actions">
+            <button class="primary" data-act="toc-note-save">حفظ التعليق</button>
+            <button class="ghost danger" data-act="toc-note-delete">حذف التعليق</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const ta = overlay.querySelector("textarea");
+    setTimeout(()=> ta.focus(), 30);
+    function close(){ overlay.remove(); document.removeEventListener("keydown", onKey); }
+    function onKey(e){ if(e.key === "Escape") close(); }
+    document.addEventListener("keydown", onKey);
+    overlay.addEventListener("click", (e)=>{ if(e.target === overlay) close(); });
+    overlay.querySelector('[data-act="toc-note-close"]').addEventListener("click", close);
+    overlay.querySelector('[data-act="toc-note-save"]').addEventListener("click", ()=>{
+      s.note = ta.value.trim();
+      scheduleAutoSave(); renderAll();
+      showToast("تم حفظ التعليق.", "ok", 1600);
+      close();
+    });
+    overlay.querySelector('[data-act="toc-note-delete"]').addEventListener("click", ()=>{
+      s.note = "";
+      scheduleAutoSave(); renderAll();
+      showToast("تم حذف التعليق.", "ok", 1600);
+      close();
+    });
   }
 
   /* ============================== RENDER: LANGUAGE MANAGER ============================== */
@@ -1263,7 +1348,7 @@
     if(!section.mindmap || !section.mindmap.nodes || !Object.keys(section.mindmap.nodes).length){
       const rootId = "m_root";
       section.mindmap = {
-        nodes: { [rootId]: { id:rootId, text:"الفكرة الرئيسية", parentId:null, x:0, y:0, color:MM_COLORS[0], shape:"rounded", scale:1, collapsed:false, orderIndex:0 } },
+        nodes: { [rootId]: { id:rootId, text:"الفكرة الرئيسية", parentId:null, x:0, y:0, color:MM_COLORS[0], shape:"rounded", scale:1, collapsed:false, orderIndex:0, note:"" } },
         rootId, dir:"rtl", dark:false
       };
     }
@@ -1381,7 +1466,7 @@
         x: parent ? parent.x + (mm.dir === "rtl" ? -190 : 190) : 0,
         y: parent ? parent.y + sibs.length * 60 : 0,
         color: MM_COLORS[Object.keys(mm.nodes).length % MM_COLORS.length],
-        shape: "rounded", scale: 1, collapsed: false, orderIndex
+        shape: "rounded", scale: 1, collapsed: false, orderIndex, note: ""
       };
     }
 
@@ -1569,6 +1654,18 @@
           e.stopPropagation();
         });
 
+        if(n.note && n.note.trim()){
+          const noteBtn = svgEl("foreignObject", { x:n.x + (mm.dir==="rtl" ? w/2-16 : -w/2-2), y:n.y-h/2-2, width:18, height:18, style:"overflow:visible;" });
+          const nb = document.createElement("div");
+          nb.className = "mm-note-badge";
+          nb.textContent = "🗒";
+          nb.title = n.note;
+          nb.addEventListener("mousedown", (e)=> e.stopPropagation());
+          nb.addEventListener("click", (e)=>{ e.stopPropagation(); openNoteEditor(n); });
+          noteBtn.appendChild(nb);
+          gNodes.appendChild(noteBtn);
+        }
+
         const kids = childrenOf(n.id);
         if(kids.length){
           const btn = svgEl("foreignObject", { x:n.x + (mm.dir==="rtl" ? -w/2-18 : w/2+2), y:n.y-9, width:18, height:18 });
@@ -1606,7 +1703,10 @@
         <span class="mm-sep"></span>
         <span style="font-size:11px;">الحجم</span>
         <input type="range" class="mm-size-range" min="0.7" max="1.8" step="0.1" value="${n.scale||1}">
+        <span class="mm-sep"></span>
+        <button class="small mm-note-btn" type="button" title="إضافة/تعديل ملاحظة على العقدة">🗒️ ${n.note && n.note.trim() ? "تعديل الملاحظة" : "إضافة ملاحظة"}</button>
       `;
+      propsBar.querySelector(".mm-note-btn").addEventListener("click", ()=> openNoteEditor(n));
       propsBar.querySelectorAll("[data-color]").forEach(btn=>{
         btn.addEventListener("click", ()=>{ pushHistory(); n.color = btn.dataset.color; scheduleAutoSave(); render(); });
       });
@@ -1641,6 +1741,47 @@
       }
     }
 
+    function openNoteEditor(n){
+      pushHistory();
+      const overlay = document.createElement("div");
+      overlay.className = "fs-overlay";
+      overlay.innerHTML = `
+        <div class="fs-box" style="max-width:420px;">
+          <div class="fs-head">
+            <strong>🗒️ ملاحظة على: ${escapeHtml(n.text)}</strong>
+            <button class="ghost" data-act="note-close">✕ إغلاق</button>
+          </div>
+          <div class="fs-body">
+            <textarea class="rawinput" style="min-height:120px;" placeholder="اكتب ملاحظتك هنا…">${escapeHtml(n.note||"")}</textarea>
+            <div class="addbox-actions">
+              <button class="primary" data-act="note-save">حفظ الملاحظة</button>
+              <button class="ghost danger" data-act="note-delete">حذف الملاحظة</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      const ta = overlay.querySelector("textarea");
+      setTimeout(()=> ta.focus(), 30);
+      function close(){ overlay.remove(); document.removeEventListener("keydown", onKey); }
+      function onKey(e){ if(e.key === "Escape") close(); }
+      document.addEventListener("keydown", onKey);
+      overlay.addEventListener("click", (e)=>{ if(e.target === overlay) close(); });
+      overlay.querySelector('[data-act="note-close"]').addEventListener("click", close);
+      overlay.querySelector('[data-act="note-save"]').addEventListener("click", ()=>{
+        n.note = ta.value.trim();
+        scheduleAutoSave(); render();
+        showToast("تم حفظ الملاحظة.", "ok", 1600);
+        close();
+      });
+      overlay.querySelector('[data-act="note-delete"]').addEventListener("click", ()=>{
+        n.note = "";
+        scheduleAutoSave(); render();
+        showToast("تم حذف الملاحظة.", "ok", 1600);
+        close();
+      });
+    }
+
     /* ---------- تفاعل السحب والتحديد والتحريك ---------- */
     let dragMode = null; // "node" | "pan"
     let dragStart = null;
@@ -1653,13 +1794,20 @@
       e.preventDefault();
       wrap.focus();
       const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+      let selectionChanged = false;
       if(additive){
         if(state.selectedIds.has(id)) state.selectedIds.delete(id); else state.selectedIds.add(id);
+        selectionChanged = true;
       } else if(!state.selectedIds.has(id)){
         state.selectedIds = new Set([id]);
+        selectionChanged = true;
       }
-      render();
       pushHistory();
+      // مهم: نعمل render() الكامل بس لو التحديد اتغيّر فعلًا. إعادة بناء العقدة نفسها
+      // مع كل mousedown (حتى لو التحديد ما اتغيرش) كانت بتهدم عنصر الـ DOM قبل ما
+      // يوصل الضغط التاني من الدبل كليك، فالمتصفح ما كانش بيولّد حدث dblclick أصلًا،
+      // وده اللي كان مانع تعديل اسم العقدة (والدخول في وضع الكتابة بشكل عام).
+      if(selectionChanged) render(); else renderProps();
       dragMode = "node";
       const t = e.touches ? e.touches[0] : e;
       dragStart = { x:t.clientX, y:t.clientY };
@@ -1893,29 +2041,45 @@
   document.getElementById("txtFileInput").addEventListener("change",(e)=>{
     const files = Array.from(e.target.files || []);
     let done = 0, failed = 0, allNew = [];
+    const failedNames = [];
     if(files.length===0) return;
     showToast("جارٍ قراءة " + files.length + " ملف/ملفات…");
     files.forEach(f=>{
       const reader = new FileReader();
       reader.onload = ()=>{
         try{
-          const newOnes = parseText(reader.result);
-          allNew = allNew.concat(newOnes);
-        }catch(err){ console.warn("فشل تحليل ملف:", f.name, err); failed++; }
+          const isJsonFile = /\.json$/i.test(f.name);
+          const jsonResult = sectionsFromJSON(reader.result);
+          if(jsonResult){
+            // الملف JSON صالح — استخدم السكشنات المتعرّف عليها بدل تحليله كنص عادي
+            if(jsonResult.list.length){
+              allNew = allNew.concat(jsonResult.list);
+            } else {
+              failed++; failedNames.push(f.name + " (بنية JSON غير معروفة كسكشنات)");
+            }
+          } else if(isJsonFile){
+            // الاسم بيقول JSON لكن المحتوى JSON غير صالح
+            failed++; failedNames.push(f.name + " (JSON غير صالح)");
+          } else {
+            const newOnes = parseText(reader.result);
+            if(newOnes.length){ allNew = allNew.concat(newOnes); }
+            else { failed++; failedNames.push(f.name + " (لم يتم العثور على سكشنات)"); }
+          }
+        }catch(err){ console.warn("فشل تحليل ملف:", f.name, err); failed++; failedNames.push(f.name); }
         done++;
         if(done === files.length){
           sections = sections.concat(allNew);
           allNew.forEach(s=>selected.add(s.id));
-          const msg = "تمت إضافة " + allNew.length + " سكشن من " + files.length + " ملف/ملفات" + (failed?(" (تعذّر تحليل "+failed+")"):"") + " ✅";
-          setStatus(msg, "ok");
-          showToast(msg, allNew.length ? "ok" : "err");
+          const msg = "تمت إضافة " + allNew.length + " سكشن من " + files.length + " ملف/ملفات" + (failed?(" (تعذّر: "+failedNames.join("، ")+")"):"") + (allNew.length ? " ✅" : "");
+          setStatus(msg, allNew.length ? "ok" : "err");
+          showToast(msg, allNew.length ? "ok" : "err", 5000);
           scheduleAutoSave();
           renderAll();
         }
       };
       reader.onerror = ()=>{
         console.error("تعذّرت قراءة الملف:", f.name, reader.error);
-        failed++; done++;
+        failed++; done++; failedNames.push(f.name);
         if(done === files.length){
           setStatus("تعذّرت قراءة بعض الملفات.", "err");
           showToast("تعذّرت قراءة الملف: " + f.name, "err");
