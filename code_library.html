@@ -6,6 +6,17 @@
 <title>مذكرة الأكواد | AVR Concepts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- محرك ماركداون كامل + تنظيف HTML + تلوين أكواد احترافي + معادلات + مخططات (بديل الـ Markdown Lite القديم) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/avrasm.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<!-- لو مفيش إنترنت، المكتبات دي مش هتتحمّل والتطبيق هيرجع تلقائيًا لمحرك التنسيق المبسّط القديم كـ fallback -->
 <style>
   :root{
     --paper:#f2e9d8;
@@ -231,6 +242,12 @@
   }
   .explain-view .md-list{margin:6px 0 10px; padding-right:22px; padding-left:4px;}
   .explain-view .md-list li{margin:4px 0;}
+  .explain-view .md-list .md-list{margin:4px 0 4px; padding-right:20px;} /* قوائم متداخلة */
+  .explain-view .md-quote .md-p{margin:0 0 6px;}
+  .explain-view .md-quote .md-p:last-child{margin-bottom:0;}
+  .explain-view a{color:var(--accent-dark); text-decoration:underline; text-decoration-color:var(--marker);}
+  .explain-view a:hover{color:var(--danger);}
+  .explain-view del{color:var(--ink-soft); opacity:.75;}
   .explain-view code{
     background:#eee3c8; border:1px solid #ddcfa8; border-radius:4px; padding:1px 6px;
     font-family:"Fira Code","Consolas",monospace; font-size:13px; direction:ltr; display:inline-block;
@@ -243,6 +260,51 @@
   }
   .explain-view table.md-table th{background:#e9dfc4; color:var(--accent-dark); font-weight:800;}
   .explain-view table.md-table tr:nth-child(even) td{background:#faf6ea;}
+
+  /* ===== إضافات محرك الماركداون الكامل ===== */
+  .explain-view h1.md-h{font-size:24px;}
+  .explain-view h2.md-h{font-size:21px;}
+  .explain-view h3.md-h{font-size:19px;}
+  .explain-view .md-callout{border-radius:8px; padding:10px 14px; border-right-width:5px;}
+  .explain-view .md-callout-tip{background:#eaf6ea; border-color:#4caf50;}
+  .explain-view .md-callout-warn{background:#fff6e5; border-color:#e0a800;}
+  .explain-view .md-callout-info{background:#e8f2fb; border-color:#2f7fd1;}
+  .explain-view .md-callout-danger{background:#fdeaea; border-color:var(--danger, #d9534f);}
+  .explain-view input[type="checkbox"]{margin-left:6px; transform:translateY(2px);}
+  .explain-view .md-tasklist{list-style:none; padding-right:6px;}
+  .explain-view .md-tasklist li{margin:4px 0;}
+
+  .explain-view .md-codewrap{
+    margin:8px 0 12px; border-radius:8px; overflow:hidden; border:1px solid #2a2a2a; background:#1e1e1e; direction:ltr;
+  }
+  .explain-view .md-codehead{
+    display:flex; align-items:center; justify-content:space-between; background:#2d2d2d; color:#ccc;
+    padding:6px 10px; font-size:12px; font-family:"Cairo",sans-serif;
+  }
+  .explain-view .md-codelang{opacity:.8; text-transform:uppercase; letter-spacing:.5px;}
+  .explain-view .md-codebtns{display:flex; gap:6px;}
+  .explain-view .md-codebtn{
+    background:#3a3a3a; color:#ddd; border:1px solid #4a4a4a; border-radius:5px; padding:3px 9px;
+    font-size:11px; cursor:pointer; font-family:"Cairo",sans-serif;
+  }
+  .explain-view .md-codebtn:hover{background:#4a4a4a;}
+  .explain-view .md-codebody{display:flex;}
+  .explain-view .md-codewrap.collapsed .md-codebody{display:none;}
+  .explain-view .md-codenums{
+    user-select:none; opacity:.35; color:#fff; text-align:left; padding:10px 8px 10px 10px;
+    font-family:"Fira Code","Consolas",monospace; font-size:13px; line-height:1.6; white-space:pre; border-left:1px solid #333;
+  }
+  .explain-view .md-codepre{margin:0; padding:10px 12px; overflow-x:auto; flex:1;}
+  .explain-view .md-codepre code.hljs{
+    background:transparent !important; font-family:"Fira Code","Consolas",monospace; font-size:13px; line-height:1.6; padding:0;
+  }
+  .explain-view .mermaid-pending{color:var(--ink-soft); font-style:italic; padding:8px 0;}
+  .explain-view .mermaid-rendered{margin:10px 0; text-align:center; overflow-x:auto;}
+  .explain-view .md-footnotes{margin-top:14px; font-size:13px; color:var(--ink-soft);}
+  .explain-view .md-fnlist{padding-right:20px;}
+  .explain-view .md-fnref a{text-decoration:none; font-weight:700;}
+  .explain-view .md-fnback{margin-right:4px; text-decoration:none;}
+  .explain-view .katex-display{overflow-x:auto; overflow-y:hidden; padding:4px 0;}
 
   textarea.explain{
     width:100%; min-height:220px; background:
@@ -600,6 +662,82 @@
       {type:"number",  pattern:"\\b0[xX][0-9A-Fa-f]+\\b|\\b\\d+\\b", flags:"g", color:"#b5cea8"}
     ]
   };
+  langRules["cpp"] = {
+    displayName:"C++",
+    rules:[
+      {type:"comment", pattern:"//.*|/\\*[\\s\\S]*?\\*/", flags:"g", color:"#6a9955"},
+      {type:"string",  pattern:"\"(?:[^\"\\\\]|\\\\.)*\"", flags:"g", color:"#ce9178"},
+      {type:"keyword", pattern:"\\b(if|else|for|while|do|switch|case|break|continue|return|void|int|char|float|double|bool|unsigned|signed|struct|class|typedef|template|namespace|using|public|private|protected|virtual|override|new|delete|const|static|volatile|sizeof|include|define|try|catch|throw|nullptr|auto)\\b", flags:"g", color:"#569cd6"},
+      {type:"number",  pattern:"\\b0[xX][0-9A-Fa-f]+\\b|\\b\\d+\\b", flags:"g", color:"#b5cea8"}
+    ]
+  };
+  langRules["pic"] = {
+    displayName:"PIC Assembly",
+    rules:[
+      {type:"comment",  pattern:";.*",                        flags:"g",  color:"#6a9955"},
+      {type:"string",   pattern:"\"[^\"]*\"",                  flags:"g",  color:"#ce9178"},
+      {type:"directive",pattern:"\\b(ORG|END|EQU|CBLOCK|ENDC|__CONFIG|LIST|INCLUDE|#include|#define)\\b", flags:"gi", color:"#c586c0"},
+      {type:"label",    pattern:"^[A-Za-z_][A-Za-z0-9_]*:?\\s*$|^[A-Za-z_][A-Za-z0-9_]*(?=\\s)", flags:"gm", color:"#dcdcaa"},
+      {type:"keyword",  pattern:"\\b(MOVLW|MOVWF|MOVF|MOVFW|CLRF|CLRW|INCF|DECF|INCFSZ|DECFSZ|GOTO|CALL|RETURN|RETLW|RETFIE|BSF|BCF|BTFSC|BTFSS|ANDLW|ANDWF|IORLW|IORWF|XORLW|XORWF|SUBLW|SUBWF|ADDLW|ADDWF|COMF|SWAPF|RLF|RRF|NOP|SLEEP|CLRWDT|BANKSEL|W|F)\\b", flags:"gi", color:"#569cd6"},
+      {type:"register", pattern:"\\bSTATUS\\b|\\bPORTA\\b|\\bPORTB\\b|\\bPORTC\\b|\\bTRISA\\b|\\bTRISB\\b|\\bTRISC\\b|\\bW\\b", flags:"g", color:"#4ec9b0"},
+      {type:"number",   pattern:"\\b0[xX][0-9A-Fa-f]+\\b|\\bH'[0-9A-Fa-f]+'|\\bB'[01]+'|\\b\\d+\\b", flags:"g", color:"#b5cea8"}
+    ]
+  };
+  langRules["python"] = {
+    displayName:"Python",
+    rules:[
+      {type:"comment", pattern:"#.*", flags:"g", color:"#6a9955"},
+      {type:"string",  pattern:"\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''|\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", flags:"g", color:"#ce9178"},
+      {type:"keyword", pattern:"\\b(def|class|if|elif|else|for|while|try|except|finally|with|as|import|from|return|yield|pass|break|continue|lambda|None|True|False|and|or|not|in|is|global|nonlocal|self|async|await)\\b", flags:"g", color:"#569cd6"},
+      {type:"number",  pattern:"\\b0[xX][0-9A-Fa-f]+\\b|\\b\\d+\\.?\\d*\\b", flags:"g", color:"#b5cea8"}
+    ]
+  };
+  langRules["javascript"] = {
+    displayName:"JavaScript",
+    rules:[
+      {type:"comment", pattern:"//.*|/\\*[\\s\\S]*?\\*/", flags:"g", color:"#6a9955"},
+      {type:"string",  pattern:"`(?:[^`\\\\]|\\\\.)*`|\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", flags:"g", color:"#ce9178"},
+      {type:"keyword", pattern:"\\b(function|const|let|var|if|else|for|while|do|switch|case|break|continue|return|class|extends|new|this|typeof|instanceof|try|catch|finally|throw|async|await|import|export|default|from|null|undefined|true|false)\\b", flags:"g", color:"#569cd6"},
+      {type:"number",  pattern:"\\b0[xX][0-9A-Fa-f]+\\b|\\b\\d+\\.?\\d*\\b", flags:"g", color:"#b5cea8"}
+    ]
+  };
+  langRules["json"] = {
+    displayName:"JSON",
+    rules:[
+      {type:"key",     pattern:"\"[^\"]*\"(?=\\s*:)", flags:"g", color:"#9cdcfe"},
+      {type:"string",  pattern:":\\s*\"(?:[^\"\\\\]|\\\\.)*\"", flags:"g", color:"#ce9178"},
+      {type:"keyword", pattern:"\\b(true|false|null)\\b", flags:"g", color:"#569cd6"},
+      {type:"number",  pattern:"\\b-?\\d+\\.?\\d*\\b", flags:"g", color:"#b5cea8"}
+    ]
+  };
+  langRules["html"] = {
+    displayName:"HTML",
+    rules:[
+      {type:"comment", pattern:"&lt;!--[\\s\\S]*?--&gt;", flags:"g", color:"#6a9955"},
+      {type:"tag",     pattern:"&lt;/?[A-Za-z][A-Za-z0-9-]*", flags:"g", color:"#569cd6"},
+      {type:"attr",    pattern:"\\b[a-zA-Z-]+(?=\\=)", flags:"g", color:"#9cdcfe"},
+      {type:"string",  pattern:"\"[^\"]*\"|'[^']*'", flags:"g", color:"#ce9178"}
+    ]
+  };
+  langRules["css"] = {
+    displayName:"CSS",
+    rules:[
+      {type:"comment",  pattern:"/\\*[\\s\\S]*?\\*/", flags:"g", color:"#6a9955"},
+      {type:"selector", pattern:"[.#]?[A-Za-z][A-Za-z0-9_-]*(?=\\s*\\{)", flags:"g", color:"#dcdcaa"},
+      {type:"property", pattern:"[a-z-]+(?=\\s*:)", flags:"g", color:"#9cdcfe"},
+      {type:"string",   pattern:"\"[^\"]*\"|'[^']*'", flags:"g", color:"#ce9178"},
+      {type:"number",   pattern:"#[0-9A-Fa-f]{3,8}\\b|\\b\\d+\\.?\\d*(px|em|rem|%|s|vh|vw)?\\b", flags:"g", color:"#b5cea8"}
+    ]
+  };
+  langRules["bash"] = {
+    displayName:"Bash",
+    rules:[
+      {type:"comment",  pattern:"#.*", flags:"g", color:"#6a9955"},
+      {type:"string",   pattern:"\"(?:[^\"\\\\]|\\\\.)*\"|'[^']*'", flags:"g", color:"#ce9178"},
+      {type:"keyword",  pattern:"\\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|return|exit|echo|export|source)\\b", flags:"g", color:"#569cd6"},
+      {type:"variable", pattern:"\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?", flags:"g", color:"#4ec9b0"}
+    ]
+  };
 
   /* ============================== PARSER ============================== */
   function parseText(raw, splitSections){
@@ -712,10 +850,27 @@
   // بالخط المائل (| a | b |) وجداول "سايبة" متباعدة بتابات أو مسافات (بتظهر لما تلصق من ChatGPT/Claude).
   function inlineMD(raw){
     let t = escapeHtml(raw);
-    t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // نحمي الكود المضمّن الأول عشان أي **/*/~~ جواه ميتفسّرش غلط كتنسيق (باج قديم)
+    const codeStash = [];
+    t = t.replace(/`([^`]+)`/g, (m, c)=>{
+      codeStash.push(c);
+      return "\u0000CODE" + (codeStash.length-1) + "\u0000";
+    });
+    // روابط [نص](URL)
+    t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    // بولد+مائل مع بعض ***نص*** / ___نص___
+    t = t.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+    t = t.replace(/___([^_]+)___/g, '<strong><em>$1</em></strong>');
+    // بولد **نص** / __نص__
     t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    t = t.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    // شطب ~~نص~~
+    t = t.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    // مائل *نص* / _نص_
     t = t.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
     t = t.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>');
+    // رجّع الكود المضمّن زي ما هو من غير أي تنسيق إضافي جواه
+    t = t.replace(/\u0000CODE(\d+)\u0000/g, (m, idx)=> '<code>'+codeStash[Number(idx)]+'</code>');
     return t;
   }
   const EMOJI_HEAD_RE = /^((?:[0-9]\uFE0F?\u20E3)|(?:[\u{1F300}-\u{1FAFF}\u2600-\u27BF]\uFE0F?))\s*(.+)$/u;
@@ -738,7 +893,77 @@
   const COLON_HEAD_RE = /^[^\-*•:][^:\n]{1,88}:$/;
   function isUlLine(s){ return /^[-*•]\s+/.test(s); }
   function isOlLine(s){ return /^\d+[.)]\s+/.test(s); }
-  function renderMarkdownLite(raw){
+  // بيرجع تفاصيل عنصر القائمة (نوعه، مستوى الإزاحة بالمسافات، ونصه) عشان ندعم القوائم المتداخلة
+  // (عنصر تحت عنصر) اللي بتظهر كتير في ردود ChatGPT/Claude — بدل ما كانت كلها بتتحط في مستوى واحد بس.
+  function listMarkerOf(line){
+    const expanded = line.replace(/\t/g, "    ");
+    let m = expanded.match(/^(\s*)[-*•]\s+(.+)$/);
+    if(m) return {indent:m[1].length, type:"ul", text:m[2]};
+    m = expanded.match(/^(\s*)(\d+)[.)]\s+(.+)$/);
+    if(m) return {indent:m[1].length, type:"ol", text:m[3], start:parseInt(m[2],10)};
+    return null;
+  }
+  // بيبني <ul>/<ol> متداخلة بادئًا من السطر i، وبيرجع الـ HTML وموقع السطر التالي بعد القائمة كلها.
+  function renderListBlock(lines, i){
+    const levels = [];
+    function openLevel(marker){
+      levels.push({indent:marker.indent, type:marker.type, start:marker.start, parts:[]});
+    }
+    function closeTopLevel(){
+      const lvl = levels.pop();
+      const startAttr = (lvl.type==="ol" && lvl.start && lvl.start!==1) ? ` start="${lvl.start}"` : "";
+      const inner = `<${lvl.type} class="md-list"${startAttr}>${lvl.parts.join("")}</${lvl.type}>`;
+      if(levels.length){
+        const parent = levels[levels.length-1];
+        const lastIdx = parent.parts.length-1;
+        parent.parts[lastIdx] = parent.parts[lastIdx].replace(/<\/li>$/, inner + "</li>");
+        return null;
+      }
+      return inner;
+    }
+    let out = "";
+    while(i < lines.length){
+      const raw = lines[i];
+      if(raw.trim() === ""){
+        let j = i+1;
+        while(j < lines.length && lines[j].trim() === "") j++;
+        if(j < lines.length && listMarkerOf(lines[j])){ i = j; continue; }
+        break;
+      }
+      const marker = listMarkerOf(raw);
+      if(!marker){
+        // سطر متابعة (تكملة نص) تحت عنصر قائمة، من غير علامة قائمة، لكنه متزحزح لجوه
+        if(levels.length && /^\s+\S/.test(raw) && raw.search(/\S/) > levels[levels.length-1].indent){
+          const parent = levels[levels.length-1];
+          const lastIdx = parent.parts.length-1;
+          parent.parts[lastIdx] = parent.parts[lastIdx].replace(/<\/li>$/, " " + inlineMD(raw.trim()) + "</li>");
+          i++; continue;
+        }
+        break;
+      }
+      while(levels.length && marker.indent < levels[levels.length-1].indent){
+        const closed = closeTopLevel();
+        if(closed) out += closed;
+      }
+      if(!levels.length || marker.indent > levels[levels.length-1].indent){
+        openLevel(marker);
+      } else if(marker.type !== levels[levels.length-1].type){
+        const closed = closeTopLevel();
+        if(closed) out += closed;
+        openLevel(marker);
+      }
+      levels[levels.length-1].parts.push(`<li>${inlineMD(marker.text)}</li>`);
+      i++;
+    }
+    while(levels.length){
+      const closed = closeTopLevel();
+      if(closed) out += closed;
+    }
+    return {html: out, next: i};
+  }
+  // هذا هو المحرك المبسّط القديم (Markdown Lite) — بقى دلوقتي fallback بس بيشتغل لو المكتبات
+  // الاحترافية (marked/highlight.js/إلخ) ما قدرتش تتحمّل (زي عدم وجود إنترنت).
+  function renderMarkdownLegacy(raw){
     if(!raw || !raw.trim()) return '<span class="md-empty">(لا يوجد شرح — اضغط هنا للإضافة)</span>';
     const lines = raw.replace(/\r\n/g,"\n").split("\n");
     let html = "";
@@ -842,7 +1067,7 @@
         i++; continue;
       }
 
-      // اقتباس
+      // اقتباس (بيدعم كذا سطر وراء بعض وكمان تنسيق داخلي زي بولد/قوائم جوّه)
       if(/^>\s?/.test(trimmed)){
         flushList();
         const quoteLines = [];
@@ -850,22 +1075,17 @@
           quoteLines.push(lines[i].trim().replace(/^>\s?/,""));
           i++;
         }
-        html += `<blockquote class="md-quote">${inlineMD(quoteLines.join(" "))}</blockquote>`;
+        html += `<blockquote class="md-quote">${renderMarkdownLegacy(quoteLines.join("\n"))}</blockquote>`;
         continue;
       }
 
-      // قوائم
-      const ulMatch = trimmed.match(/^[-*•]\s+(.+)$/);
-      const olMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
-      if(ulMatch){
-        if(!listBuf || listBuf.type!=="ul"){ flushList(); listBuf = {type:"ul", items:[]}; }
-        listBuf.items.push(ulMatch[1]);
-        i++; continue;
-      }
-      if(olMatch){
-        if(!listBuf || listBuf.type!=="ol"){ flushList(); listBuf = {type:"ol", items:[]}; }
-        listBuf.items.push(olMatch[1]);
-        i++; continue;
+      // قوائم (بتدعم التعشيش — عنصر فرعي تحت عنصر رئيسي بمسافات بادئة، وسطور متابعة بدون علامة)
+      if(listMarkerOf(line)){
+        flushList();
+        const block = renderListBlock(lines, i);
+        html += block.html;
+        i = block.next;
+        continue;
       }
       // سطر قصير بيقف لوحده ومنتهي بـ ":" (زي "طريقة العمل:") — بيتعامل معاه كعنوان تمهيدي
       // مصغّر لو مش سطر رسم توضيحي ومش بداية جدول/قائمة بعده مباشرة بنفس السطر.
@@ -921,23 +1141,246 @@
     return out;
   }
 
+  /* ===================== محرك ماركداون كامل (marked + DOMPurify + highlight.js + KaTeX + Mermaid) =====================
+     ده المحرك الرئيسي دلوقتي. لو المكتبات مش متاحة (مفيش إنترنت مثلاً) بيرجع تلقائيًا لـ renderMarkdownLegacy. */
+  const MD_LANG_ALIASES = { avr:"avrasm", asm:"avrasm", assembly:"avrasm", assembler:"avrasm" };
+  let __mdReady = false;
+  if(window.marked && window.DOMPurify){
+    try{
+      const renderer = new marked.Renderer();
+      renderer.code = function(code, infostring){ return buildCodeBlockHtml(code, infostring); };
+      marked.setOptions({ gfm:true, breaks:true, renderer });
+      if(window.mermaid){ mermaid.initialize({ startOnLoad:false, theme:"default" }); }
+      __mdReady = true;
+    } catch(e){ __mdReady = false; }
+  }
+
+  function buildCodeBlockHtml(code, infostring){
+    const langRaw = (infostring || "").trim().split(/\s+/)[0] || "";
+    const lang = langRaw.toLowerCase();
+    if(lang === "diagram"){
+      // رسم ASCII (اتحط في fenced block من wrapAsciiDiagrams) — يتعرض زي القديم بالظبط، بدون هيدر
+      return `<pre class="md-diagram">${escapeHtml(code.replace(/\n$/,""))}</pre>`;
+    }
+    if(lang === "mermaid" && window.mermaid){
+      return `<div class="mermaid-pending" data-mermaid-src="${encodeURIComponent(code)}">⏳ جاري تجهيز المخطط...</div>`;
+    }
+    const hljsLang = MD_LANG_ALIASES[lang] || lang;
+    let highlighted, labelText;
+    try{
+      if(window.hljs && hljsLang && hljs.getLanguage(hljsLang)){
+        highlighted = hljs.highlight(code, { language: hljsLang, ignoreIllegals:true }).value;
+        labelText = langRaw || hljsLang;
+      } else if(window.hljs && lang !== "text" && lang !== "txt" && lang !== ""){
+        const auto = hljs.highlightAuto(code);
+        highlighted = auto.value;
+        labelText = langRaw || auto.language || "كود";
+      } else {
+        highlighted = escapeHtml(code);
+        labelText = langRaw || "نص";
+      }
+    } catch(e){
+      highlighted = escapeHtml(code);
+      labelText = langRaw || "كود";
+    }
+    const lineCount = Math.max(1, code.replace(/\n$/,"").split("\n").length);
+    let nums = ""; for(let n=1;n<=lineCount;n++){ nums += (n>1?"\n":"") + n; }
+    return `<div class="md-codewrap">
+      <div class="md-codehead">
+        <span class="md-codelang">${escapeHtml(labelText)}</span>
+        <div class="md-codebtns">
+          <button type="button" class="md-codebtn" data-md-action="copy">📋 نسخ</button>
+          <button type="button" class="md-codebtn" data-md-action="collapse">➖ طي</button>
+        </div>
+      </div>
+      <div class="md-codebody">
+        <div class="md-codenums" aria-hidden="true">${nums}</div>
+        <pre class="md-codepre"><code class="hljs">${highlighted}</code></pre>
+      </div>
+    </div>`;
+  }
+
+  // مستمع واحد للنقر على مستوى الصفحة (event delegation) بدل onclick مضمّن في الـ HTML —
+  // أأمن مع DOMPurify (منظّف الـ HTML) وبيشتغل تلقائيًا مع أي كتلة كود جديدة من غير ما نربط أحداث لكل عنصر.
+  document.addEventListener("click", function(e){
+    const copyBtn = e.target.closest('.md-codebtn[data-md-action="copy"]');
+    if(copyBtn){
+      const wrap = copyBtn.closest(".md-codewrap");
+      const codeEl = wrap && wrap.querySelector("code");
+      if(codeEl && navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(codeEl.textContent).then(()=>{
+          const old = copyBtn.textContent;
+          copyBtn.textContent = "✅ اتنسخ";
+          setTimeout(()=>{ copyBtn.textContent = old; }, 1400);
+        }).catch(()=>{});
+      }
+      return;
+    }
+    const collapseBtn = e.target.closest('.md-codebtn[data-md-action="collapse"]');
+    if(collapseBtn){
+      const wrap = collapseBtn.closest(".md-codewrap");
+      if(wrap){
+        const collapsed = wrap.classList.toggle("collapsed");
+        collapseBtn.textContent = collapsed ? "➕ عرض" : "➖ طي";
+      }
+    }
+  });
+
+  // بنلف أسطر رسومات ASCII (┌─┐ إلخ) جوه fenced code block خاص، عشان تفضل ثابتة العرض
+  // بالظبط ومتتلمسش من marked (زي منطق الرسومات في المحرك القديم بالظبط).
+  function wrapAsciiDiagrams(raw){
+    const segments = raw.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g);
+    for(let s=0; s<segments.length; s+=2){
+      const lines = segments[s].split("\n");
+      const out = [];
+      let i = 0;
+      while(i < lines.length){
+        if(lines[i].trim() === ""){ out.push(lines[i]); i++; continue; }
+        const para = [lines[i]]; i++;
+        while(i < lines.length && lines[i].trim() !== ""){ para.push(lines[i]); i++; }
+        const isDiagram = para.length > 1
+          ? para.some(l => DIAGRAM_CHARS_RE.test(l))
+          : (DIAGRAM_CHARS_RE.test(para[0]) && para[0].trim().length < 60);
+        if(isDiagram){ out.push("```diagram", ...para, "```"); }
+        else { out.push(...para); }
+      }
+      segments[s] = out.join("\n");
+    }
+    return segments.join("");
+  }
+
+  // Footnotes: بنستخرج التعريفات [^1]: نص، وبنحوّل الإشارات [^1] لروابط <sup> فوق النص الأصلي
+  // قبل ما نبعته لـ marked، عشان الـ HTML الجاهز ده يفضل زي ما هو من غير تعديل.
+  function extractFootnoteDefs(raw){
+    const defs = {};
+    const text = raw.replace(/^\[\^([^\]]+)\]:\s*(.+)$/gm, (m, id, def)=>{ defs[id]=def; return ""; });
+    return { text, defs };
+  }
+  function applyFootnoteRefs(text, defs){
+    const used = [];
+    if(!Object.keys(defs).length) return { text, used };
+    const replaced = text.replace(/\[\^([^\]]+)\]/g, (m, id)=>{
+      if(!(id in defs)) return m;
+      if(!used.includes(id)) used.push(id);
+      const n = used.indexOf(id) + 1;
+      return `<sup class="md-fnref"><a href="#md-fn-${escapeHtml(id)}" id="md-fnref-${escapeHtml(id)}">${n}</a></sup>`;
+    });
+    return { text: replaced, used };
+  }
+  function buildFootnotesHtml(defs, used){
+    if(!used.length) return "";
+    let out = '<div class="md-footnotes"><hr class="md-hr"><ol class="md-fnlist">';
+    used.forEach(id=>{
+      out += `<li id="md-fn-${escapeHtml(id)}">${inlineMD(defs[id]||"")} <a href="#md-fnref-${escapeHtml(id)}" class="md-fnback" title="رجوع">↩</a></li>`;
+    });
+    out += "</ol></div>";
+    return out;
+  }
+
+  // صناديق تنبيه ملوّنة (زي 💡 Tip / ⚠ Warning في ChatGPT): بنكتشفها من أول إيموجي في الاقتباس.
+  const MD_CALLOUT_MAP = { "💡":"tip", "📝":"tip", "✅":"tip", "⚠️":"warn", "⚠":"warn", "❗":"warn", "❕":"warn", "ℹ️":"info", "ℹ":"info", "🔴":"danger", "🚫":"danger", "❌":"danger" };
+  function decorateRenderedHtml(containerEl){
+    containerEl.querySelectorAll("blockquote").forEach(bq=>{
+      bq.classList.add("md-quote");
+      const firstText = (bq.querySelector("p,li") || bq).textContent.trim();
+      for(const emo in MD_CALLOUT_MAP){
+        if(firstText.indexOf(emo) === 0){ bq.classList.add("md-callout", "md-callout-"+MD_CALLOUT_MAP[emo]); break; }
+      }
+    });
+    containerEl.querySelectorAll("h1,h2,h3,h4,h5,h6").forEach(h=> h.classList.add("md-h"));
+    containerEl.querySelectorAll("p").forEach(p=> p.classList.add("md-p"));
+    containerEl.querySelectorAll("ul,ol").forEach(l=> l.classList.add("md-list"));
+    containerEl.querySelectorAll("ul").forEach(l=>{
+      if(l.querySelector(":scope > li.task-list-item")) l.classList.add("md-tasklist");
+    });
+    containerEl.querySelectorAll("table").forEach(t=>{
+      t.classList.add("md-table");
+      if(!(t.parentElement && t.parentElement.classList.contains("md-table-wrap"))){
+        const wrap = document.createElement("div");
+        wrap.className = "md-table-wrap";
+        t.parentNode.insertBefore(wrap, t);
+        wrap.appendChild(t);
+      }
+    });
+  }
+
+  function renderMarkdownFull(raw){
+    const wrapped = wrapAsciiDiagrams(raw.replace(/\r\n/g, "\n"));
+    const { text: noDefs, defs } = extractFootnoteDefs(wrapped);
+    const { text: withRefs, used } = applyFootnoteRefs(noDefs, defs);
+    const rawHtml = marked.parse(withRefs);
+    const safeHtml = DOMPurify.sanitize(rawHtml);
+    const tmp = document.createElement("div");
+    tmp.innerHTML = safeHtml;
+    decorateRenderedHtml(tmp);
+    let finalHtml = tmp.innerHTML + buildFootnotesHtml(defs, used);
+    if(window.renderMathInElement){
+      try{
+        const mathHost = document.createElement("div");
+        mathHost.innerHTML = finalHtml;
+        renderMathInElement(mathHost, {
+          delimiters:[
+            {left:"$$", right:"$$", display:true},
+            {left:"\\[", right:"\\]", display:true},
+            {left:"\\(", right:"\\)", display:false},
+            {left:"$", right:"$", display:false}
+          ],
+          throwOnError:false
+        });
+        finalHtml = mathHost.innerHTML;
+      } catch(e){ /* نتجاهل أي خطأ في KaTeX ونكمل عرض الباقي عادي */ }
+    }
+    return finalHtml;
+  }
+
+  // بعد ما الـ HTML يتحط فعليًا في الصفحة، بنفعّل أي مخططات Mermaid لسه مستنية (لازم تترسم Async).
+  function enhanceMarkdownView(containerEl){
+    if(!containerEl || !window.mermaid) return;
+    const pendings = containerEl.querySelectorAll(".mermaid-pending");
+    pendings.forEach(async (el)=>{
+      const src = decodeURIComponent(el.dataset.mermaidSrc || "");
+      try{
+        const id = "mmd" + Math.random().toString(36).slice(2);
+        const { svg } = await mermaid.render(id, src);
+        el.outerHTML = `<div class="mermaid-rendered">${svg}</div>`;
+      } catch(e){
+        el.outerHTML = `<pre class="md-diagram">${escapeHtml(src)}</pre>`;
+      }
+    });
+  }
+
+  function renderMarkdownLite(raw){
+    if(!raw || !raw.trim()) return '<span class="md-empty">(لا يوجد شرح — اضغط هنا للإضافة)</span>';
+    if(__mdReady){
+      try{ return renderMarkdownFull(raw); }
+      catch(e){ return renderMarkdownLegacy(raw); }
+    }
+    return renderMarkdownLegacy(raw);
+  }
+
   function getRuleset(langKey){
     return langRules[langKey] || langRules["plain"] || genericRules;
   }
   function highlight(code, langKey){
     const ruleset = getRuleset(langKey);
     let result = escapeHtml(code);
+    // بنستخدم رموز PUA (مساحة استخدام خاص) كـ"عازل" بديل بعد كل تظليل، بدل نصوص \u0000 القديمة.
+    // ده لازم عشان لو قاعدة لاحقة (زي الأرقام أو النصوص) بتدور على حاجة شكلها موجود جوه
+    // الـ style الملوّن اللي القاعدة اللي قبلها ظللته (زي "color:#569cd6")، ماتعيدش تظليله فوق بعضه.
+    const stash = [];
     ruleset.rules.forEach(rule=>{
       try{
         const flags = (rule.flags && rule.flags.includes("g")) ? rule.flags : (rule.flags||"")+"g";
         const re = new RegExp(rule.pattern, flags);
         result = result.replace(re, (match)=>{
-          if(match.indexOf("\u0000")!==-1) return match;
-          return "\u0000<span style=\"color:"+rule.color+"\">"+match+"</span>\u0000";
+          if(/[\uE000-\uF8FF]/.test(match)) return match; // جزء منه اتظلل قبل كده، سيبه زي ما هو
+          const idx = stash.length;
+          stash.push('<span style="color:'+rule.color+'">'+match+'</span>');
+          return String.fromCodePoint(0xE000 + idx);
         });
       }catch(e){ /* ignore bad user regex */ }
     });
-    return result.replace(/\u0000/g,"");
+    return result.replace(/[\uE000-\uF8FF]/g, ch => stash[ch.codePointAt(0) - 0xE000]);
   }
 
   /* ============================== DRAWER (slide index) ============================== */
@@ -1190,6 +1633,7 @@
       card.querySelector(".mindmap-holder").appendChild(buildMindMapPanel(s));
 
       cardsWrap.appendChild(card);
+      enhanceMarkdownView(card.querySelector('[data-act="explain-view"]'));
     });
 
     cardsWrap.querySelectorAll(".card").forEach(card=>{
@@ -1209,6 +1653,7 @@
         });
         taEl.addEventListener("blur", ()=>{
           viewEl.innerHTML = renderMarkdownLite(s.explanation);
+          enhanceMarkdownView(viewEl);
           taEl.style.display = "none";
           viewEl.style.display = "block";
         });
@@ -1240,11 +1685,13 @@
           const preview = document.createElement("div");
           preview.className = "explain-view";
           preview.innerHTML = renderMarkdownLite(s.explanation);
+          enhanceMarkdownView(preview);
           ta.addEventListener("input", (e)=>{
             s.explanation = e.target.value;
             const inlineTa = card.querySelector('[data-act="explain"]');
             if(inlineTa) inlineTa.value = e.target.value;
             preview.innerHTML = renderMarkdownLite(s.explanation);
+            enhanceMarkdownView(preview);
             scheduleAutoSave();
           });
           body.appendChild(ta);
@@ -1253,7 +1700,7 @@
           setTimeout(()=> ta.focus(), 50);
         }, ()=>{
           const viewEl = card.querySelector('[data-act="explain-view"]');
-          if(viewEl) viewEl.innerHTML = renderMarkdownLite(s.explanation);
+          if(viewEl){ viewEl.innerHTML = renderMarkdownLite(s.explanation); enhanceMarkdownView(viewEl); }
         });
       });
       card.querySelector('[data-act="expand-draw"]').addEventListener("click", ()=>{
