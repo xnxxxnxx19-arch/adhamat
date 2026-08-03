@@ -195,6 +195,55 @@
   .tag{font-size:10.5px; color:#fff; background:var(--tab); padding:2px 9px; border-radius:20px; font-weight:700;}
 
   .section-label{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.6px; margin:14px 0 6px; border-bottom:1px dotted var(--rule); padding-bottom:3px;}
+
+  /* ============================== عرض الشرح المنسّق (ماركداون-لايت) ============================== */
+  .explain-view{
+    width:100%; min-height:60px; background:#fffdf7; border:1px solid var(--rule); color:var(--ink);
+    border-radius:6px; padding:12px 14px; font-size:14.5px; line-height:1.85; direction:rtl; text-align:right;
+    cursor:text; font-family:"Cairo",sans-serif;
+  }
+  .explain-view .md-empty{color:var(--ink-soft); font-style:italic;}
+  .explain-view .md-p{margin:0 0 10px;}
+  .explain-view .md-p:last-child{margin-bottom:0;}
+  .explain-view .md-diagram{
+    direction:ltr; text-align:left; margin:8px 0 12px; padding:12px 14px; background:#2b2820; color:#e9dfc4;
+    border-radius:6px; border:1px solid #45402f; font-family:"Consolas","Fira Code",monospace;
+    font-size:12.5px; line-height:1.5; overflow-x:auto; white-space:pre;
+  }
+  .explain-view .md-h{margin:16px 0 8px; color:var(--accent-dark); font-weight:800; line-height:1.4;}
+  .explain-view h4.md-h{font-size:19px;}
+  .explain-view h5.md-h{font-size:16px;}
+  .explain-view h6.md-h{font-size:14px;}
+  .explain-view .md-emoji-head{
+    font-weight:800; font-size:15.5px; margin:16px 0 8px; color:var(--accent-dark);
+    padding-bottom:4px; border-bottom:2px solid #e9dfc4;
+  }
+  /* عنوان فرعي مستنتج من نص بدون # صريح — زي سطر **بولد** كامل، أو سطر قصير منتهي بـ ":"
+     (شكل شائع جدًا في ردود الـ AI). بيكون بارز عن الفقرة العادية لكن أصغر من عناوين الـ #. */
+  .explain-view .md-subhead{
+    font-weight:800; font-size:14.5px; margin:14px 0 6px; color:var(--accent-dark); line-height:1.5;
+  }
+  .explain-view .md-subhead:first-child{margin-top:0;}
+  .explain-view .md-hr{border:none; border-top:1px dashed var(--rule); margin:14px 0;}
+  .explain-view .md-quote{
+    margin:8px 0; padding:6px 12px; border-right:3px solid var(--accent); background:#f5efdc;
+    color:var(--ink-soft); border-radius:4px;
+  }
+  .explain-view .md-list{margin:6px 0 10px; padding-right:22px; padding-left:4px;}
+  .explain-view .md-list li{margin:4px 0;}
+  .explain-view code{
+    background:#eee3c8; border:1px solid #ddcfa8; border-radius:4px; padding:1px 6px;
+    font-family:"Fira Code","Consolas",monospace; font-size:13px; direction:ltr; display:inline-block;
+  }
+  .explain-view strong{color:var(--accent-dark);}
+  .explain-view .md-table-wrap{overflow-x:auto; margin:8px 0 12px; border-radius:6px; border:1px solid var(--rule);}
+  .explain-view table.md-table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  .explain-view table.md-table th, .explain-view table.md-table td{
+    border:1px solid var(--rule); padding:7px 10px; text-align:center; vertical-align:middle;
+  }
+  .explain-view table.md-table th{background:#e9dfc4; color:var(--accent-dark); font-weight:800;}
+  .explain-view table.md-table tr:nth-child(even) td{background:#faf6ea;}
+
   textarea.explain{
     width:100%; min-height:220px; background:
       repeating-linear-gradient(#fffdf7 0 31px, #eadfc4 31px 32px);
@@ -235,6 +284,47 @@
   .mm-node-box.shape-ellipse{border-radius:999px;}
   .mm-node-box.shape-rect{border-radius:2px;}
   .mm-node-box.shape-none{border-color:transparent; background:transparent;}
+  .mm-node-box.shape-circle{border-radius:50%; padding:8px;}
+  .mm-node-box.shape-diamond{
+    border-radius:0; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    padding:16px 26px;
+  }
+  .mm-node-box.shape-triangle{
+    border-radius:0; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    padding:32px 20px 6px;
+  }
+  .mm-node-box.shape-hexagon{
+    border-radius:0; clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+    padding:6px 20px;
+  }
+  .mm-node-box.shape-octagon{
+    border-radius:0;
+    clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+    padding:6px 18px;
+  }
+  .mm-node-box.shape-parallelogram{
+    border-radius:0; clip-path: polygon(15% 0%, 100% 0%, 85% 100%, 0% 100%);
+    padding:6px 22px;
+  }
+  .mm-node-box.shape-arrow-right{
+    border-radius:0;
+    clip-path: polygon(0% 22%, 62% 22%, 62% 0%, 100% 50%, 62% 100%, 62% 78%, 0% 78%);
+    padding:6px 34px 6px 8px;
+  }
+  .mm-node-box.shape-arrow-left{
+    border-radius:0;
+    clip-path: polygon(100% 22%, 38% 22%, 38% 0%, 0% 50%, 38% 100%, 38% 78%, 100% 78%);
+    padding:6px 8px 6px 34px;
+  }
+  .mm-node-box.shape-star{
+    border-radius:0;
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    padding:28px 22px 20px;
+  }
+  .mm-node-box.shape-cloud{
+    border-radius: 42% 58% 55% 45% / 55% 45% 55% 45%;
+    padding:6px 14px;
+  }
   .mm-node-box.mm-selected{box-shadow:0 0 0 3px rgba(122,92,45,.35);}
   .mm-node-box.mm-match{box-shadow:0 0 0 3px #e0a92b;}
   .mm-note-badge{
@@ -381,6 +471,10 @@
     <summary>➕ إضافة نص جديد (يدعم لصق أكثر من نص بدون فقد القديم)</summary>
     <div class="addbox-body">
       <textarea class="rawinput" id="rawInput" placeholder="الصق هنا نص السكشنات (عنوان + شرح + كود)…"></textarea>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft);margin:8px 0 2px;cursor:pointer;">
+        <input type="checkbox" id="splitSectionsChk">
+        قسّم النص لعدة سكشنات عند وجود سطر --- (سيبها فاضية لو النص ده رسالة واحدة متصلة زي رد من ChatGPT/Claude)
+      </label>
       <div class="addbox-actions">
         <button class="primary" id="parseAddBtn">تحليل وإضافة كسكشنات جديدة</button>
         <label class="ghost" style="display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--rule);padding:7px 12px;border-radius:8px;cursor:pointer;background:#fff;">
@@ -508,11 +602,11 @@
   };
 
   /* ============================== PARSER ============================== */
-  function parseText(raw){
+  function parseText(raw, splitSections){
     const results = [];
     if(!raw || !raw.trim()) return results;
     raw = raw.replace(/\r\n/g,"\n");
-    const blocks = raw.split(/\n\s*-{3,}\s*\n/);
+    const blocks = splitSections ? raw.split(/\n\s*-{3,}\s*\n/) : [raw];
 
     blocks.forEach((block)=>{
       try{
@@ -532,6 +626,7 @@
           .replace(/^\d+[\.\)]\s*/,"")
           .trim();
         if(!title) title = "سكشن بدون عنوان";
+        if(title.length > 70) title = title.slice(0,70).trim() + "…";
 
         const rest = lines.slice(titleLineIdx+1).join("\n");
 
@@ -553,14 +648,10 @@
         }
         explanationParts.push(rest.slice(lastIndex));
 
+        // مهم: من غير ما نمسح أي تنسيق (**بولد**, #عناوين, أسطر فاضية) عشان ماركداون-لايت
+        // (renderMarkdownLite) يقدر يعرضه صح. بس بنقلل الأسطر الفاضية الزيادة عن اتنين.
         let explanation = explanationParts.join("\n")
-          .replace(/\*\*الشرح:\*\*/g,"")
-          .replace(/\*\*كود[^*]*\*\*/g,"")
-          .replace(/\*\*/g,"")
-          .split("\n")
-          .map(l=>l.trim())
-          .filter(l=>l.length>0 && !/^#+\s*$/.test(l))
-          .join("\n")
+          .replace(/\n{3,}/g, "\n\n")
           .trim();
 
         results.push({
@@ -614,6 +705,222 @@
   function escapeHtml(s){
     return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   }
+
+  /* ============================== ماركداون-لايت لعرض الشرح ============================== */
+  // بيدعم: عناوين #/##/###, عناوين بإيموجي (زي "1️⃣ عنوان" أو "🔥 عنوان"), **بولد**, *مائل*,
+  // كود مضمّن `code`, خط فاصل ---, اقتباس >, قوائم -/•/1., وجداول بشكلين: جداول Markdown
+  // بالخط المائل (| a | b |) وجداول "سايبة" متباعدة بتابات أو مسافات (بتظهر لما تلصق من ChatGPT/Claude).
+  function inlineMD(raw){
+    let t = escapeHtml(raw);
+    t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+    t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    t = t.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    t = t.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>');
+    return t;
+  }
+  const EMOJI_HEAD_RE = /^((?:[0-9]\uFE0F?\u20E3)|(?:[\u{1F300}-\u{1FAFF}\u2600-\u27BF]\uFE0F?))\s*(.+)$/u;
+  // بنعتمد بس على التاب الحقيقي (\t) لاكتشاف الجداول "السايبة". اكتشاف الجدول بالاعتماد على
+  // مسافتين-أو-أكتر كان بيتعارض مع رسومات ASCII (زي مخططات الصناديق ┌─┐) اللي بتستخدم
+  // مسافات كتير للمحاذاة، فكان بيقطّعها ويفسد شكلها.
+  function splitRow(line){
+    if(line.includes("\t")){
+      const parts = line.split("\t").map(p=>p.trim());
+      if(parts.filter(p=>p!=="").length >= 2) return parts;
+    }
+    return null;
+  }
+  // خطوط الرسومات التوضيحية (ASCII diagrams): بتحتوي على حروف رسم صناديق/أسهم، فلازم تتعرض
+  // بخط ثابت العرض (monospace) وتحافظ على المسافات، مش تتحول لفقرة عادية بخط عادي.
+  const DIAGRAM_CHARS_RE = /[┌┐└┘│─━┬┴├┤┼▼▲◄►↔→←↑↓╔╗╚╝║═╠╣╦╩╬▶◀]/;
+  // سطر بولد كامل بيُستخدم كعنوان فرعي بدون # (شائع جدًا في ردود ChatGPT/Claude)، زي: **طريقة العمل**
+  const BOLD_LINE_HEAD_RE = /^\*\*([^*]{1,90})\*\*:?\s*$/;
+  // سطر قصير بينتهي بـ ":" وبيقف لوحده كعنوان تمهيدي لقائمة/فقرة بعده (زي: "طريقة العمل:")
+  const COLON_HEAD_RE = /^[^\-*•:][^:\n]{1,88}:$/;
+  function isUlLine(s){ return /^[-*•]\s+/.test(s); }
+  function isOlLine(s){ return /^\d+[.)]\s+/.test(s); }
+  function renderMarkdownLite(raw){
+    if(!raw || !raw.trim()) return '<span class="md-empty">(لا يوجد شرح — اضغط هنا للإضافة)</span>';
+    const lines = raw.replace(/\r\n/g,"\n").split("\n");
+    let html = "";
+    let i = 0;
+    let listBuf = null; // {type:'ul'|'ol', items:[]}
+    function flushList(){
+      if(listBuf){
+        const tag = listBuf.type;
+        html += `<${tag} class="md-list">` + listBuf.items.map(it=>`<li>${inlineMD(it)}</li>`).join("") + `</${tag}>`;
+        listBuf = null;
+      }
+    }
+    while(i < lines.length){
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // ردود الـ AI غالبًا بتحط سطر فاضي (أو أكتر) بين عناصر القائمة الواحدة. من غير المعالجة
+      // دي، كل عنصر كان بيتحوّل لقائمة <ol>/<ul> منفصلة، فكانت كل الأرقام بتظهر "1." من كتر
+      // ما القوائم بتتقطّع. هنا بنتخطى الأسطر الفاضية طالما اللي بعدها لسه من نفس نوع القائمة.
+      if(trimmed === "" && listBuf){
+        let j = i+1;
+        while(j < lines.length && lines[j].trim() === "") j++;
+        if(j < lines.length){
+          const nt = lines[j].trim();
+          if((listBuf.type === "ul" && isUlLine(nt)) || (listBuf.type === "ol" && isOlLine(nt))){
+            i = j;
+            continue;
+          }
+        }
+      }
+
+      // جدول Markdown بالخط المائل | a | b |
+      if(/^\|.*\|$/.test(trimmed)){
+        const rows = [];
+        while(i < lines.length && /^\|.*\|$/.test(lines[i].trim())){
+          const cells = lines[i].trim().slice(1,-1).split("|").map(c=>c.trim());
+          if(!/^:?-{2,}:?$/.test(cells.join(""))) rows.push(cells);
+          i++;
+        }
+        if(rows.length){
+          flushList();
+          html += buildTableHtml(rows);
+        }
+        continue;
+      }
+
+      // جدول سايب (تابات أو مسافات متعددة) — بنجمع كل الأسطر المتتالية اللي بتتقسّم لنفس عدد الأعمدة
+      const rowCells = trimmed ? splitRow(trimmed) : null;
+      if(rowCells){
+        const rows = [rowCells];
+        let j = i+1;
+        let sameCount = rowCells.length;
+        while(j < lines.length){
+          const nt = lines[j].trim();
+          if(nt === ""){
+            const k = j+1;
+            const nextCells = k<lines.length ? splitRow(lines[k].trim()) : null;
+            if(nextCells && nextCells.length === sameCount){ j = k; continue; }
+            break;
+          }
+          const cells = splitRow(nt);
+          if(cells && cells.length === sameCount){ rows.push(cells); j++; }
+          else break;
+        }
+        if(rows.length >= 2){
+          flushList();
+          html += buildTableHtml(rows);
+          i = j;
+          continue;
+        }
+      }
+
+      // خط فاصل
+      if(/^(-{3,}|_{3,}|\*{3,})$/.test(trimmed)){
+        flushList();
+        html += "<hr class='md-hr'>";
+        i++; continue;
+      }
+
+      // عناوين #
+      const hMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+      if(hMatch){
+        flushList();
+        const lvl = Math.min(hMatch[1].length + 3, 6);
+        html += `<h${lvl} class="md-h">${inlineMD(hMatch[2])}</h${lvl}>`;
+        i++; continue;
+      }
+
+      // عناوين بإيموجي (زي "1️⃣ LDI — تحميل قيمة" أو "🔥 مثال يجمع...")
+      const emojiMatch = trimmed.match(EMOJI_HEAD_RE);
+      if(emojiMatch && trimmed.length < 90){
+        flushList();
+        html += `<div class="md-emoji-head">${inlineMD(trimmed)}</div>`;
+        i++; continue;
+      }
+
+      // سطر بولد كامل (**كده**) بيُستخدم كعنوان فرعي بدون # — شائع في ردود الـ AI
+      if(BOLD_LINE_HEAD_RE.test(trimmed)){
+        flushList();
+        html += `<div class="md-subhead">${inlineMD(trimmed.match(BOLD_LINE_HEAD_RE)[1])}</div>`;
+        i++; continue;
+      }
+
+      // اقتباس
+      if(/^>\s?/.test(trimmed)){
+        flushList();
+        const quoteLines = [];
+        while(i<lines.length && /^>\s?/.test(lines[i].trim())){
+          quoteLines.push(lines[i].trim().replace(/^>\s?/,""));
+          i++;
+        }
+        html += `<blockquote class="md-quote">${inlineMD(quoteLines.join(" "))}</blockquote>`;
+        continue;
+      }
+
+      // قوائم
+      const ulMatch = trimmed.match(/^[-*•]\s+(.+)$/);
+      const olMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
+      if(ulMatch){
+        if(!listBuf || listBuf.type!=="ul"){ flushList(); listBuf = {type:"ul", items:[]}; }
+        listBuf.items.push(ulMatch[1]);
+        i++; continue;
+      }
+      if(olMatch){
+        if(!listBuf || listBuf.type!=="ol"){ flushList(); listBuf = {type:"ol", items:[]}; }
+        listBuf.items.push(olMatch[1]);
+        i++; continue;
+      }
+      // سطر قصير بيقف لوحده ومنتهي بـ ":" (زي "طريقة العمل:") — بيتعامل معاه كعنوان تمهيدي
+      // مصغّر لو مش سطر رسم توضيحي ومش بداية جدول/قائمة بعده مباشرة بنفس السطر.
+      if(COLON_HEAD_RE.test(trimmed) && !DIAGRAM_CHARS_RE.test(trimmed)){
+        flushList();
+        html += `<div class="md-subhead">${inlineMD(trimmed.slice(0,-1))}</div>`;
+        i++; continue;
+      }
+
+      flushList();
+
+      // سطر فاضي
+      if(trimmed === ""){ i++; continue; }
+
+      // فقرة عادية (بنجمع الأسطر المتتالية اللي مش فاضية ومش من نوع خاص)
+      const paraLines = [line];
+      i++;
+      while(i < lines.length && lines[i].trim() !== "" &&
+            !/^\|.*\|$/.test(lines[i].trim()) &&
+            !splitRow(lines[i].trim()) &&
+            !/^(-{3,}|_{3,}|\*{3,})$/.test(lines[i].trim()) &&
+            !/^#{1,4}\s+/.test(lines[i].trim()) &&
+            !/^>\s?/.test(lines[i].trim()) &&
+            !isUlLine(lines[i].trim()) &&
+            !isOlLine(lines[i].trim()) &&
+            !EMOJI_HEAD_RE.test(lines[i].trim()) &&
+            !BOLD_LINE_HEAD_RE.test(lines[i].trim()) &&
+            !(COLON_HEAD_RE.test(lines[i].trim()) && !DIAGRAM_CHARS_RE.test(lines[i].trim()))){
+        paraLines.push(lines[i]);
+        i++;
+      }
+      const isDiagram = paraLines.length > 1
+        ? paraLines.some(l => DIAGRAM_CHARS_RE.test(l))
+        : (DIAGRAM_CHARS_RE.test(paraLines[0]) && paraLines[0].trim().length < 60);
+      if(isDiagram){
+        html += `<pre class="md-diagram">${paraLines.map(l=>escapeHtml(l)).join("\n")}</pre>`;
+      } else {
+        html += `<p class="md-p">${paraLines.map(l=>inlineMD(l.trim())).join("<br>")}</p>`;
+      }
+    }
+    flushList();
+    return html;
+  }
+  function buildTableHtml(rows){
+    const [head, ...body] = rows;
+    let out = '<div class="md-table-wrap"><table class="md-table"><thead><tr>';
+    out += head.map(c=>`<th>${inlineMD(c)}</th>`).join("");
+    out += "</tr></thead><tbody>";
+    body.forEach(r=>{
+      out += "<tr>" + r.map(c=>`<td>${inlineMD(c)}</td>`).join("") + "</tr>";
+    });
+    out += "</tbody></table></div>";
+    return out;
+  }
+
   function getRuleset(langKey){
     return langRules[langKey] || langRules["plain"] || genericRules;
   }
@@ -849,7 +1156,8 @@
           <div class="section-label">الشرح</div>
           <button class="ghost expand-btn" data-act="expand-explain" title="تكبير لملء الشاشة">⛶ تكبير</button>
         </div>
-        <textarea class="explain" data-act="explain">${escapeHtml(s.explanation)}</textarea>
+        <div class="explain-view" data-act="explain-view">${renderMarkdownLite(s.explanation)}</div>
+        <textarea class="explain" data-act="explain" style="display:none;">${escapeHtml(s.explanation)}</textarea>
 
         <div class="label-row">
           <div class="section-label">الأكواد</div>
@@ -891,6 +1199,20 @@
       card.querySelector('[data-act="star"]').addEventListener("click", ()=>{ s.starred=!s.starred; scheduleAutoSave(); renderAll(); });
       card.querySelector('[data-act="title"]').addEventListener("input", (e)=>{ s.title = e.target.value; scheduleAutoSave(); renderToc(); });
       card.querySelector('[data-act="explain"]').addEventListener("input", (e)=>{ s.explanation = e.target.value; scheduleAutoSave(); });
+      {
+        const viewEl = card.querySelector('[data-act="explain-view"]');
+        const taEl = card.querySelector('[data-act="explain"]');
+        viewEl.addEventListener("click", ()=>{
+          viewEl.style.display = "none";
+          taEl.style.display = "block";
+          taEl.focus();
+        });
+        taEl.addEventListener("blur", ()=>{
+          viewEl.innerHTML = renderMarkdownLite(s.explanation);
+          taEl.style.display = "none";
+          viewEl.style.display = "block";
+        });
+      }
       card.querySelector('[data-act="close"]').addEventListener("click", ()=>{ selected.delete(id); renderAll(); });
       card.querySelector('[data-act="delete"]').addEventListener("click", (e)=>{
         if(!armConfirm(e.currentTarget, "متأكد؟ اضغط تاني للحذف نهائيًا")) return;
@@ -909,15 +1231,29 @@
         openFullscreen("الشرح — " + s.title, (body)=>{
           const ta = document.createElement("textarea");
           ta.className = "explain";
+          ta.style.minHeight = "160px";
           ta.value = s.explanation;
+          const previewLabel = document.createElement("div");
+          previewLabel.className = "section-label";
+          previewLabel.style.marginTop = "16px";
+          previewLabel.textContent = "🔍 معاينة الشكل النهائي";
+          const preview = document.createElement("div");
+          preview.className = "explain-view";
+          preview.innerHTML = renderMarkdownLite(s.explanation);
           ta.addEventListener("input", (e)=>{
             s.explanation = e.target.value;
             const inlineTa = card.querySelector('[data-act="explain"]');
             if(inlineTa) inlineTa.value = e.target.value;
+            preview.innerHTML = renderMarkdownLite(s.explanation);
             scheduleAutoSave();
           });
           body.appendChild(ta);
+          body.appendChild(previewLabel);
+          body.appendChild(preview);
           setTimeout(()=> ta.focus(), 50);
+        }, ()=>{
+          const viewEl = card.querySelector('[data-act="explain-view"]');
+          if(viewEl) viewEl.innerHTML = renderMarkdownLite(s.explanation);
         });
       });
       card.querySelector('[data-act="expand-draw"]').addEventListener("click", ()=>{
@@ -1611,7 +1947,15 @@
 
     function nodeSize(n){
       const s = n.scale || 1;
-      return { w: MM_BASE_W*s, h: MM_BASE_H*s };
+      switch(n.shape){
+        case "circle": { const d = 78*s; return { w:d, h:d }; }
+        case "star": { const d = 94*s; return { w:d, h:d }; }
+        case "diamond": return { w: MM_BASE_W*s, h: MM_BASE_H*1.6*s };
+        case "triangle": return { w: MM_BASE_W*s, h: MM_BASE_H*1.6*s };
+        case "arrow-right":
+        case "arrow-left": return { w: MM_BASE_W*1.2*s, h: MM_BASE_H*s };
+        default: return { w: MM_BASE_W*s, h: MM_BASE_H*s };
+      }
     }
 
     function renderStage(){
@@ -1698,6 +2042,16 @@
           <option value="rounded" ${n.shape==="rounded"?"selected":""}>مستطيل مدوّر</option>
           <option value="rect" ${n.shape==="rect"?"selected":""}>مستطيل حاد</option>
           <option value="ellipse" ${n.shape==="ellipse"?"selected":""}>بيضاوي</option>
+          <option value="circle" ${n.shape==="circle"?"selected":""}>دائرة</option>
+          <option value="diamond" ${n.shape==="diamond"?"selected":""}>معين (قرار)</option>
+          <option value="triangle" ${n.shape==="triangle"?"selected":""}>مثلث</option>
+          <option value="hexagon" ${n.shape==="hexagon"?"selected":""}>سداسي الأضلاع</option>
+          <option value="octagon" ${n.shape==="octagon"?"selected":""}>ثماني الأضلاع</option>
+          <option value="parallelogram" ${n.shape==="parallelogram"?"selected":""}>متوازي أضلاع</option>
+          <option value="arrow-right" ${n.shape==="arrow-right"?"selected":""}>سهم لليمين</option>
+          <option value="arrow-left" ${n.shape==="arrow-left"?"selected":""}>سهم للشمال</option>
+          <option value="star" ${n.shape==="star"?"selected":""}>نجمة</option>
+          <option value="cloud" ${n.shape==="cloud"?"selected":""}>سحابة</option>
           <option value="none" ${n.shape==="none"?"selected":""}>بدون إطار</option>
         </select>
         <span class="mm-sep"></span>
@@ -2029,10 +2383,11 @@
 
   document.getElementById("parseAddBtn").addEventListener("click", ()=>{
     const raw = document.getElementById("rawInput").value;
+    const splitSections = document.getElementById("splitSectionsChk").checked;
     try{
-      const newOnes = parseText(raw);
+      const newOnes = parseText(raw, splitSections);
       if(newOnes.length === 0){
-        setStatus("لم يتم العثور على سكشنات قابلة للتحليل في هذا النص. تأكد من وجود عنوان و فواصل --- بين الأقسام.", "err");
+        setStatus("لم يتم العثور على سكشنات قابلة للتحليل في هذا النص.", "err");
         return;
       }
       sections = sections.concat(newOnes);
@@ -2054,6 +2409,7 @@
 
   document.getElementById("txtFileInput").addEventListener("change",(e)=>{
     const files = Array.from(e.target.files || []);
+    const splitSections = document.getElementById("splitSectionsChk").checked;
     let done = 0, failed = 0, allNew = [];
     const failedNames = [];
     if(files.length===0) return;
@@ -2075,7 +2431,7 @@
             // الاسم بيقول JSON لكن المحتوى JSON غير صالح
             failed++; failedNames.push(f.name + " (JSON غير صالح)");
           } else {
-            const newOnes = parseText(reader.result);
+            const newOnes = parseText(reader.result, splitSections);
             if(newOnes.length){ allNew = allNew.concat(newOnes); }
             else { failed++; failedNames.push(f.name + " (لم يتم العثور على سكشنات)"); }
           }

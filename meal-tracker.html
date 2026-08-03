@@ -129,8 +129,17 @@
           <label>الوزن (جرام)</label>
           <input id="manWeight" type="number" value="150">
         </div>
+        <div>
+          <label>التاريخ</label>
+          <input id="manDate" type="date">
+        </div>
+        <div>
+          <label>الوقت</label>
+          <input id="manTime" type="time">
+        </div>
       </div>
       <div class="btn-row"><button class="btn-gold" onclick="handleManualAdd()">إضافة الصنف</button></div>
+      <p class="legend-note">سايب التاريخ أو الوقت فاضي؟ هيتسجل بتوقيت وتاريخ دلوقتي تلقائيًا.</p>
     </div>
     <div id="feedback" class="feedback"></div>
   </div>
@@ -339,6 +348,12 @@ function deleteFood(name){
 function normalize(s){
   return s.replace(/[\u064B-\u0652]/g,'').replace(/[إأآا]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
 }
+/* بيحوّل الأرقام العربية (١٢٣) والفارسية (۱۲۳) لأرقام إنجليزية عادية عشان أي regex شغال بالأرقام يقدر يفهمها */
+function normalizeDigits(s){
+  return s
+    .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0));
+}
 function todayKey(d){ const dt=d||new Date(); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
 function fmtDate(key){ const [y,m,d]=key.split('-').map(Number); const dt=new Date(y,m-1,d); return dt.toLocaleDateString('ar-EG',{weekday:'long', year:'numeric', month:'long', day:'numeric'}); }
 function fmtTime(ts){ if(!ts) return '--:--'; const d=new Date(ts); return d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}); }
@@ -389,12 +404,23 @@ function extractWeight(segment){
   m = segment.match(/(\d+(?:\.\d+)?)/); if(m) return parseFloat(m[1]);
   return null;
 }
+/* بيقسّم النص لكلمات منفصلة بعد التطبيع، عشان نقارن الكلمات بغض النظر عن ترتيبها */
+function tokenize(s){ return normalize(s).split(/\s+/).filter(Boolean); }
+
 function matchFood(segment){
-  const n = normalize(segment); let best=null, bestLen=0;
-  for(const key in FOOD_DB){ const nk=normalize(key); if(n.includes(nk) && nk.length>bestLen){ best=key; bestLen=nk.length; } }
+  const segTokens = new Set(tokenize(segment));
+  let best=null, bestScore=0;
+  for(const key in FOOD_DB){
+    const keyTokens = tokenize(key);
+    // كل كلمات اسم الصنف لازم تكون موجودة في الجملة، أيًا كان ترتيبها
+    if(keyTokens.length && keyTokens.every(t=>segTokens.has(t))){
+      if(keyTokens.length > bestScore){ best=key; bestScore=keyTokens.length; }
+    }
+  }
   return best;
 }
 function parseMessage(text){
+  text = normalizeDigits(text);
   const meal = detectMeal(text);
   const segments = text.split(/[و،,+]/).map(s=>s.trim()).filter(Boolean);
   const items=[]; const warnings=[];
@@ -430,11 +456,37 @@ function handleAdd(){
   if(warnings.length) html += '<br>' + warnings.map(w=>`<span class="warn">⚠ ${w}</span>`).join('<br>');
   fb.innerHTML = html; msgInput.value='';
 }
-function toggleManual(){ const el=document.getElementById('manualForm'); el.style.display = el.style.display==='none'?'block':'none'; }
+function toggleManual(){
+  const el=document.getElementById('manualForm');
+  const opening = el.style.display==='none';
+  el.style.display = opening ? 'block' : 'none';
+  if(opening){
+    const now = new Date();
+    const dateEl = document.getElementById('manDate');
+    const timeEl = document.getElementById('manTime');
+    if(!dateEl.value) dateEl.value = todayKey(now);
+    if(!timeEl.value) timeEl.value = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  }
+}
 function handleManualAdd(){
   const meal = manMeal.value; const name = manFood.value.trim(); const weight = +manWeight.value || 150;
   const matched = matchFood(name) || name; const kcal = Math.round((FOOD_DB[matched]||150) * weight/100);
-  addItemsToLog(meal, [{name:matched, weight, kcal, approx:!FOOD_DB[matched]}], todayKey(), new Date().toISOString());
+
+  let dateKey = todayKey();
+  let ts = new Date().toISOString();
+  const dateVal = document.getElementById('manDate').value; // "YYYY-MM-DD"
+  const timeVal = document.getElementById('manTime').value; // "HH:MM"
+  if(dateVal) dateKey = dateVal;
+  if(dateVal && timeVal){
+    ts = new Date(dateVal+'T'+timeVal+':00').toISOString();
+  } else if(timeVal){
+    const now = new Date();
+    const [hh,mm] = timeVal.split(':').map(Number);
+    now.setHours(hh, mm, 0, 0);
+    ts = now.toISOString();
+  }
+
+  addItemsToLog(meal, [{name:matched, weight, kcal, approx:!FOOD_DB[matched]}], dateKey, ts);
   renderAll(); manFood.value='';
 }
 
