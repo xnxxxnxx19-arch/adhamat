@@ -88,6 +88,38 @@
   /* ============ layout ============ */
   main{padding:24px; max-width:980px; margin:0 auto;}
 
+  /* ---- تبويبات الفهارس المتعددة ---- */
+  #indexTabs{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;}
+  .index-tab{
+    display:flex; align-items:center; gap:2px; background:var(--paper); border:1.5px solid var(--rule);
+    border-radius:8px; padding:4px 4px 4px 8px; cursor:pointer; max-width:100%;
+  }
+  .index-tab.active{background:var(--accent); border-color:var(--accent-dark);}
+  .index-tab.active .index-title-label, .index-tab.active input.index-title,
+  .index-tab.active .index-del, .index-tab.active .index-edit{color:#fff;}
+  .index-tab .index-title-label{
+    font-size:12.5px; font-weight:700; color:var(--ink); max-width:130px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; padding:2px 2px;
+  }
+  .index-tab input.index-title{
+    background:transparent; border:none; border-bottom:1px dashed rgba(0,0,0,.3); font-size:12.5px; font-weight:700; color:var(--ink);
+    width:auto; max-width:120px; min-width:40px; padding:2px 0; font-family:inherit;
+  }
+  .index-tab input.index-title:focus{outline:none;}
+  .index-tab .index-edit{
+    background:none; border:none; cursor:pointer; font-size:11px; color:var(--ink-soft); padding:2px 4px; flex-shrink:0;
+  }
+  .index-tab .index-edit:hover{color:var(--accent-dark);}
+  .index-tab .index-del{
+    background:none; border:none; cursor:pointer; font-size:11px; color:var(--ink-soft); padding:2px 4px; flex-shrink:0;
+  }
+  .index-tab .index-del:hover{color:var(--danger);}
+  .index-tab-add{
+    background:#eef3ea; border:1.5px dashed var(--accent); color:var(--accent-dark); font-weight:900;
+    border-radius:8px; padding:4px 12px; cursor:pointer; font-size:15px;
+  }
+  .index-tab-add:hover{background:var(--accent); color:#fff;}
+
   /* ---- sliding index drawer ---- */
   #tocToggle{
     position:fixed; top:96px; inset-inline-end:16px; z-index:40;
@@ -472,10 +504,124 @@
     main{padding:16px;}
     aside#drawer{width:88vw;}
   }
+
+  /* ============================== نظام الجداول (منقول من DBSV) ============================== */
+  .tables-holder{display:flex; flex-direction:column; gap:14px;}
+  .table-panel{background:#fffdf7; border:1.5px solid var(--rule); border-radius:10px; overflow:hidden;}
+  .table-panel-head{background:var(--tab); color:#fff; font-weight:700; font-size:12.5px; padding:7px 10px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;}
+  .table-panel-head input.tbl-title{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.3); color:#fff; font-weight:700; font-size:12.5px; padding:4px 8px; border-radius:4px; min-width:120px; font-family:inherit;}
+  .table-panel-head input.tbl-title:focus{outline:none; background:rgba(255,255,255,.22);}
+  .table-panel-head .head-actions{display:flex; gap:6px; align-items:center;}
+  .table-panel-head .mini-btn{background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.35); color:#fff; font-size:10.5px; border-radius:4px; padding:5px 9px; cursor:pointer;}
+  .table-panel-head .mini-btn:hover{background:rgba(255,255,255,.3);}
+  .table-panel-head .mini-btn.danger{background:rgba(166,58,58,.55); border-color:#e0bcbc;}
+  .table-panel-head .mini-btn.danger:hover{background:var(--danger);}
+
+  .table-scroll{overflow-x:auto;}
+  table.sheet{width:100%; border-collapse:collapse; font-size:12.5px; min-width:480px;}
+  table.sheet th{background:var(--paper-card); color:var(--ink-soft); font-size:10.5px; font-weight:700; padding:0; border:1px solid var(--rule); text-align:center;}
+  .col-head-cell{display:flex; align-items:center; gap:3px; padding:5px 5px; justify-content:center;}
+  .col-head-cell input.col-label{width:70px; min-width:50px; text-align:center; font-size:10.5px; font-weight:700; color:var(--ink-soft); background:transparent; border:none; border-bottom:1px dashed var(--rule); font-family:inherit;}
+  .col-head-cell input.col-label:focus{outline:none; background:#fff8e2;}
+  .col-icon-btn{width:16px;height:16px; border-radius:3px; border:1px solid var(--rule); background:#fff; font-size:9px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); flex:0 0 auto; padding:0;}
+  .col-icon-btn:hover{border-color:var(--accent); color:var(--accent-dark);}
+  .col-icon-btn.del:hover{border-color:var(--danger); color:var(--danger);}
+  th.actions-th{width:1%; white-space:nowrap;}
+  th.add-col-th{width:1%;}
+  .add-col-btn{width:22px;height:22px; border-radius:4px; border:1.5px dashed var(--accent); background:#eef3ea; color:var(--accent-dark); font-weight:900; cursor:pointer; font-size:13px; padding:0;}
+  .add-col-btn:hover{background:var(--accent); color:#fff;}
+
+  table.sheet td{border:1px solid var(--rule); padding:0; vertical-align:middle;}
+  table.sheet tbody tr:nth-child(4n+1),
+  table.sheet tbody tr:nth-child(4n+2){ background:rgba(140,120,80,.045); }
+
+  input.cell-text{font-size:12.5px; font-weight:600; color:var(--ink); background:transparent; border:none; width:100%; padding:7px 6px; font-family:inherit;}
+  input.cell-text:focus{outline:none; background:#fff8e2;}
+  select.cell-select{font-size:11.5px; font-weight:800; color:var(--accent-dark); background:transparent; border:none; width:100%; text-align:center; padding:7px 2px; cursor:pointer; font-family:inherit;}
+  select.cell-select:focus{outline:none; background:#fff8e2;}
+
+  .actions-cell{padding:3px !important; text-align:center; white-space:nowrap;}
+  .chk, .note-toggle, .img-toggle, .row-del{width:19px;height:19px; border-radius:4px; border:1.5px solid var(--rule); background:#fff; cursor:pointer; font-size:10px; vertical-align:middle; display:inline-flex; align-items:center; justify-content:center; margin-inline-end:3px; padding:0; color:var(--ink-soft);}
+  .chk{color:var(--accent-dark); font-size:11px; font-weight:900;}
+  .chk.on{background:var(--accent); border-color:var(--accent-dark); color:#fff;}
+  .note-toggle.has-content{background:#fdf3d4; border-color:var(--marker);}
+  .img-toggle{overflow:hidden; position:relative;}
+  .img-toggle img{width:100%;height:100%;object-fit:cover;}
+  .img-toggle .count-badge{position:absolute; bottom:-2px; left:-2px; background:var(--danger); color:#fff; font-size:7px; border-radius:50%; width:10px;height:10px; display:flex; align-items:center; justify-content:center; font-weight:900;}
+  .row-del:hover{color:var(--danger); border-color:var(--danger);}
+
+  tr.detail-row{display:none;}
+  tr.detail-row.open{display:table-row;}
+  tr.detail-row td{background:#fffdf5; padding:10px; border:1px solid var(--rule);}
+  .detail-inner{display:flex; flex-direction:column; gap:9px;}
+  .notes-grid{display:flex; gap:7px; flex-wrap:wrap;}
+  .note-box{flex:1 1 150px; display:flex; flex-direction:column; gap:3px;}
+  .note-box label{font-size:9.5px; color:var(--ink-soft);}
+  .note-box textarea{font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--rule); border-radius:5px; padding:6px 7px; resize:vertical; min-height:38px; font-family:inherit; direction:rtl;}
+  .note-box textarea:focus{outline:none; border-color:var(--accent);}
+
+  .comments-area{display:flex; flex-direction:column; gap:5px;}
+  .comment-item{display:flex; gap:6px; align-items:flex-start; background:#fff; border:1px solid var(--rule); border-radius:5px; padding:5px 7px;}
+  .comment-item .txt{flex:1; font-size:11.5px; color:var(--ink); line-height:1.45; white-space:pre-wrap;}
+  .comment-del{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:13px; padding:0 3px;}
+  .comment-del:hover{color:var(--danger);}
+  .add-comment-row{display:flex; gap:6px;}
+  .add-comment-row input{flex:1; font-size:11.5px; color:var(--ink); background:#fff; border:1px solid var(--rule); border-radius:5px; padding:6px 8px; font-family:inherit;}
+  .add-comment-row input:focus{outline:none; border-color:var(--accent);}
+  .btn-accent{background:#eef3ea; border:1px solid var(--accent); color:var(--accent-dark); font-weight:700; font-size:11px; border-radius:5px; padding:6px 11px; cursor:pointer; white-space:nowrap;}
+  .btn-accent:hover{background:var(--accent); color:#fff;}
+
+  .images-grid{display:flex; gap:7px; flex-wrap:wrap; align-items:center;}
+  .images-grid .thumb-wrap{position:relative; width:56px; height:56px;}
+  .images-grid .thumb-wrap img{width:100%; height:100%; object-fit:cover; border-radius:6px; border:1px solid var(--rule); cursor:zoom-in;}
+  .images-grid .thumb-del{position:absolute; top:-6px; left:-6px; width:16px;height:16px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;}
+  .tbl-file-label{background:#fff; border:1px dashed var(--rule); border-radius:6px; padding:16px 12px; cursor:pointer; font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; align-items:center; gap:3px; width:56px; height:56px; justify-content:center; text-align:center;}
+  .tbl-file-label:hover{border-color:var(--accent);}
+  .tbl-file-label input{display:none;}
+
+  .row-footer{padding:8px 10px; display:flex; justify-content:flex-start;}
+  .add-row-btn{background:#eef3ea; border:1.5px solid var(--accent); color:var(--accent-dark); font-weight:700; font-size:11.5px; border-radius:6px; padding:7px 14px; cursor:pointer;}
+  .add-row-btn:hover{background:var(--accent); color:#fff;}
+  .add-table-row{display:flex; justify-content:flex-start; padding:2px 0;}
+
+  /* modal عام لإدارة الجداول (إضافة جدول/عمود/أنواع) */
+  .tbl-modal-overlay{position:fixed; inset:0; z-index:210; background:rgba(30,25,15,.5); display:none; align-items:center; justify-content:center; padding:20px;}
+  .tbl-modal-overlay.open{display:flex;}
+  .tbl-modal-panel{background:var(--paper-card); border:1.5px solid var(--rule); border-radius:12px; padding:18px; width:100%; max-width:420px; max-height:85vh; overflow-y:auto;}
+  .tbl-modal-panel h4{margin:0 0 12px; font-size:15px; font-weight:900; font-family:"Amiri","Cairo",serif;}
+  .tbl-modal-field{display:flex; flex-direction:column; gap:5px; margin-bottom:12px;}
+  .tbl-modal-field label{font-size:11.5px; color:var(--ink-soft); font-weight:700;}
+  .tbl-modal-field input[type=text]{font-size:13px; padding:8px 10px; border:1px solid var(--rule); border-radius:6px; background:#fff; color:var(--ink); font-family:inherit;}
+  .tbl-modal-field input[type=text]:focus{outline:none; border-color:var(--accent);}
+  .tbl-modal-radio-group{display:flex; gap:10px;}
+  .tbl-modal-radio-group label{display:flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer; color:var(--ink);}
+  .tbl-modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;}
+  .tbl-options-list{display:flex; flex-direction:column; gap:6px; margin-bottom:10px;}
+  .tbl-option-row{display:flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--rule); border-radius:5px; padding:5px 8px;}
+  .tbl-option-row span{flex:1; font-size:12px; color:var(--ink);}
+  .tbl-option-row button{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:13px;}
+  .tbl-option-row button:hover{color:var(--danger);}
+  .tbl-add-option-row{display:flex; gap:6px;}
+  .tbl-add-option-row input{flex:1;}
+
+  /* lightbox لصور الجداول */
+  .tbl-lightbox-overlay{position:fixed; inset:0; z-index:220; background:rgba(20,20,30,0.88); display:none; align-items:center; justify-content:center; padding:30px; cursor:zoom-out;}
+  .tbl-lightbox-overlay.open{display:flex;}
+  .tbl-lightbox-overlay img{max-width:92vw; max-height:88vh; border-radius:8px; box-shadow:0 12px 40px rgba(0,0,0,.5);}
+  .tbl-lightbox-close{position:absolute; top:18px; left:20px; width:38px; height:38px; border-radius:50%; background:#fff; border:none; font-size:18px; cursor:pointer; color:var(--ink); font-weight:900; padding:0;}
 </style>
 </head>
 <body>
 <div id="toastWrap"></div>
+
+<div class="tbl-lightbox-overlay" id="tblLightbox">
+  <button class="tbl-lightbox-close" id="tblLightboxClose">✕</button>
+  <img id="tblLightboxImg" src="" alt="صورة مكبّرة">
+</div>
+
+<div class="tbl-modal-overlay" id="tblModalOverlay">
+  <div class="tbl-modal-panel" id="tblModalPanel"></div>
+</div>
 
 <header id="mainHeader">
   <h1>مذكرة <span>الأكواد</span></h1>
@@ -499,6 +645,11 @@
   </div>
 
   <div class="drawer-scroll">
+    <div class="drawer-block">
+      <h3>📚 الفهارس</h3>
+      <div id="indexTabs"></div>
+    </div>
+
     <div class="drawer-block">
       <h3>البحث والعرض</h3>
       <div class="side-search">
@@ -570,6 +721,59 @@
   let selected = new Set();
   let idCounter = 1;
   const uid = () => "s" + (idCounter++) + "_" + Math.random().toString(36).slice(2,7);
+
+  /* ============================== فهارس متعددة ============================== */
+  // كل فهرس عبارة عن مكتبة سكشنات مستقلة بعنوانها الخاص. sections في أي لحظة
+  // بتشاور على مصفوفة سكشنات الفهرس النشط، وأي حفظ بيزامن الحالة مرة واحدة قبله.
+  let indexes = [];
+  let activeIndexIdx = 0;
+  let idxCounter = 1;
+  const idxUid = () => "idx" + (idxCounter++) + "_" + Math.random().toString(36).slice(2,7);
+
+  function ensureIndexes(){
+    if(!Array.isArray(indexes) || indexes.length === 0){
+      indexes = [{ id: idxUid(), title: "الفهرس الرئيسي", sections: sections }];
+      activeIndexIdx = 0;
+    }
+    if(activeIndexIdx < 0 || activeIndexIdx >= indexes.length) activeIndexIdx = 0;
+    sections = indexes[activeIndexIdx].sections;
+  }
+
+  function switchToIndex(i){
+    if(i === activeIndexIdx || !indexes[i]) return;
+    indexes[activeIndexIdx].sections = sections;
+    activeIndexIdx = i;
+    sections = indexes[activeIndexIdx].sections;
+    selected = new Set();
+    scheduleAutoSave();
+    renderAll();
+  }
+
+  function addIndex(){
+    indexes[activeIndexIdx].sections = sections;
+    const newIdx = { id: idxUid(), title: "فهرس جديد", sections: [] };
+    indexes.push(newIdx);
+    activeIndexIdx = indexes.length - 1;
+    sections = newIdx.sections;
+    selected = new Set();
+    scheduleAutoSave();
+    renderAll();
+    showToast("تم إضافة فهرس جديد.", "ok");
+  }
+
+  function deleteIndexAt(i){
+    if(indexes.length <= 1) return;
+    const wasActive = (i === activeIndexIdx);
+    const removedTitle = indexes[i].title;
+    indexes.splice(i, 1);
+    if(wasActive) activeIndexIdx = Math.min(i, indexes.length - 1);
+    else if(i < activeIndexIdx) activeIndexIdx -= 1;
+    sections = indexes[activeIndexIdx].sections;
+    selected = new Set();
+    scheduleAutoSave();
+    renderAll();
+    showToast(`تم حذف فهرس "${removedTitle}".`, "ok");
+  }
 
   /* ============================== توست مخصص (بديل alert) ============================== */
   const toastWrap = document.getElementById("toastWrap");
@@ -1411,6 +1615,69 @@
     localStorage.setItem(HEADER_COLLAPSE_KEY, collapsed ? "1" : "0");
   });
 
+  /* ============================== RENDER: تبويبات الفهارس ============================== */
+  const indexTabsEl = document.getElementById("indexTabs");
+  function renderIndexTabs(){
+    indexTabsEl.innerHTML = "";
+    indexes.forEach((ix, i)=>{
+      const tab = document.createElement("div");
+      tab.className = "index-tab" + (i === activeIndexIdx ? " active" : "");
+
+      const label = document.createElement("span");
+      label.className = "index-title-label";
+      label.textContent = ix.title;
+
+      const titleIn = document.createElement("input");
+      titleIn.className = "index-title";
+      titleIn.value = ix.title;
+      titleIn.style.display = "none";
+      titleIn.addEventListener("click", (e)=> e.stopPropagation());
+      titleIn.addEventListener("input", ()=>{ ix.title = titleIn.value; label.textContent = titleIn.value; scheduleAutoSave(); });
+      function finishEdit(){
+        titleIn.style.display = "none";
+        label.style.display = "inline-block";
+      }
+      titleIn.addEventListener("blur", finishEdit);
+      titleIn.addEventListener("keydown", (e)=>{ if(e.key === "Enter") titleIn.blur(); });
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "index-edit";
+      editBtn.textContent = "✎";
+      editBtn.title = "إعادة تسمية الفهرس";
+      editBtn.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        label.style.display = "none";
+        titleIn.style.display = "inline-block";
+        titleIn.focus();
+        titleIn.select();
+      });
+
+      tab.appendChild(label);
+      tab.appendChild(titleIn);
+      tab.appendChild(editBtn);
+      if(indexes.length > 1){
+        const del = document.createElement("button");
+        del.className = "index-del";
+        del.textContent = "✕";
+        del.title = "حذف هذا الفهرس";
+        del.addEventListener("click", (e)=>{
+          e.stopPropagation();
+          if(!armConfirm(e.currentTarget, "تأكيد الحذف؟")) return;
+          deleteIndexAt(i);
+        });
+        tab.appendChild(del);
+      }
+      tab.addEventListener("click", ()=> switchToIndex(i));
+      indexTabsEl.appendChild(tab);
+    });
+    const addBtn = document.createElement("button");
+    addBtn.className = "index-tab-add";
+    addBtn.textContent = "+";
+    addBtn.title = "إضافة فهرس جديد";
+    addBtn.addEventListener("click", addIndex);
+    indexTabsEl.appendChild(addBtn);
+  }
+
   /* ============================== RENDER: SIDEBAR ============================== */
   const tocList = document.getElementById("tocList");
   const searchBox = document.getElementById("searchBox");
@@ -1609,6 +1876,12 @@
         <button class="ghost addcode-btn" data-act="addcode">➕ إضافة كتلة كود</button>
 
         <div class="label-row">
+          <div class="section-label">📊 جداول</div>
+          <button class="ghost expand-btn" data-act="expand-tables" title="تكبير لملء الشاشة">⛶ تكبير</button>
+        </div>
+        <div class="tables-holder"></div>
+
+        <div class="label-row">
           <div class="section-label">📐 رسم توضيحي (لتثبيت المعلومة)</div>
           <button class="ghost expand-btn" data-act="expand-draw" title="تكبير لملء الشاشة">⛶ تكبير</button>
         </div>
@@ -1629,6 +1902,7 @@
       s.codes.forEach((c, ci)=>{
         holder.appendChild(buildCodeBlock(s, c, ci));
       });
+      card.querySelector(".tables-holder").appendChild(buildTablesHolder(s));
       card.querySelector(".drawing-holder").appendChild(buildDrawingPanel(s));
       card.querySelector(".mindmap-holder").appendChild(buildMindMapPanel(s));
 
@@ -1701,6 +1975,17 @@
         }, ()=>{
           const viewEl = card.querySelector('[data-act="explain-view"]');
           if(viewEl){ viewEl.innerHTML = renderMarkdownLite(s.explanation); enhanceMarkdownView(viewEl); }
+        });
+      });
+      card.querySelector('[data-act="expand-tables"]').addEventListener("click", ()=>{
+        const holder = card.querySelector(".tables-holder");
+        const placeholder = document.createComment("tables-placeholder");
+        holder.after(placeholder);
+        openFullscreen("جداول — " + s.title, (body)=>{
+          body.appendChild(holder);
+        }, ()=>{
+          placeholder.replaceWith(holder);
+          placeholder.remove?.();
         });
       });
       card.querySelector('[data-act="expand-draw"]').addEventListener("click", ()=>{
@@ -2815,7 +3100,421 @@
     return wrap;
   }
 
+  /* ============================== نظام الجداول (منقول من DBSV) ============================== */
+  function tblGenId(){ return "tb_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+  function makeTblRow(values){
+    return { id: tblGenId(), values: values, checked:false, note1:"", note2:"", comments:[], images:[] };
+  }
+
+  /* ---- lightbox ---- */
+  const tblLightboxEl = document.getElementById("tblLightbox");
+  const tblLightboxImgEl = document.getElementById("tblLightboxImg");
+  function openTblLightbox(src){
+    if(!src) return;
+    tblLightboxImgEl.src = src;
+    tblLightboxEl.classList.add("open");
+  }
+  function closeTblLightbox(){ tblLightboxEl.classList.remove("open"); tblLightboxImgEl.src=""; }
+  tblLightboxEl.addEventListener("click", (e)=>{ if(e.target===tblLightboxEl) closeTblLightbox(); });
+  document.getElementById("tblLightboxClose").addEventListener("click", closeTblLightbox);
+
+  /* ---- modal عام لإدارة الجداول ---- */
+  const tblModalOverlay = document.getElementById("tblModalOverlay");
+  const tblModalPanel = document.getElementById("tblModalPanel");
+  function closeTblModal(){ tblModalOverlay.classList.remove("open"); tblModalPanel.innerHTML=""; }
+  function openTblModal(buildFn){
+    tblModalPanel.innerHTML = "";
+    buildFn(tblModalPanel);
+    tblModalOverlay.classList.add("open");
+  }
+  tblModalOverlay.addEventListener("click", (e)=>{ if(e.target===tblModalOverlay) closeTblModal(); });
+  document.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape"){ closeTblLightbox(); closeTblModal(); }
+  });
+
+  function tblModalAddTable(section, rerender){
+    openTblModal((panel)=>{
+      panel.innerHTML = `<h4>إضافة جدول جديد</h4>`;
+      const f = document.createElement("div"); f.className="tbl-modal-field";
+      f.innerHTML = `<label>عنوان الجدول</label>`;
+      const inTitle = document.createElement("input"); inTitle.type="text"; inTitle.placeholder="مثال: جدول القيم";
+      f.appendChild(inTitle);
+      panel.appendChild(f);
+      const actions = document.createElement("div"); actions.className="tbl-modal-actions";
+      const cancel = document.createElement("button"); cancel.className="ghost"; cancel.textContent="إلغاء"; cancel.onclick=closeTblModal;
+      const ok = document.createElement("button"); ok.className="primary"; ok.textContent="إضافة";
+      ok.onclick = ()=>{
+        const title = inTitle.value.trim() || "جدول جديد";
+        if(!section.tables) section.tables = [];
+        section.tables.push({id:tblGenId(), title, columns:[{id:"name",label:"الاسم",type:"text"}], rows:[]});
+        scheduleAutoSave(); rerender(); closeTblModal();
+      };
+      actions.appendChild(cancel); actions.appendChild(ok);
+      panel.appendChild(actions);
+      inTitle.focus();
+    });
+  }
+
+  function tblModalAddColumn(table, rerender){
+    openTblModal((panel)=>{
+      panel.innerHTML = `<h4>إضافة عمود جديد</h4>`;
+      const f = document.createElement("div"); f.className="tbl-modal-field";
+      f.innerHTML = `<label>اسم العمود</label>`;
+      const inLabel = document.createElement("input"); inLabel.type="text"; inLabel.placeholder="مثال: الحالة";
+      f.appendChild(inLabel);
+      panel.appendChild(f);
+
+      const fType = document.createElement("div"); fType.className="tbl-modal-field";
+      fType.innerHTML = `<label>نوع العمود</label>`;
+      const grp = document.createElement("div"); grp.className="tbl-modal-radio-group";
+      grp.innerHTML = `
+        <label><input type="radio" name="tblcoltype" value="text" checked> نص حر</label>
+        <label><input type="radio" name="tblcoltype" value="select"> قائمة اختيار</label>
+      `;
+      fType.appendChild(grp);
+      panel.appendChild(fType);
+
+      const actions = document.createElement("div"); actions.className="tbl-modal-actions";
+      const cancel = document.createElement("button"); cancel.className="ghost"; cancel.textContent="إلغاء"; cancel.onclick=closeTblModal;
+      const ok = document.createElement("button"); ok.className="primary"; ok.textContent="إضافة";
+      ok.onclick = ()=>{
+        const label = inLabel.value.trim() || "عمود جديد";
+        const type = panel.querySelector("input[name=tblcoltype]:checked").value;
+        const col = {id:tblGenId(), label, type};
+        if(type==="select") col.options = ["خيار 1"];
+        table.columns.push(col);
+        table.rows.forEach(r=>{ if(type==="select") r.values[col.id]=col.options[0]; else r.values[col.id]=""; });
+        scheduleAutoSave(); rerender(); closeTblModal();
+      };
+      actions.appendChild(cancel); actions.appendChild(ok);
+      panel.appendChild(actions);
+      inLabel.focus();
+    });
+  }
+
+  function tblModalManageOptions(col, rerender){
+    openTblModal((panel)=>{
+      panel.innerHTML = `<h4>إدارة خيارات عمود «${escapeHtml(col.label)}»</h4>`;
+      const list = document.createElement("div"); list.className="tbl-options-list";
+      function renderList(){
+        list.innerHTML="";
+        col.options.forEach((opt, oi)=>{
+          const row = document.createElement("div"); row.className="tbl-option-row";
+          const span = document.createElement("span"); span.textContent = opt;
+          const del = document.createElement("button"); del.textContent="✕";
+          del.onclick = ()=>{
+            if(col.options.length<=1) return;
+            col.options.splice(oi,1);
+            renderList();
+            scheduleAutoSave(); rerender();
+          };
+          row.appendChild(span); row.appendChild(del);
+          list.appendChild(row);
+        });
+      }
+      renderList();
+      panel.appendChild(list);
+
+      const addRow = document.createElement("div"); addRow.className="tbl-add-option-row";
+      const input = document.createElement("input"); input.type="text"; input.placeholder="خيار جديد...";
+      const addBtn = document.createElement("button"); addBtn.className="btn-accent"; addBtn.textContent="+ إضافة";
+      function doAdd(){
+        const v = input.value.trim();
+        if(!v || col.options.includes(v)) return;
+        col.options.push(v);
+        input.value="";
+        renderList();
+        scheduleAutoSave(); rerender();
+      }
+      addBtn.onclick = doAdd;
+      input.onkeydown = (e)=>{ if(e.key==="Enter") doAdd(); };
+      addRow.appendChild(input); addRow.appendChild(addBtn);
+      panel.appendChild(addRow);
+
+      const actions = document.createElement("div"); actions.className="tbl-modal-actions";
+      const close = document.createElement("button"); close.className="primary"; close.textContent="تم"; close.onclick=closeTblModal;
+      actions.appendChild(close);
+      panel.appendChild(actions);
+    });
+  }
+
+  /* ---- صور ---- */
+  function tblResizeImageToDataURL(file, maxDim, quality){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=(e)=>{
+        const img=new Image();
+        img.onload=()=>{
+          let w=img.width,h=img.height;
+          if(w>h && w>maxDim){ h=h*(maxDim/w); w=maxDim; } else if(h>maxDim){ w=w*(maxDim/h); h=maxDim; }
+          const c=document.createElement("canvas"); c.width=w; c.height=h;
+          c.getContext("2d").drawImage(img,0,0,w,h);
+          resolve(c.toDataURL("image/jpeg", quality));
+        };
+        img.onerror=reject; img.src=e.target.result;
+      };
+      reader.onerror=reject; reader.readAsDataURL(file);
+    });
+  }
+  function tblBuildMultiImagePicker(imagesArr, onChange){
+    const wrap = document.createElement("div");
+    wrap.className="images-grid";
+    function refresh(){
+      wrap.innerHTML="";
+      imagesArr.forEach((src, ii)=>{
+        const tw = document.createElement("div"); tw.className="thumb-wrap";
+        const img = document.createElement("img"); img.src=src; img.title="اضغط للتكبير";
+        img.onclick = ()=> openTblLightbox(src);
+        const del = document.createElement("button"); del.className="thumb-del"; del.textContent="✕";
+        del.onclick = (e)=>{ e.stopPropagation(); imagesArr.splice(ii,1); refresh(); onChange(); };
+        tw.appendChild(img); tw.appendChild(del);
+        wrap.appendChild(tw);
+      });
+      const label = document.createElement("label"); label.className="tbl-file-label"; label.innerHTML="📷<br>إضافة";
+      const input = document.createElement("input"); input.type="file"; input.accept="image/*"; input.multiple=true;
+      input.onchange = async (e)=>{
+        const files = Array.from(e.target.files || []);
+        for(const file of files){
+          const dataUrl = await tblResizeImageToDataURL(file, 520, 0.72);
+          imagesArr.push(dataUrl);
+        }
+        refresh(); onChange();
+      };
+      label.appendChild(input);
+      wrap.appendChild(label);
+    }
+    refresh();
+    return wrap;
+  }
+  function tblMakeNoteBox(label, val, onChange){
+    const box=document.createElement("div"); box.className="note-box";
+    const l=document.createElement("label"); l.textContent=label;
+    const ta=document.createElement("textarea"); ta.value=val||"";
+    ta.oninput=()=>onChange(ta.value);
+    box.appendChild(l); box.appendChild(ta);
+    return box;
+  }
+
+  /* ---- الحاوية الكلية لجداول السكشن ---- */
+  function buildTablesHolder(section){
+    const wrap = document.createElement("div");
+    if(!section.tables) section.tables = [];
+
+    function rerender(){
+      wrap.innerHTML = "";
+      section.tables.forEach(tbl=> wrap.appendChild(buildTblPanel(section, tbl, rerender)));
+      const addRow = document.createElement("div"); addRow.className="add-table-row";
+      const addBtn = document.createElement("button"); addBtn.className="btn-accent"; addBtn.textContent="+ إضافة جدول جديد";
+      addBtn.onclick = ()=> tblModalAddTable(section, rerender);
+      addRow.appendChild(addBtn);
+      wrap.appendChild(addRow);
+    }
+    rerender();
+    return wrap;
+  }
+
+  /* ---- بانل جدول واحد ---- */
+  function buildTblPanel(section, table, rerenderHolder){
+    const panel = document.createElement("div"); panel.className="table-panel";
+
+    const head = document.createElement("div"); head.className="table-panel-head";
+    const titleIn = document.createElement("input"); titleIn.className="tbl-title"; titleIn.value = table.title;
+    titleIn.oninput = ()=>{ table.title = titleIn.value; scheduleAutoSave(); };
+    const countSpan = document.createElement("span"); countSpan.style.opacity=".8"; countSpan.style.fontSize="10.5px"; countSpan.textContent = table.rows.length + " صف";
+    const headActions = document.createElement("div"); headActions.className="head-actions";
+    const delTableBtn = document.createElement("button"); delTableBtn.className="mini-btn danger"; delTableBtn.textContent="حذف الجدول";
+    delTableBtn.onclick = (e)=>{
+      if(!armConfirm(e.currentTarget, "اضغط تاني للحذف")) return;
+      section.tables = section.tables.filter(t=>t.id!==table.id);
+      scheduleAutoSave(); rerenderHolder();
+    };
+    headActions.appendChild(countSpan); headActions.appendChild(delTableBtn);
+    head.appendChild(titleIn); head.appendChild(headActions);
+    panel.appendChild(head);
+
+    const scrollWrap = document.createElement("div"); scrollWrap.className="table-scroll";
+    const tableEl = document.createElement("table"); tableEl.className="sheet";
+
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    table.columns.forEach(col=>{
+      const th = document.createElement("th");
+      const cell = document.createElement("div"); cell.className="col-head-cell";
+      const labelIn = document.createElement("input"); labelIn.className="col-label"; labelIn.value = col.label;
+      labelIn.oninput = ()=>{ col.label = labelIn.value; scheduleAutoSave(); };
+      cell.appendChild(labelIn);
+      if(col.type==="select"){
+        const gear = document.createElement("button"); gear.className="col-icon-btn"; gear.textContent="⚙"; gear.title="إدارة الخيارات";
+        gear.onclick = ()=> tblModalManageOptions(col, rerenderHolder);
+        cell.appendChild(gear);
+      }
+      if(table.columns.length>1){
+        const del = document.createElement("button"); del.className="col-icon-btn del"; del.textContent="✕"; del.title="حذف العمود";
+        del.onclick = (e)=>{
+          if(!armConfirm(e.currentTarget, "تأكيد؟")) return;
+          table.columns = table.columns.filter(c=>c.id!==col.id);
+          table.rows.forEach(r=>{ delete r.values[col.id]; });
+          scheduleAutoSave(); rerenderHolder();
+        };
+        cell.appendChild(del);
+      }
+      th.appendChild(cell);
+      trh.appendChild(th);
+    });
+    const thAddCol = document.createElement("th"); thAddCol.className="add-col-th";
+    const addColBtn = document.createElement("button"); addColBtn.className="add-col-btn"; addColBtn.textContent="+"; addColBtn.title="إضافة عمود";
+    addColBtn.onclick = ()=> tblModalAddColumn(table, rerenderHolder);
+    thAddCol.appendChild(addColBtn);
+    trh.appendChild(thAddCol);
+    const thActions = document.createElement("th"); thActions.className="actions-th"; thActions.textContent="إجراءات";
+    trh.appendChild(thActions);
+    thead.appendChild(trh);
+    tableEl.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    table.rows.forEach(row=> appendTblRow(tbody, table, row, rerenderHolder));
+    tableEl.appendChild(tbody);
+
+    scrollWrap.appendChild(tableEl);
+    panel.appendChild(scrollWrap);
+
+    const rowFooter = document.createElement("div"); rowFooter.className="row-footer";
+    const addRowBtn = document.createElement("button"); addRowBtn.className="add-row-btn"; addRowBtn.textContent="+ إضافة صف";
+    addRowBtn.onclick = ()=>{
+      const values = {};
+      table.columns.forEach(c=>{ values[c.id] = c.type==="select" ? (c.options[0]||"") : ""; });
+      table.rows.push(makeTblRow(values));
+      scheduleAutoSave(); rerenderHolder();
+    };
+    rowFooter.appendChild(addRowBtn);
+    panel.appendChild(rowFooter);
+
+    return panel;
+  }
+
+  function appendTblRow(tbody, table, row, rerenderHolder){
+    const tr = document.createElement("tr");
+
+    table.columns.forEach(col=>{
+      const td = document.createElement("td");
+      if(col.type==="select"){
+        const sel = document.createElement("select"); sel.className="cell-select";
+        col.options.forEach(opt=>{
+          const o = document.createElement("option"); o.value=opt; o.textContent=opt;
+          if(row.values[col.id]===opt) o.selected=true;
+          sel.appendChild(o);
+        });
+        sel.onchange = ()=>{ row.values[col.id] = sel.value; scheduleAutoSave(); };
+        td.appendChild(sel);
+      } else {
+        const inp = document.createElement("input"); inp.className="cell-text";
+        inp.value = row.values[col.id] !== undefined ? row.values[col.id] : "";
+        inp.oninput = ()=>{ row.values[col.id] = inp.value; scheduleAutoSave(); };
+        td.appendChild(inp);
+      }
+      tr.appendChild(td);
+    });
+
+    const tdSpacer = document.createElement("td");
+    tr.appendChild(tdSpacer);
+
+    const tdActions = document.createElement("td"); tdActions.className="actions-cell";
+
+    const chk = document.createElement("button"); chk.className="chk"+(row.checked?" on":"");
+    chk.textContent = row.checked?"✓":""; chk.title="تمييز كمكتمل";
+    chk.onclick = ()=>{
+      row.checked = !row.checked;
+      chk.className="chk"+(row.checked?" on":""); chk.textContent = row.checked?"✓":"";
+      scheduleAutoSave();
+    };
+    tdActions.appendChild(chk);
+
+    const noteBtn = document.createElement("button");
+    function hasContent(){ return row.note1 || row.note2 || (row.comments && row.comments.length); }
+    noteBtn.className="note-toggle"+(hasContent()?" has-content":"");
+    noteBtn.textContent="📝"; noteBtn.title="ملاحظات وتعليقات";
+    tdActions.appendChild(noteBtn);
+
+    const imgBtn = document.createElement("button"); imgBtn.className="img-toggle"; imgBtn.title="الصور";
+    function refreshImgBtn(){
+      if(row.images && row.images.length){
+        imgBtn.innerHTML = `<img src="${row.images[0]}"><span class="count-badge">${row.images.length}</span>`;
+      } else {
+        imgBtn.innerHTML = "📷";
+      }
+    }
+    refreshImgBtn();
+    tdActions.appendChild(imgBtn);
+
+    const delRowBtn = document.createElement("button"); delRowBtn.className="row-del"; delRowBtn.textContent="🗑"; delRowBtn.title="حذف الصف";
+    delRowBtn.onclick = (e)=>{
+      if(!armConfirm(e.currentTarget, "تأكيد؟")) return;
+      table.rows = table.rows.filter(r=>r.id!==row.id);
+      scheduleAutoSave(); rerenderHolder();
+    };
+    tdActions.appendChild(delRowBtn);
+
+    tr.appendChild(tdActions);
+    tbody.appendChild(tr);
+
+    // صف التفاصيل (ملاحظات/صور/تعليقات)
+    const detailTr = document.createElement("tr"); detailTr.className="detail-row";
+    const detailTd = document.createElement("td"); detailTd.colSpan = table.columns.length + 2;
+    const inner = document.createElement("div"); inner.className="detail-inner";
+
+    const notesGrid = document.createElement("div"); notesGrid.className="notes-grid";
+    notesGrid.appendChild(tblMakeNoteBox("ملاحظة 1", row.note1, v=>{ row.note1=v; scheduleAutoSave(); refreshNoteBtn(); }));
+    notesGrid.appendChild(tblMakeNoteBox("ملاحظة 2", row.note2, v=>{ row.note2=v; scheduleAutoSave(); refreshNoteBtn(); }));
+    inner.appendChild(notesGrid);
+
+    if(!row.images) row.images = [];
+    const imagesPicker = tblBuildMultiImagePicker(row.images, ()=>{ scheduleAutoSave(); refreshImgBtn(); });
+    inner.appendChild(imagesPicker);
+
+    const commentsWrap = document.createElement("div"); commentsWrap.className="comments-area";
+    const list = document.createElement("div"); list.style.display="flex"; list.style.flexDirection="column"; list.style.gap="5px";
+    if(!row.comments) row.comments=[];
+    function renderComments(){
+      list.innerHTML="";
+      row.comments.forEach((c,ci)=>{
+        const item=document.createElement("div"); item.className="comment-item";
+        const txt=document.createElement("div"); txt.className="txt"; txt.textContent=c.text;
+        const del=document.createElement("button"); del.className="comment-del"; del.textContent="✕";
+        del.onclick=()=>{ row.comments.splice(ci,1); renderComments(); scheduleAutoSave(); refreshNoteBtn(); };
+        item.appendChild(txt); item.appendChild(del); list.appendChild(item);
+      });
+    }
+    renderComments();
+    commentsWrap.appendChild(list);
+    const addRow = document.createElement("div"); addRow.className="add-comment-row";
+    const input = document.createElement("input"); input.placeholder="اكتب تعليقًا...";
+    const addBtn = document.createElement("button"); addBtn.className="btn-accent"; addBtn.textContent="+ إضافة تعليق";
+    function doAdd(){
+      const v=input.value.trim(); if(!v) return;
+      row.comments.push({text:v, ts:new Date().toLocaleString("ar-EG")});
+      input.value=""; renderComments(); scheduleAutoSave(); refreshNoteBtn();
+    }
+    addBtn.onclick=doAdd;
+    input.onkeydown=(e)=>{ if(e.key==="Enter") doAdd(); };
+    addRow.appendChild(input); addRow.appendChild(addBtn);
+    commentsWrap.appendChild(addRow);
+    inner.appendChild(commentsWrap);
+
+    function refreshNoteBtn(){
+      noteBtn.className = "note-toggle"+(hasContent()?" has-content":"");
+    }
+
+    detailTd.appendChild(inner);
+    detailTr.appendChild(detailTd);
+    tbody.appendChild(detailTr);
+
+    noteBtn.onclick = ()=> detailTr.classList.toggle("open");
+    imgBtn.onclick = ()=> detailTr.classList.add("open");
+  }
+
   function renderAll(){
+    renderIndexTabs();
     renderToc();
     renderCards();
     renderLangManager();
@@ -2947,7 +3646,8 @@
 
   /* ============================== EXPORT / IMPORT (manual) ============================== */
   function currentPayload(){
-    return { sections, langRules, exportedAt: new Date().toISOString() };
+    if(indexes[activeIndexIdx]) indexes[activeIndexIdx].sections = sections;
+    return { indexes, activeIndexIdx, langRules, exportedAt: new Date().toISOString() };
   }
   document.getElementById("exportBtn").addEventListener("click", ()=>{
     const blob = new Blob([JSON.stringify(currentPayload(), null, 2)], {type:"application/json"});
@@ -2969,7 +3669,19 @@
     reader.onload = ()=>{
       try{
         const data = JSON.parse(reader.result);
-        if(Array.isArray(data.sections)) sections = data.sections;
+        if(Array.isArray(data.indexes) && data.indexes.length){
+          indexes = data.indexes.map(ix=>({
+            id: (ix && ix.id) || idxUid(),
+            title: (ix && typeof ix.title === "string" && ix.title.trim()) ? ix.title : "فهرس",
+            sections: (ix && Array.isArray(ix.sections)) ? ix.sections : []
+          }));
+          activeIndexIdx = Number.isInteger(data.activeIndexIdx) ? data.activeIndexIdx : 0;
+          ensureIndexes();
+        } else if(Array.isArray(data.sections)){
+          // نسخة قديمة بفهرس واحد فقط — بتستبدل سكشنات الفهرس النشط حاليًا
+          sections = data.sections;
+          indexes[activeIndexIdx].sections = sections;
+        }
         if(data.langRules) langRules = Object.assign(langRules, data.langRules);
         selected = new Set();
         setStatus("تم استرجاع النسخة بنجاح ✅", "ok");
@@ -3001,8 +3713,20 @@
       const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
       if(!raw) return false;
       const data = JSON.parse(raw);
-      if(Array.isArray(data.sections)) sections = data.sections;
+      if(Array.isArray(data.indexes) && data.indexes.length){
+        indexes = data.indexes.map(ix=>({
+          id: (ix && ix.id) || idxUid(),
+          title: (ix && typeof ix.title === "string" && ix.title.trim()) ? ix.title : "فهرس",
+          sections: (ix && Array.isArray(ix.sections)) ? ix.sections : []
+        }));
+        activeIndexIdx = Number.isInteger(data.activeIndexIdx) ? data.activeIndexIdx : 0;
+      } else if(Array.isArray(data.sections)){
+        // صيغة قديمة قبل دعم الفهارس المتعددة — تتحول تلقائيًا لفهرس واحد
+        indexes = [{ id: idxUid(), title: "الفهرس الرئيسي", sections: data.sections }];
+        activeIndexIdx = 0;
+      }
       if(data.langRules && typeof data.langRules === "object") langRules = Object.assign(langRules, data.langRules);
+      ensureIndexes();
       return true;
     }catch(e){
       console.warn("تعذّرت قراءة الحفظ التلقائي المحلي:", e);
@@ -3058,6 +3782,7 @@
   }
 
   function scheduleAutoSave(){
+    if(indexes[activeIndexIdx]) indexes[activeIndexIdx].sections = sections;
     clearTimeout(autoSaveTimer);
     autoSaveTimer = setTimeout(()=>{
       const ok = saveToLocalStorage();
@@ -3109,6 +3834,7 @@
 
   /* ============================== init ============================== */
   loadFromLocalStorage();
+  ensureIndexes();
   renderAll();
 })();
 </script>
