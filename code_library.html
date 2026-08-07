@@ -541,13 +541,16 @@
   select.cell-select:focus{outline:none; background:#fff8e2;}
 
   .actions-cell{padding:3px !important; text-align:center; white-space:nowrap;}
-  .chk, .note-toggle, .img-toggle, .row-del{width:19px;height:19px; border-radius:4px; border:1.5px solid var(--rule); background:#fff; cursor:pointer; font-size:10px; vertical-align:middle; display:inline-flex; align-items:center; justify-content:center; margin-inline-end:3px; padding:0; color:var(--ink-soft);}
+  .chk, .note-toggle, .img-toggle, .file-toggle, .row-del{width:19px;height:19px; border-radius:4px; border:1.5px solid var(--rule); background:#fff; cursor:pointer; font-size:10px; vertical-align:middle; display:inline-flex; align-items:center; justify-content:center; margin-inline-end:3px; padding:0; color:var(--ink-soft);}
   .chk{color:var(--accent-dark); font-size:11px; font-weight:900;}
   .chk.on{background:var(--accent); border-color:var(--accent-dark); color:#fff;}
   .note-toggle.has-content{background:#fdf3d4; border-color:var(--marker);}
   .img-toggle{overflow:hidden; position:relative;}
   .img-toggle img{width:100%;height:100%;object-fit:cover;}
   .img-toggle .count-badge{position:absolute; bottom:-2px; left:-2px; background:var(--danger); color:#fff; font-size:7px; border-radius:50%; width:10px;height:10px; display:flex; align-items:center; justify-content:center; font-weight:900;}
+  .file-toggle{position:relative;}
+  .file-toggle.has-content{background:#e7f0ff; border-color:var(--accent);}
+  .file-toggle .count-badge{position:absolute; bottom:-2px; left:-2px; background:var(--danger); color:#fff; font-size:7px; border-radius:50%; width:10px;height:10px; display:flex; align-items:center; justify-content:center; font-weight:900;}
   .row-del:hover{color:var(--danger); border-color:var(--danger);}
 
   tr.detail-row{display:none;}
@@ -578,6 +581,12 @@
   .tbl-file-label{background:#fff; border:1px dashed var(--rule); border-radius:6px; padding:16px 12px; cursor:pointer; font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; align-items:center; gap:3px; width:56px; height:56px; justify-content:center; text-align:center;}
   .tbl-file-label:hover{border-color:var(--accent);}
   .tbl-file-label input{display:none;}
+  .files-grid{display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin-top:8px;}
+  .files-grid .file-chip{position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; width:64px; height:64px; border-radius:6px; border:1px solid var(--rule); background:var(--paper-card); cursor:pointer; font-size:9.5px; text-align:center; padding:4px; overflow:hidden; color:var(--ink-soft);}
+  .files-grid .file-chip:hover{border-color:var(--accent);}
+  .files-grid .file-chip .fi-icon{font-size:20px; line-height:1; margin-bottom:2px;}
+  .files-grid .file-chip .fi-name{font-size:8.5px; line-height:1.15; max-height:2.2em; overflow:hidden; word-break:break-word; width:100%;}
+  .files-grid .file-del{position:absolute; top:-6px; left:-6px; width:16px;height:16px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;}
 
   .row-footer{padding:8px 10px; display:flex; justify-content:flex-start;}
   .add-row-btn{background:#eef3ea; border:1.5px solid var(--accent); color:var(--accent-dark); font-weight:700; font-size:11.5px; border-radius:6px; padding:7px 14px; cursor:pointer;}
@@ -605,10 +614,23 @@
   .tbl-add-option-row input{flex:1;}
 
   /* lightbox لصور الجداول */
-  .tbl-lightbox-overlay{position:fixed; inset:0; z-index:220; background:rgba(20,20,30,0.88); display:none; align-items:center; justify-content:center; padding:30px; cursor:zoom-out;}
+  .tbl-lightbox-overlay{position:fixed; inset:0; z-index:220; background:rgba(20,20,30,0.92); display:none; flex-direction:column; align-items:center; justify-content:center; padding:0;}
   .tbl-lightbox-overlay.open{display:flex;}
-  .tbl-lightbox-overlay img{max-width:92vw; max-height:88vh; border-radius:8px; box-shadow:0 12px 40px rgba(0,0,0,.5);}
-  .tbl-lightbox-close{position:absolute; top:18px; left:20px; width:38px; height:38px; border-radius:50%; background:#fff; border:none; font-size:18px; cursor:pointer; color:var(--ink); font-weight:900; padding:0;}
+  .tbl-lightbox-stage{position:relative; flex:1; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; touch-action:none; cursor:grab;}
+  .tbl-lightbox-stage.zoomed{cursor:grab;}
+  .tbl-lightbox-stage.dragging{cursor:grabbing;}
+  .tbl-lightbox-stage img{max-width:none; max-height:none; width:auto; height:auto; user-select:none; -webkit-user-drag:none; border-radius:6px; box-shadow:0 12px 40px rgba(0,0,0,.5); transform-origin:0 0; touch-action:none;}
+  .tbl-lightbox-stage video{max-width:92vw; max-height:82vh;}
+  .tbl-lightbox-stage audio{width:min(480px,86vw);}
+  .tbl-lightbox-stage iframe{width:94vw; height:86vh; background:#fff; border:none; border-radius:8px;}
+  .tbl-lb-fallback{color:#fff; text-align:center; padding:20px;}
+  .tbl-lb-fallback .fi-big-icon{font-size:64px; display:block; margin-bottom:14px;}
+  .tbl-lb-fallback .fi-big-name{font-size:14px; color:#ddd; margin-bottom:16px; word-break:break-word; max-width:80vw;}
+  .tbl-lb-fallback a.dl-btn{display:inline-block; background:#fff; color:var(--ink); padding:10px 20px; border-radius:8px; text-decoration:none; font-weight:800; font-size:13px;}
+  .tbl-lightbox-toolbar{position:absolute; top:14px; right:70px; left:70px; display:flex; align-items:center; justify-content:center; gap:8px; z-index:2;}
+  .tbl-lightbox-toolbar button, .tbl-lightbox-toolbar a{background:#fff; color:var(--ink); border:none; border-radius:8px; min-width:36px; height:36px; padding:0 8px; display:flex; align-items:center; justify-content:center; font-size:15px; cursor:pointer; text-decoration:none; font-weight:900;}
+  .tbl-lightbox-toolbar .zoom-level{color:#fff; font-size:12.5px; min-width:44px; text-align:center; font-weight:700;}
+  .tbl-lightbox-close{position:absolute; top:18px; left:20px; width:38px; height:38px; border-radius:50%; background:#fff; border:none; font-size:18px; cursor:pointer; color:var(--ink); font-weight:900; padding:0; z-index:3;}
 </style>
 </head>
 <body>
@@ -616,7 +638,23 @@
 
 <div class="tbl-lightbox-overlay" id="tblLightbox">
   <button class="tbl-lightbox-close" id="tblLightboxClose">✕</button>
-  <img id="tblLightboxImg" src="" alt="صورة مكبّرة">
+  <div class="tbl-lightbox-toolbar" id="tblLightboxToolbar" style="display:none;">
+    <button type="button" id="tblLbZoomOut" title="تصغير">－</button>
+    <span class="zoom-level" id="tblLbZoomLevel">100%</span>
+    <button type="button" id="tblLbZoomIn" title="تكبير">＋</button>
+    <button type="button" id="tblLbZoomReset" title="إعادة الضبط للحجم الأصلي">⤾</button>
+  </div>
+  <div class="tbl-lightbox-stage" id="tblLightboxStage">
+    <img id="tblLightboxImg" src="" alt="صورة مكبّرة" style="display:none;">
+    <video id="tblLightboxVideo" controls style="display:none;"></video>
+    <audio id="tblLightboxAudio" controls style="display:none;"></audio>
+    <iframe id="tblLightboxPdf" title="ملف PDF" style="display:none;"></iframe>
+    <div id="tblLightboxFallback" class="tbl-lb-fallback" style="display:none;">
+      <span class="fi-big-icon" id="tblLbFallbackIcon">📎</span>
+      <div class="fi-big-name" id="tblLbFallbackName"></div>
+      <a class="dl-btn" id="tblLbFallbackDownload" download>⬇️ تنزيل الملف</a>
+    </div>
+  </div>
 </div>
 
 <div class="tbl-modal-overlay" id="tblModalOverlay">
@@ -778,6 +816,36 @@
     }catch(e){ /* تجاهل لو فشل الحذف */ }
   }
   function genImageId(){ return "idbimg_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,9); }
+
+  /* ============================== تصنيف الملفات العامة (PDF/صوت/فيديو/غيرها) ============================== */
+  function fileKindFromMime(mime, name){
+    mime = mime || ""; name = (name || "").toLowerCase();
+    if(mime.indexOf("image/") === 0) return "image";
+    if(mime.indexOf("video/") === 0) return "video";
+    if(mime.indexOf("audio/") === 0) return "audio";
+    if(mime === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+    return "other";
+  }
+  function tblFileIconFor(mime, name){
+    const kind = fileKindFromMime(mime, name);
+    if(kind === "image") return "🖼️";
+    if(kind === "video") return "🎬";
+    if(kind === "audio") return "🎵";
+    if(kind === "pdf") return "📄";
+    const n = (name || "").toLowerCase();
+    if(/\.(zip|rar|7z|tar|gz)$/.test(n)) return "📦";
+    if(/\.(c|cpp|h|hpp|py|js|ts|java|json|html|css|asm|s|hex|ino|sh|php|rb|go|rs)$/.test(n)) return "💻";
+    if(/\.(exe|bin|dll|so|apk)$/.test(n)) return "⚙️";
+    if(/\.(doc|docx|xls|xlsx|ppt|pptx|txt|md)$/.test(n)) return "📃";
+    return "📎";
+  }
+  function formatFileSize(bytes){
+    if(bytes == null) return "";
+    if(bytes < 1024) return bytes + " B";
+    if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + " KB";
+    return (bytes/(1024*1024)).toFixed(1) + " MB";
+  }
+
   function isIdbImageRef(ref){ return typeof ref === "string" && ref.indexOf("data:") !== 0 && ref.indexOf("idbimg_") === 0; }
   const imgUrlCache = new Map();
   async function getImageDisplayURL(ref){
@@ -828,14 +896,28 @@
               }
               row.images = resolved;
             }
+            if(Array.isArray(row.files) && row.files.length){
+              const resolvedFiles = [];
+              for(const entry of row.files){
+                if(entry && typeof entry === "object" && entry.id){
+                  const blob = await idbGetImage(entry.id);
+                  if(blob){
+                    resolvedFiles.push({ name: entry.name, mime: entry.mime, size: entry.size, data: await blobToBase64(blob) });
+                  }
+                } else if(entry && entry.data){
+                  resolvedFiles.push(entry); // بالفعل base64 (من ملف تصدير سابق)
+                }
+              }
+              row.files = resolvedFiles;
+            }
           }
         }
       }
     }
     return indexesClone;
   }
-  /** عكس العملية: بيدور على أي صورة base64 جوه بنية مستوردة، يخزنها في IndexedDB،
-   *  ويستبدلها بمرجع خفيف — مستخدمة وقت الاستيراد. */
+  /** عكس العملية: بيدور على أي صورة/ملف base64 جوه بنية مستوردة، يخزنه في IndexedDB،
+   *  ويستبدله بمرجع خفيف — مستخدمة وقت الاستيراد. */
   async function migrateAllImagesToIndexedDB(indexesArr){
     for(const ix of (indexesArr||[])){
       for(const sec of (ix.sections||[])){
@@ -855,6 +937,21 @@
                 }
               }
               row.images = migrated;
+            }
+            if(Array.isArray(row.files) && row.files.length){
+              const migratedFiles = [];
+              for(const entry of row.files){
+                if(entry && typeof entry === "object" && entry.id){
+                  migratedFiles.push(entry); // مرجع موجود بالفعل
+                } else if(entry && entry.data){
+                  try{
+                    const id = genImageId();
+                    await idbPutImage(id, base64ToBlob(entry.data));
+                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size });
+                  }catch(e){ /* تجاهل الملف ده لو فشل الترحيل */ }
+                }
+              }
+              row.files = migratedFiles;
             }
           }
         }
@@ -3245,19 +3342,192 @@
   function tblGenId(){ return "tb_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 
   function makeTblRow(values){
-    return { id: tblGenId(), values: values, checked:false, note1:"", note2:"", comments:[], images:[] };
+    return { id: tblGenId(), values: values, checked:false, note1:"", note2:"", comments:[], images:[], files:[] };
   }
 
-  /* ---- lightbox ---- */
+  /* ---- عارض الملفات الموحّد (صور بزوم/باند + فيديو + صوت + PDF + ملفات عامة) ---- */
   const tblLightboxEl = document.getElementById("tblLightbox");
   const tblLightboxImgEl = document.getElementById("tblLightboxImg");
-  function openTblLightbox(src){
-    if(!src) return;
-    tblLightboxImgEl.src = src;
+  const tblLightboxVideoEl = document.getElementById("tblLightboxVideo");
+  const tblLightboxAudioEl = document.getElementById("tblLightboxAudio");
+  const tblLightboxPdfEl = document.getElementById("tblLightboxPdf");
+  const tblLightboxFallbackEl = document.getElementById("tblLightboxFallback");
+  const tblLbFallbackIconEl = document.getElementById("tblLbFallbackIcon");
+  const tblLbFallbackNameEl = document.getElementById("tblLbFallbackName");
+  const tblLbFallbackDownloadEl = document.getElementById("tblLbFallbackDownload");
+  const tblLightboxStageEl = document.getElementById("tblLightboxStage");
+  const tblLightboxToolbarEl = document.getElementById("tblLightboxToolbar");
+  const tblLbZoomLevelEl = document.getElementById("tblLbZoomLevel");
+
+  // --- حالة تكبير/تصغير الصورة ---
+  let imgNaturalW = 0, imgNaturalH = 0, imgBaseScale = 1, imgZoomFactor = 1, imgTx = 0, imgTy = 0;
+  const MIN_ZOOM = 0.5, MAX_ZOOM = 6;
+
+  function applyImgTransform(){
+    const s = imgBaseScale * imgZoomFactor;
+    tblLightboxImgEl.style.transform = `translate(${imgTx}px, ${imgTy}px) scale(${s})`;
+    tblLbZoomLevelEl.textContent = Math.round(imgZoomFactor * 100) + "%";
+    tblLightboxStageEl.classList.toggle("zoomed", imgZoomFactor > 1.001);
+  }
+  function computeBaseScaleAndCenter(){
+    const stageRect = tblLightboxStageEl.getBoundingClientRect();
+    if(!imgNaturalW || !imgNaturalH || !stageRect.width){ imgBaseScale = 1; }
+    else{
+      const availW = stageRect.width * 0.94, availH = stageRect.height * 0.9;
+      imgBaseScale = Math.min(availW / imgNaturalW, availH / imgNaturalH, 1);
+    }
+    const dispW = imgNaturalW * imgBaseScale * imgZoomFactor;
+    const dispH = imgNaturalH * imgBaseScale * imgZoomFactor;
+    imgTx = (stageRect.width - dispW) / 2;
+    imgTy = (stageRect.height - dispH) / 2;
+  }
+  function resetImgZoomState(){
+    imgZoomFactor = 1; imgTx = 0; imgTy = 0; imgNaturalW = 0; imgNaturalH = 0; imgBaseScale = 1;
+  }
+  function zoomBy(factor, clientX, clientY){
+    if(tblLightboxImgEl.style.display === "none") return;
+    const stageRect = tblLightboxStageEl.getBoundingClientRect();
+    const cx = (clientX != null ? clientX - stageRect.left : stageRect.width / 2);
+    const cy = (clientY != null ? clientY - stageRect.top : stageRect.height / 2);
+    const oldScale = imgBaseScale * imgZoomFactor;
+    let newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, imgZoomFactor * factor));
+    const newScale = imgBaseScale * newZoom;
+    imgTx = cx - (cx - imgTx) * (newScale / oldScale);
+    imgTy = cy - (cy - imgTy) * (newScale / oldScale);
+    imgZoomFactor = newZoom;
+    applyImgTransform();
+  }
+  tblLightboxImgEl.addEventListener("load", ()=>{
+    imgNaturalW = tblLightboxImgEl.naturalWidth;
+    imgNaturalH = tblLightboxImgEl.naturalHeight;
+    imgZoomFactor = 1;
+    computeBaseScaleAndCenter();
+    applyImgTransform();
+  });
+  document.getElementById("tblLbZoomIn").addEventListener("click", ()=> zoomBy(1.4));
+  document.getElementById("tblLbZoomOut").addEventListener("click", ()=> zoomBy(1/1.4));
+  document.getElementById("tblLbZoomReset").addEventListener("click", ()=>{
+    imgZoomFactor = 1; computeBaseScaleAndCenter(); applyImgTransform();
+  });
+  tblLightboxImgEl.addEventListener("dblclick", (e)=>{
+    e.stopPropagation();
+    if(imgZoomFactor > 1.05){ imgZoomFactor = 1; computeBaseScaleAndCenter(); }
+    else{ zoomBy(2.2, e.clientX, e.clientY); }
+    applyImgTransform();
+  });
+  tblLightboxStageEl.addEventListener("wheel", (e)=>{
+    if(tblLightboxImgEl.style.display === "none") return;
+    e.preventDefault();
+    zoomBy(e.deltaY < 0 ? 1.15 : 1/1.15, e.clientX, e.clientY);
+  }, { passive:false });
+
+  // --- سحب/بان باللمس أو الماوس + تكبير بإصبعين (pinch) ---
+  const activePointers = new Map();
+  let dragStart = null, dragMoved = false, pinchStartDist = null, pinchStartZoom = null;
+  function ptDist(p1,p2){ return Math.hypot(p1.x-p2.x, p1.y-p2.y); }
+  function ptMid(p1,p2){ return {x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2}; }
+  tblLightboxStageEl.addEventListener("pointerdown", (e)=>{
+    if(tblLightboxImgEl.style.display === "none") return;
+    tblLightboxStageEl.setPointerCapture(e.pointerId);
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    dragMoved = false;
+    if(activePointers.size === 1){
+      dragStart = { x:e.clientX, y:e.clientY, tx:imgTx, ty:imgTy };
+      tblLightboxStageEl.classList.add("dragging");
+    } else if(activePointers.size === 2){
+      dragStart = null;
+      const pts = Array.from(activePointers.values());
+      pinchStartDist = ptDist(pts[0], pts[1]);
+      pinchStartZoom = imgZoomFactor;
+    }
+  });
+  tblLightboxStageEl.addEventListener("pointermove", (e)=>{
+    if(!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(activePointers.size === 1 && dragStart){
+      const dx = e.clientX - dragStart.x, dy = e.clientY - dragStart.y;
+      if(Math.abs(dx) + Math.abs(dy) > 6) dragMoved = true;
+      imgTx = dragStart.tx + dx; imgTy = dragStart.ty + dy;
+      applyImgTransform();
+    } else if(activePointers.size === 2 && pinchStartDist){
+      dragMoved = true;
+      const pts = Array.from(activePointers.values());
+      const dist = ptDist(pts[0], pts[1]);
+      const mid = ptMid(pts[0], pts[1]);
+      const stageRect = tblLightboxStageEl.getBoundingClientRect();
+      const oldScale = imgBaseScale * imgZoomFactor;
+      let newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchStartZoom * (dist / pinchStartDist)));
+      const newScale = imgBaseScale * newZoom;
+      const cx = mid.x - stageRect.left, cy = mid.y - stageRect.top;
+      imgTx = cx - (cx - imgTx) * (newScale / oldScale);
+      imgTy = cy - (cy - imgTy) * (newScale / oldScale);
+      imgZoomFactor = newZoom;
+      applyImgTransform();
+    }
+  });
+  function releasePointer(e){
+    activePointers.delete(e.pointerId);
+    tblLightboxStageEl.classList.remove("dragging");
+    dragStart = null; pinchStartDist = null;
+    if(activePointers.size === 1){
+      const entry = Array.from(activePointers.entries())[0];
+      dragStart = { x:entry[1].x, y:entry[1].y, tx:imgTx, ty:imgTy };
+    }
+  }
+  tblLightboxStageEl.addEventListener("pointerup", releasePointer);
+  tblLightboxStageEl.addEventListener("pointercancel", releasePointer);
+  tblLightboxStageEl.addEventListener("pointerleave", (e)=>{ if(activePointers.has(e.pointerId)) releasePointer(e); });
+  window.addEventListener("resize", ()=>{
+    if(tblLightboxEl.classList.contains("open") && tblLightboxImgEl.style.display !== "none" && imgNaturalW){
+      computeBaseScaleAndCenter(); applyImgTransform();
+    }
+  });
+
+  function tblHideAllViewers(){
+    tblLightboxImgEl.style.display = "none"; tblLightboxImgEl.src = "";
+    tblLightboxVideoEl.style.display = "none"; tblLightboxVideoEl.pause(); tblLightboxVideoEl.removeAttribute("src"); tblLightboxVideoEl.load();
+    tblLightboxAudioEl.style.display = "none"; tblLightboxAudioEl.pause(); tblLightboxAudioEl.removeAttribute("src"); tblLightboxAudioEl.load();
+    tblLightboxPdfEl.style.display = "none"; tblLightboxPdfEl.src = "";
+    tblLightboxFallbackEl.style.display = "none";
+    tblLightboxToolbarEl.style.display = "none";
+    resetImgZoomState();
+  }
+  /** descriptor: { kind:'image'|'video'|'audio'|'pdf'|'other', url, name, mime } */
+  function openTblViewer(descriptor){
+    if(!descriptor || !descriptor.url) return;
+    tblHideAllViewers();
+    if(descriptor.kind === "image"){
+      tblLightboxImgEl.src = descriptor.url;
+      tblLightboxImgEl.style.display = "block";
+      tblLightboxToolbarEl.style.display = "flex";
+    } else if(descriptor.kind === "video"){
+      tblLightboxVideoEl.src = descriptor.url;
+      tblLightboxVideoEl.style.display = "block";
+      tblLightboxVideoEl.play().catch(()=>{});
+    } else if(descriptor.kind === "audio"){
+      tblLightboxAudioEl.src = descriptor.url;
+      tblLightboxAudioEl.style.display = "block";
+      tblLightboxAudioEl.play().catch(()=>{});
+    } else if(descriptor.kind === "pdf"){
+      tblLightboxPdfEl.src = descriptor.url;
+      tblLightboxPdfEl.style.display = "block";
+    } else {
+      tblLbFallbackIconEl.textContent = tblFileIconFor(descriptor.mime, descriptor.name);
+      tblLbFallbackNameEl.textContent = descriptor.name || "ملف";
+      tblLbFallbackDownloadEl.href = descriptor.url;
+      tblLbFallbackDownloadEl.download = descriptor.name || "file";
+      tblLightboxFallbackEl.style.display = "block";
+    }
     tblLightboxEl.classList.add("open");
   }
-  function closeTblLightbox(){ tblLightboxEl.classList.remove("open"); tblLightboxImgEl.src=""; }
-  tblLightboxEl.addEventListener("click", (e)=>{ if(e.target===tblLightboxEl) closeTblLightbox(); });
+  // توافقًا مع أي استدعاء قديم لعرض صورة بس
+  function openTblLightbox(src){ if(src) openTblViewer({ kind:"image", url:src }); }
+  function closeTblLightbox(){ tblLightboxEl.classList.remove("open"); tblHideAllViewers(); }
+  tblLightboxEl.addEventListener("click", (e)=>{ if(e.target === tblLightboxEl) closeTblLightbox(); });
+  tblLightboxStageEl.addEventListener("click", (e)=>{
+    if(dragMoved){ dragMoved = false; return; }
+    if(e.target === tblLightboxStageEl) closeTblLightbox();
+  });
   document.getElementById("tblLightboxClose").addEventListener("click", closeTblLightbox);
 
   /* ---- modal عام لإدارة الجداول ---- */
@@ -3394,7 +3664,7 @@
         const img = document.createElement("img"); img.title="اضغط للتكبير";
         img.alt = "";
         getImageDisplayURL(ref).then(url=>{ if(url) img.src = url; });
-        img.onclick = async ()=>{ const url = await getImageDisplayURL(ref); openTblLightbox(url); };
+        img.onclick = async ()=>{ const url = await getImageDisplayURL(ref); openTblViewer({ kind:"image", url }); };
         const del = document.createElement("button"); del.className="thumb-del"; del.textContent="✕";
         del.onclick = (e)=>{
           e.stopPropagation();
@@ -3426,6 +3696,58 @@
     refresh();
     return wrap;
   }
+
+  /* ---- مرفقات عامة: PDF، صوت، فيديو، ملفات كود/مكتبات بأي صيغة ----
+     بتتخزن بنفس طريقة الصور بالظبط (IndexedDB، جودة/دقة كاملة، بدون أي تحويل)،
+     وكل عنصر بيحمل معاه اسمه ونوعه وحجمه عشان يتعرض صح من غير ما نفتح الملف نفسه. */
+  function tblBuildMultiFilePicker(filesArr, onChange){
+    const wrap = document.createElement("div");
+    wrap.className = "files-grid";
+    function refresh(){
+      wrap.innerHTML = "";
+      filesArr.forEach((entry, ii)=>{
+        const chip = document.createElement("div"); chip.className = "file-chip";
+        chip.title = (entry.name || "ملف") + (entry.size!=null ? " — " + formatFileSize(entry.size) : "");
+        const icon = document.createElement("div"); icon.className = "fi-icon"; icon.textContent = tblFileIconFor(entry.mime, entry.name);
+        const nm = document.createElement("div"); nm.className = "fi-name"; nm.textContent = entry.name || "ملف";
+        chip.appendChild(icon); chip.appendChild(nm);
+        chip.onclick = async ()=>{
+          const url = await getImageDisplayURL(entry.id);
+          if(!url){ showToast("تعذّر تحميل الملف — ممكن يكون اتحذف من التخزين", "err"); return; }
+          openTblViewer({ kind: fileKindFromMime(entry.mime, entry.name), url, name: entry.name, mime: entry.mime });
+        };
+        const del = document.createElement("button"); del.className = "file-del"; del.textContent = "✕";
+        del.onclick = (e)=>{
+          e.stopPropagation();
+          const removed = filesArr.splice(ii,1)[0];
+          if(removed && removed.id) idbDeleteImage(removed.id);
+          refresh(); onChange();
+        };
+        chip.appendChild(del);
+        wrap.appendChild(chip);
+      });
+      const label = document.createElement("label"); label.className = "tbl-file-label"; label.innerHTML = "📎<br>ملف";
+      const input = document.createElement("input"); input.type = "file"; input.multiple = true;
+      input.onchange = async (e)=>{
+        const files = Array.from(e.target.files || []);
+        for(const file of files){
+          try{
+            const id = genImageId();
+            await idbPutImage(id, file); // تخزين الملف الأصلي كامل زي ما هو — بدون أي تحويل أو ضغط
+            filesArr.push({ id, name: file.name, mime: file.type || "", size: file.size });
+          }catch(err){
+            showToast("تعذّر حفظ الملف: " + (err && err.message ? err.message : err), "err");
+          }
+        }
+        refresh(); onChange();
+      };
+      label.appendChild(input);
+      wrap.appendChild(label);
+    }
+    refresh();
+    return wrap;
+  }
+
   function tblMakeNoteBox(label, val, onChange){
     const box=document.createElement("div"); box.className="note-box";
     const l=document.createElement("label"); l.textContent=label;
@@ -3588,6 +3910,17 @@
     refreshImgBtn();
     tdActions.appendChild(imgBtn);
 
+    const filesBtn = document.createElement("button"); filesBtn.className="file-toggle"; filesBtn.title="مرفقات (PDF, صوت, فيديو, ملفات...)";
+    function refreshFilesBtn(){
+      if(row.files && row.files.length){
+        filesBtn.innerHTML = `📎<span class="count-badge">${row.files.length}</span>`;
+      } else {
+        filesBtn.innerHTML = "📎";
+      }
+    }
+    refreshFilesBtn();
+    tdActions.appendChild(filesBtn);
+
     const delRowBtn = document.createElement("button"); delRowBtn.className="row-del"; delRowBtn.textContent="🗑"; delRowBtn.title="حذف الصف";
     delRowBtn.onclick = (e)=>{
       if(!armConfirm(e.currentTarget, "تأكيد؟")) return;
@@ -3599,7 +3932,7 @@
     tr.appendChild(tdActions);
     tbody.appendChild(tr);
 
-    // صف التفاصيل (ملاحظات/صور/تعليقات)
+    // صف التفاصيل (ملاحظات/صور/مرفقات/تعليقات)
     const detailTr = document.createElement("tr"); detailTr.className="detail-row";
     const detailTd = document.createElement("td"); detailTd.colSpan = table.columns.length + 2;
     const inner = document.createElement("div"); inner.className="detail-inner";
@@ -3612,6 +3945,10 @@
     if(!row.images) row.images = [];
     const imagesPicker = tblBuildMultiImagePicker(row.images, ()=>{ scheduleAutoSave(); refreshImgBtn(); });
     inner.appendChild(imagesPicker);
+
+    if(!row.files) row.files = [];
+    const filesPicker = tblBuildMultiFilePicker(row.files, ()=>{ scheduleAutoSave(); refreshFilesBtn(); });
+    inner.appendChild(filesPicker);
 
     const commentsWrap = document.createElement("div"); commentsWrap.className="comments-area";
     const list = document.createElement("div"); list.style.display="flex"; list.style.flexDirection="column"; list.style.gap="5px";
@@ -3652,6 +3989,7 @@
 
     noteBtn.onclick = ()=> detailTr.classList.toggle("open");
     imgBtn.onclick = ()=> detailTr.classList.add("open");
+    filesBtn.onclick = ()=> detailTr.classList.add("open");
   }
 
   function renderAll(){
