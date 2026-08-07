@@ -218,7 +218,7 @@
   /* ---- Writing / handwriting practice ---- */
   .wpanel{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:18px; box-shadow:var(--shadow);}
   .pad-wrap{
-    position:relative; width:100%; height:180px; margin:14px 0;
+    position:relative; width:100%; height:min(58vh, 420px); min-height:260px; margin:14px 0;
     border:2px dashed var(--line); border-radius:8px; background:var(--paper);
     touch-action:none; overflow:hidden;
   }
@@ -229,6 +229,17 @@
   .score-box .n{display:block; font-family:'Space Mono',monospace; font-size:22px; font-weight:700; color:var(--gold-deep);}
   .score-box .l{font-size:11px; color:var(--ink-soft);}
   .typed-target{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+
+  /* ---- جسر استيراد الكلمات من المحرر البرمجي ---- */
+  .count-pill{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; margin-inline-start:6px; border-radius:999px; background:var(--red); color:#fff; font-size:11px; font-weight:900;}
+  #editorBridgePanel{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px;}
+  .bridge-list{display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto; margin-bottom:14px;}
+  .bridge-item{display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid var(--line); border-radius:6px; background:var(--paper); cursor:pointer; font-size:13px;}
+  .bridge-item.already{opacity:.55; cursor:default;}
+  .bridge-item input{flex:0 0 auto;}
+  .bridge-item .bt{direction:ltr; font-family:'Space Mono',monospace; font-weight:700; flex:0 0 auto;}
+  .bridge-item .bm{color:var(--ink-soft); flex:1;}
+  .bridge-item .bnote{font-size:11px; color:var(--ink-soft); flex:0 0 auto;}
 
   footer{text-align:center; padding:20px; font-size:11px; color:var(--ink-soft);}
 
@@ -344,8 +355,8 @@
         <span id="traceRepCount">0 / 3 تكرارات ناجحة</span>
       </div>
       <div class="pad-wrap" id="tracePad">
-        <canvas id="traceGuideCanvas" width="320" height="180"></canvas>
-        <canvas id="traceInkCanvas" width="320" height="180"></canvas>
+        <canvas id="traceGuideCanvas" width="960" height="540"></canvas>
+        <canvas id="traceInkCanvas" width="960" height="540"></canvas>
       </div>
       <div class="pad-controls">
         <button class="btn ghost small" id="traceClear">مسح</button>
@@ -364,8 +375,8 @@
       <div class="quiz-q">اكتب هذه الكلمة بخط يدك من الذاكرة، ثم اكشف الإجابة لتقارن:</div>
       <div class="quiz-word" id="recallMeaning" style="direction:rtl; font-family:'Tajawal'; font-size:24px;">تفاحة</div>
       <div class="pad-wrap" id="recallPad">
-        <canvas id="recallGuideCanvas" width="320" height="180"></canvas>
-        <canvas id="recallInkCanvas" width="320" height="180"></canvas>
+        <canvas id="recallGuideCanvas" width="960" height="540"></canvas>
+        <canvas id="recallInkCanvas" width="960" height="540"></canvas>
       </div>
       <div class="pad-controls">
         <button class="btn ghost small" id="recallClear">مسح</button>
@@ -401,8 +412,12 @@
 
   <!-- MANAGE -->
   <section class="view" id="view-manage">
-    <button class="btn" id="addWordBtn" style="margin-bottom:16px;">+ إضافة كلمة جديدة</button>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+      <button class="btn" id="addWordBtn">+ إضافة كلمة جديدة</button>
+      <button class="btn ghost" id="importFromEditorBtn">🖥️ استيراد من المحرر البرمجي<span id="editorBridgeCount" class="count-pill" style="display:none;"></span></button>
+    </div>
     <div id="wordForm" style="display:none;"></div>
+    <div id="editorBridgePanel" style="display:none;"></div>
     <div id="wordList"></div>
   </section>
 
@@ -787,7 +802,7 @@
       if(!drawing) return;
       const p = toCanvasCoords(e);
       iCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || "#1C2541";
-      iCtx.lineWidth = 7;
+      iCtx.lineWidth = Math.max(10, inkCanvas.width * 0.014);
       iCtx.lineCap = "round"; iCtx.lineJoin = "round";
       iCtx.beginPath();
       iCtx.moveTo(lastX,lastY);
@@ -810,11 +825,23 @@
         gCtx.clearRect(0,0,guideCanvas.width,guideCanvas.height);
         gCtx.save();
         gCtx.globalAlpha = opacity==null ? 0.35 : opacity;
-        gCtx.font = "700 46px 'Space Mono', monospace";
+        // نحسب حجم الخط تلقائيًا عشان الكلمة تتناسب مع مساحة اللوحة كاملة مهما كان طولها،
+        // بدل ما تتقطع أو تخرج بره الحدود لما تكون طويلة.
+        const maxW = guideCanvas.width * 0.86;
+        const maxH = guideCanvas.height * 0.62;
+        let fontSize = Math.min(maxH, (guideCanvas.width / Math.max(text.length, 1)) * 1.55);
+        fontSize = Math.max(34, Math.min(fontSize, 220));
+        gCtx.font = "700 " + fontSize + "px 'Space Mono', monospace";
+        while(gCtx.measureText(text).width > maxW && fontSize > 22){
+          fontSize -= 2;
+          gCtx.font = "700 " + fontSize + "px 'Space Mono', monospace";
+        }
         gCtx.textAlign = "center";
         gCtx.textBaseline = "middle";
         gCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--gold-deep').trim() || "#A97F26";
-        gCtx.lineWidth = 16;
+        // عرض شريط الإرشاد بيتناسب مع حجم الخط — كل ما الكلمة أكبر كل ما "المسار المسموح"
+        // للتتبّع بيبقى أعرض، وده بيخلي التتبّع أسهل وأكثر تسامحًا مع بساطة اليد.
+        gCtx.lineWidth = Math.max(16, fontSize * 0.34);
         gCtx.lineJoin = "round";
         gCtx.strokeText(text, guideCanvas.width/2, guideCanvas.height/2);
         gCtx.restore();
@@ -876,7 +903,7 @@
     const ws = ensureWriting(traceWord);
     ws.bestTraceScore = Math.max(ws.bestTraceScore||0, overall);
     const fb = document.getElementById("traceFeedback");
-    if(overall >= 70){
+    if(overall >= 58){
       ws.traceReps = (ws.traceReps||0) + 1;
       updateTraceRepLabel();
       if(ws.traceReps >= TRACE_TARGET_REPS){
@@ -1078,6 +1105,88 @@
   const wordFormEl = document.getElementById("wordForm");
   addWordBtn.addEventListener("click", ()=> openForm(null));
 
+  /* ============================================================
+     جسر استيراد من المحرر البرمجي: أي تعليمة يحددها المستخدم هناك
+     بزرار 🎓 بتوصل هنا كمرشّحة لإضافتها ككلمة جديدة — قراءة فقط من
+     مفتاح localStorage المشترك (نفس الجسر اللي بيستخدمه تطبيق تعلم
+     الإنجليزي). التطبيقات شغالة في iframes منفصلة، فمفيش أي بيانات
+     تانية بتتشارك غير الجسر ده.
+  ============================================================ */
+  function getEditorBridgeItems(){
+    try{
+      const raw = localStorage.getItem('bridge-editor-instructions');
+      const items = raw ? JSON.parse(raw) : [];
+      return Array.isArray(items) ? items : [];
+    }catch(e){ return []; }
+  }
+  function existingWordSet(){
+    return new Set(state.words.map(w => String(w.word||"").trim().toLowerCase()));
+  }
+  function refreshEditorBridgeButton(){
+    const badge = document.getElementById("editorBridgeCount");
+    if(!badge) return;
+    const existing = existingWordSet();
+    const items = getEditorBridgeItems();
+    const newOnes = items.filter(it => it && it.term && !existing.has(String(it.term).trim().toLowerCase()));
+    if(newOnes.length){ badge.style.display = "inline-flex"; badge.textContent = newOnes.length; }
+    else{ badge.style.display = "none"; }
+  }
+  function renderEditorBridgePanel(){
+    const panel = document.getElementById("editorBridgePanel");
+    const items = getEditorBridgeItems();
+    if(!items.length){
+      panel.innerHTML = `<div class="empty"><h3>لا توجد كلمات محددة في المحرر</h3><p>افتح صفحة «المحرر البرمجي»، وحدد التعليمات اللي عايز تضيفها هنا (بنفس الزرار اللي بيستخدمه تطبيق تعلم الإنجليزي)، وارجع تاني.</p></div>`;
+      panel.style.display = "block";
+      return;
+    }
+    const existing = existingWordSet();
+    panel.innerHTML = `
+      <div class="bridge-list">
+        ${items.map((it,i)=>{
+          const already = it && it.term && existing.has(String(it.term).trim().toLowerCase());
+          return `
+          <label class="bridge-item ${already?'already':''}">
+            <input type="checkbox" data-bidx="${i}" ${already?'disabled':'checked'}>
+            <span class="bt">${escapeHtml(it && it.term || '')}</span>
+            <span class="bm">${escapeHtml(it && it.meaning || '')}</span>
+            ${already?'<span class="bnote">(مضافة بالفعل)</span>':''}
+          </label>`;
+        }).join('')}
+      </div>
+      <div class="form-actions">
+        <button class="btn ghost small" id="bridgeCancel">إغلاق</button>
+        <button class="btn small" id="bridgeAddSelected">+ إضافة المحدد</button>
+      </div>
+    `;
+    panel.style.display = "block";
+    document.getElementById("bridgeCancel").addEventListener("click", ()=>{ panel.style.display="none"; panel.innerHTML=""; });
+    document.getElementById("bridgeAddSelected").addEventListener("click", ()=>{
+      const checked = Array.from(panel.querySelectorAll('input[data-bidx]:checked'));
+      const existingNow = existingWordSet();
+      let added = 0;
+      checked.forEach(chk=>{
+        const it = items[+chk.dataset.bidx];
+        if(!it || !it.term) return;
+        const key = String(it.term).trim().toLowerCase();
+        if(existingNow.has(key)) return;
+        state.words.push(seedWord({
+          word: it.term,
+          meaning: it.meaning || "",
+          example: it.example || "",
+          pronunciation: "",
+          category: it.lang ? ("من المحرر - " + it.lang) : "من المحرر"
+        }));
+        existingNow.add(key);
+        added++;
+      });
+      if(added){ save(); renderManage(); }
+      panel.style.display = "none"; panel.innerHTML = "";
+      alert(added ? ("تمت إضافة " + added + " كلمة جديدة ✅") : "لم يتم اختيار أي كلمة جديدة.");
+    });
+  }
+  document.getElementById("importFromEditorBtn").addEventListener("click", renderEditorBridgePanel);
+  window.addEventListener('storage', (e)=>{ if(e.key === 'bridge-editor-instructions') refreshEditorBridgeButton(); });
+
   function openForm(word){
     wordFormEl.style.display = "block";
     wordFormEl.innerHTML = `
@@ -1117,6 +1226,7 @@
   function escapeAttr(s){ return String(s).replace(/"/g,"&quot;"); }
 
   function renderManage(){
+    refreshEditorBridgeButton();
     const list = document.getElementById("wordList");
     list.innerHTML = "";
     if(state.words.length === 0){
@@ -1406,6 +1516,7 @@
 
   // ---------- INIT ----------
   renderReview();
+  refreshEditorBridgeButton();
   window.addEventListener("resize", ()=>{
     if(document.getElementById("view-stats").classList.contains("active")) drawLevelChart();
   });
