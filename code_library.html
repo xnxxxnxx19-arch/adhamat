@@ -722,6 +722,147 @@
   let idCounter = 1;
   const uid = () => "s" + (idCounter++) + "_" + Math.random().toString(36).slice(2,7);
 
+  /* ============================== تخزين الصور بجودة كاملة (IndexedDB) ==============================
+     مشكلة localStorage: محدود بحوالي 5-10 ميجا لكل موقع، وأي صورة متحولة base64 بتاخد حجم أكبر
+     بحوالي 33% من حجمها الأصلي، فكان لازم نضغط الصور ونصغّرها عشان الحفظ ميفشلش.
+     الحل: الصور بقت بتتخزن كملفات (Blobs) في IndexedDB (مساحته أكبر بكتير، عادة مئات الميجا لجيجا
+     كاملة حسب مساحة الجهاز)، وجوه بيانات الصف (row.images) بيتخزن بس "مرجع" (ID) صغير للصورة
+     بدل الصورة نفسها. النتيجة: localStorage فاضي وخفيف، والصور بتتحفظ زي ما هي بالظبط من غير
+     أي ضغط أو تصغير في الجودة. */
+  const IMG_DB_NAME = "code-library-images-db";
+  const IMG_DB_VERSION = 1;
+  const IMG_STORE = "images";
+  let imgDbPromise = null;
+
+  function openImageDB(){
+    if(imgDbPromise) return imgDbPromise;
+    imgDbPromise = new Promise((resolve, reject) => {
+      if(!("indexedDB" in window)){ reject(new Error("IndexedDB غير مدعوم في هذا المتصفح")); return; }
+      const req = indexedDB.open(IMG_DB_NAME, IMG_DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if(!db.objectStoreNames.contains(IMG_STORE)) db.createObjectStore(IMG_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return imgDbPromise;
+  }
+  async function idbPutImage(id, blob){
+    const db = await openImageDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IMG_STORE, "readwrite");
+      tx.objectStore(IMG_STORE).put(blob, id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function idbGetImage(id){
+    const db = await openImageDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IMG_STORE, "readonly");
+      const req = tx.objectStore(IMG_STORE).get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbDeleteImage(id){
+    try{
+      const db = await openImageDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IMG_STORE, "readwrite");
+        tx.objectStore(IMG_STORE).delete(id);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }catch(e){ /* تجاهل لو فشل الحذف */ }
+  }
+  function genImageId(){ return "idbimg_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,9); }
+  function isIdbImageRef(ref){ return typeof ref === "string" && ref.indexOf("data:") !== 0 && ref.indexOf("idbimg_") === 0; }
+  const imgUrlCache = new Map();
+  async function getImageDisplayURL(ref){
+    if(typeof ref !== "string") return "";
+    if(ref.indexOf("data:") === 0) return ref; // صيغة قديمة (base64) — بترجع زي ما هي
+    if(imgUrlCache.has(ref)) return imgUrlCache.get(ref);
+    try{
+      const blob = await idbGetImage(ref);
+      if(!blob) return "";
+      const url = URL.createObjectURL(blob);
+      imgUrlCache.set(ref, url);
+      return url;
+    }catch(e){ return ""; }
+  }
+  function blobToBase64(blob){
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  }
+  function base64ToBlob(dataUrl){
+    const parts = dataUrl.split(",");
+    const meta = parts[0]; const b64 = parts[1];
+    const mimeMatch = meta.match(/data:(.*?);base64/);
+    const mime = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], {type: mime});
+  }
+  /** يمشي على كل الصور جوه بنية الفهارس ويستبدل مراجع IndexedDB بصور base64 كاملة —
+   *  مستخدمة وقت التصدير (الملف النهائي يبقى بيحتوي على الصور فعليًا، محمول بالكامل). */
+  async function embedAllImagesAsBase64(indexesClone){
+    for(const ix of (indexesClone||[])){
+      for(const sec of (ix.sections||[])){
+        for(const tbl of (sec.tables||[])){
+          for(const row of (tbl.rows||[])){
+            if(Array.isArray(row.images) && row.images.length){
+              const resolved = [];
+              for(const ref of row.images){
+                if(typeof ref === "string" && ref.indexOf("data:") === 0){ resolved.push(ref); continue; }
+                if(isIdbImageRef(ref)){
+                  const blob = await idbGetImage(ref);
+                  if(blob){ resolved.push(await blobToBase64(blob)); }
+                }
+              }
+              row.images = resolved;
+            }
+          }
+        }
+      }
+    }
+    return indexesClone;
+  }
+  /** عكس العملية: بيدور على أي صورة base64 جوه بنية مستوردة، يخزنها في IndexedDB،
+   *  ويستبدلها بمرجع خفيف — مستخدمة وقت الاستيراد. */
+  async function migrateAllImagesToIndexedDB(indexesArr){
+    for(const ix of (indexesArr||[])){
+      for(const sec of (ix.sections||[])){
+        for(const tbl of (sec.tables||[])){
+          for(const row of (tbl.rows||[])){
+            if(Array.isArray(row.images) && row.images.length){
+              const migrated = [];
+              for(const ref of row.images){
+                if(typeof ref === "string" && ref.indexOf("data:") === 0){
+                  try{
+                    const id = genImageId();
+                    await idbPutImage(id, base64ToBlob(ref));
+                    migrated.push(id);
+                  }catch(e){ /* لو فشل، سيب الصورة كـ base64 زي ما هي بدل ما تتفقد */ migrated.push(ref); }
+                } else {
+                  migrated.push(ref); // مرجع idbimg_ خفيف موجود بالفعل
+                }
+              }
+              row.images = migrated;
+            }
+          }
+        }
+      }
+    }
+    return indexesArr;
+  }
+
   /* ============================== فهارس متعددة ============================== */
   // كل فهرس عبارة عن مكتبة سكشنات مستقلة بعنوانها الخاص. sections في أي لحظة
   // بتشاور على مصفوفة سكشنات الفهرس النشط، وأي حفظ بيزامن الحالة مرة واحدة قبله.
@@ -3240,44 +3381,42 @@
   }
 
   /* ---- صور ---- */
-  function tblResizeImageToDataURL(file, maxDim, quality){
-    return new Promise((resolve,reject)=>{
-      const reader=new FileReader();
-      reader.onload=(e)=>{
-        const img=new Image();
-        img.onload=()=>{
-          let w=img.width,h=img.height;
-          if(w>h && w>maxDim){ h=h*(maxDim/w); w=maxDim; } else if(h>maxDim){ w=w*(maxDim/h); h=maxDim; }
-          const c=document.createElement("canvas"); c.width=w; c.height=h;
-          c.getContext("2d").drawImage(img,0,0,w,h);
-          resolve(c.toDataURL("image/jpeg", quality));
-        };
-        img.onerror=reject; img.src=e.target.result;
-      };
-      reader.onerror=reject; reader.readAsDataURL(file);
-    });
-  }
+  // ملحوظة: الصور دلوقتي بتتخزن بجودتها الأصلية الكاملة من غير أي ضغط أو تصغير،
+  // لأنها بقت في IndexedDB مش في localStorage (شوف قسم "تخزين الصور بجودة كاملة" فوق).
   function tblBuildMultiImagePicker(imagesArr, onChange){
     const wrap = document.createElement("div");
     wrap.className="images-grid";
-    function refresh(){
+    async function refresh(){
       wrap.innerHTML="";
-      imagesArr.forEach((src, ii)=>{
+      for(let ii=0; ii<imagesArr.length; ii++){
+        const ref = imagesArr[ii];
         const tw = document.createElement("div"); tw.className="thumb-wrap";
-        const img = document.createElement("img"); img.src=src; img.title="اضغط للتكبير";
-        img.onclick = ()=> openTblLightbox(src);
+        const img = document.createElement("img"); img.title="اضغط للتكبير";
+        img.alt = "";
+        getImageDisplayURL(ref).then(url=>{ if(url) img.src = url; });
+        img.onclick = async ()=>{ const url = await getImageDisplayURL(ref); openTblLightbox(url); };
         const del = document.createElement("button"); del.className="thumb-del"; del.textContent="✕";
-        del.onclick = (e)=>{ e.stopPropagation(); imagesArr.splice(ii,1); refresh(); onChange(); };
+        del.onclick = (e)=>{
+          e.stopPropagation();
+          const removed = imagesArr.splice(ii,1)[0];
+          if(isIdbImageRef(removed)) idbDeleteImage(removed);
+          refresh(); onChange();
+        };
         tw.appendChild(img); tw.appendChild(del);
         wrap.appendChild(tw);
-      });
+      }
       const label = document.createElement("label"); label.className="tbl-file-label"; label.innerHTML="📷<br>إضافة";
       const input = document.createElement("input"); input.type="file"; input.accept="image/*"; input.multiple=true;
       input.onchange = async (e)=>{
         const files = Array.from(e.target.files || []);
         for(const file of files){
-          const dataUrl = await tblResizeImageToDataURL(file, 520, 0.72);
-          imagesArr.push(dataUrl);
+          try{
+            const id = genImageId();
+            await idbPutImage(id, file); // تخزين الملف الأصلي زي ما هو — بدون أي ضغط
+            imagesArr.push(id);
+          }catch(err){
+            showToast("تعذّر حفظ الصورة: " + (err && err.message ? err.message : err), "err");
+          }
         }
         refresh(); onChange();
       };
@@ -3439,7 +3578,9 @@
     const imgBtn = document.createElement("button"); imgBtn.className="img-toggle"; imgBtn.title="الصور";
     function refreshImgBtn(){
       if(row.images && row.images.length){
-        imgBtn.innerHTML = `<img src="${row.images[0]}"><span class="count-badge">${row.images.length}</span>`;
+        imgBtn.innerHTML = `<img><span class="count-badge">${row.images.length}</span>`;
+        const thumbImg = imgBtn.querySelector("img");
+        getImageDisplayURL(row.images[0]).then(url=>{ if(url && thumbImg.isConnected) thumbImg.src = url; });
       } else {
         imgBtn.innerHTML = "📷";
       }
@@ -3649,13 +3790,24 @@
     if(indexes[activeIndexIdx]) indexes[activeIndexIdx].sections = sections;
     return { indexes, activeIndexIdx, langRules, exportedAt: new Date().toISOString() };
   }
-  document.getElementById("exportBtn").addEventListener("click", ()=>{
-    const blob = new Blob([JSON.stringify(currentPayload(), null, 2)], {type:"application/json"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "code-library-backup.json";
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+  document.getElementById("exportBtn").addEventListener("click", async ()=>{
+    showToast("جارٍ تجهيز النسخة (بما فيها الصور بجودتها الكاملة)…");
+    try{
+      const payload = currentPayload();
+      // بنعمل نسخة عميقة عشان نضمّن الصور من غير ما نلمس بيانات التطبيق الشغالة دلوقتي
+      const payloadClone = JSON.parse(JSON.stringify(payload));
+      payloadClone.indexes = await embedAllImagesAsBase64(payloadClone.indexes);
+      const blob = new Blob([JSON.stringify(payloadClone)], {type:"application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "code-library-backup.json";
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      showToast("تم تنزيل النسخة بنجاح ✅", "ok");
+    }catch(err){
+      console.error("فشل تصدير النسخة:", err);
+      showToast("حصل خطأ أثناء التصدير: " + (err && err.message ? err.message : err), "err");
+    }
   });
 
   document.getElementById("importBtn").addEventListener("click", ()=>{
@@ -3666,7 +3818,7 @@
     if(!f) return;
     showToast("جارٍ قراءة " + f.name + "…");
     const reader = new FileReader();
-    reader.onload = ()=>{
+    reader.onload = async ()=>{
       try{
         const data = JSON.parse(reader.result);
         if(Array.isArray(data.indexes) && data.indexes.length){
@@ -3684,6 +3836,8 @@
         }
         if(data.langRules) langRules = Object.assign(langRules, data.langRules);
         selected = new Set();
+        showToast("جارٍ نقل الصور لمساحة التخزين الكاملة الجودة…");
+        indexes = await migrateAllImagesToIndexedDB(indexes); // يحوّل صور base64 القادمة من الملف لمراجع IndexedDB
         setStatus("تم استرجاع النسخة بنجاح ✅", "ok");
         showToast("تم استرجاع النسخة بنجاح ✅ (" + sections.length + " سكشن)", "ok");
         scheduleAutoSave();
@@ -3832,21 +3986,37 @@
     showToast(`تم حذف ${countBefore} عنصر بنجاح.`, "ok");
   });
 
-  /* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============ */
-  window.addEventListener('message', function(ev){
+  /* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============
+     بما إن الصور بقت متخزنة في IndexedDB مش localStorage، لازم وقت التصدير الموحّد
+     ندمج الصور كـ base64 جوه البيانات (عشان الملف الموحّد يبقى محمول ومحتوي كل حاجة
+     فعلًا)، ووقت الاستيراد نرجّعها تاني لـ IndexedDB بجودتها الكاملة. */
+  window.addEventListener('message', async function(ev){
     var msg = ev.data;
     if(!msg || typeof msg !== 'object') return;
     if(msg.type === 'HUB_EXPORT_REQUEST'){
-      var data = {
-        'code-library-autosave-v1': localStorage.getItem(LOCAL_STORAGE_KEY),
-        'code-library-header-collapsed': localStorage.getItem(HEADER_COLLAPSE_KEY)
-      };
+      var data = { 'code-library-header-collapsed': localStorage.getItem(HEADER_COLLAPSE_KEY) };
+      try{
+        var raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if(raw){
+          var payload = JSON.parse(raw);
+          payload.indexes = await embedAllImagesAsBase64(payload.indexes || []);
+          data['code-library-autosave-v1'] = JSON.stringify(payload);
+        } else {
+          data['code-library-autosave-v1'] = null;
+        }
+      }catch(e){
+        data['code-library-autosave-v1'] = localStorage.getItem(LOCAL_STORAGE_KEY); // فشل الدمج — نرجع القيمة الخام على الأقل
+      }
       ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'codelib', data: data }, '*');
     } else if(msg.type === 'HUB_IMPORT_REQUEST' && msg.app === 'codelib'){
       try{
         var d = msg.data || {};
-        if(typeof d['code-library-autosave-v1'] === 'string') localStorage.setItem(LOCAL_STORAGE_KEY, d['code-library-autosave-v1']);
         if(typeof d['code-library-header-collapsed'] === 'string') localStorage.setItem(HEADER_COLLAPSE_KEY, d['code-library-header-collapsed']);
+        if(typeof d['code-library-autosave-v1'] === 'string'){
+          var parsed = JSON.parse(d['code-library-autosave-v1']);
+          parsed.indexes = await migrateAllImagesToIndexedDB(parsed.indexes || []);
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsed));
+        }
         ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'codelib', ok:true }, '*');
       }catch(e){
         ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'codelib', ok:false, error:String(e) }, '*');
@@ -3859,6 +4029,31 @@
   loadFromLocalStorage();
   ensureIndexes();
   renderAll();
+
+  // ترحيل الصور القديمة (اللي كانت متخزنة كـ base64 جوه localStorage قبل هذا التحديث)
+  // لمساحة IndexedDB تلقائيًا في الخلفية، عشان تفضى مساحة localStorage تدريجيًا.
+  (async function migrateLegacyImagesOnce(){
+    try{
+      let hasLegacy = false;
+      for(const ix of indexes){
+        for(const sec of (ix.sections||[])){
+          for(const tbl of (sec.tables||[])){
+            for(const row of (tbl.rows||[])){
+              if(Array.isArray(row.images) && row.images.some(r => typeof r === "string" && r.indexOf("data:") === 0)){
+                hasLegacy = true;
+              }
+            }
+          }
+        }
+      }
+      if(hasLegacy){
+        indexes = await migrateAllImagesToIndexedDB(indexes);
+        ensureIndexes();
+        saveToLocalStorage();
+        renderAll();
+      }
+    }catch(e){ console.warn("تعذّر ترحيل الصور القديمة تلقائيًا:", e); }
+  })();
 })();
 </script>
 </body>
