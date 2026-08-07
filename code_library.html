@@ -3832,6 +3832,29 @@
     showToast(`تم حذف ${countBefore} عنصر بنجاح.`, "ok");
   });
 
+  /* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============ */
+  window.addEventListener('message', function(ev){
+    var msg = ev.data;
+    if(!msg || typeof msg !== 'object') return;
+    if(msg.type === 'HUB_EXPORT_REQUEST'){
+      var data = {
+        'code-library-autosave-v1': localStorage.getItem(LOCAL_STORAGE_KEY),
+        'code-library-header-collapsed': localStorage.getItem(HEADER_COLLAPSE_KEY)
+      };
+      ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'codelib', data: data }, '*');
+    } else if(msg.type === 'HUB_IMPORT_REQUEST' && msg.app === 'codelib'){
+      try{
+        var d = msg.data || {};
+        if(typeof d['code-library-autosave-v1'] === 'string') localStorage.setItem(LOCAL_STORAGE_KEY, d['code-library-autosave-v1']);
+        if(typeof d['code-library-header-collapsed'] === 'string') localStorage.setItem(HEADER_COLLAPSE_KEY, d['code-library-header-collapsed']);
+        ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'codelib', ok:true }, '*');
+      }catch(e){
+        ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'codelib', ok:false, error:String(e) }, '*');
+      }
+      setTimeout(function(){ location.reload(); }, 200);
+    }
+  });
+
   /* ============================== init ============================== */
   loadFromLocalStorage();
   ensureIndexes();

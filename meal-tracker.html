@@ -938,6 +938,29 @@ function renderAll(){ renderTickets(); renderActivePanel(); }
 fillSettingsForm(); fillFoodDatalist(); updateNotifStatus(); renderAll();
 setInterval(checkReminders, 60000); checkReminders();
 setInterval(updateNotifStatus, 5000);
+
+/* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============ */
+window.addEventListener('message', function(ev){
+  var msg = ev.data;
+  if(!msg || typeof msg !== 'object') return;
+  if(msg.type === 'HUB_EXPORT_REQUEST'){
+    var data = {
+      'mt_data': localStorage.getItem('mt_data'),
+      'mt_settings': localStorage.getItem('mt_settings')
+    };
+    ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'meals', data: data }, '*');
+  } else if(msg.type === 'HUB_IMPORT_REQUEST' && msg.app === 'meals'){
+    try{
+      var d = msg.data || {};
+      if(typeof d['mt_data'] === 'string') localStorage.setItem('mt_data', d['mt_data']);
+      if(typeof d['mt_settings'] === 'string') localStorage.setItem('mt_settings', d['mt_settings']);
+      ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'meals', ok:true }, '*');
+    }catch(e){
+      ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'meals', ok:false, error:String(e) }, '*');
+    }
+    setTimeout(function(){ location.reload(); }, 200);
+  }
+});
 </script>
 </body>
 </html>

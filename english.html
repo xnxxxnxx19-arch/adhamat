@@ -4533,6 +4533,29 @@ window.addEventListener('storage', (e) => {
     buildApp();
   }
 });
+
+/* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============ */
+window.addEventListener('message', async function(ev){
+  var msg = ev.data;
+  if(!msg || typeof msg !== 'object') return;
+  if(msg.type === 'HUB_EXPORT_REQUEST'){
+    var data = {
+      'grammar-full-state': await storageGet('grammar-full-state'),
+      'grammar-stats': await storageGet('grammar-stats')
+    };
+    ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'english', data: data }, '*');
+  } else if(msg.type === 'HUB_IMPORT_REQUEST' && msg.app === 'english'){
+    try{
+      var d = msg.data || {};
+      if(typeof d['grammar-full-state'] === 'string') await storageSet('grammar-full-state', d['grammar-full-state']);
+      if(typeof d['grammar-stats'] === 'string') await storageSet('grammar-stats', d['grammar-stats']);
+      ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'english', ok:true }, '*');
+    }catch(e){
+      ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'english', ok:false, error:String(e) }, '*');
+    }
+    setTimeout(function(){ location.reload(); }, 200);
+  }
+});
 </script>
 </body>
 </html>

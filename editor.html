@@ -6746,6 +6746,25 @@ function initDebugger() {
 
 document.addEventListener('DOMContentLoaded', init);
 
+/* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============ */
+window.addEventListener('message', function(ev){
+  var msg = ev.data;
+  if(!msg || typeof msg !== 'object') return;
+  if(msg.type === 'HUB_EXPORT_REQUEST'){
+    var data = { 'ced_state_v2': localStorage.getItem('ced_state_v2') };
+    ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'editor', data: data }, '*');
+  } else if(msg.type === 'HUB_IMPORT_REQUEST' && msg.app === 'editor'){
+    try{
+      var d = msg.data || {};
+      if(typeof d['ced_state_v2'] === 'string') localStorage.setItem('ced_state_v2', d['ced_state_v2']);
+      ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'editor', ok:true }, '*');
+    }catch(e){
+      ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'editor', ok:false, error:String(e) }, '*');
+    }
+    setTimeout(function(){ location.reload(); }, 200);
+  }
+});
+
 </script>
 </body>
 </html>

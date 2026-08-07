@@ -21,6 +21,26 @@
   #frameWrap iframe{
     position:absolute; top:0; left:0; width:100%; height:100%; border:none; background:#fff;
   }
+  #switchBar .divider{ width:1px; align-self:stretch; margin:8px 2px; background:#30363d; flex:0 0 auto; }
+  #switchBar .backupBtn{
+    flex:0 0 auto; min-width:0; width:42px; height:38px; border:none; border-radius:8px; cursor:pointer;
+    font-size:1.05rem; font-family:inherit; background:#2a303a; color:#c9c2a8; transition:background .15s, color .15s;
+  }
+  #switchBar .backupBtn:hover{ background:#333a46; }
+  #switchBar .backupBtn:disabled{ opacity:.5; cursor:default; }
+  #backupOverlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:9999;
+  }
+  #backupOverlay.show{ display:flex; }
+  #backupBox{
+    background:#1c2128; color:#e6edf3; border:1px solid #30363d; border-radius:12px; padding:20px 22px;
+    max-width:320px; text-align:center; font-size:.9rem; line-height:1.7;
+  }
+  #backupBox .spinner{
+    width:26px; height:26px; margin:0 auto 12px; border-radius:50%;
+    border:3px solid #30363d; border-top-color:#1f8a4c; animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -31,7 +51,13 @@
   <button type="button" id="btnShowMeals">🍽️ متتبع الوجبات</button>
   <button type="button" id="btnShowVocab">🃏 بطاقاتي</button>
   <button type="button" id="btnShowCodeLib">🗒️ مذكرة الأكواد</button>
+  <div class="divider"></div>
+  <button type="button" class="backupBtn" id="btnExportAll" title="تصدير نسخة احتياطية كاملة (كل التطبيقات + الصور)">⬇️</button>
+  <button type="button" class="backupBtn" id="btnImportAll" title="استيراد نسخة احتياطية كاملة">⬆️</button>
+  <input type="file" id="importFileInput" accept="application/json,.json" style="display:none;">
 </div>
+
+<div id="backupOverlay"><div id="backupBox"><div class="spinner"></div><div id="backupBoxText">جارٍ التجهيز…</div></div></div>
 
 <div id="frameWrap">
   <!-- كل تطبيق شغال جوه iframe منفصل تمامًا — نفس المستند، نفس الجافاسكريبت، نفس الـ CSS
@@ -73,6 +99,164 @@
   buttons.meals.addEventListener('click', () => showApp('meals'));
   buttons.vocab.addEventListener('click', () => showApp('vocab'));
   buttons.codelib.addEventListener('click', () => showApp('codelib'));
+
+  /* ============================================================
+     نسخة احتياطية موحّدة لكل التطبيقات (تصدير/استيراد ملف واحد)
+     كل تطبيق شغال في iframe منفصل، فبنستخدم postMessage عشان نطلب
+     من كل تطبيق يجيب بياناته الحقيقية (نفس اللي محفوظة عنده فعليًا،
+     بما فيها أي صور متحوّلة base64 جوه بيانات مذكرة الأكواد) وبعدين
+     نجمعهم في ملف JSON واحد. الاستيراد بيرجّع كل قيمة لمكانها في كل
+     تطبيق وبعدين يعمل reload للـ iframe عشان يقرأ البيانات الجديدة
+     بنفس منطق التحميل العادي بتاعه (فمفيش تكرار أو تعارض منطق).
+  ============================================================ */
+  const APP_KEYS = ['english', 'editor', 'meals', 'vocab', 'codelib'];
+  const overlay = document.getElementById('backupOverlay');
+  const overlayText = document.getElementById('backupBoxText');
+  const btnExportAll = document.getElementById('btnExportAll');
+  const btnImportAll = document.getElementById('btnImportAll');
+  const importFileInput = document.getElementById('importFileInput');
+
+  function showOverlay(text){ overlayText.textContent = text; overlay.classList.add('show'); }
+  function hideOverlay(){ overlay.classList.remove('show'); }
+
+  function requestExportFromApp(key, reqId, timeoutMs){
+    return new Promise((resolve) => {
+      let done = false;
+      const handler = (ev) => {
+        const msg = ev.data;
+        if(msg && msg.type === 'HUB_EXPORT_RESPONSE' && msg.reqId === reqId && msg.app === key){
+          if(done) return;
+          done = true;
+          window.removeEventListener('message', handler);
+          resolve(msg.data || null);
+        }
+      };
+      window.addEventListener('message', handler);
+      try{
+        frames[key].contentWindow.postMessage({ type: 'HUB_EXPORT_REQUEST', reqId }, '*');
+      }catch(e){ /* frame not ready */ }
+      setTimeout(() => {
+        if(done) return;
+        done = true;
+        window.removeEventListener('message', handler);
+        resolve(null);
+      }, timeoutMs || 6000);
+    });
+  }
+
+  function requestImportToApp(key, reqId, data, timeoutMs){
+    return new Promise((resolve) => {
+      let done = false;
+      const handler = (ev) => {
+        const msg = ev.data;
+        if(msg && msg.type === 'HUB_IMPORT_DONE' && msg.reqId === reqId && msg.app === key){
+          if(done) return;
+          done = true;
+          window.removeEventListener('message', handler);
+          resolve(!!msg.ok);
+        }
+      };
+      window.addEventListener('message', handler);
+      try{
+        frames[key].contentWindow.postMessage({ type: 'HUB_IMPORT_REQUEST', reqId, app: key, data }, '*');
+      }catch(e){ /* frame not ready */ }
+      setTimeout(() => {
+        if(done) return;
+        done = true;
+        window.removeEventListener('message', handler);
+        resolve(false);
+      }, timeoutMs || 6000);
+    });
+  }
+
+  async function exportAll(){
+    btnExportAll.disabled = true; btnImportAll.disabled = true;
+    showOverlay('جارٍ تجميع بيانات كل التطبيقات…');
+    try{
+      const reqId = 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      const results = {};
+      const failed = [];
+      await Promise.all(APP_KEYS.map(async (key) => {
+        const data = await requestExportFromApp(key, reqId);
+        if(data === null){ failed.push(key); }
+        else{ results[key] = data; }
+      }));
+
+      const bundle = {
+        type: 'unified-app-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        apps: results
+      };
+      const json = JSON.stringify(bundle);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `نسخة-احتياطية-كاملة-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      if(failed.length){
+        alert('تم التصدير، لكن التطبيقات دي مارجعتش رد (ممكن تكون لسه بتحمّل، جرب تاني بعد شوية):\n' + failed.join('، '));
+      }
+    }catch(e){
+      alert('حصل خطأ أثناء التصدير: ' + (e && e.message ? e.message : e));
+    }finally{
+      hideOverlay();
+      btnExportAll.disabled = false; btnImportAll.disabled = false;
+    }
+  }
+
+  async function importAll(file){
+    btnExportAll.disabled = true; btnImportAll.disabled = true;
+    showOverlay('جارٍ قراءة الملف…');
+    try{
+      const text = await file.text();
+      let bundle;
+      try{ bundle = JSON.parse(text); }
+      catch(e){ alert('الملف ده مش JSON صالح.'); return; }
+
+      if(!bundle || typeof bundle !== 'object' || !bundle.apps){
+        alert('صيغة الملف مش معروفة — لازم يكون ملف نسخة احتياطية اتعمل تصديره من نفس البرنامج.');
+        return;
+      }
+
+      if(!confirm('هيتم استبدال كل بيانات التطبيقات الحالية ببيانات الملف ده. متأكد عاوز تكمل؟')) return;
+
+      showOverlay('جارٍ استعادة بيانات كل التطبيقات…');
+      const reqId = 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      const failed = [];
+      await Promise.all(APP_KEYS.map(async (key) => {
+        const data = bundle.apps[key];
+        if(data == null) return; // مفيش بيانات لهذا التطبيق في الملف
+        const ok = await requestImportToApp(key, reqId, data);
+        if(!ok) failed.push(key);
+      }));
+
+      if(failed.length){
+        alert('تم الاستيراد، لكن التطبيقات دي مأكدتش نجاح العملية (اتعمللها ريفريش على أي حال، تأكد من محتواها):\n' + failed.join('، '));
+      } else {
+        alert('تم استيراد كل البيانات بنجاح ✅ — التطبيقات هتتحدث دلوقتي.');
+      }
+    }catch(e){
+      alert('حصل خطأ أثناء الاستيراد: ' + (e && e.message ? e.message : e));
+    }finally{
+      hideOverlay();
+      btnExportAll.disabled = false; btnImportAll.disabled = false;
+    }
+  }
+
+  btnExportAll.addEventListener('click', exportAll);
+  btnImportAll.addEventListener('click', () => importFileInput.click());
+  importFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    importFileInput.value = '';
+    if(file) importAll(file);
+  });
 </script>
 
 </body>

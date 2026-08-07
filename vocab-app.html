@@ -1410,6 +1410,25 @@
     if(document.getElementById("view-stats").classList.contains("active")) drawLevelChart();
   });
 
+  /* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============ */
+  window.addEventListener('message', function(ev){
+    var msg = ev.data;
+    if(!msg || typeof msg !== 'object') return;
+    if(msg.type === 'HUB_EXPORT_REQUEST'){
+      var data = { 'vocab_app_v1': localStorage.getItem(STORAGE_KEY) };
+      ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'vocab', data: data }, '*');
+    } else if(msg.type === 'HUB_IMPORT_REQUEST' && msg.app === 'vocab'){
+      try{
+        var d = msg.data || {};
+        if(typeof d['vocab_app_v1'] === 'string') localStorage.setItem(STORAGE_KEY, d['vocab_app_v1']);
+        ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'vocab', ok:true }, '*');
+      }catch(e){
+        ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'vocab', ok:false, error:String(e) }, '*');
+      }
+      setTimeout(function(){ location.reload(); }, 200);
+    }
+  });
+
 })();
 </script>
 </body>
