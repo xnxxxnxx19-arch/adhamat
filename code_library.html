@@ -198,6 +198,25 @@
   .langrow .cnt{color:var(--ink-soft); font-size:11px;}
   .upload-lang{font-size:12px; color:var(--ink-soft); display:flex; flex-direction:column; gap:6px; margin-top:8px;}
 
+  /* ============================== شريط أدوات تنسيق النصوص ============================== */
+  .fmt-toolbar{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px; padding:6px; background:var(--paper); border:1px solid var(--rule); border-radius:6px;}
+  .fmt-btn{background:#fff; border:1px solid var(--rule); border-radius:5px; padding:3px 8px; font-size:12px; cursor:pointer; color:var(--ink); line-height:1.6;}
+  .fmt-btn:hover{border-color:var(--accent); background:var(--paper-card);}
+  .fmt-sep{width:1px; align-self:stretch; background:var(--rule); margin:0 2px;}
+  .fmt-btn.custom-rule{background:#fff8e8; border-color:var(--marker);}
+
+  /* ============================== صناديق شرح إضافية (حرة) ============================== */
+  .extra-explanations-holder{display:flex; flex-direction:column; gap:12px; margin-top:10px;}
+  .extra-explain-box{border:1px solid var(--rule); border-radius:8px; padding:10px; background:var(--paper);}
+  .extra-explain-box .exbox-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .extra-explain-box .exbox-title{flex:1; font-size:13px; font-weight:700; border:1px solid var(--rule); border-radius:5px; padding:5px 8px; background:#fff; color:var(--ink);}
+  .add-explain-btn{margin-top:10px;}
+
+  /* ============================== مدير قواعد التنسيق ============================== */
+  .fmtrow{display:flex; align-items:center; gap:8px; background:var(--paper); border:1px solid var(--rule); border-radius:8px; padding:6px 10px; font-size:12.5px; margin-bottom:6px;}
+  .fmtrow .name{flex:1; font-weight:600;}
+  .fmtrow .cnt{color:var(--ink-soft); font-size:11px;}
+
   .empty-hint{color:var(--ink-soft); font-size:13.5px; line-height:1.9; padding:40px 10px; text-align:center; background:var(--paper-card); border:1.5px dashed var(--rule); border-radius:14px;}
 
   /* ---- add-text panel ---- */
@@ -714,6 +733,16 @@
         <input type="file" id="langFileInput" accept=".json" multiple>
       </label>
     </div>
+
+    <div class="drawer-block">
+      <h3>🖋️ قواعد تنسيق النصوص</h3>
+      <div id="formatRuleManager"></div>
+      <label class="upload-lang">
+        ارفع ملف/ملفات JSON بقواعد تنسيق مخصّصة — كل قاعدة بتضيف زرار جديد في شريط التنسيق فوق أي صندوق شرح
+        <input type="file" id="formatRulesFileInput" accept=".json" multiple>
+      </label>
+      <button class="small ghost" id="downloadFormatRulesTemplateBtn" style="margin-top:8px;">📄 تنزيل نموذج JSON فارغ</button>
+    </div>
   </div>
 </aside>
 
@@ -756,6 +785,18 @@
   /* ============================== STATE ============================== */
   let sections = [];
   let langRules = {};
+  // قواعد تنسيق نصوص مخصّصة (مستوردة من ملف JSON) — كل قاعدة بتضيف زرار جديد في شريط
+  // أدوات التنسيق، وبتتطبق تلقائيًا على أي صندوق شرح لما يترسم.
+  let customFormatRules = [];
+  /** بتدمج قواعد جديدة مع القديمة: لو الاسم موجود بالفعل بتستبدله، غير كده بتضيفه. */
+  function mergeFormatRules(incoming){
+    if(!Array.isArray(incoming)) return;
+    incoming.forEach(rule=>{
+      if(!rule || typeof rule !== "object" || !rule.name) return;
+      const idx = customFormatRules.findIndex(r=>r.name===rule.name);
+      if(idx>-1) customFormatRules[idx] = rule; else customFormatRules.push(rule);
+    });
+  }
   let selected = new Set();
   let idCounter = 1;
   const uid = () => "s" + (idCounter++) + "_" + Math.random().toString(36).slice(2,7);
@@ -1238,6 +1279,7 @@
           id: uid(),
           title: title,
           explanation: explanation || "(لا يوجد شرح مستخرج — يمكنك إضافته يدويًا)",
+          explanations: [],
           codes: codes,
           starred:false,
           note: ""
@@ -1264,6 +1306,9 @@
       id: uid(),
       title: item.title.trim(),
       explanation: typeof item.explanation === "string" ? item.explanation : "(لا يوجد شرح — يمكنك إضافته يدويًا)",
+      explanations: Array.isArray(item.explanations) ? item.explanations
+        .filter(b=>b && typeof b === "object")
+        .map(b=>({ id: uid(), title: typeof b.title==="string"?b.title:"", content: typeof b.content==="string"?b.content:"" })) : [],
       codes: codes,
       starred: !!item.starred,
       note: typeof item.note === "string" ? item.note : ""
@@ -1284,6 +1329,10 @@
   /* ============================== HIGHLIGHT ============================== */
   function escapeHtml(s){
     return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+  // لتضمين نص جوه attribute بمزدوجتين (زي style="...") بأمان — بتهرب علامات الاقتباس كمان
+  function escapeAttr(s){
+    return escapeHtml(String(s==null?"":s)).replace(/"/g,"&quot;");
   }
 
   /* ============================== ماركداون-لايت لعرض الشرح ============================== */
@@ -1746,8 +1795,156 @@
     });
   }
 
+  /** بتطبّق قواعد التنسيق المخصّصة (customFormatRules) على النص الخام قبل تمريره لمحرك
+   *  الماركداون — بتحول كل تطابق لـ span/div بستايل مباشر، وبتتجاهل كتل الكود (```...```)
+   *  عشان قواعد التنسيق متلخبطش جوه كود فعلي بيحتوي نفس الرموز بالصدفة. */
+  function applyCustomFormatRules(raw){
+    if(!customFormatRules.length) return raw;
+    const segments = raw.split(/(```[\s\S]*?```)/g);
+    return segments.map((seg, idx)=>{
+      if(idx % 2 === 1) return seg; // كتلة كود — سيبها زي ما هي
+      let text = seg;
+      customFormatRules.forEach(rule=>{
+        try{
+          const icon = rule.icon ? escapeHtml(rule.icon) + " " : "";
+          const css = escapeAttr(rule.css || "");
+          if(rule.type === "wrap" && rule.marker){
+            const m = rule.marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const re = new RegExp(m + "([^" + rule.marker[0].replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + "]+?)" + m, "g");
+            text = text.replace(re, (all, inner)=> `<span style="${css}">${icon}${escapeHtml(inner)}</span>`);
+          } else if(rule.type === "keyword" && rule.keyword){
+            const kw = rule.keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const re = new RegExp("(^|[^\\p{L}\\p{N}_])(" + kw + ")(?=[^\\p{L}\\p{N}_]|$)", "gu");
+            text = text.replace(re, (all, pre, word)=> pre + `<span style="${css}">${icon}${escapeHtml(word)}</span>`);
+          } else if(rule.type === "block" && rule.prefix){
+            const lines = text.split("\n");
+            const out = [];
+            for(let i=0;i<lines.length;i++){
+              if(lines[i].trim().indexOf(rule.prefix) === 0){
+                const contentLines = [];
+                const firstRest = lines[i].trim().slice(rule.prefix.length).trim();
+                if(firstRest) contentLines.push(firstRest);
+                let j = i+1;
+                while(j<lines.length && lines[j].trim() !== ""){ contentLines.push(lines[j].trim()); j++; }
+                out.push(`<div style="${css}">${icon}${escapeHtml(contentLines.join(" "))}</div>`);
+                i = j-1;
+              } else {
+                out.push(lines[i]);
+              }
+            }
+            text = out.join("\n");
+          }
+        }catch(e){ /* تجاهل أي قاعدة معطوبة عشان ما توقفش عرض باقي الشرح */ }
+      });
+      return text;
+    }).join("");
+  }
+
+  /* ============================== شريط أدوات تنسيق النصوص ============================== */
+  function wrapSelection(textarea, before, after, placeholder){
+    const start = textarea.selectionStart, end = textarea.selectionEnd;
+    const val = textarea.value;
+    const hasSelection = end > start;
+    const selected = hasSelection ? val.slice(start, end) : (placeholder || "");
+    textarea.value = val.slice(0, start) + before + selected + after + val.slice(end);
+    const selStart = start + before.length;
+    const selEnd = selStart + selected.length;
+    textarea.focus();
+    textarea.setSelectionRange(selStart, selEnd);
+    textarea.dispatchEvent(new Event("input", {bubbles:true}));
+  }
+  function insertLinePrefix(textarea, prefix){
+    const start = textarea.selectionStart;
+    const val = textarea.value;
+    const lineStart = val.lastIndexOf("\n", start-1) + 1;
+    textarea.value = val.slice(0, lineStart) + prefix + val.slice(lineStart);
+    const newPos = start + prefix.length;
+    textarea.focus();
+    textarea.setSelectionRange(newPos, newPos);
+    textarea.dispatchEvent(new Event("input", {bubbles:true}));
+  }
+  function insertAtCursor(textarea, text){
+    const start = textarea.selectionStart, end = textarea.selectionEnd;
+    const val = textarea.value;
+    textarea.value = val.slice(0,start) + text + val.slice(end);
+    const pos = start + text.length;
+    textarea.focus();
+    textarea.setSelectionRange(pos, pos);
+    textarea.dispatchEvent(new Event("input", {bubbles:true}));
+  }
+  /** بيبني شريط أدوات تنسيق كامل (بولد/مائل/عناوين/قوائم/روابط/جداول...) بالإضافة لأي
+   *  قواعد مخصّصة مستوردة من JSON. getTextarea() لازم ترجع الـ textarea الحالي المرتبط. */
+  function buildFormatToolbar(getTextarea){
+    const bar = document.createElement("div");
+    bar.className = "fmt-toolbar";
+    function btn(label, title, handler, extraStyle){
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "fmt-btn";
+      b.textContent = label;
+      b.title = title || "";
+      if(extraStyle) b.style.cssText = extraStyle;
+      b.addEventListener("click", (e)=>{
+        e.preventDefault();
+        const ta = getTextarea();
+        if(ta) handler(ta);
+      });
+      bar.appendChild(b);
+      return b;
+    }
+    function sep(){ const s=document.createElement("span"); s.className="fmt-sep"; bar.appendChild(s); }
+
+    btn("B", "عريض (Bold)", ta=> wrapSelection(ta, "**", "**", "نص عريض"), "font-weight:900;");
+    btn("I", "مائل (Italic)", ta=> wrapSelection(ta, "*", "*", "نص مائل"), "font-style:italic;");
+    btn("U", "تسطير (Underline)", ta=> wrapSelection(ta, "<u>", "</u>", "نص مسطّر"), "text-decoration:underline;");
+    btn("S", "يتوسطه خط (Strikethrough)", ta=> wrapSelection(ta, "~~", "~~", "نص"), "text-decoration:line-through;");
+    btn("==", "تمييز (Highlight)", ta=> wrapSelection(ta, "==", "==", "نص مميز"));
+    sep();
+    btn("H1", "عنوان كبير", ta=> insertLinePrefix(ta, "# "));
+    btn("H2", "عنوان متوسط", ta=> insertLinePrefix(ta, "## "));
+    btn("H3", "عنوان صغير", ta=> insertLinePrefix(ta, "### "));
+    sep();
+    btn("•", "قائمة نقطية", ta=> insertLinePrefix(ta, "- "));
+    btn("1.", "قائمة مرقّمة", ta=> insertLinePrefix(ta, "1. "));
+    btn("❝", "اقتباس", ta=> insertLinePrefix(ta, "> "));
+    sep();
+    btn("</>", "كود مضمّن", ta=> wrapSelection(ta, "`", "`", "code"));
+    btn("{ }", "كتلة كود", ta=> insertAtCursor(ta, "\n```\nكود هنا\n```\n"));
+    btn("🔗", "رابط", ta=>{
+      const url = prompt("رابط URL:", "https://");
+      if(url) wrapSelection(ta, "[", "](" + url + ")", "نص الرابط");
+    });
+    btn("▦", "جدول", ta=> insertAtCursor(ta, "\n| عمود 1 | عمود 2 |\n| --- | --- |\n| قيمة | قيمة |\n"));
+    btn("―", "خط فاصل", ta=> insertAtCursor(ta, "\n---\n"));
+    sep();
+    btn("💡", "تنبيه (Tip)", ta=> insertLinePrefix(ta, "> 💡 "));
+    btn("⚠️", "تحذير", ta=> insertLinePrefix(ta, "> ⚠️ "));
+
+    if(customFormatRules.length){
+      sep();
+      customFormatRules.forEach(rule=>{
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "fmt-btn custom-rule";
+        b.textContent = (rule.icon ? rule.icon+" " : "") + rule.name;
+        b.title = "قاعدة مخصّصة: " + rule.name;
+        b.addEventListener("click", (e)=>{
+          e.preventDefault();
+          const ta = getTextarea();
+          if(!ta) return;
+          if(rule.type === "wrap" && rule.marker) wrapSelection(ta, rule.marker, rule.marker, "نص");
+          else if(rule.type === "keyword" && rule.keyword) insertAtCursor(ta, rule.keyword);
+          else if(rule.type === "block" && rule.prefix) insertLinePrefix(ta, rule.prefix + " ");
+        });
+        bar.appendChild(b);
+      });
+    }
+    return bar;
+  }
+
   function renderMarkdownFull(raw){
-    const wrapped = wrapAsciiDiagrams(raw.replace(/\r\n/g, "\n"));
+    const withCustomRules = applyCustomFormatRules(raw);
+    const wrapped = wrapAsciiDiagrams(withCustomRules.replace(/\r\n/g, "\n"));
     const { text: noDefs, defs } = extractFootnoteDefs(wrapped);
     const { text: withRefs, used } = applyFootnoteRefs(noDefs, defs);
     const rawHtml = marked.parse(withRefs);
@@ -2069,6 +2266,33 @@
     });
   }
 
+  /* ============================== RENDER: FORMAT RULES MANAGER ============================== */
+  const formatRuleManager = document.getElementById("formatRuleManager");
+  function renderFormatRuleManager(){
+    formatRuleManager.innerHTML = "";
+    if(!customFormatRules.length){
+      formatRuleManager.innerHTML = '<div style="font-size:11.5px; color:var(--ink-soft);">لا توجد قواعد تنسيق مخصّصة بعد.</div>';
+      return;
+    }
+    customFormatRules.forEach((rule, i)=>{
+      const row = document.createElement("div");
+      row.className = "fmtrow";
+      row.innerHTML = `
+        <span class="name">${escapeHtml(rule.icon ? rule.icon+" " : "")}${escapeHtml(rule.name)}</span>
+        <span class="cnt">${escapeHtml(rule.type||'wrap')}</span>
+        <button class="small danger" data-removefmt="${i}">حذف</button>
+      `;
+      formatRuleManager.appendChild(row);
+    });
+    formatRuleManager.querySelectorAll("[data-removefmt]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        customFormatRules.splice(+btn.dataset.removefmt, 1);
+        scheduleAutoSave();
+        renderAll();
+      });
+    });
+  }
+
   /* ============================== RENDER: CARDS ============================== */
   const cardsWrap = document.getElementById("cards");
   const emptyHint = document.getElementById("emptyHint");
@@ -2078,6 +2302,51 @@
       const d = langRules[k].displayName || k;
       return `<option value="${k}" ${k===selectedLang?"selected":""}>${d}</option>`;
     }).join("");
+  }
+
+  /** بيبني صندوق شرح إضافي حر — نفس فكرة الشرح الرئيسي (عرض/تحرير + شريط تنسيق) لكن مع
+   *  عنوان قابل للتعديل وزرار حذف، عشان تقدر تضيف كام صندوق ما تحبه. */
+  function buildExtraExplainBox(s, box, index){
+    const wrap = document.createElement("div");
+    wrap.className = "extra-explain-box";
+    wrap.innerHTML = `
+      <div class="exbox-head">
+        <input class="exbox-title" data-act="exbox-title" value="${escapeHtml(box.title||'').replace(/"/g,'&quot;')}" placeholder="عنوان الصندوق (اختياري)">
+        <button class="ghost" data-act="exbox-delete" title="حذف الصندوق">🗑</button>
+      </div>
+      <div class="explain-view" data-act="exbox-view">${renderMarkdownLite(box.content)}</div>
+      <div class="fmt-toolbar-holder" data-act="exbox-toolbar-holder" style="display:none;"></div>
+      <textarea class="explain" data-act="exbox-text" style="display:none;">${escapeHtml(box.content)}</textarea>
+    `;
+    const titleEl = wrap.querySelector('[data-act="exbox-title"]');
+    const viewEl = wrap.querySelector('[data-act="exbox-view"]');
+    const taEl = wrap.querySelector('[data-act="exbox-text"]');
+    const toolbarHolder = wrap.querySelector('[data-act="exbox-toolbar-holder"]');
+    toolbarHolder.appendChild(buildFormatToolbar(()=> taEl));
+
+    titleEl.addEventListener("input", (e)=>{ box.title = e.target.value; scheduleAutoSave(); });
+    taEl.addEventListener("input", (e)=>{ box.content = e.target.value; scheduleAutoSave(); });
+    viewEl.addEventListener("click", ()=>{
+      viewEl.style.display = "none";
+      toolbarHolder.style.display = "flex";
+      taEl.style.display = "block";
+      taEl.focus();
+    });
+    taEl.addEventListener("blur", ()=>{
+      viewEl.innerHTML = renderMarkdownLite(box.content);
+      enhanceMarkdownView(viewEl);
+      taEl.style.display = "none";
+      toolbarHolder.style.display = "none";
+      viewEl.style.display = "block";
+    });
+    wrap.querySelector('[data-act="exbox-delete"]').addEventListener("click", (e)=>{
+      if(!armConfirm(e.currentTarget, "حذف الصندوق؟")) return;
+      s.explanations = s.explanations.filter(b=>b.id!==box.id);
+      scheduleAutoSave();
+      renderAll();
+    });
+    enhanceMarkdownView(viewEl);
+    return wrap;
   }
 
   function renderCards(){
@@ -2105,7 +2374,11 @@
           <button class="ghost expand-btn" data-act="expand-explain" title="تكبير لملء الشاشة">⛶ تكبير</button>
         </div>
         <div class="explain-view" data-act="explain-view">${renderMarkdownLite(s.explanation)}</div>
+        <div class="fmt-toolbar-holder" data-act="explain-toolbar-holder" style="display:none;"></div>
         <textarea class="explain" data-act="explain" style="display:none;">${escapeHtml(s.explanation)}</textarea>
+
+        <div class="extra-explanations-holder" data-act="extra-explanations-holder"></div>
+        <button class="ghost add-explain-btn" data-act="add-explain-box">➕ إضافة صندوق شرح</button>
 
         <div class="label-row">
           <div class="section-label">الأكواد</div>
@@ -2144,6 +2417,12 @@
       card.querySelector(".drawing-holder").appendChild(buildDrawingPanel(s));
       card.querySelector(".mindmap-holder").appendChild(buildMindMapPanel(s));
 
+      if(!Array.isArray(s.explanations)) s.explanations = [];
+      const exHolder = card.querySelector('[data-act="extra-explanations-holder"]');
+      s.explanations.forEach((box, bi)=>{
+        exHolder.appendChild(buildExtraExplainBox(s, box, bi));
+      });
+
       cardsWrap.appendChild(card);
       enhanceMarkdownView(card.querySelector('[data-act="explain-view"]'));
     });
@@ -2158,8 +2437,11 @@
       {
         const viewEl = card.querySelector('[data-act="explain-view"]');
         const taEl = card.querySelector('[data-act="explain"]');
+        const toolbarHolder = card.querySelector('[data-act="explain-toolbar-holder"]');
+        toolbarHolder.appendChild(buildFormatToolbar(()=> taEl));
         viewEl.addEventListener("click", ()=>{
           viewEl.style.display = "none";
+          toolbarHolder.style.display = "flex";
           taEl.style.display = "block";
           taEl.focus();
         });
@@ -2167,9 +2449,16 @@
           viewEl.innerHTML = renderMarkdownLite(s.explanation);
           enhanceMarkdownView(viewEl);
           taEl.style.display = "none";
+          toolbarHolder.style.display = "none";
           viewEl.style.display = "block";
         });
       }
+      card.querySelector('[data-act="add-explain-box"]').addEventListener("click", ()=>{
+        if(!Array.isArray(s.explanations)) s.explanations = [];
+        s.explanations.push({ id: uid(), title: "", content: "" });
+        scheduleAutoSave();
+        renderAll();
+      });
       card.querySelector('[data-act="close"]').addEventListener("click", ()=>{ selected.delete(id); renderAll(); });
       card.querySelector('[data-act="delete"]').addEventListener("click", (e)=>{
         if(!armConfirm(e.currentTarget, "متأكد؟ اضغط تاني للحذف نهائيًا")) return;
@@ -2190,6 +2479,7 @@
           ta.className = "explain";
           ta.style.minHeight = "160px";
           ta.value = s.explanation;
+          const toolbar = buildFormatToolbar(()=> ta);
           const previewLabel = document.createElement("div");
           previewLabel.className = "section-label";
           previewLabel.style.marginTop = "16px";
@@ -2206,6 +2496,7 @@
             enhanceMarkdownView(preview);
             scheduleAutoSave();
           });
+          body.appendChild(toolbar);
           body.appendChild(ta);
           body.appendChild(previewLabel);
           body.appendChild(preview);
@@ -3997,6 +4288,7 @@
     renderToc();
     renderCards();
     renderLangManager();
+    renderFormatRuleManager();
   }
 
   /* ============================== ADD TEXT ============================== */
@@ -4123,10 +4415,72 @@
     e.target.value = "";
   });
 
+  /* ============================== FORMAT RULES JSON UPLOAD ==============================
+     شكل كل قاعدة في ملف الـ JSON:
+     {
+       "name": "تنبيه",                 // اسم القاعدة (بيظهر كزرار في شريط التنسيق)
+       "type": "wrap",                  // "wrap" (يحيط بالنص المحدد) أو "keyword" (يلوّن كلمة معينة أينما وردت) أو "block" (فقرة كاملة)
+       "marker": "!!",                  // مطلوبة لو النوع wrap — بتحيط النص المحدد: !!نص!!
+       "keyword": "TODO",               // مطلوبة لو النوع keyword — أي ظهور لها هيتنسق تلقائيًا
+       "prefix": ":::تنبيه",            // مطلوبة لو النوع block — أي سطر يبدأ بيها لحد سطر فاضي
+       "css": "color:#a63a3a;font-weight:900;background:#fdecec;padding:2px 6px;border-radius:4px;",
+       "icon": "⚠️"                     // اختياري: إيموجي يتحط قبل النص
+     }
+     الملف نفسه ممكن يكون قاعدة واحدة أو مصفوفة [ {...}, {...} ]. */
+  document.getElementById("formatRulesFileInput").addEventListener("change",(e)=>{
+    const files = Array.from(e.target.files || []);
+    let pending = files.length;
+    if(pending===0) return;
+    showToast("جارٍ قراءة " + files.length + " ملف/ملفات قواعد تنسيق…");
+    files.forEach(f=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const data = JSON.parse(reader.result);
+          const list = Array.isArray(data) ? data : [data];
+          const valid = list.filter(r=>{
+            if(!r || typeof r !== "object" || !r.name || !r.type) return false;
+            if(r.type==="wrap" && !r.marker) return false;
+            if(r.type==="keyword" && !r.keyword) return false;
+            if(r.type==="block" && !r.prefix) return false;
+            return true;
+          });
+          if(!valid.length) throw new Error("no valid rules");
+          mergeFormatRules(valid);
+          showToast("تمت إضافة " + valid.length + " قاعدة تنسيق من " + f.name + " ✅", "ok");
+        }catch(err){
+          showToast("ملف " + f.name + " ليس بصيغة قواعد تنسيق صالحة.", "err");
+        }
+        pending--;
+        if(pending===0){ scheduleAutoSave(); renderAll(); }
+      };
+      reader.onerror = ()=>{
+        showToast("تعذّرت قراءة الملف: " + f.name, "err");
+        pending--;
+        if(pending===0){ scheduleAutoSave(); renderAll(); }
+      };
+      reader.readAsText(f, "utf-8");
+    });
+    e.target.value = "";
+  });
+  document.getElementById("downloadFormatRulesTemplateBtn").addEventListener("click", ()=>{
+    const template = [
+      { name:"تنبيه", type:"block", prefix:":::تنبيه", css:"background:#fdecec;border-inline-start:4px solid #a63a3a;padding:8px 12px;border-radius:6px;", icon:"⚠️" },
+      { name:"تمييز", type:"wrap", marker:"==", css:"background:#fff3c4;padding:1px 4px;border-radius:3px;" },
+      { name:"مهم", type:"keyword", keyword:"مهم", css:"color:#a63a3a;font-weight:900;" }
+    ];
+    const blob = new Blob([JSON.stringify(template, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "نموذج-قواعد-تنسيق.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
   /* ============================== EXPORT / IMPORT (manual) ============================== */
   function currentPayload(){
     if(indexes[activeIndexIdx]) indexes[activeIndexIdx].sections = sections;
-    return { indexes, activeIndexIdx, langRules, exportedAt: new Date().toISOString() };
+    return { indexes, activeIndexIdx, langRules, customFormatRules, exportedAt: new Date().toISOString() };
   }
   document.getElementById("exportBtn").addEventListener("click", async ()=>{
     showToast("جارٍ تجهيز النسخة (بما فيها الصور بجودتها الكاملة)…");
@@ -4173,6 +4527,7 @@
           indexes[activeIndexIdx].sections = sections;
         }
         if(data.langRules) langRules = Object.assign(langRules, data.langRules);
+        if(Array.isArray(data.customFormatRules)) mergeFormatRules(data.customFormatRules);
         selected = new Set();
         showToast("جارٍ نقل الصور لمساحة التخزين الكاملة الجودة…");
         indexes = await migrateAllImagesToIndexedDB(indexes); // يحوّل صور base64 القادمة من الملف لمراجع IndexedDB
@@ -4218,6 +4573,7 @@
         activeIndexIdx = 0;
       }
       if(data.langRules && typeof data.langRules === "object") langRules = Object.assign(langRules, data.langRules);
+      if(Array.isArray(data.customFormatRules)) customFormatRules = data.customFormatRules;
       ensureIndexes();
       return true;
     }catch(e){
