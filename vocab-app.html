@@ -226,6 +226,33 @@
     touch-action:none; overflow:hidden;
   }
   .pad-wrap canvas{position:absolute; inset:0; width:100%; height:100%; cursor:crosshair;}
+  .pad-expand-btn{
+    position:absolute; top:10px; inset-inline-end:10px; z-index:5;
+    width:38px; height:38px; border-radius:8px; border:1px solid var(--line);
+    background:var(--card); color:var(--ink); font-size:17px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow);
+  }
+  .pad-expand-btn:hover{background:var(--gold); color:#fff;}
+  body.pad-fullscreen-active{overflow:hidden;}
+  .pad-wrap.pad-fullscreen{
+    position:fixed; inset:0; z-index:1000; width:100vw; height:100vh; margin:0;
+    border-radius:0; background:var(--paper);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pad-canvas-frame{position:relative; width:100%; height:100%;}
+  .pad-wrap.pad-fullscreen .pad-canvas-frame{
+    position:relative; width:min(96vw, 96vh*16/9); aspect-ratio:16/9; max-height:92vh;
+  }
+  .pad-wrap.pad-fullscreen .pad-canvas-frame canvas{position:absolute; inset:0; width:100%; height:100%;}
+  .pad-wrap.pad-fullscreen .pad-expand-btn{top:16px; inset-inline-end:16px; width:44px; height:44px; font-size:20px;}
+  .pad-fs-clear-btn{display:none;}
+  .pad-wrap.pad-fullscreen .pad-fs-clear-btn{
+    display:flex; position:absolute; top:16px; inset-inline-start:16px; z-index:5;
+    align-items:center; justify-content:center; height:44px; padding:0 16px; border-radius:8px;
+    border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:14px;
+    font-family:'Tajawal'; cursor:pointer; box-shadow:var(--shadow);
+  }
+  .pad-fs-clear-btn:hover{background:var(--red); color:#fff; border-color:var(--red);}
   .pad-controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:6px;}
   .score-row{display:flex; gap:12px; justify-content:center; margin:12px 0;}
   .score-box{background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 18px; text-align:center;}
@@ -361,8 +388,12 @@
         <span id="traceRepCount">0 / 3 تكرارات ناجحة</span>
       </div>
       <div class="pad-wrap" id="tracePad">
-        <canvas id="traceGuideCanvas" width="960" height="540"></canvas>
-        <canvas id="traceInkCanvas" width="960" height="540"></canvas>
+        <div class="pad-canvas-frame">
+          <canvas id="traceGuideCanvas" width="960" height="540"></canvas>
+          <canvas id="traceInkCanvas" width="960" height="540"></canvas>
+        </div>
+        <button type="button" class="pad-fs-clear-btn" id="traceFsClear">🗑 مسح</button>
+        <button type="button" class="pad-expand-btn" id="traceExpandBtn" title="تكبير للشاشة الكاملة">⛶</button>
       </div>
       <div class="pad-controls">
         <button class="btn ghost small" id="traceClear">مسح</button>
@@ -383,8 +414,12 @@
       <div class="quiz-q">اكتب هذه الكلمة بخط يدك من الذاكرة، ثم اكشف الإجابة لتقارن:</div>
       <div class="quiz-word" id="recallMeaning" style="direction:rtl; font-family:'Tajawal'; font-size:24px;">تفاحة</div>
       <div class="pad-wrap" id="recallPad">
-        <canvas id="recallGuideCanvas" width="960" height="540"></canvas>
-        <canvas id="recallInkCanvas" width="960" height="540"></canvas>
+        <div class="pad-canvas-frame">
+          <canvas id="recallGuideCanvas" width="960" height="540"></canvas>
+          <canvas id="recallInkCanvas" width="960" height="540"></canvas>
+        </div>
+        <button type="button" class="pad-fs-clear-btn" id="recallFsClear">🗑 مسح</button>
+        <button type="button" class="pad-expand-btn" id="recallExpandBtn" title="تكبير للشاشة الكاملة">⛶</button>
       </div>
       <div class="pad-controls">
         <button class="btn ghost small" id="recallClear">مسح</button>
@@ -1183,6 +1218,35 @@
       save();
       startRecallRound();
     });
+  });
+
+  // ---- زر تكبير لوحة الكتابة لملء الشاشة كاملة ----
+  // بما إن دقة الكانفاس الداخلية ثابتة (960×540) وإحداثيات القلم بتتحسب من حجم العرض
+  // الفعلي وقت كل لمسة (toCanvasCoords)، تكبير حجم العرض بالـCSS بس كافي ومفيش داعي
+  // لإعادة رسم أي حاجة — النص الإرشادي والحبر المرسوم بيتمددوا بنفس النسبة تلقائيًا.
+  function setupPadExpand(padWrapId, btnId){
+    const wrap = document.getElementById(padWrapId);
+    const btn = document.getElementById(btnId);
+    if(!wrap || !btn) return;
+    btn.addEventListener("click", ()=>{
+      const isFull = wrap.classList.toggle("pad-fullscreen");
+      document.body.classList.toggle("pad-fullscreen-active", isFull);
+      btn.textContent = isFull ? "✕" : "⛶";
+      btn.title = isFull ? "الخروج من ملء الشاشة" : "تكبير للشاشة الكاملة";
+    });
+  }
+  setupPadExpand("tracePad", "traceExpandBtn");
+  setupPadExpand("recallPad", "recallExpandBtn");
+  document.getElementById("traceFsClear").addEventListener("click", ()=> document.getElementById("traceClear").click());
+  document.getElementById("recallFsClear").addEventListener("click", ()=> document.getElementById("recallClear").click());
+  document.addEventListener("keydown", (e)=>{
+    if(e.key !== "Escape") return;
+    document.querySelectorAll(".pad-wrap.pad-fullscreen").forEach(w=>{
+      w.classList.remove("pad-fullscreen");
+      const btn = w.querySelector(".pad-expand-btn");
+      if(btn){ btn.textContent = "⛶"; btn.title = "تكبير للشاشة الكاملة"; }
+    });
+    document.body.classList.remove("pad-fullscreen-active");
   });
 
   // ---- TYPED REPETITION MODE ----
