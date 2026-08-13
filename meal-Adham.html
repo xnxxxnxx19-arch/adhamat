@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سجل الوجبات — دفتر السعرات والتحليل السلوكي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#211812; --bg-soft:#2c2118; --card:#322619; --ticket:#3a2c1c; --edge:#4a3826;
+    --ink:#f2e9dd; --ink-dim:#cbb99f; --ink-faint:#8f7c65;
+    --gold:#d8a93b; --tomato:#c1440e; --olive:#8a9a5b; --danger:#b23a2f; --blueish:#5b8a9a;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:'Cairo',sans-serif; min-height:100vh; padding-bottom:60px; }
+  .wrap{ max-width:960px; margin:0 auto; padding:22px 16px 40px; }
+  header.top{ text-align:center; padding:18px 0 26px; border-bottom:1px dashed var(--edge); margin-bottom:22px; }
+  header.top h1{ font-family:'Amiri',serif; font-weight:700; font-size:2.1rem; margin:0 0 6px; color:var(--gold); }
+  header.top p{ margin:0; color:var(--ink-dim); font-size:.92rem; }
+
+  .card{ background:var(--card); border:1px solid var(--edge); border-radius:var(--radius); padding:18px; margin-bottom:18px; }
+  .card h2{ font-family:'Amiri',serif; font-size:1.25rem; margin:0 0 12px; color:var(--ink); display:flex; align-items:center; gap:8px;}
+  .card h2 .dot{ width:8px; height:8px; border-radius:50%; background:var(--tomato); display:inline-block;}
+
+  textarea, input, select{ width:100%; background:var(--bg-soft); border:1px solid var(--edge); color:var(--ink); border-radius:10px; padding:10px 12px; font-family:'Cairo',sans-serif; font-size:.95rem; }
+  textarea{ min-height:70px; resize:vertical; }
+  label{ display:block; font-size:.82rem; color:var(--ink-dim); margin:10px 0 5px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .row > *{ flex:1; min-width:120px; }
+
+  button{ cursor:pointer; border:none; border-radius:10px; padding:10px 18px; font-family:'Cairo',sans-serif; font-weight:700; font-size:.92rem; transition:transform .15s ease; }
+  button:active{ transform:scale(.97); }
+  .btn-main{ background:var(--tomato); color:#fff6ee; }
+  .btn-ghost{ background:transparent; border:1px solid var(--edge); color:var(--ink-dim); }
+  .btn-gold{ background:var(--gold); color:#2c2118; }
+  .btn-row{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
+
+  .feedback{ margin-top:12px; padding:10px 12px; border-radius:10px; font-size:.86rem; line-height:1.7; background:var(--bg-soft); border:1px dashed var(--edge); display:none; }
+  .feedback.show{ display:block; }
+  .feedback.ok{ display:block; border-color:var(--olive); color:var(--olive); }
+  .feedback.err{ display:block; border-color:var(--danger); color:var(--danger); }
+  .feedback b{ color:var(--gold); }
+  .feedback .warn{ color:var(--tomato); }
+  details summary{ cursor:pointer; color:var(--ink-dim); font-size:.88rem; margin-top:4px; }
+
+  /* تذكرة اليوم */
+  .ticket{ position:relative; background:var(--ticket); border:1px solid var(--edge); border-radius:10px; padding:16px 16px 14px; margin-bottom:14px; }
+  .ticket::before{ content:""; position:absolute; top:-6px; right:14px; left:14px; height:6px; background-image: radial-gradient(circle at 6px 6px, var(--bg) 4px, transparent 4.5px); background-size:16px 12px; background-repeat:repeat-x; }
+  .ticket-head{ display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+  .ticket-date{ font-family:'Amiri',serif; font-size:1.1rem; color:var(--gold); }
+  .ticket-total{ font-size:.85rem; color:var(--ink-dim); }
+  .ticket-total b{ color:var(--ink); font-size:1rem; }
+  .ticket-badges{ display:flex; gap:6px; margin-top:4px; flex-wrap:wrap; }
+  .badge{ font-size:.7rem; padding:2px 8px; border-radius:20px; background:var(--bg-soft); border:1px solid var(--edge); color:var(--ink-dim); }
+  .badge.good{ border-color:var(--olive); color:var(--olive); }
+  .badge.bad{ border-color:var(--danger); color:var(--danger); }
+
+  .meals{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  @media(max-width:640px){ .meals{ grid-template-columns:1fr; } }
+  .meal-slot{ background:var(--bg-soft); border:1px solid var(--edge); border-radius:8px; padding:10px; }
+  .meal-slot h4{ margin:0 0 6px; font-size:.85rem; color:var(--ink-dim); display:flex; justify-content:space-between; }
+  .meal-slot h4 span.kcal{ color:var(--ink); font-weight:700; }
+  .meal-slot ul{ margin:0; padding-right:16px; font-size:.78rem; color:var(--ink-dim); }
+  .meal-slot .empty{ font-size:.8rem; color:var(--ink-faint); font-style:italic; }
+  .meal-slot .time-tag{ color:var(--ink-faint); font-size:.72rem; }
+  .ring{ width:34px; height:34px; border-radius:50%; float:left; margin-left:8px; }
+  .item-row{ display:flex; justify-content:space-between; align-items:center; gap:4px; }
+  .item-row button{ background:none; padding:0 4px; color:var(--ink-faint); font-size:.75rem; }
+
+  .tabs{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .tabs button{ background:var(--bg-soft); color:var(--ink-dim); border:1px solid var(--edge); padding:6px 14px; font-size:.82rem;}
+  .tabs button.active{ background:var(--gold); color:#2c2118; border-color:var(--gold);}
+
+  .stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  @media(max-width:700px){ .stat-grid{ grid-template-columns:repeat(2,1fr);} }
+  .stat-box{ background:var(--bg-soft); border:1px solid var(--edge); border-radius:10px; padding:12px; text-align:center; }
+  .stat-box .num{ font-family:'Amiri',serif; font-size:1.6rem; color:var(--gold); display:block; }
+  .stat-box .lbl{ font-size:.72rem; color:var(--ink-dim); }
+
+  .heatmap{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .heat-cell{ aspect-ratio:1; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:.65rem; color:var(--ink-faint); border:1px solid var(--edge); }
+  .heat-legend{ display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; font-size:.72rem; color:var(--ink-dim); align-items:center; }
+  .heat-legend .sw{ width:12px; height:12px; border-radius:3px; display:inline-block; margin-left:5px; vertical-align:middle; }
+
+  .insight{ background:var(--bg-soft); border-right:3px solid var(--gold); border-radius:6px; padding:10px 12px; margin-bottom:8px; font-size:.85rem; line-height:1.8; }
+  .insight b{ color:var(--gold); }
+  .insight.flag{ border-right-color:var(--danger); }
+  .insight.pos{ border-right-color:var(--olive); }
+
+  .notif-status{ font-size:.85rem; color:var(--ink-dim); margin-top:8px; }
+  .legend-note{ font-size:.78rem; color:var(--ink-faint); margin-top:10px; line-height:1.8;}
+  footer{ text-align:center; color:var(--ink-faint); font-size:.78rem; margin-top:30px; }
+  table.simple{ width:100%; border-collapse:collapse; font-size:.82rem; }
+  table.simple th, table.simple td{ padding:6px 8px; border-bottom:1px solid var(--edge); text-align:right; color:var(--ink-dim); }
+  table.simple th{ color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>سجل الوجبات</h1>
+    <p>تسجيل بالتوقيت الفعلي لحظة الإرسال، مع تحليل دقيق للأداء والانضباط والسلوك</p>
+  </header>
+
+  <!-- إدخال الوجبة -->
+  <div class="card">
+    <h2><span class="dot"></span> سجّل وجبة جديدة</h2>
+    <textarea id="msgInput" placeholder="مثال: كلت 200 جرام رز و100 جرام فراخ مشوية بعد الضهر"></textarea>
+    <div class="btn-row">
+      <button class="btn-main" onclick="handleAdd()">سجّل الوجبة</button>
+      <button class="btn-ghost" onclick="toggleManual()">إضافة يدوية بدل الرسالة</button>
+    </div>
+    <div id="manualForm" style="display:none; margin-top:14px;">
+      <div class="row">
+        <div>
+          <label>الوجبة</label>
+          <select id="manMeal"><option value="breakfast">فطار</option><option value="lunch">غداء</option><option value="dinner">عشاء</option></select>
+        </div>
+        <div>
+          <label>الصنف</label>
+          <input id="manFood" list="foodList" placeholder="مثال: رز أبيض مطبوخ">
+          <datalist id="foodList"></datalist>
+        </div>
+        <div>
+          <label>الوزن (جرام)</label>
+          <input id="manWeight" type="number" value="150">
+        </div>
+        <div>
+          <label>التاريخ</label>
+          <input id="manDate" type="date">
+        </div>
+        <div>
+          <label>الوقت</label>
+          <input id="manTime" type="time">
+        </div>
+      </div>
+      <div class="btn-row"><button class="btn-gold" onclick="handleManualAdd()">إضافة الصنف</button></div>
+      <p class="legend-note">سايب التاريخ أو الوقت فاضي؟ هيتسجل بتوقيت وتاريخ دلوقتي تلقائيًا.</p>
+    </div>
+    <div id="feedback" class="feedback"></div>
+  </div>
+
+  <!-- الإعدادات -->
+  <div class="card">
+    <h2><span class="dot" style="background:var(--olive)"></span> الأهداف ومواعيد الوجبات</h2>
+    <div class="row">
+      <div><label>السعرات المستهدفة يوميًا</label><input id="targetDaily" type="number" value="2000"></div>
+      <div><label>هدف الفطار</label><input id="targetBreakfast" type="number" value="500"></div>
+      <div><label>هدف الغداء</label><input id="targetLunch" type="number" value="800"></div>
+      <div><label>هدف العشاء</label><input id="targetDinner" type="number" value="700"></div>
+    </div>
+    <div class="row">
+      <div><label>موعد الفطار المعتاد</label><input id="timeBreakfast" type="time" value="08:00"></div>
+      <div><label>موعد الغداء المعتاد</label><input id="timeLunch" type="time" value="14:30"></div>
+      <div><label>موعد العشاء المعتاد</label><input id="timeDinner" type="time" value="20:30"></div>
+      <div><label>مهلة التنبيه (دقيقة)</label><input id="tolerance" type="number" value="60"></div>
+    </div>
+    <details>
+      <summary>تنبيهات خارج المتصفح (واتساب / إيميل) — اختياري</summary>
+      <div style="margin-top:8px;">
+        <label>رابط Webhook (من Zapier أو Make أو IFTTT)</label>
+        <input id="webhookUrl" placeholder="https://hooks.zapier.com/hooks/catch/...">
+        <p class="legend-note">
+          الصفحة ملف HTML بدون سيرفر، فمينفعش تبعت واتساب أو إيميل أو SMS مباشرة من غير خدمة وسيطة.
+          اعمل Zap/Scenario على Zapier أو Make يستقبل Webhook ويبعت إيميل أو واتساب، وحط رابطه هنا.
+          تنبيهات المتصفح (لو مفتوح ومديله إذن) شغالة من غير الخطوة دي.
+        </p>
+      </div>
+    </details>
+    <div class="btn-row">
+      <button class="btn-main" onclick="saveSettings()">حفظ الإعدادات</button>
+      <button class="btn-ghost" onclick="requestNotif()">تفعيل تنبيهات المتصفح</button>
+    </div>
+    <div class="notif-status" id="notifStatus"></div>
+  </div>
+
+  <!-- لوحة التحليل التفصيلي -->
+  <div class="card">
+    <h2><span class="dot" style="background:var(--gold)"></span> لوحة التحليل التفصيلي</h2>
+    <div class="tabs">
+      <button data-t="overview" class="active" onclick="setTab('overview',this)">نظرة عامة</button>
+      <button data-t="trend" onclick="setTab('trend',this)">اتجاه السعرات</button>
+      <button data-t="heat" onclick="setTab('heat',this)">خريطة الانتظام</button>
+      <button data-t="punct" onclick="setTab('punct',this)">الانضباط الزمني</button>
+      <button data-t="weekday" onclick="setTab('weekday',this)">تحليل أيام الأسبوع</button>
+      <button data-t="foods" onclick="setTab('foods',this)">الأصناف الأكثر تكرارًا</button>
+      <button data-t="macros" onclick="setTab('macros',this)">الماكروز</button>
+      <button data-t="insights" onclick="setTab('insights',this)">رؤى وسلوك</button>
+      <button data-t="fooddb" onclick="setTab('fooddb',this)">قاعدة الأطعمة 🍽️</button>
+    </div>
+
+    <div id="panel-overview" class="panel"></div>
+
+    <div id="panel-trend" class="panel" style="display:none">
+      <div class="tabs" style="margin-bottom:10px">
+        <button data-v="all" class="active" onclick="setChartView('all',this)">الإجمالي</button>
+        <button data-v="breakfast" onclick="setChartView('breakfast',this)">فطار</button>
+        <button data-v="lunch" onclick="setChartView('lunch',this)">غداء</button>
+        <button data-v="dinner" onclick="setChartView('dinner',this)">عشاء</button>
+      </div>
+      <canvas id="chartTrend" height="150"></canvas>
+      <p class="legend-note">الخط المتقطع الذهبي = المستهدف. الخط الفاتح المنقط = متوسط متحرك لآخر 7 أيام لملاحظة الاتجاه العام بدل تذبذب اليوم الواحد.</p>
+    </div>
+
+    <div id="panel-heat" class="panel" style="display:none">
+      <div id="heatmapWrap"></div>
+      <div class="heat-legend">
+        <span><span class="sw" style="background:var(--olive)"></span> ملتزم بالهدف</span>
+        <span><span class="sw" style="background:var(--gold)"></span> ناقص عن الهدف</span>
+        <span><span class="sw" style="background:var(--danger)"></span> زيادة عن الهدف</span>
+        <span><span class="sw" style="background:var(--blueish)"></span> تسجيل جزئي</span>
+        <span><span class="sw" style="background:var(--edge)"></span> لا يوجد بيانات</span>
+      </div>
+    </div>
+
+    <div id="panel-punct" class="panel" style="display:none">
+      <canvas id="chartPunct" height="160"></canvas>
+      <div id="punctStats" style="margin-top:14px"></div>
+    </div>
+
+    <div id="panel-weekday" class="panel" style="display:none">
+      <canvas id="chartWeekday" height="150"></canvas>
+    </div>
+
+    <div id="panel-foods" class="panel" style="display:none">
+      <canvas id="chartFoods" height="180"></canvas>
+    </div>
+
+    <div id="panel-macros" class="panel" style="display:none">
+      <canvas id="chartMacros" height="160"></canvas>
+      <p class="legend-note">تقدير تقريبي للبروتين/الكربوهيدرات/الدهون بناءً على قاعدة بيانات مبسطة — للاسترشاد العام فقط وليس بديلاً عن تحليل غذائي دقيق.</p>
+    </div>
+
+    <div id="panel-insights" class="panel" style="display:none"></div>
+
+    <div id="panel-fooddb" class="panel" style="display:none"></div>
+  </div>
+
+  <!-- السجل -->
+  <div class="card">
+    <h2><span class="dot" style="background:var(--tomato)"></span> السجل اليومي</h2>
+    <div id="ticketsWrap"></div>
+  </div>
+
+  <footer>
+    التقدير الحراري والغذائي تقريبي حسب قاعدة بيانات مبسطة — البيانات محفوظة محليًا في متصفحك (localStorage) فقط، ولا تُرسل لأي سيرفر.
+  </footer>
+</div>
+
+<script>
+/* ================= قاعدة بيانات السعرات والماكروز (تقريبية لكل 100 جرام) ================= */
+const FOOD_DB = {
+  "رز ابيض مطبوخ":130,"رز بسمتي":130,"رز":130,
+  "مكرونه":158,"مكرونة":158,
+  "خبز بلدي":260,"خبز فينو":280,"عيش شامي":260,"عيش":260,
+  "فراخ مشويه":165,"فراخ مشوية":165,"فراخ مسلوقه":150,"فراخ مسلوقة":150,
+  "فراخ بانيه":250,"فراخ":180,"دجاج":180,
+  "لحمه مشويه":250,"لحمة مشوية":250,"لحمه مفرومه":215,"لحمة مفرومة":215,"لحمة":230,"لحمه":230,
+  "كبده":175,"كبدة":175,
+  "سمك بلطي":128,"سمك سلمون":208,"سمك":150,"تونه":130,"تونة":130,
+  "بيض مسلوق":155,"بيض مقلي":196,"بيض":150,
+  "جبنه بيضاء":260,"جبنة بيضاء":260,"جبنه رومي":350,"جبنة رومي":350,"جبنه":260,"جبنة":260,
+  "زبادي":61,"لبن":61,
+  "فول مدمس":110,"فول":110,
+  "طعميه":330,"طعمية":330,"فلافل":330,
+  "حمص":164,"عدس":116,"شوربة عدس":90,"شوربه عدس":90,
+  "كشري":150,
+  "ملوخيه":60,"ملوخية":60,"بامية":71,"بامیه":71,
+  "بطاطس مسلوقه":87,"بطاطس مسلوقة":87,"بطاطس محمره":250,"بطاطس محمرة":250,"بطاطس":140,"بطاطا":86,
+  "سلطه":30,"سلطة":30,"خيار":15,"طماطم":18,
+  "تفاح":52,"موز":89,"برتقال":47,"عنب":69,"مانجو":60,"بطيخ":30,"شمام":34,
+  "تمر":277,"مكسرات":600,"فول سوداني":567,
+  "شيبسي":536,"شوكولاته":546,"شوكولاتة":546,"بسكويت":480,
+  "عصير برتقال":45,"كولا":42,"زيت":884,"سكر":387,"دقيق":364
+};
+/* بروتين/كارب/دهون تقريبية لكل 100 جرام */
+const FOOD_MACROS = {
+  "رز ابيض مطبوخ":[2.7,28,0.3],"رز بسمتي":[2.7,28,0.3],"رز":[2.7,28,0.3],
+  "مكرونه":[5.8,31,0.9],"مكرونة":[5.8,31,0.9],
+  "خبز بلدي":[9,50,1.5],"خبز فينو":[9,54,3],"عيش شامي":[9,50,1.5],"عيش":[9,50,1.5],
+  "فراخ مشويه":[31,0,7],"فراخ مشوية":[31,0,7],"فراخ مسلوقه":[29,0,6],"فراخ مسلوقة":[29,0,6],
+  "فراخ بانيه":[15,18,14],"فراخ":[27,0,8],"دجاج":[27,0,8],
+  "لحمه مشويه":[26,0,17],"لحمة مشوية":[26,0,17],"لحمه مفرومه":[18,0,15],"لحمة مفرومة":[18,0,15],"لحمة":[24,0,16],"لحمه":[24,0,16],
+  "كبده":[20,4,6],"كبدة":[20,4,6],
+  "سمك بلطي":[26,0,3],"سمك سلمون":[20,0,13],"سمك":[23,0,5],"تونه":[26,0,1],"تونة":[26,0,1],
+  "بيض مسلوق":[13,1.1,11],"بيض مقلي":[14,1,15],"بيض":[13,1,12],
+  "جبنه بيضاء":[18,3,20],"جبنة بيضاء":[18,3,20],"جبنه رومي":[25,2,27],"جبنة رومي":[25,2,27],"جبنه":[18,3,20],"جبنة":[18,3,20],
+  "زبادي":[3.5,4.7,3.3],"لبن":[3.2,4.8,3.2],
+  "فول مدمس":[7.5,17,1],"فول":[7.5,17,1],
+  "طعميه":[13,30,17],"طعمية":[13,30,17],"فلافل":[13,30,17],
+  "حمص":[8,20,3],"عدس":[9,20,0.4],"شوربة عدس":[5,14,1],"شوربه عدس":[5,14,1],
+  "كشري":[4,25,4],
+  "ملوخيه":[3.6,7,1.2],"ملوخية":[3.6,7,1.2],"بامية":[2,7,0.2],"بامیه":[2,7,0.2],
+  "بطاطس مسلوقه":[2,20,0.1],"بطاطس مسلوقة":[2,20,0.1],"بطاطس محمره":[3,32,13],"بطاطس محمرة":[3,32,13],"بطاطس":[2,25,5],"بطاطا":[1.6,20,0.1],
+  "سلطه":[1.5,5,0.2],"سلطة":[1.5,5,0.2],"خيار":[0.7,3.6,0.1],"طماطم":[0.9,3.9,0.2],
+  "تفاح":[0.3,14,0.2],"موز":[1.1,23,0.3],"برتقال":[0.9,12,0.1],"عنب":[0.6,18,0.2],"مانجو":[0.8,15,0.4],"بطيخ":[0.6,8,0.2],"شمام":[0.8,8,0.2],
+  "تمر":[2,75,0.4],"مكسرات":[20,20,50],"فول سوداني":[26,16,49],
+  "شيبسي":[6,53,35],"شوكولاته":[7,58,30],"شوكولاتة":[7,58,30],"بسكويت":[6,65,20],
+  "عصير برتقال":[0.5,10,0.1],"كولا":[0,10.6,0],"زيت":[0,0,100],"سكر":[0,100,0],"دقيق":[10,76,1]
+};
+const DEFAULT_MACRO = [8,20,6];
+
+/* ================= تعديلات/إضافات المستخدم على قاعدة الأطعمة ================= */
+/* بتتخزن في مفتاح localStorage منفصل تمامًا (mt_food_overrides) عشان محدش يلمس
+   بيانات السجل اليومي (mt_data) ولا الإعدادات (mt_settings) — القاعدة الأصلية
+   فوق دي بتفضل زي ما هي، والتعديلات بتتطبّق فوقها في الذاكرة بس. */
+const FOOD_OVERRIDES_KEY = 'mt_food_overrides';
+function loadFoodOverrides(){
+  try{ return JSON.parse(localStorage.getItem(FOOD_OVERRIDES_KEY)||'{}'); }catch(e){ return {}; }
+}
+function saveFoodOverrides(ov){ localStorage.setItem(FOOD_OVERRIDES_KEY, JSON.stringify(ov)); }
+function applyFoodOverrides(){
+  const ov = loadFoodOverrides();
+  for(const name in ov){
+    const entry = ov[name];
+    if(entry.deleted){ delete FOOD_DB[name]; delete FOOD_MACROS[name]; continue; }
+    FOOD_DB[name] = entry.kcal;
+    FOOD_MACROS[name] = entry.macro || DEFAULT_MACRO;
+  }
+}
+applyFoodOverrides();
+
+function upsertFood(name, kcal, macro){
+  name = name.trim();
+  if(!name) return false;
+  FOOD_DB[name] = kcal;
+  FOOD_MACROS[name] = macro;
+  const ov = loadFoodOverrides();
+  ov[name] = {kcal, macro};
+  saveFoodOverrides(ov);
+  fillFoodDatalist();
+  return true;
+}
+function deleteFood(name){
+  delete FOOD_DB[name];
+  delete FOOD_MACROS[name];
+  const ov = loadFoodOverrides();
+  ov[name] = {deleted:true};
+  saveFoodOverrides(ov);
+  fillFoodDatalist();
+}
+
+/* ================= أدوات مساعدة ================= */
+function normalize(s){
+  return s.replace(/[\u064B-\u0652]/g,'').replace(/[إأآا]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
+}
+/* بيحوّل الأرقام العربية (١٢٣) والفارسية (۱۲۳) لأرقام إنجليزية عادية عشان أي regex شغال بالأرقام يقدر يفهمها */
+function normalizeDigits(s){
+  return s
+    .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0));
+}
+function todayKey(d){ const dt=d||new Date(); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
+function fmtDate(key){ const [y,m,d]=key.split('-').map(Number); const dt=new Date(y,m-1,d); return dt.toLocaleDateString('ar-EG',{weekday:'long', year:'numeric', month:'long', day:'numeric'}); }
+function fmtTime(ts){ if(!ts) return '--:--'; const d=new Date(ts); return d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}); }
+function timeToMinutes(str){ const [h,m]=str.split(':').map(Number); return h*60+m; }
+
+/* ================= تخزين ================= */
+function loadData(){ try{ return JSON.parse(localStorage.getItem('mt_data')||'{}'); }catch(e){ return {}; } }
+function saveData(d){ localStorage.setItem('mt_data', JSON.stringify(d)); }
+function loadSettings(){
+  const def = { targetDaily:2000, targetBreakfast:500, targetLunch:800, targetDinner:700,
+    timeBreakfast:'08:00', timeLunch:'14:30', timeDinner:'20:30', tolerance:60, webhookUrl:'' };
+  try{ return {...def, ...JSON.parse(localStorage.getItem('mt_settings')||'{}')}; }catch(e){ return def; }
+}
+function saveSettingsObj(s){ localStorage.setItem('mt_settings', JSON.stringify(s)); }
+
+let DATA = loadData();
+let SETTINGS = loadSettings();
+const MEAL_LABEL = {breakfast:'فطار', lunch:'غداء', dinner:'عشاء'};
+const WEEKDAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+
+function fillSettingsForm(){
+  targetDaily.value=SETTINGS.targetDaily; targetBreakfast.value=SETTINGS.targetBreakfast;
+  targetLunch.value=SETTINGS.targetLunch; targetDinner.value=SETTINGS.targetDinner;
+  timeBreakfast.value=SETTINGS.timeBreakfast; timeLunch.value=SETTINGS.timeLunch; timeDinner.value=SETTINGS.timeDinner;
+  tolerance.value=SETTINGS.tolerance; webhookUrl.value=SETTINGS.webhookUrl;
+}
+function saveSettings(){
+  SETTINGS = { targetDaily:+targetDaily.value, targetBreakfast:+targetBreakfast.value, targetLunch:+targetLunch.value, targetDinner:+targetDinner.value,
+    timeBreakfast:timeBreakfast.value, timeLunch:timeLunch.value, timeDinner:timeDinner.value, tolerance:+tolerance.value, webhookUrl:webhookUrl.value.trim() };
+  saveSettingsObj(SETTINGS);
+  renderAll();
+  alert('تم حفظ الإعدادات');
+}
+
+/* ================= التعرف على نوع الوجبة والوزن والصنف ================= */
+function detectMeal(text){
+  const n = normalize(text);
+  if(/فطار|فطور|فطر/.test(n)) return 'breakfast';
+  if(/غداء|غدا/.test(n)) return 'lunch';
+  if(/عشاء|عشا/.test(n)) return 'dinner';
+  const h = new Date().getHours();
+  if(h<11) return 'breakfast'; if(h<17) return 'lunch'; return 'dinner';
+}
+function extractWeight(segment){
+  let m = segment.match(/(\d+(?:\.\d+)?)\s*(كيلو|كجم|كغ)/); if(m) return parseFloat(m[1])*1000;
+  m = segment.match(/(\d+(?:\.\d+)?)\s*(جرام|جم|غ)\b/); if(m) return parseFloat(m[1]);
+  if(/نص كيلو/.test(segment)) return 500; if(/ربع كيلو/.test(segment)) return 250;
+  m = segment.match(/(\d+(?:\.\d+)?)/); if(m) return parseFloat(m[1]);
+  return null;
+}
+/* بيقسّم النص لكلمات منفصلة بعد التطبيع، عشان نقارن الكلمات بغض النظر عن ترتيبها */
+function tokenize(s){ return normalize(s).split(/\s+/).filter(Boolean); }
+
+function matchFood(segment){
+  const segTokens = new Set(tokenize(segment));
+  let best=null, bestScore=0;
+  for(const key in FOOD_DB){
+    const keyTokens = tokenize(key);
+    // كل كلمات اسم الصنف لازم تكون موجودة في الجملة، أيًا كان ترتيبها
+    if(keyTokens.length && keyTokens.every(t=>segTokens.has(t))){
+      if(keyTokens.length > bestScore){ best=key; bestScore=keyTokens.length; }
+    }
+  }
+  return best;
+}
+function parseMessage(text){
+  text = normalizeDigits(text);
+  const meal = detectMeal(text);
+  const segments = text.split(/[و،,+]/).map(s=>s.trim()).filter(Boolean);
+  const items=[]; const warnings=[];
+  segments.forEach(seg=>{
+    const food = matchFood(seg); if(!food) return;
+    let weight = extractWeight(seg); let approx=false;
+    if(!weight){ weight=150; approx=true; }
+    const kcal = Math.round(FOOD_DB[food]*weight/100);
+    items.push({name:food, weight, kcal, approx});
+  });
+  if(items.length===0) warnings.push('محدش عرفت أي صنف من اللي اتكتب. جرب تكتب اسم الأكلة بوضوح، أو استخدم الإضافة اليدوية.');
+  items.forEach(it=>{ if(it.approx) warnings.push(`الكمية مش متحددة لـ "${it.name}"، اتحسبت على أساس 150 جرام تقريبًا.`); });
+  return {meal, items, warnings};
+}
+
+/* ================= إضافة للسجل — بتوقيت الإرسال الفعلي ================= */
+function addItemsToLog(meal, items, dateKey, ts){
+  dateKey = dateKey || todayKey(); ts = ts || new Date().toISOString();
+  if(!DATA[dateKey]) DATA[dateKey] = { breakfast:{items:[],kcal:0}, lunch:{items:[],kcal:0}, dinner:{items:[],kcal:0} };
+  const slot = DATA[dateKey][meal];
+  items.forEach(it=>{ slot.items.push({...it, ts}); slot.kcal += it.kcal; });
+  saveData(DATA);
+}
+
+function handleAdd(){
+  const text = msgInput.value.trim(); if(!text) return;
+  const now = new Date();
+  const {meal, items, warnings} = parseMessage(text);
+  if(items.length){ addItemsToLog(meal, items, todayKey(now), now.toISOString()); renderAll(); }
+  const fb = document.getElementById('feedback'); fb.classList.add('show');
+  let html = `تم تحديد الوجبة: <b>${MEAL_LABEL[meal]}</b> — وقت التسجيل: <b>${fmtTime(now)}</b><br>`;
+  if(items.length) html += items.map(it=>`• ${it.name} (${it.weight} جم) → ${it.kcal} سعرة`).join('<br>');
+  if(warnings.length) html += '<br>' + warnings.map(w=>`<span class="warn">⚠ ${w}</span>`).join('<br>');
+  fb.innerHTML = html; msgInput.value='';
+}
+function toggleManual(){
+  const el=document.getElementById('manualForm');
+  const opening = el.style.display==='none';
+  el.style.display = opening ? 'block' : 'none';
+  if(opening){
+    const now = new Date();
+    const dateEl = document.getElementById('manDate');
+    const timeEl = document.getElementById('manTime');
+    if(!dateEl.value) dateEl.value = todayKey(now);
+    if(!timeEl.value) timeEl.value = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  }
+}
+function handleManualAdd(){
+  const meal = manMeal.value; const name = manFood.value.trim(); const weight = +manWeight.value || 150;
+  const matched = matchFood(name) || name; const kcal = Math.round((FOOD_DB[matched]||150) * weight/100);
+
+  let dateKey = todayKey();
+  let ts = new Date().toISOString();
+  const dateVal = document.getElementById('manDate').value; // "YYYY-MM-DD"
+  const timeVal = document.getElementById('manTime').value; // "HH:MM"
+  if(dateVal) dateKey = dateVal;
+  if(dateVal && timeVal){
+    ts = new Date(dateVal+'T'+timeVal+':00').toISOString();
+  } else if(timeVal){
+    const now = new Date();
+    const [hh,mm] = timeVal.split(':').map(Number);
+    now.setHours(hh, mm, 0, 0);
+    ts = now.toISOString();
+  }
+
+  addItemsToLog(meal, [{name:matched, weight, kcal, approx:!FOOD_DB[matched]}], dateKey, ts);
+  renderAll(); manFood.value='';
+}
+
+/* ================= السجل (التذاكر) ================= */
+function ringGradient(actual, target){
+  const pct = target>0 ? Math.min(100, Math.round(actual/target*100)) : 0;
+  const color = pct>110 ? 'var(--danger)' : (pct>=80 ? 'var(--olive)' : 'var(--gold)');
+  return `conic-gradient(${color} ${pct}%, var(--edge) 0)`;
+}
+function dayStatus(dayObj){
+  const meals=['breakfast','lunch','dinner'];
+  const loggedCount = meals.filter(m=>dayObj[m].items.length>0).length;
+  const total = meals.reduce((s,m)=>s+dayObj[m].kcal,0);
+  if(loggedCount===0) return 'none';
+  if(loggedCount<3) return 'partial';
+  const target = SETTINGS.targetDaily;
+  if(total > target*1.1) return 'over';
+  if(total < target*0.9) return 'under';
+  return 'ontarget';
+}
+function renderTickets(){
+  const keys = Object.keys(DATA).sort().reverse();
+  const wrap = document.getElementById('ticketsWrap');
+  if(keys.length===0){ wrap.innerHTML = '<p class="legend-note">لسه مفيش وجبات متسجلة. سجّل أول وجبة من فوق.</p>'; return; }
+  wrap.innerHTML = keys.map(key=>{
+    const day = DATA[key];
+    const total = day.breakfast.kcal + day.lunch.kcal + day.dinner.kcal;
+    const status = dayStatus(day);
+    const badgeMap = {none:'', partial:'<span class="badge">تسجيل جزئي</span>', over:'<span class="badge bad">زيادة عن الهدف</span>', under:'<span class="badge">أقل من الهدف</span>', ontarget:'<span class="badge good">ملتزم بالهدف</span>'};
+    const meals = ['breakfast','lunch','dinner'].map(m=>{
+      const targetVal = SETTINGS['target'+m[0].toUpperCase()+m.slice(1)];
+      const slot = day[m];
+      const itemsHtml = slot.items.length
+        ? '<ul>' + slot.items.map((it,idx)=>`<li class="item-row"><span>${it.name} (${it.weight}جم) — ${it.kcal} سعرة <span class="time-tag">${fmtTime(it.ts)}</span></span><button onclick="deleteItem('${key}','${m}',${idx})">حذف</button></li>`).join('') + '</ul>'
+        : '<div class="empty">لم تُسجَّل بعد</div>';
+      return `<div class="meal-slot">
+        <div style="display:flex; align-items:center;">
+          <div class="ring" style="background:${ringGradient(slot.kcal, targetVal)}"></div>
+          <h4 style="flex:1"><span>${MEAL_LABEL[m]}</span><span class="kcal">${slot.kcal} / ${targetVal}</span></h4>
+        </div>
+        ${itemsHtml}
+      </div>`;
+    }).join('');
+    return `<div class="ticket">
+      <div class="ticket-head">
+        <div>
+          <div class="ticket-date">${fmtDate(key)}</div>
+          <div class="ticket-badges">${badgeMap[status]}</div>
+        </div>
+        <div class="ticket-total">الإجمالي: <b>${total}</b> / ${SETTINGS.targetDaily} سعرة</div>
+      </div>
+      <div class="meals">${meals}</div>
+    </div>`;
+  }).join('');
+}
+function deleteItem(dateKey, meal, idx){
+  const slot = DATA[dateKey][meal];
+  slot.kcal -= slot.items[idx].kcal; slot.items.splice(idx,1);
+  saveData(DATA); renderAll();
+}
+
+/* ================= تبويبات لوحة التحليل ================= */
+let activeTab = 'overview';
+function setTab(t, btn){
+  activeTab = t;
+  document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p=>p.style.display='none');
+  document.getElementById('panel-'+t).style.display='block';
+  renderActivePanel();
+}
+function renderActivePanel(){
+  if(activeTab==='overview') renderOverview();
+  else if(activeTab==='trend') renderTrendChart();
+  else if(activeTab==='heat') renderHeatmap();
+  else if(activeTab==='punct') renderPunctuality();
+  else if(activeTab==='weekday') renderWeekday();
+  else if(activeTab==='foods') renderTopFoods();
+  else if(activeTab==='macros') renderMacros();
+  else if(activeTab==='insights') renderInsights();
+  else if(activeTab==='fooddb') renderFoodDB();
+}
+
+/* ---------- حسابات عامة ---------- */
+function sortedKeys(){ return Object.keys(DATA).sort(); }
+function dayTotal(key){ const d=DATA[key]; return d.breakfast.kcal+d.lunch.kcal+d.dinner.kcal; }
+function computeStreaks(){
+  const keys = sortedKeys();
+  let longest=0, current=0, run=0;
+  let prevDate=null;
+  const flags = keys.map(k=>({key:k, ok: dayStatus(DATA[k])==='ontarget'}));
+  flags.forEach(f=>{ if(f.ok){ run++; longest=Math.max(longest,run); } else run=0; });
+  // current streak: من آخر يوم موجود بيانات فيه للخلف
+  for(let i=flags.length-1;i>=0;i--){ if(flags[i].ok) current++; else break; }
+  return {longest, current};
+}
+
+/* ---------- نظرة عامة ---------- */
+function renderOverview(){
+  const keys = sortedKeys();
+  const panel = document.getElementById('panel-overview');
+  if(keys.length===0){ panel.innerHTML = '<p class="legend-note">سجّل بيانات لأكثر من يوم عشان تظهر التحليلات.</p>'; return; }
+  const totals = keys.map(dayTotal);
+  const avg = Math.round(totals.reduce((a,b)=>a+b,0)/totals.length);
+  const {longest, current} = computeStreaks();
+  const onTargetDays = keys.filter(k=>dayStatus(DATA[k])==='ontarget').length;
+  const adherencePct = Math.round(onTargetDays/keys.length*100);
+  panel.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-box"><span class="num">${keys.length}</span><span class="lbl">إجمالي الأيام المسجّلة</span></div>
+      <div class="stat-box"><span class="num">${current}</span><span class="lbl">السلسلة الحالية (أيام ملتزمة متتالية)</span></div>
+      <div class="stat-box"><span class="num">${longest}</span><span class="lbl">أطول سلسلة التزام</span></div>
+      <div class="stat-box"><span class="num">${avg}</span><span class="lbl">متوسط السعرات اليومي</span></div>
+      <div class="stat-box"><span class="num">${adherencePct}%</span><span class="lbl">نسبة الأيام الملتزمة بالهدف</span></div>
+      <div class="stat-box"><span class="num">${SETTINGS.targetDaily}</span><span class="lbl">الهدف اليومي الحالي</span></div>
+    </div>
+    <p class="legend-note">"الالتزام بالهدف" يعني تسجيل الثلاث وجبات في يوم واحد وإجمالي السعرات في حدود ±10% من الهدف اليومي.</p>
+  `;
+}
+
+/* ---------- اتجاه السعرات ---------- */
+let chartView='all'; let chartTrendObj=null;
+function setChartView(v, btn){ chartView=v; document.querySelectorAll('#panel-trend .tabs button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderTrendChart(); }
+function movingAvg(arr, w){ return arr.map((_,i)=>{ const s=Math.max(0,i-w+1); const slice=arr.slice(s,i+1); return Math.round(slice.reduce((a,b)=>a+b,0)/slice.length); }); }
+function renderTrendChart(){
+  const keys = sortedKeys();
+  const labels = keys.map(k=>{ const [y,m,d]=k.split('-'); return `${d}/${m}`; });
+  let actual, target;
+  if(chartView==='all'){ actual = keys.map(dayTotal); target = keys.map(()=>SETTINGS.targetDaily); }
+  else { actual = keys.map(k=>DATA[k][chartView].kcal); target = keys.map(()=>SETTINGS['target'+chartView[0].toUpperCase()+chartView.slice(1)]); }
+  const ma7 = movingAvg(actual,7);
+  const ctx = document.getElementById('chartTrend').getContext('2d');
+  if(chartTrendObj) chartTrendObj.destroy();
+  chartTrendObj = new Chart(ctx, { type:'line', data:{ labels, datasets:[
+    { label:'الفعلي', data:actual, borderColor:'#c1440e', backgroundColor:'rgba(193,68,14,.15)', tension:.3, fill:true, pointRadius:3 },
+    { label:'المستهدف', data:target, borderColor:'#d8a93b', borderDash:[6,4], pointRadius:0 },
+    { label:'متوسط متحرك (7 أيام)', data:ma7, borderColor:'#5b8a9a', borderDash:[2,3], pointRadius:0, tension:.3 }
+  ]}, options:{ responsive:true, plugins:{legend:{labels:{color:'#f2e9dd', font:{family:'Cairo'}}}}, scales:{ x:{ticks:{color:'#cbb99f'}, grid:{color:'#4a3826'}}, y:{ticks:{color:'#cbb99f'}, grid:{color:'#4a3826'}} } } });
+}
+
+/* ---------- خريطة الانتظام ---------- */
+function renderHeatmap(){
+  const wrap = document.getElementById('heatmapWrap');
+  const days = [];
+  const today = new Date();
+  for(let i=34;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); days.push(d); }
+  const colorMap = {none:'var(--edge)', partial:'var(--blueish)', over:'var(--danger)', under:'var(--gold)', ontarget:'var(--olive)'};
+  wrap.innerHTML = `<div class="heatmap">` + days.map(d=>{
+    const key = todayKey(d);
+    const status = DATA[key] ? dayStatus(DATA[key]) : 'none';
+    const dn = d.getDate();
+    return `<div class="heat-cell" style="background:${colorMap[status]}" title="${fmtDate(key)}">${dn}</div>`;
+  }).join('') + `</div>`;
+}
+
+/* ---------- الانضباط الزمني ---------- */
+function renderPunctuality(){
+  const keys = sortedKeys();
+  const meals = ['breakfast','lunch','dinner'];
+  const pointsByMeal = {breakfast:[], lunch:[], dinner:[]};
+  const delaysByMeal = {breakfast:[], lunch:[], dinner:[]};
+  keys.forEach((key, idx)=>{
+    meals.forEach(m=>{
+      const items = DATA[key][m].items;
+      if(items.length===0) return;
+      const firstTs = items.map(it=>it.ts).sort()[0];
+      const d = new Date(firstTs);
+      const minutesOfDay = d.getHours()*60 + d.getMinutes();
+      pointsByMeal[m].push({x:idx, y:minutesOfDay});
+      const targetMin = timeToMinutes(SETTINGS['time'+m[0].toUpperCase()+m.slice(1)]);
+      delaysByMeal[m].push(minutesOfDay - targetMin);
+    });
+  });
+  const ctx = document.getElementById('chartPunct').getContext('2d');
+  if(window._chartPunctObj) window._chartPunctObj.destroy();
+  const colors = {breakfast:'#d8a93b', lunch:'#c1440e', dinner:'#5b8a9a'};
+  window._chartPunctObj = new Chart(ctx, { type:'scatter', data:{ datasets: meals.map(m=>({
+      label:MEAL_LABEL[m], data:pointsByMeal[m], backgroundColor:colors[m]
+    })) }, options:{ responsive:true,
+      plugins:{ legend:{labels:{color:'#f2e9dd', font:{family:'Cairo'}}},
+        tooltip:{ callbacks:{ label:(ctx)=>{ const h=Math.floor(ctx.raw.y/60); const mi=String(ctx.raw.y%60).padStart(2,'0'); return `${ctx.dataset.label}: ${h}:${mi}`; } } } },
+      scales:{ x:{ title:{display:true,text:'ترتيب الأيام',color:'#cbb99f'}, ticks:{color:'#cbb99f'}, grid:{color:'#4a3826'} },
+        y:{ title:{display:true,text:'وقت اليوم (بالدقائق)',color:'#cbb99f'}, ticks:{color:'#cbb99f', callback:(v)=>{ const h=Math.floor(v/60); return h+':00'; }}, grid:{color:'#4a3826'} } } } });
+
+  const statsHtml = meals.map(m=>{
+    const arr = delaysByMeal[m];
+    if(arr.length===0) return `<p class="legend-note">${MEAL_LABEL[m]}: لا توجد بيانات كافية بعد.</p>`;
+    const avg = Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
+    const label = avg>0 ? `متأخر بمعدل ${avg} دقيقة عن الموعد المعتاد` : `مبكر بمعدل ${Math.abs(avg)} دقيقة عن الموعد المعتاد`;
+    return `<div class="insight"><b>${MEAL_LABEL[m]}:</b> ${label} (${arr.length} تسجيلة).</div>`;
+  }).join('');
+  document.getElementById('punctStats').innerHTML = statsHtml;
+}
+
+/* ---------- تحليل أيام الأسبوع ---------- */
+let chartWeekdayObj=null;
+function renderWeekday(){
+  const keys = sortedKeys();
+  const sums = Array(7).fill(0); const counts = Array(7).fill(0);
+  keys.forEach(k=>{ const [y,m,d]=k.split('-').map(Number); const wd = new Date(y,m-1,d).getDay(); sums[wd]+=dayTotal(k); counts[wd]++; });
+  const avgs = sums.map((s,i)=> counts[i]? Math.round(s/counts[i]) : 0);
+  const ctx = document.getElementById('chartWeekday').getContext('2d');
+  if(chartWeekdayObj) chartWeekdayObj.destroy();
+  chartWeekdayObj = new Chart(ctx, { type:'bar', data:{ labels:WEEKDAYS, datasets:[
+    { label:'متوسط السعرات', data:avgs, backgroundColor:'#c1440e' },
+    { label:'الهدف اليومي', data:WEEKDAYS.map(()=>SETTINGS.targetDaily), type:'line', borderColor:'#d8a93b', borderDash:[6,4], pointRadius:0 }
+  ]}, options:{ responsive:true, plugins:{legend:{labels:{color:'#f2e9dd', font:{family:'Cairo'}}}},
+    scales:{ x:{ticks:{color:'#cbb99f'}, grid:{display:false}}, y:{ticks:{color:'#cbb99f'}, grid:{color:'#4a3826'}} } } });
+}
+
+/* ---------- الأصناف الأكثر تكرارًا ---------- */
+let chartFoodsObj=null;
+function renderTopFoods(){
+  const tally = {};
+  Object.values(DATA).forEach(day=>{ ['breakfast','lunch','dinner'].forEach(m=>{ day[m].items.forEach(it=>{
+    if(!tally[it.name]) tally[it.name]={count:0, kcal:0}; tally[it.name].count++; tally[it.name].kcal+=it.kcal;
+  }); }); });
+  const arr = Object.entries(tally).sort((a,b)=>b[1].count-a[1].count).slice(0,10);
+  const ctx = document.getElementById('chartFoods').getContext('2d');
+  if(chartFoodsObj) chartFoodsObj.destroy();
+  chartFoodsObj = new Chart(ctx, { type:'bar', data:{ labels:arr.map(a=>a[0]), datasets:[
+    { label:'عدد مرات التكرار', data:arr.map(a=>a[1].count), backgroundColor:'#d8a93b' }
+  ]}, options:{ indexAxis:'y', responsive:true, plugins:{legend:{labels:{color:'#f2e9dd', font:{family:'Cairo'}}}},
+    scales:{ x:{ticks:{color:'#cbb99f'}, grid:{color:'#4a3826'}}, y:{ticks:{color:'#cbb99f'}, grid:{display:false}} } } });
+}
+
+/* ---------- الماكروز ---------- */
+let chartMacrosObj=null;
+function renderMacros(){
+  const keys = sortedKeys();
+  const labels = keys.map(k=>{ const [y,m,d]=k.split('-'); return `${d}/${m}`; });
+  const protein=[], carbs=[], fat=[];
+  keys.forEach(k=>{
+    let p=0,c=0,f=0;
+    ['breakfast','lunch','dinner'].forEach(m=>{ DATA[k][m].items.forEach(it=>{
+      const macro = FOOD_MACROS[it.name] || DEFAULT_MACRO;
+      const factor = it.weight/100;
+      p += macro[0]*factor; c += macro[1]*factor; f += macro[2]*factor;
+    }); });
+    protein.push(Math.round(p)); carbs.push(Math.round(c)); fat.push(Math.round(f));
+  });
+  const ctx = document.getElementById('chartMacros').getContext('2d');
+  if(chartMacrosObj) chartMacrosObj.destroy();
+  chartMacrosObj = new Chart(ctx, { type:'bar', data:{ labels, datasets:[
+    { label:'بروتين (جم)', data:protein, backgroundColor:'#8a9a5b' },
+    { label:'كربوهيدرات (جم)', data:carbs, backgroundColor:'#d8a93b' },
+    { label:'دهون (جم)', data:fat, backgroundColor:'#c1440e' }
+  ]}, options:{ responsive:true, plugins:{legend:{labels:{color:'#f2e9dd', font:{family:'Cairo'}}}},
+    scales:{ x:{stacked:true, ticks:{color:'#cbb99f'}, grid:{display:false}}, y:{stacked:true, ticks:{color:'#cbb99f'}, grid:{color:'#4a3826'}} } } });
+}
+
+/* ---------- رؤى وسلوك (نصية تلقائية) ---------- */
+function renderInsights(){
+  const panel = document.getElementById('panel-insights');
+  const keys = sortedKeys();
+  if(keys.length < 3){ panel.innerHTML = '<p class="legend-note">محتاج تسجل 3 أيام على الأقل عشان تظهر رؤى دقيقة.</p>'; return; }
+  const insights = [];
+
+  // مقارنة آخر 7 أيام بالسابقين
+  const last7 = keys.slice(-7); const prev7 = keys.slice(-14,-7);
+  if(prev7.length>=3){
+    const avgLast = last7.reduce((a,k)=>a+dayTotal(k),0)/last7.length;
+    const avgPrev = prev7.reduce((a,k)=>a+dayTotal(k),0)/prev7.length;
+    const diffPct = Math.round((avgLast-avgPrev)/avgPrev*100);
+    if(Math.abs(diffPct) >= 5){
+      insights.push({ type: diffPct>0?'flag':'pos',
+        text: `متوسط سعراتك في آخر 7 أيام ${diffPct>0?'زاد':'قلّ'} بنسبة ${Math.abs(diffPct)}% مقارنة بالأسبوع اللي قبله.` });
+    } else {
+      insights.push({ type:'', text:'استقرار ملحوظ في متوسط السعرات بين آخر أسبوعين.' });
+    }
+  }
+
+  // انضباط الوجبات آخر 7 أيام
+  ['breakfast','lunch','dinner'].forEach(m=>{
+    const loggedDays = last7.filter(k=>DATA[k][m].items.length>0).length;
+    if(loggedDays < last7.length){
+      insights.push({ type:'flag', text:`سجّلت ${MEAL_LABEL[m]} في ${loggedDays} من ${last7.length} أيام بس في آخر أسبوع.` });
+    }
+  });
+
+  // أعلى تأخير
+  const delaysByMeal = {breakfast:[], lunch:[], dinner:[]};
+  keys.forEach(key=>{ ['breakfast','lunch','dinner'].forEach(m=>{
+    const items = DATA[key][m].items; if(items.length===0) return;
+    const firstTs = items.map(it=>it.ts).sort()[0]; const d = new Date(firstTs);
+    const minutesOfDay = d.getHours()*60+d.getMinutes();
+    const targetMin = timeToMinutes(SETTINGS['time'+m[0].toUpperCase()+m.slice(1)]);
+    delaysByMeal[m].push(minutesOfDay-targetMin);
+  }); });
+  let worstMeal=null, worstAvg=-Infinity;
+  Object.keys(delaysByMeal).forEach(m=>{ const arr=delaysByMeal[m]; if(arr.length===0) return; const avg=arr.reduce((a,b)=>a+b,0)/arr.length; if(avg>worstAvg){ worstAvg=avg; worstMeal=m; } });
+  if(worstMeal && worstAvg>15){ insights.push({ type:'flag', text:`أكتر وجبة بتتأخر فيها هي ${MEAL_LABEL[worstMeal]}، بمعدل تأخير ${Math.round(worstAvg)} دقيقة عن موعدها.` }); }
+
+  // تحليل أيام الأسبوع
+  const sums=Array(7).fill(0), counts=Array(7).fill(0);
+  keys.forEach(k=>{ const [y,m,d]=k.split('-').map(Number); const wd=new Date(y,m-1,d).getDay(); sums[wd]+=dayTotal(k); counts[wd]++; });
+  const avgs = sums.map((s,i)=> counts[i]? s/counts[i] : null);
+  let maxI=-1,maxV=-Infinity,minI=-1,minV=Infinity;
+  avgs.forEach((v,i)=>{ if(v===null) return; if(v>maxV){maxV=v;maxI=i;} if(v<minV){minV=v;minI=i;} });
+  if(maxI>=0 && minI>=0 && maxI!==minI){
+    insights.push({ type:'', text:`أعلى استهلاك سعرات بيكون يوم ${WEEKDAYS[maxI]} (${Math.round(maxV)} سعرة في المتوسط)، وأقله يوم ${WEEKDAYS[minI]} (${Math.round(minV)} سعرة).` });
+  }
+
+  // الصنف الأكثر تكرارًا
+  const tally={};
+  Object.values(DATA).forEach(day=>{ ['breakfast','lunch','dinner'].forEach(m=>{ day[m].items.forEach(it=>{ tally[it.name]=(tally[it.name]||0)+1; }); }); });
+  const topFood = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0];
+  if(topFood) insights.push({ type:'', text:`أكتر صنف بتكرره هو "${topFood[0]}" (${topFood[1]} مرة).` });
+
+  // السلسلة والانتظام العام
+  const {longest, current} = computeStreaks();
+  if(current>=3) insights.push({ type:'pos', text:`عندك سلسلة التزام حالية ${current} أيام متتالية — استمر كده.` });
+  else if(longest>=3) insights.push({ type:'', text:`أطول سلسلة التزام سجلتها كانت ${longest} أيام متتالية.` });
+
+  panel.innerHTML = insights.map(i=>`<div class="insight ${i.type}">${i.text}</div>`).join('') || '<p class="legend-note">لسه البيانات مش كفاية لاستخراج رؤى واضحة.</p>';
+}
+
+/* ================= التنبيهات ================= */
+function requestNotif(){
+  if(!('Notification' in window)){ notifStatus.textContent='المتصفح ده مش بيدعم التنبيهات.'; return; }
+  Notification.requestPermission().then(p=>{ notifStatus.textContent = p==='granted' ? 'تنبيهات المتصفح مفعّلة ✅' : 'تم رفض إذن التنبيهات.'; });
+}
+function updateNotifStatus(){
+  if(!('Notification' in window)){ notifStatus.textContent=''; return; }
+  notifStatus.textContent = 'حالة تنبيهات المتصفح: ' + (Notification.permission==='granted'?'مفعّلة ✅':Notification.permission==='denied'?'مرفوضة ❌':'لم تُفعَّل بعد');
+}
+function alertedKey(dateKey, meal){ return `mt_alerted_${dateKey}_${meal}`; }
+function checkReminders(){
+  const now = new Date(); const key = todayKey(now); const day = DATA[key];
+  const loggedMeal = (m)=> day && day[m] && day[m].items.length>0;
+  ['breakfast','lunch','dinner'].forEach(m=>{
+    const timeStr = SETTINGS['time'+m[0].toUpperCase()+m.slice(1)]; if(!timeStr) return;
+    const [h,mi] = timeStr.split(':').map(Number);
+    const mealTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, mi);
+    const diffMin = (now-mealTime)/60000;
+    if(diffMin >= SETTINGS.tolerance && !loggedMeal(m)){
+      const ak = alertedKey(key,m);
+      if(!localStorage.getItem(ak)){ localStorage.setItem(ak,'1'); fireReminder(m); }
+    }
+  });
+}
+function fireReminder(meal){
+  const title = `فاتك تسجّل ${MEAL_LABEL[meal]}`;
+  const body = `عدّى موعد ${MEAL_LABEL[meal]} المعتاد ولسه مسجلتش الوجبة في الدفتر.`;
+  if('Notification' in window && Notification.permission==='granted') new Notification(title,{body});
+  if(SETTINGS.webhookUrl){ fetch(SETTINGS.webhookUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,body,meal,date:todayKey()})}).catch(()=>{}); }
+}
+
+/* ================= لوحة قاعدة الأطعمة (عرض/تعديل/إضافة) ================= */
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let foodDBSearch = '';
+
+function renderFoodDB(){
+  const panel = document.getElementById('panel-fooddb');
+  const names = Object.keys(FOOD_DB).sort((a,b)=>a.localeCompare(b,'ar'));
+  const q = foodDBSearch.trim();
+  const filtered = q ? names.filter(n=>n.includes(q)) : names;
+
+  panel.innerHTML = `
+    <p class="legend-note">دي كل أنواع الطعام اللي التطبيق يعرفها ويقدر يتعرف عليها تلقائيًا من رسالتك النصية، مع تقدير السعرات والماكروز (بروتين/كارب/دهون) لكل 100 جرام. عدّل أي قيمة أو ضيف صنف جديد — أي تغيير بيتحفظ تلقائيًا فورًا وبيبقى متاح في التعرف التلقائي والإضافة اليدوية على طول، من غير ما يأثر على أي حاجة تانية في التطبيق.</p>
+    <div class="row" style="margin-bottom:12px;">
+      <div style="flex:2; min-width:200px;"><label>بحث في الأصناف</label><input id="foodDBSearch" placeholder="ابحث عن صنف..." value="${escapeHtml(q)}"></div>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="simple">
+      <thead><tr><th>الصنف</th><th>سعرات/100جم</th><th>بروتين</th><th>كارب</th><th>دهون</th><th></th></tr></thead>
+      <tbody id="foodDBRows">
+        ${filtered.map(n=>{
+          const m = FOOD_MACROS[n]||DEFAULT_MACRO;
+          return `<tr data-name="${escapeHtml(n)}">
+            <td>${escapeHtml(n)}</td>
+            <td><input type="number" class="fdb-kcal" value="${FOOD_DB[n]}" style="width:70px"></td>
+            <td><input type="number" step="0.1" class="fdb-p" value="${m[0]}" style="width:55px"></td>
+            <td><input type="number" step="0.1" class="fdb-c" value="${m[1]}" style="width:55px"></td>
+            <td><input type="number" step="0.1" class="fdb-f" value="${m[2]}" style="width:55px"></td>
+            <td style="white-space:nowrap;">
+              <button class="btn-ghost fdb-save-btn">حفظ</button>
+              <button class="btn-ghost fdb-del-btn">حذف</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>
+    <p class="legend-note">${filtered.length} صنف${q ? (' من إجمالي ' + names.length) : ''}</p>
+
+    <h3 style="margin-top:20px; font-size:.95rem; color:var(--ink);">➕ إضافة صنف جديد</h3>
+    <div class="row">
+      <div><label>اسم الصنف</label><input id="newFoodName" placeholder="مثال: كبسة"></div>
+      <div><label>سعرات/100جم</label><input id="newFoodKcal" type="number" placeholder="مثال: 180"></div>
+      <div><label>بروتين/100جم</label><input id="newFoodP" type="number" step="0.1" value="8"></div>
+      <div><label>كارب/100جم</label><input id="newFoodC" type="number" step="0.1" value="20"></div>
+      <div><label>دهون/100جم</label><input id="newFoodF" type="number" step="0.1" value="6"></div>
+    </div>
+    <div class="btn-row"><button class="btn-main" id="fdbAddBtn">إضافة الصنف</button></div>
+    <div id="foodDBFeedback" class="feedback"></div>
+  `;
+
+  const searchInput = document.getElementById('foodDBSearch');
+  searchInput.addEventListener('input', (e)=>{
+    foodDBSearch = e.target.value;
+    renderFoodDB();
+    const el = document.getElementById('foodDBSearch');
+    el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+  });
+
+  panel.querySelectorAll('.fdb-save-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const tr = btn.closest('tr');
+      const name = tr.dataset.name;
+      const kcal = parseFloat(tr.querySelector('.fdb-kcal').value) || 0;
+      const p = parseFloat(tr.querySelector('.fdb-p').value) || 0;
+      const c = parseFloat(tr.querySelector('.fdb-c').value) || 0;
+      const f = parseFloat(tr.querySelector('.fdb-f').value) || 0;
+      upsertFood(name, kcal, [p,c,f]);
+      const fb = document.getElementById('foodDBFeedback');
+      fb.textContent = 'تم حفظ «' + name + '» ✅'; fb.className = 'feedback ok';
+    });
+  });
+  panel.querySelectorAll('.fdb-del-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const tr = btn.closest('tr');
+      const name = tr.dataset.name;
+      if(!confirm('حذف «' + name + '» من قاعدة الأصناف؟ (مش هيأثر على وجبات مسجلة قبل كده)')) return;
+      deleteFood(name);
+      renderFoodDB();
+    });
+  });
+  document.getElementById('fdbAddBtn').addEventListener('click', ()=>{
+    const nameEl = document.getElementById('newFoodName');
+    const name = nameEl.value.trim();
+    const kcal = parseFloat(document.getElementById('newFoodKcal').value);
+    const p = parseFloat(document.getElementById('newFoodP').value) || 0;
+    const c = parseFloat(document.getElementById('newFoodC').value) || 0;
+    const f = parseFloat(document.getElementById('newFoodF').value) || 0;
+    const fb = document.getElementById('foodDBFeedback');
+    if(!name){ fb.textContent = 'اكتب اسم الصنف الأول.'; fb.className = 'feedback err'; return; }
+    if(isNaN(kcal) || kcal <= 0){ fb.textContent = 'اكتب عدد سعرات صحيح لكل 100 جرام.'; fb.className = 'feedback err'; return; }
+    upsertFood(name, kcal, [p,c,f]);
+    fb.textContent = 'تمت إضافة «' + name + '» بنجاح ✅'; fb.className = 'feedback ok';
+    renderFoodDB();
+  });
+}
+
+/* ================= تهيئة ================= */
+function fillFoodDatalist(){ foodList.innerHTML = Object.keys(FOOD_DB).map(k=>`<option value="${k}">`).join(''); }
+function renderAll(){ renderTickets(); renderActivePanel(); }
+
+fillSettingsForm(); fillFoodDatalist(); updateNotifStatus(); renderAll();
+setInterval(checkReminders, 60000); checkReminders();
+setInterval(updateNotifStatus, 5000);
+
+/* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============ */
+window.addEventListener('message', function(ev){
+  var msg = ev.data;
+  if(!msg || typeof msg !== 'object') return;
+  if(msg.type === 'HUB_EXPORT_REQUEST'){
+    var data = {
+      'mt_data': localStorage.getItem('mt_data'),
+      'mt_settings': localStorage.getItem('mt_settings')
+    };
+    ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'meals', data: data }, '*');
+  } else if(msg.type === 'HUB_IMPORT_REQUEST' && msg.app === 'meals'){
+    try{
+      var d = msg.data || {};
+      if(typeof d['mt_data'] === 'string') localStorage.setItem('mt_data', d['mt_data']);
+      if(typeof d['mt_settings'] === 'string') localStorage.setItem('mt_settings', d['mt_settings']);
+      ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'meals', ok:true }, '*');
+    }catch(e){
+      ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'meals', ok:false, error:String(e) }, '*');
+    }
+    setTimeout(function(){ location.reload(); }, 200);
+  }
+});
+</script>
+</body>
+</html>

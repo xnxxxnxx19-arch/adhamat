@@ -461,7 +461,7 @@
   <section class="view" id="view-manage">
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
       <button class="btn" id="addWordBtn">+ إضافة كلمة جديدة</button>
-      <button class="btn ghost" id="importFromEditorBtn">🖥️ استيراد من المحرر البرمجي<span id="editorBridgeCount" class="count-pill" style="display:none;"></span></button>
+      <button class="btn ghost" id="importFromEditorBtn">🖥️ استيراد من المحرر أو مرجع التعليمات<span id="editorBridgeCount" class="count-pill" style="display:none;"></span></button>
     </div>
     <div id="wordForm" style="display:none;"></div>
     <div id="editorBridgePanel" style="display:none;"></div>
@@ -1429,7 +1429,7 @@
     const panel = document.getElementById("editorBridgePanel");
     const items = getEditorBridgeItems();
     if(!items.length){
-      panel.innerHTML = `<div class="empty"><h3>لا توجد كلمات محددة في المحرر</h3><p>افتح صفحة «المحرر البرمجي»، وحدد التعليمات اللي عايز تضيفها هنا (بنفس الزرار اللي بيستخدمه تطبيق تعلم الإنجليزي)، وارجع تاني.</p></div>`;
+      panel.innerHTML = `<div class="empty"><h3>لا توجد كلمات محددة</h3><p>افتح صفحة «المحرر البرمجي» أو «مرجع التعليمات»، وحدد التعليمات اللي عايز تضيفها هنا، وارجع تاني.</p></div>`;
       panel.style.display = "block";
       return;
     }

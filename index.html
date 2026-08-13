@@ -51,6 +51,7 @@
   <button type="button" id="btnShowMeals">🍽️ متتبع الوجبات</button>
   <button type="button" id="btnShowVocab">🃏 بطاقاتي</button>
   <button type="button" id="btnShowCodeLib">🗒️ مذكرة الأكواد</button>
+  <button type="button" id="btnShowInstructions">📚 مرجع التعليمات</button>
   <div class="divider"></div>
   <button type="button" class="backupBtn" id="btnExportAll" title="تصدير نسخة احتياطية كاملة (كل التطبيقات + الصور)">⬇️</button>
   <button type="button" class="backupBtn" id="btnImportAll" title="استيراد نسخة احتياطية كاملة">⬆️</button>
@@ -69,6 +70,7 @@
   <iframe id="frameMeals" src="meal-tracker.html" style="display:none;"></iframe>
   <iframe id="frameVocab" src="vocab-app.html" style="display:none;"></iframe>
   <iframe id="frameCodeLib" src="code_library.html" style="display:none;"></iframe>
+  <iframe id="frameInstructions" src="instruction_reference.html" style="display:none;"></iframe>
 </div>
 
 <script>
@@ -78,6 +80,7 @@
     meals: document.getElementById('btnShowMeals'),
     vocab: document.getElementById('btnShowVocab'),
     codelib: document.getElementById('btnShowCodeLib'),
+    instructions: document.getElementById('btnShowInstructions'),
   };
   const frames = {
     english: document.getElementById('frameEnglish'),
@@ -85,6 +88,7 @@
     meals: document.getElementById('frameMeals'),
     vocab: document.getElementById('frameVocab'),
     codelib: document.getElementById('frameCodeLib'),
+    instructions: document.getElementById('frameInstructions'),
   };
 
   function showApp(key){
@@ -99,6 +103,7 @@
   buttons.meals.addEventListener('click', () => showApp('meals'));
   buttons.vocab.addEventListener('click', () => showApp('vocab'));
   buttons.codelib.addEventListener('click', () => showApp('codelib'));
+  buttons.instructions.addEventListener('click', () => showApp('instructions'));
 
   /* ============================================================
      نسخة احتياطية موحّدة لكل التطبيقات (تصدير/استيراد ملف واحد)
@@ -109,7 +114,7 @@
      تطبيق وبعدين يعمل reload للـ iframe عشان يقرأ البيانات الجديدة
      بنفس منطق التحميل العادي بتاعه (فمفيش تكرار أو تعارض منطق).
   ============================================================ */
-  const APP_KEYS = ['english', 'editor', 'meals', 'vocab', 'codelib'];
+  const APP_KEYS = ['english', 'editor', 'meals', 'vocab', 'codelib', 'instructions'];
   const overlay = document.getElementById('backupOverlay');
   const overlayText = document.getElementById('backupBoxText');
   const btnExportAll = document.getElementById('btnExportAll');

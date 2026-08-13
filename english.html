@@ -1193,7 +1193,7 @@ function loadEditorBridgeSection(){
 
   const data = bridgeItems.map((it, i) => [i + 1, it.term || '', it.meaning || '', it.example || '(مفيش مثال متسجل)']);
   const bridgeSection = {
-    id: 'editor_bridge', color: 'magenta', title: '🖥️ تعليمات محددة من المحرر البرمجي',
+    id: 'editor_bridge', color: 'magenta', title: '🖥️ تعليمات محددة من المحرر أو مرجع التعليمات',
     headers: ['#', 'Instruction', 'Meaning', 'Example'], kinds: ['num', 'en', 'ar', 'en'],
     data: data, sub: null, speakCols: [1, 3], sentenceCol: 3
   };
