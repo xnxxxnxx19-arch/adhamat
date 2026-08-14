@@ -227,6 +227,100 @@ td.col-actions{width:1%;text-align:center;padding:6px 10px;}
 .bc-chip .bc-lang{color:var(--muted);font-size:9.5px;}
 .bc-chip[style]{border-width:2px;}
 
+/* ===== swipe view ===== */
+.swipe-wrap{
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  padding:6px 0 20px;
+}
+.swipe-topbar{
+  width:100%; max-width:640px; display:flex; align-items:center; justify-content:space-between; gap:10px;
+}
+.swipe-progress{
+  font-family:var(--font-mono); font-size:12px; color:var(--muted);
+  background:var(--panel); border:1px solid var(--border); padding:6px 12px; border-radius:20px;
+  flex-shrink:0;
+}
+.swipe-progress b{color:var(--accent);}
+.swipe-navbtn{
+  background:var(--panel); border:1px solid var(--border); color:var(--text); width:38px;height:38px;
+  border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  font-size:16px; transition:all .15s;
+}
+.swipe-navbtn:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}
+.swipe-navbtn:disabled{opacity:.3;cursor:not-allowed;}
+.swipe-stage{
+  position:relative; width:100%; max-width:640px; min-height:420px;
+  display:flex; align-items:stretch; justify-content:center;
+  touch-action:pan-y;
+  overflow:hidden;
+}
+.swipe-card{
+  width:100%; background:var(--panel); border:1px solid var(--border); border-top:3px solid var(--accent);
+  border-radius:var(--radius); display:flex; flex-direction:column; overflow:hidden;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1), opacity .28s;
+  will-change:transform;
+}
+.swipe-card.dragging{transition:none;}
+.swipe-card.anim-left{transform:translateX(-60px);opacity:0;}
+.swipe-card.anim-right{transform:translateX(60px);opacity:0;}
+.swipe-head{
+  padding:16px 18px; background:var(--elevated); border-bottom:1px solid var(--border);
+  display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+}
+.swipe-head .sh-left{min-width:0;}
+.swipe-head h3{
+  margin:0 0 6px; font-family:var(--font-mono); font-size:22px; color:var(--accent);
+  direction:ltr; text-align:left; word-break:break-all;
+}
+.swipe-head .sh-meta{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+.swipe-head .sh-lang{font-family:var(--font-mono); font-size:11px; color:var(--muted);}
+.swipe-head .sh-right{display:flex; gap:6px; flex-shrink:0;}
+.swipe-iconbtn{
+  background:var(--elevated2); border:1px solid var(--border); color:var(--muted); width:30px;height:30px;
+  border-radius:7px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center;
+}
+.swipe-iconbtn:hover{color:var(--accent);border-color:var(--accent);}
+.swipe-body{padding:16px 18px 20px; display:flex; flex-direction:column; gap:16px; overflow-y:auto;}
+.swipe-syntax{
+  font-family:var(--font-mono); direction:ltr; text-align:left; background:var(--elevated2);
+  border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; color:var(--text);
+}
+.swipe-section-label{
+  font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted);
+  font-family:var(--font-mono); display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.swipe-section-label::before{content:"";width:12px;height:2px;background:var(--accent);display:inline-block;margin-left:6px;}
+.swipe-desc-box textarea{
+  width:100%; min-height:90px; resize:vertical; background:var(--elevated); border:1px solid var(--border);
+  color:var(--text); border-radius:10px; padding:12px 14px; font-family:var(--font-ui); font-size:14px;
+  line-height:1.8; outline:none;
+}
+.swipe-desc-box textarea:focus{border-color:var(--accent);}
+.swipe-code-block{background:#0A0E14;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px;}
+.swipe-code-block:last-child{margin-bottom:0;}
+.swipe-code-block .scb-bar{
+  display:flex; align-items:center; justify-content:space-between; padding:6px 10px;
+  background:var(--elevated); border-bottom:1px solid var(--border);
+}
+.swipe-code-block .scb-bar span{font-family:var(--font-mono); font-size:10.5px; color:var(--muted);}
+.swipe-code-block .scb-actions{display:flex; gap:6px;}
+.swipe-code-block textarea{
+  width:100%; min-height:100px; resize:vertical; background:transparent; border:none; color:#B9F5E8;
+  font-family:var(--font-mono); font-size:var(--code-fs); direction:ltr; text-align:left; padding:12px 14px;
+  outline:none; white-space:pre;
+}
+.swipe-addcode-btn{
+  width:100%; justify-content:center; border-style:dashed;
+}
+.swipe-dots{display:flex; gap:5px; justify-content:center; flex-wrap:wrap; max-width:640px;}
+.swipe-dots .dot{width:6px;height:6px;border-radius:50%;background:var(--border);flex-shrink:0;}
+.swipe-dots .dot.on{background:var(--accent);}
+.swipe-hint{font-size:11.5px; color:var(--muted); text-align:center; font-family:var(--font-mono);}
+@media(max-width:520px){
+  .swipe-stage{min-height:480px;}
+  .swipe-head h3{font-size:18px;}
+}
+
 /* add-row modal */
 .form-row{margin-bottom:14px;}
 .form-row label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600;}
@@ -311,6 +405,97 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 }
 .preset .sw{height:22px;border-radius:5px;margin-bottom:6px;}
 
+/* ===== Quiz ===== */
+.overlay.quiz-overlay{justify-content:center;align-items:center;}
+.quiz-panel{
+  width:min(620px,92vw);max-height:88vh;overflow-y:auto;background:var(--panel);
+  border:1px solid var(--border);border-radius:16px;
+  transform:scale(.96);transition:transform .22s cubic-bezier(.2,.8,.2,1);
+}
+.overlay.quiz-overlay.show .quiz-panel{transform:scale(1);}
+.quiz-head{
+  padding:20px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel);
+  display:flex;justify-content:space-between;align-items:center;gap:12px;z-index:2;
+}
+.quiz-head h2{margin:0;font-size:17px;font-family:var(--font-mono);color:var(--accent);}
+.quiz-head .sub{font-size:12px;color:var(--muted);font-family:var(--font-mono);margin-top:3px;}
+.quiz-body{padding:22px 24px 30px;}
+.quiz-progress-bar{height:6px;border-radius:4px;background:var(--elevated);overflow:hidden;margin-bottom:20px;}
+.quiz-progress-fill{height:100%;background:var(--accent);transition:width .25s;}
+.quiz-score-pill{
+  font-family:var(--font-mono);font-size:12.5px;background:var(--elevated);border:1px solid var(--border);
+  padding:5px 12px;border-radius:20px;color:var(--accent);white-space:nowrap;
+}
+.quiz-qtext{font-size:16.5px;line-height:1.8;margin-bottom:18px;}
+.quiz-qtext code{
+  direction:ltr;display:inline-block;font-family:var(--font-mono);color:var(--accent);
+  background:var(--elevated);padding:2px 8px;border-radius:6px;font-size:.92em;
+}
+.quiz-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(max-width:560px){.quiz-options{grid-template-columns:1fr;}}
+.quiz-opt{
+  background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:10px;
+  padding:12px 14px;text-align:right;cursor:pointer;font-family:var(--font-ui);font-size:13.5px;line-height:1.6;
+  direction:rtl;transition:all .12s;
+}
+.quiz-opt.code{direction:ltr;text-align:left;font-family:var(--font-mono);}
+.quiz-opt:hover:not(:disabled){border-color:var(--accent);}
+.quiz-opt:disabled{cursor:default;}
+.quiz-opt.correct{background:rgba(73,216,196,.16);border-color:var(--accent);color:var(--accent);}
+.quiz-opt.wrong{background:rgba(226,88,107,.14);border-color:var(--danger);color:var(--danger);}
+.quiz-opt.dim{opacity:.5;}
+.quiz-next-row{display:flex;justify-content:flex-end;margin-top:20px;}
+.quiz-empty{padding:20px 0;color:var(--muted);text-align:center;line-height:1.9;}
+.quiz-result{text-align:center;padding:10px 0 6px;}
+.quiz-result .ring{
+  width:120px;height:120px;border-radius:50%;margin:0 auto 18px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:26px;font-weight:800;border:6px solid var(--elevated);
+}
+.quiz-result h3{margin:0 0 6px;font-size:18px;}
+.quiz-result p{color:var(--muted);font-size:13px;margin:0 0 22px;}
+.quiz-review{text-align:right;border-top:1px solid var(--border);padding-top:16px;margin-top:6px;}
+.quiz-review-item{
+  background:var(--elevated);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;font-size:13px;
+}
+.quiz-review-item .qname{font-family:var(--font-mono);color:var(--accent2);direction:ltr;text-align:left;font-weight:700;margin-bottom:4px;}
+.quiz-review-item .yours{color:var(--danger);}
+.quiz-review-item .right{color:var(--accent);}
+.quiz-result-actions{display:flex;gap:10px;justify-content:center;margin-top:22px;flex-wrap:wrap;}
+
+/* ===== Question bank manager ===== */
+.bank-panel{width:min(760px,94vw);}
+.bank-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.bank-toolbar select{
+  background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:8px;
+  padding:8px 10px;font-family:var(--font-ui);font-size:13px;cursor:pointer;
+}
+.bank-stats{
+  font-family:var(--font-mono);font-size:12px;color:var(--muted);background:var(--elevated);
+  border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:14px;
+}
+.bank-textarea{
+  width:100%;min-height:260px;resize:vertical;background:var(--elevated);color:var(--text);
+  border:1px solid var(--border);border-radius:10px;padding:12px;font-family:var(--font-mono);
+  font-size:12.5px;direction:ltr;text-align:left;line-height:1.6;
+}
+.bank-msg{margin-top:8px;font-size:12.5px;font-family:var(--font-mono);min-height:18px;}
+.bank-msg.ok{color:var(--accent);}
+.bank-msg.err{color:var(--danger);}
+.bank-actions-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.bank-add-form{
+  margin-top:18px;border-top:1px solid var(--border);padding-top:16px;display:none;
+}
+.bank-add-form.show{display:block;}
+.bank-add-form label{display:block;font-size:11.5px;color:var(--muted);margin:10px 0 5px;font-family:var(--font-mono);}
+.bank-add-form select, .bank-add-form input[type="text"], .bank-add-form textarea{
+  width:100%;background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:8px;
+  padding:9px 11px;font-family:var(--font-ui);font-size:13px;
+}
+.bank-add-form textarea{min-height:60px;resize:vertical;}
+.bank-opt-row{display:flex;gap:8px;align-items:center;margin-bottom:7px;}
+.bank-opt-row input[type="text"]{flex:1;}
+.bank-opt-row input[type="radio"]{accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;}
+
 footer{max-width:1400px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);font-size:11.5px;font-family:var(--font-mono);text-align:center;}
 
 @media(max-width:900px){
@@ -318,6 +503,65 @@ footer{max-width:1400px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);
   td.col-desc, td.col-note, td.col-color, td.col-actions{display:none;}
   thead th:nth-child(5), thead th.col-color, thead th.col-actions{display:none;}
 }
+
+/* ===== C standard keywords section (C89/90, C99, C11, C23) ===== */
+.cstd-wrap{display:none;}
+.cstd-intro{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 18px;margin-bottom:16px;color:var(--muted);font-size:13px;display:flex;
+  align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+}
+.cstd-table-wrap{
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);
+  padding:16px;
+}
+.cstd-legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.cstd-legend .lg-pill{
+  display:flex;align-items:center;gap:7px;padding:5px 11px;border-radius:20px;
+  background:var(--elevated);border:1px solid var(--border);font-family:var(--font-mono);font-size:11.5px;color:var(--muted);
+}
+.cstd-legend .lg-pill .lg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.cstd-legend .lg-pill b{color:var(--text);font-weight:700;}
+.cstd-cell-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:9px;
+}
+.cstd-cell{
+  position:relative;cursor:pointer;font-family:var(--font-mono);font-size:13px;font-weight:700;
+  direction:ltr;text-align:left;color:#0B0F14;border-radius:9px;
+  padding:10px 32px 10px 12px;display:flex;align-items:center;gap:6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:transform .12s,box-shadow .12s;
+}
+[dir="rtl"] .cstd-cell{padding:10px 12px 10px 32px;}
+.cstd-cell:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.35);}
+.cstd-cell .edited-flag{color:#04231F;opacity:.75;font-size:11px;flex-shrink:0;}
+.cstd-cell-color-input{
+  position:absolute;top:50%;transform:translateY(-50%);left:auto;right:8px;
+  width:18px;height:18px;border:1px solid rgba(0,0,0,.25);border-radius:50%;padding:0;cursor:pointer;background:none;
+}
+[dir="rtl"] .cstd-cell-color-input{right:auto;left:8px;}
+.cstd-empty{padding:30px;text-align:center;color:var(--muted);}
+.cstd-detail-body textarea{
+  width:100%;min-height:140px;resize:vertical;background:var(--elevated);border:1px solid var(--border);
+  color:var(--text);border-radius:10px;padding:12px 14px;font-family:var(--font-ui);font-size:14px;
+  line-height:1.8;outline:none;
+}
+.cstd-detail-body textarea:focus{border-color:var(--accent);}
+.cstd-save-row{display:flex;gap:10px;justify-content:flex-end;margin-top:10px;}
+.cstd-lang-block{margin-bottom:34px;}
+.cstd-lang-block:last-child{margin-bottom:0;}
+.cstd-lang-title{
+  font-size:16px;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);
+  color:var(--accent);font-family:var(--font-mono);
+}
+.cstd-lang-btns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;}
+.cstd-lang-btns button{
+  font-family:var(--font-mono);font-size:12px;padding:7px 14px;border-radius:20px;
+  border:1px solid var(--border);background:var(--panel);color:var(--muted);cursor:pointer;
+  font-weight:600;transition:all .12s;
+}
+.cstd-lang-btns button:hover{border-color:var(--accent);color:var(--accent);}
+.cstd-lang-btns button.active{background:var(--accent);border-color:var(--accent);color:#04231F;}
 </style>
 </head>
 <body>
@@ -339,6 +583,9 @@ footer{max-width:1400px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);
       <button class="btn" id="stopAudioBtn" title="إيقاف أي قراءة صوتية جارية">
         ⏹ إيقاف الصوت
       </button>
+      <button class="btn" id="cstdOpenBtn" title="كل تعليمات كل اللغات في إطار واحد، مقسّمة حسب الوظيفة">
+        📚 كل التعليمات فى اطار واحد
+      </button>
       <button class="btn" id="settingsBtn">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         الإعدادات
@@ -355,11 +602,19 @@ footer{max-width:1400px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);
       <div class="view-toggle">
         <button id="viewTableBtn" class="active">📋 جدول</button>
         <button id="viewBlocksBtn">🧩 بلوكات</button>
+        <button id="viewSwipeBtn">👆 سويب</button>
       </div>
       <span class="meta" id="selCount">لم يتم تحديد شيء</span>
       <button class="btn" id="speakSelectedBtn">🔊 قراءة المحدد بالتتابع</button>
       <button class="btn" id="shareBridgeBtn" title="يرسل التعليمات المحددة إلى تطبيقي بطاقاتي والإنجليزي">🎓 إرسال المحدد لبطاقاتي/الإنجليزي</button>
       <button class="btn" id="clearSelBtn">✕ إلغاء التحديد</button>
+      <select id="quizLenSelect" class="btn" title="عدد أسئلة الاختبار" style="cursor:pointer;">
+        <option value="10">10 أسئلة</option>
+        <option value="20">20 سؤال</option>
+        <option value="30">30 سؤال</option>
+      </select>
+      <button class="btn primary" id="quizBtn" title="اختبار عشوائي على تعليمات اللغة المحددة حاليًا">🧠 اختبار</button>
+      <button class="btn" id="bankBtn" title="بنك أسئلة مخصّص لكل مجموعة تعليمات، بصيغة JSON">🗂️ بنك الأسئلة</button>
       <button class="btn primary" id="addRowBtn">+ إضافة تعليمة</button>
     </div>
     <div class="meta" id="toolbarPage"></div>
@@ -378,6 +633,26 @@ footer{max-width:1400px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);
   <div class="pager" id="pager"></div>
 
   <div class="blocks-grid" id="blocksContainer" style="display:none;"></div>
+
+  <div class="swipe-wrap" id="swipeWrap" style="display:none;">
+    <div class="swipe-topbar">
+      <button class="swipe-navbtn" id="swipePrevBtn" title="السابق">‹</button>
+      <div class="swipe-progress" id="swipeProgress"></div>
+      <button class="swipe-navbtn" id="swipeNextBtn" title="التالي">›</button>
+    </div>
+    <button class="btn" id="swipeQuizToggleBtn" style="max-width:640px;width:100%;justify-content:center;">🙈 وضع الاختبار (إخفاء الاسم والكود)</button>
+    <div class="swipe-stage" id="swipeStage"></div>
+    <div class="swipe-hint">اسحب يمين/يسار للتنقل — أو استخدم الأسهم ⌨️ — اضغط ✏️ للتعديل — 🎨 لون الإطار من رأس الكرت</div>
+  </div>
+
+  <div class="cstd-wrap" id="cstdWrap">
+    <div class="cstd-intro">
+      <span>كل تعليمات كل اللغات (AVR · PIC · STM32 · ESP8266 · C · Python · JavaScript · CSS · HTML) فى إطار واحد — مقسّمة حسب الوظيفة/النوع. اضغط أي تعليمة لعرض شرحها، ويمكنك تعديل الشرح وحفظه.</span>
+      <button class="btn" id="cstdBackBtn">⬅ رجوع لباقي التعليمات</button>
+    </div>
+    <div class="cstd-lang-btns" id="cstdLangBtns"></div>
+    <div id="cstdGrid"></div>
+  </div>
 </main>
 
 <footer>مرجع تفاعلي يجمع تعليمات AVR وPIC وSTM32 وESP8266 ولغات C وPython وJavaScript وCSS وHTML — بيانات مصدرها الجداول التي رفعتها · اضغط أي صف لعرض الشرح والكود</footer>
@@ -385,6 +660,16 @@ footer{max-width:1400px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);
 <!-- Detail overlay -->
 <div class="overlay" id="detailOverlay">
   <div class="panel" id="detailPanel"></div>
+</div>
+
+<!-- Quiz overlay -->
+<div class="overlay quiz-overlay" id="quizOverlay">
+  <div class="quiz-panel" id="quizPanel"></div>
+</div>
+
+<!-- Question bank overlay -->
+<div class="overlay quiz-overlay" id="bankOverlay">
+  <div class="quiz-panel bank-panel" id="bankPanel"></div>
 </div>
 
 <!-- Settings overlay -->
@@ -685,6 +970,27 @@ const customRows = {};         // langKey -> [row, ...]
 LANG_ORDER.forEach(k=> customRows[k] = []);
 let customSeq = 1;
 
+/* swipe-view customizations: per-row editable explanation + one-or-more code examples */
+const swipeDesc = new Map();   // id -> string (overrides the auto-generated explanation)
+const swipeCodes = new Map();  // id -> [string, string, ...] (editable code examples)
+const swipeFrameColor = new Map(); // id -> hex color for the card's frame/border
+let swipeIndex = 0;            // current position within the swipe deck
+let swipeQuizMode = false;     // quiz/hide mode: hides name+code, leaves only the explanation
+const swipeRevealed = new Set(); // ids that have been revealed while quiz mode is on
+
+function getSwipeCodes(row, langKey){
+  if(!swipeCodes.has(row.id)){
+    swipeCodes.set(row.id, [buildExample(langKey, row)]);
+  }
+  return swipeCodes.get(row.id);
+}
+function getSwipeDesc(row){
+  if(!swipeDesc.has(row.id)){
+    swipeDesc.set(row.id, row.desc || '');
+  }
+  return swipeDesc.get(row.id);
+}
+
 /* ---------- build tabs ---------- */
 const tabsNav = document.getElementById('tabsNav');
 function buildTabs(){
@@ -773,9 +1079,18 @@ function render(){
   document.getElementById('tableCard').style.display = state.view==='table' ? 'block' : 'none';
   pagerEl.style.display = state.view==='table' ? 'flex' : 'none';
   document.getElementById('blocksContainer').style.display = state.view==='blocks' ? 'grid' : 'none';
+  document.getElementById('swipeWrap').style.display = state.view==='swipe' ? 'flex' : 'none';
 
   if(state.view === 'blocks'){
     renderBlocksView(rows);
+    toolbarMeta.textContent = `عدد التعليمات: ${rows.length}`;
+    toolbarPage.textContent = '';
+    updateSelBar();
+    return;
+  }
+
+  if(state.view === 'swipe'){
+    renderSwipeView(rows);
     toolbarMeta.textContent = `عدد التعليمات: ${rows.length}`;
     toolbarPage.textContent = '';
     updateSelBar();
@@ -946,6 +1261,222 @@ function renderBlocksView(rows){
   });
 }
 
+/* ---------- swipe view (one card at a time: name / explanation / code) ---------- */
+function renderSwipeView(rows){
+  const stage = document.getElementById('swipeStage');
+  const progressEl = document.getElementById('swipeProgress');
+  const prevBtn = document.getElementById('swipePrevBtn');
+  const nextBtn = document.getElementById('swipeNextBtn');
+
+  if(rows.length===0){
+    stage.innerHTML = `<div class="empty" style="width:100%;">لا توجد نتائج مطابقة لبحثك 🔍</div>`;
+    progressEl.textContent = '';
+    prevBtn.disabled = true; nextBtn.disabled = true;
+    return;
+  }
+
+  if(swipeIndex >= rows.length) swipeIndex = rows.length - 1;
+  if(swipeIndex < 0) swipeIndex = 0;
+
+  const row = rows[swipeIndex];
+  const langKey = row.__lang;
+  const codes = getSwipeCodes(row, langKey).slice();
+  const desc = getSwipeDesc(row);
+  const isAll = state.tab === 'all';
+  const frameColor = swipeFrameColor.get(row.id) || '';
+  const hidden = swipeQuizMode && !swipeRevealed.has(row.id);
+
+  progressEl.innerHTML = `<b>${swipeIndex+1}</b> / ${rows.length}`;
+  prevBtn.disabled = swipeIndex === 0;
+  nextBtn.disabled = swipeIndex === rows.length - 1;
+
+  const codesHtml = codes.map((code, i)=> `
+    <div class="swipe-code-block" data-i="${i}">
+      <div class="scb-bar">
+        <span>مثال كود ${codes.length>1 ? (i+1) : ''}</span>
+        <div class="scb-actions">
+          <button class="swipe-iconbtn scb-copy" data-i="${i}" title="نسخ">⧉</button>
+          ${codes.length>1 ? `<button class="swipe-iconbtn scb-del" data-i="${i}" title="حذف هذا الكود">✕</button>` : ''}
+        </div>
+      </div>
+      <textarea class="scb-textarea" data-i="${i}" spellcheck="false">${escapeHtml(code)}</textarea>
+    </div>
+  `).join('');
+
+  const cardStyleAttr = frameColor ? ` style="border-color:${frameColor};"` : '';
+
+  stage.innerHTML = `
+    <div class="swipe-card" id="swipeCard"${cardStyleAttr}>
+      <div class="swipe-head">
+        <div class="sh-left">
+          <h3>${hidden ? '🔒 ••••••••' : escapeHtml(row.name)}</h3>
+          <div class="sh-meta">
+            ${hidden ? '' : `<span class="badge">${row.type}</span><span class="sh-lang">${DATA[langKey].label}</span>`}
+            ${swipeQuizMode ? `<span class="sh-lang" style="color:var(--accent2);">${hidden ? 'وضع الاختبار — مخفي' : 'وضع الاختبار — مكشوف'}</span>` : (isAll ? '' : '')}
+          </div>
+        </div>
+        <div class="sh-right">
+          <input type="color" id="swipeFrameColorInput" class="bc-color-input" title="لون إطار الكرت" value="${frameColor || '#49d8c4'}">
+          ${hidden ? '' : `<button class="swipe-iconbtn" id="swipeSpeakBtn" title="استمع">🔊</button>`}
+        </div>
+      </div>
+      <div class="swipe-body">
+        ${hidden ? '' : `
+        <div>
+          <div class="swipe-section-label">الصيغة (Syntax)</div>
+          <div class="swipe-syntax">${escapeHtml(row.syntax)}</div>
+        </div>`}
+        <div class="swipe-desc-box">
+          <div class="swipe-section-label">الشرح</div>
+          <textarea id="swipeDescArea" spellcheck="false" placeholder="اكتب شرحك الخاص لهذه التعليمة هنا...">${escapeHtml(desc)}</textarea>
+        </div>
+        ${hidden ? `
+        <button class="btn primary" id="swipeRevealBtn" style="width:100%;justify-content:center;">👁️ إظهار اسم التعليمة والكود</button>
+        ` : `
+        <div>
+          <div class="swipe-section-label">أمثلة الكود</div>
+          <div id="swipeCodesList">${codesHtml}</div>
+          <button class="btn swipe-addcode-btn" id="swipeAddCodeBtn">+ إضافة كود آخر</button>
+        </div>`}
+      </div>
+    </div>
+  `;
+
+  const card = document.getElementById('swipeCard');
+
+  // explanation edits (always saved to the swipeDesc map immediately on every keystroke)
+  document.getElementById('swipeDescArea').addEventListener('input', e=>{
+    swipeDesc.set(row.id, e.target.value);
+  });
+
+  // frame color
+  document.getElementById('swipeFrameColorInput').addEventListener('click', e=> e.stopPropagation());
+  document.getElementById('swipeFrameColorInput').addEventListener('input', e=>{
+    swipeFrameColor.set(row.id, e.target.value);
+    card.style.borderColor = e.target.value;
+  });
+
+  if(hidden){
+    document.getElementById('swipeRevealBtn').addEventListener('click', ()=>{
+      swipeRevealed.add(row.id);
+      renderSwipeView(rows);
+    });
+  } else {
+    // code edits
+    card.querySelectorAll('.scb-textarea').forEach(ta=>{
+      ta.addEventListener('input', e=>{
+        const i = +ta.dataset.i;
+        const arr = getSwipeCodes(row, langKey);
+        arr[i] = e.target.value;
+      });
+    });
+    card.querySelectorAll('.scb-copy').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const i = +btn.dataset.i;
+        const arr = getSwipeCodes(row, langKey);
+        navigator.clipboard?.writeText(arr[i]).then(()=>{
+          const old = btn.textContent; btn.textContent='✓';
+          setTimeout(()=>btn.textContent=old, 1000);
+        });
+      });
+    });
+    card.querySelectorAll('.scb-del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const i = +btn.dataset.i;
+        const arr = getSwipeCodes(row, langKey);
+        if(arr.length>1){ arr.splice(i,1); renderSwipeView(rows); }
+      });
+    });
+    document.getElementById('swipeAddCodeBtn').addEventListener('click', ()=>{
+      const arr = getSwipeCodes(row, langKey);
+      arr.push('// اكتب كودك هنا');
+      renderSwipeView(rows);
+    });
+    document.getElementById('swipeSpeakBtn')?.addEventListener('click', ()=> speakRow(row, langKey, true));
+  }
+}
+
+/* ---------- swipe navigation: bound ONCE (not per-render) to avoid duplicate
+   listeners stacking up and moving the deck by more than one card at a time ---------- */
+function swipeGoPrev(){
+  if(swipeIndex <= 0) return;
+  const card = document.getElementById('swipeCard');
+  if(card) card.classList.add('anim-right');
+  swipeIndex--;
+  setTimeout(render, 150);
+}
+function swipeGoNext(){
+  const rows = currentRows();
+  if(swipeIndex >= rows.length - 1) return;
+  const card = document.getElementById('swipeCard');
+  if(card) card.classList.add('anim-left');
+  swipeIndex++;
+  setTimeout(render, 150);
+}
+document.getElementById('swipePrevBtn').addEventListener('click', swipeGoPrev);
+document.getElementById('swipeNextBtn').addEventListener('click', swipeGoNext);
+
+(function setupSwipeGestures(){
+  const stageEl = document.getElementById('swipeStage');
+  let startX=null, startY=null, dragging=false, moved=0;
+  function getCard(){ return document.getElementById('swipeCard'); }
+  function onStart(x,y){ startX=x; startY=y; dragging=true; moved=0; const c=getCard(); if(c) c.classList.add('dragging'); }
+  function onMove(x,y){
+    if(!dragging) return;
+    const dx = x-startX, dy = y-startY;
+    if(Math.abs(dy) > Math.abs(dx)+10) return; // vertical scroll intent, ignore
+    moved = dx;
+    const c = getCard(); if(c) c.style.transform = `translateX(${dx}px)`;
+  }
+  function onEnd(){
+    if(!dragging) return;
+    dragging = false;
+    const c = getCard();
+    if(c){ c.classList.remove('dragging'); c.style.transform = ''; }
+    const threshold = 70;
+    if(moved <= -threshold) swipeGoNext();
+    else if(moved >= threshold) swipeGoPrev();
+    moved = 0;
+  }
+  stageEl.addEventListener('touchstart', e=>{
+    if(state.view!=='swipe') return;
+    const t = e.touches[0]; onStart(t.clientX, t.clientY);
+  }, {passive:true});
+  stageEl.addEventListener('touchmove', e=>{
+    if(state.view!=='swipe') return;
+    const t = e.touches[0]; onMove(t.clientX, t.clientY);
+  }, {passive:true});
+  stageEl.addEventListener('touchend', ()=>{ if(state.view==='swipe') onEnd(); });
+  stageEl.addEventListener('mousedown', e=>{
+    if(state.view!=='swipe') return;
+    if(e.target.closest('textarea,button,input')) return;
+    onStart(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e=>{ if(state.view==='swipe' && dragging) onMove(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', ()=>{ if(state.view==='swipe') onEnd(); });
+})();
+
+/* quiz/hide mode toggle: hides the instruction name + syntax + code, leaving only the explanation */
+const swipeQuizToggleBtn = document.getElementById('swipeQuizToggleBtn');
+swipeQuizToggleBtn.addEventListener('click', ()=>{
+  swipeQuizMode = !swipeQuizMode;
+  if(swipeQuizMode) swipeRevealed.clear();
+  swipeQuizToggleBtn.classList.toggle('primary', swipeQuizMode);
+  swipeQuizToggleBtn.textContent = swipeQuizMode
+    ? '👁️ إيقاف وضع الاختبار'
+    : '🙈 وضع الاختبار (إخفاء الاسم والكود)';
+  render();
+});
+
+/* keyboard navigation for swipe view */
+document.addEventListener('keydown', e=>{
+  if(state.view !== 'swipe') return;
+  if(e.target && (e.target.tagName==='TEXTAREA' || e.target.tagName==='INPUT')) return;
+  if(e.key === 'ArrowRight'){ swipeGoPrev(); }
+  else if(e.key === 'ArrowLeft'){ swipeGoNext(); }
+});
+
 function renderPager(totalPages){
   if(totalPages<=1){ pagerEl.innerHTML=""; return; }
   let html = `<button id="pgFirst" ${state.page===1?'disabled':''}>«</button>`;
@@ -1060,6 +1591,363 @@ function openDetail(langKey, row){
 function closeDetail(){ detailOverlay.classList.remove('show'); }
 detailOverlay.addEventListener('click', e=>{ if(e.target===detailOverlay) closeDetail(); });
 
+/* ---------- question bank (JSON store, per instruction group) ---------- */
+const QUIZ_BANK_KEY = 'quiz-bank-v1';
+let quizBank = {};
+try{ quizBank = JSON.parse(localStorage.getItem(QUIZ_BANK_KEY) || '{}'); }catch(e){ quizBank = {}; }
+function saveQuizBank(){ try{ localStorage.setItem(QUIZ_BANK_KEY, JSON.stringify(quizBank)); }catch(e){} }
+function bankQuestionsFor(langKey){ return Array.isArray(quizBank[langKey]) ? quizBank[langKey] : []; }
+
+function validateBankArray(arr, rows){
+  if(!Array.isArray(arr)) throw new Error('لازم يكون المحتوى مصفوفة JSON من الأسئلة "[ {...}, {...} ]"');
+  const validIds = new Set(rows.map(r=>r.id));
+  arr.forEach((q,i)=>{
+    if(!q || typeof q !== 'object') throw new Error(`العنصر رقم ${i+1}: مش object صالح`);
+    if(!q.instructionId || !validIds.has(q.instructionId)) throw new Error(`العنصر رقم ${i+1}: instructionId "${q.instructionId||''}" غير موجود في هذه المجموعة`);
+    if(!q.question || typeof q.question !== 'string') throw new Error(`العنصر رقم ${i+1}: لازم حقل question نصي`);
+    if(!Array.isArray(q.options) || q.options.length < 2) throw new Error(`العنصر رقم ${i+1}: لازم options مصفوفة فيها اختيارين على الأقل`);
+    if(typeof q.correct !== 'number' || q.correct < 0 || q.correct >= q.options.length) throw new Error(`العنصر رقم ${i+1}: correct لازم يكون رقم index صحيح ضمن options`);
+  });
+}
+
+const bankOverlay = document.getElementById('bankOverlay');
+const bankPanel = document.getElementById('bankPanel');
+let bankState = { group: LANG_ORDER[0] };
+
+function openBank(){
+  bankState.group = (state.tab !== 'all' && LANG_ORDER.includes(state.tab)) ? state.tab : LANG_ORDER[0];
+  bankOverlay.classList.add('show');
+  renderBank();
+}
+document.getElementById('bankBtn').addEventListener('click', openBank);
+bankOverlay.addEventListener('click', e=>{ if(e.target===bankOverlay) closeBank(); });
+function closeBank(){ bankOverlay.classList.remove('show'); }
+
+function renderBank(){
+  const group = bankState.group;
+  const rows = rowsForLang(group);
+  const bank = bankQuestionsFor(group);
+  const coveredIds = new Set(bank.map(q=>q.instructionId));
+  bankPanel.innerHTML = `
+    <div class="quiz-head">
+      <div><h2>🗂️ بنك الأسئلة</h2><div class="sub">مخزن أسئلة بصيغة JSON — مقسّم لكل مجموعة تعليمات، تقدر تخزّن وترجّع منه براحتك</div></div>
+      <button class="close" id="bankCloseBtn">✕</button>
+    </div>
+    <div class="quiz-body">
+      <div class="bank-toolbar">
+        <select id="bankGroupSelect">${LANG_ORDER.map(k=>`<option value="${k}" ${k===group?'selected':''}>${escapeHtml(DATA[k].label)}</option>`).join('')}</select>
+      </div>
+      <div class="bank-stats">عدد الأسئلة المخزّنة: ${bank.length} — عدد التعليمات المغطاة: ${coveredIds.size} من ${rows.length}</div>
+      <textarea class="bank-textarea" id="bankJsonArea" spellcheck="false">${escapeHtml(JSON.stringify(bank, null, 2))}</textarea>
+      <div class="bank-msg" id="bankMsg">صيغة كل سؤال: {"instructionId": "معرّف التعليمة", "question": "نص السؤال", "options": ["...","...","...","..."], "correct": 0}</div>
+      <div class="bank-actions-row">
+        <button class="btn primary" id="bankSaveBtn">💾 حفظ</button>
+        <button class="btn" id="bankDownloadBtn">⬇️ تنزيل JSON</button>
+        <label class="btn" style="cursor:pointer;">⬆️ استيراد ملف<input type="file" id="bankFileInput" accept=".json,application/json" style="display:none;"></label>
+        <button class="btn" id="bankAddToggleBtn">➕ إضافة سؤال يدويًا</button>
+        <button class="btn" id="bankClearBtn" style="margin-inline-start:auto;color:var(--danger);">🗑️ مسح أسئلة المجموعة</button>
+      </div>
+      <div class="bank-add-form" id="bankAddForm">
+        <label>التعليمة</label>
+        <select id="bankAddInstr">${rows.map(r=>`<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('')}</select>
+        <label>نص السؤال</label>
+        <textarea id="bankAddQ" placeholder="اكتب نص السؤال هنا..."></textarea>
+        <label>الاختيارات الأربعة (اختر الدائرة بجانب الإجابة الصحيحة)</label>
+        ${[0,1,2,3].map(i=>`<div class="bank-opt-row">
+          <input type="radio" name="bankAddCorrect" value="${i}" ${i===0?'checked':''}>
+          <input type="text" id="bankAddOpt${i}" placeholder="اختيار ${i+1}">
+        </div>`).join('')}
+        <div class="bank-actions-row">
+          <button class="btn primary" id="bankAddSaveBtn">إضافة للمخزن</button>
+          <button class="btn" id="bankAddCancelBtn">إلغاء</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('bankCloseBtn').addEventListener('click', closeBank);
+  document.getElementById('bankGroupSelect').addEventListener('change', e=>{
+    bankState.group = e.target.value;
+    renderBank();
+  });
+  document.getElementById('bankSaveBtn').addEventListener('click', ()=>{
+    const msg = document.getElementById('bankMsg');
+    try{
+      const parsed = JSON.parse(document.getElementById('bankJsonArea').value);
+      validateBankArray(parsed, rows);
+      quizBank[group] = parsed;
+      saveQuizBank();
+      renderBank();
+      document.getElementById('bankMsg').textContent = 'تم الحفظ بنجاح ✓';
+      document.getElementById('bankMsg').className = 'bank-msg ok';
+    }catch(err){
+      msg.textContent = 'خطأ: ' + err.message;
+      msg.className = 'bank-msg err';
+    }
+  });
+  document.getElementById('bankDownloadBtn').addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(bank, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `quiz-bank-${group}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById('bankFileInput').addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      document.getElementById('bankJsonArea').value = reader.result;
+      document.getElementById('bankMsg').textContent = 'تم تحميل الملف في الصندوق — اضغط "حفظ" لتأكيد الحفظ';
+      document.getElementById('bankMsg').className = 'bank-msg';
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+  document.getElementById('bankAddToggleBtn').addEventListener('click', ()=>{
+    document.getElementById('bankAddForm').classList.toggle('show');
+  });
+  document.getElementById('bankAddCancelBtn').addEventListener('click', ()=>{
+    document.getElementById('bankAddForm').classList.remove('show');
+  });
+  document.getElementById('bankAddSaveBtn').addEventListener('click', ()=>{
+    const msg = document.getElementById('bankMsg');
+    const instructionId = document.getElementById('bankAddInstr').value;
+    const question = document.getElementById('bankAddQ').value.trim();
+    const options = [0,1,2,3].map(i=> document.getElementById('bankAddOpt'+i).value.trim());
+    const correctRadio = document.querySelector('input[name="bankAddCorrect"]:checked');
+    const correct = correctRadio ? +correctRadio.value : 0;
+    if(!question || options.some(v=>!v)){
+      msg.textContent = 'خطأ: لازم نص سؤال و4 اختيارات معبّاة كلها';
+      msg.className = 'bank-msg err';
+      return;
+    }
+    const row = rows.find(r=>r.id===instructionId);
+    if(!Array.isArray(quizBank[group])) quizBank[group] = [];
+    quizBank[group].push({
+      id: 'bq-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      instructionId, instructionName: row ? row.name : instructionId,
+      question, options, correct
+    });
+    saveQuizBank();
+    renderBank();
+    document.getElementById('bankAddForm').classList.add('show');
+    document.getElementById('bankMsg').textContent = 'تمت إضافة السؤال ✓';
+    document.getElementById('bankMsg').className = 'bank-msg ok';
+  });
+  document.getElementById('bankClearBtn').addEventListener('click', ()=>{
+    if(!bank.length) return;
+    if(!confirm(`متأكد إنك عاوز تمسح كل الـ ${bank.length} سؤال في مجموعة "${DATA[group].label}"؟`)) return;
+    quizBank[group] = [];
+    saveQuizBank();
+    renderBank();
+  });
+}
+
+/* ---------- quiz ---------- */
+const quizOverlay = document.getElementById('quizOverlay');
+const quizPanel = document.getElementById('quizPanel');
+let quiz = null; // { langLabel, questions:[...], index, score, answers:[] }
+
+function shuffleArr(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+function quizPoolForCurrentTab(){
+  if(state.tab === 'all'){
+    let rows = [];
+    LANG_ORDER.forEach(k=> rowsForLang(k).forEach(r=> rows.push(Object.assign({__lang:k}, r))));
+    return { rows, label: 'كل اللغات' };
+  }
+  const rows = rowsForLang(state.tab).map(r=> Object.assign({__lang:state.tab}, r));
+  return { rows, label: DATA[state.tab].label };
+}
+
+function buildQuizQuestions(rows, quizLen){
+  // 1) pull custom questions the user stored in the JSON bank for these instructions
+  const bankItems = [];
+  rows.forEach(r=>{
+    bankQuestionsFor(r.__lang).forEach(q=>{
+      if(q.instructionId === r.id) bankItems.push({ row:r, bankQ:q });
+    });
+  });
+
+  // 2) only auto-generate from rows that actually have a real explanation
+  const pool = rows.filter(r=> (r.desc||'').trim().length > 0);
+  if(bankItems.length < 2 && pool.length < 2) return [];
+
+  const questions = [];
+  shuffleArr(bankItems).forEach(item=>{
+    if(questions.length >= quizLen) return;
+    const opts = item.bankQ.options.map((text,i)=> ({ text, correct: i===item.bankQ.correct }));
+    questions.push({
+      row:item.row, type:'bank',
+      prompt: item.bankQ.question,
+      contextText: null,
+      options: shuffleArr(opts),
+      isCode:false
+    });
+  });
+
+  if(questions.length < quizLen && pool.length >= 2){
+    const optCount = Math.min(4, pool.length);
+    const order = shuffleArr(pool);
+    let idx = 0, lastId = null, guard = 0;
+    while(questions.length < quizLen && guard < quizLen*8){
+      guard++;
+      const row = order[idx % order.length];
+      idx++;
+      if(order.length > 1 && row.id === lastId) continue;
+      lastId = row.id;
+      const type = Math.random() < 0.5 ? 'name2desc' : 'desc2name';
+      const distractorsPool = pool.filter(r=> r.id !== row.id);
+      const distractors = shuffleArr(distractorsPool).slice(0, optCount-1);
+      const options = type === 'name2desc'
+        ? shuffleArr([
+            { text: row.desc, correct:true },
+            ...distractors.map(d=> ({ text: d.desc, correct:false }))
+          ])
+        : shuffleArr([
+            { text: row.name, correct:true },
+            ...distractors.map(d=> ({ text: d.name, correct:false }))
+          ]);
+      questions.push({
+        row, type,
+        prompt: type === 'name2desc'
+          ? `ما وظيفة التعليمة التالية؟`
+          : `أي تعليمة تقوم بالوظيفة التالية؟`,
+        contextText: type === 'name2desc' ? row.name : row.desc,
+        options,
+        isCode: type === 'desc2name'
+      });
+    }
+  }
+  return shuffleArr(questions).slice(0, quizLen);
+}
+
+function openQuiz(){
+  const { rows, label } = quizPoolForCurrentTab();
+  const quizLen = +document.getElementById('quizLenSelect').value || 10;
+  const questions = buildQuizQuestions(rows, quizLen);
+  quiz = { langLabel: label, questions, index:0, score:0, answers:[] };
+  quizOverlay.classList.add('show');
+  renderQuiz();
+}
+document.getElementById('quizBtn').addEventListener('click', openQuiz);
+quizOverlay.addEventListener('click', e=>{ if(e.target===quizOverlay) closeQuiz(); });
+function closeQuiz(){ quizOverlay.classList.remove('show'); }
+
+function renderQuiz(){
+  if(!quiz.questions.length){
+    quizPanel.innerHTML = `
+      <div class="quiz-head">
+        <div><h2>🧠 اختبار — ${escapeHtml(quiz.langLabel)}</h2></div>
+        <button class="close" id="quizCloseBtn">✕</button>
+      </div>
+      <div class="quiz-body">
+        <div class="quiz-empty">التعليمات في هذا القسم غير كافية لإنشاء اختبار (محتاجين على الأقل تعليمتين لهم شرح مكتوب، أو أسئلة مخزّنة في بنك الأسئلة).<br>جرّب تختار لغة فيها تعليمات أكثر، أو ضيف أسئلة من زرار "🗂️ بنك الأسئلة".</div>
+      </div>`;
+    document.getElementById('quizCloseBtn').addEventListener('click', closeQuiz);
+    return;
+  }
+  if(quiz.index >= quiz.questions.length){
+    renderQuizResult();
+    return;
+  }
+  const q = quiz.questions[quiz.index];
+  const pct = Math.round((quiz.index/quiz.questions.length)*100);
+  quizPanel.innerHTML = `
+    <div class="quiz-head">
+      <div>
+        <h2>🧠 اختبار — ${escapeHtml(quiz.langLabel)}</h2>
+        <div class="sub">سؤال ${quiz.index+1} من ${quiz.questions.length}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="quiz-score-pill">النتيجة: ${quiz.score}/${quiz.index}</span>
+        <button class="close" id="quizCloseBtn">✕</button>
+      </div>
+    </div>
+    <div class="quiz-body">
+      <div class="quiz-progress-bar"><div class="quiz-progress-fill" style="width:${pct}%;"></div></div>
+      <div class="quiz-qtext">
+        ${escapeHtml(q.prompt)}
+        ${q.contextText ? (q.type==='name2desc'
+          ? `<div style="margin-top:8px;"><code>${escapeHtml(q.contextText)}</code></div>`
+          : `<div class="explain" style="margin-top:10px;font-size:14px;">${escapeHtml(q.contextText)}</div>`)
+          : ''}
+      </div>
+      <div class="quiz-options" id="quizOptions">
+        ${q.options.map((opt,i)=>`<button class="quiz-opt${q.isCode?' code':''}" data-i="${i}">${escapeHtml(opt.text)}</button>`).join('')}
+      </div>
+      <div class="quiz-next-row" id="quizNextRow" style="display:none;">
+        <button class="btn primary" id="quizNextBtn">التالي ←</button>
+      </div>
+    </div>`;
+  document.getElementById('quizCloseBtn').addEventListener('click', closeQuiz);
+  const optButtons = quizPanel.querySelectorAll('.quiz-opt');
+  optButtons.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = +btn.dataset.i;
+      const chosen = q.options[i];
+      optButtons.forEach(b=> b.disabled = true);
+      optButtons.forEach((b,bi)=>{
+        if(q.options[bi].correct) b.classList.add('correct');
+        else if(bi===i) b.classList.add('wrong');
+        else b.classList.add('dim');
+      });
+      const correct = !!chosen.correct;
+      if(correct) quiz.score++;
+      quiz.answers.push({ row:q.row, type:q.type, correct, yourText:chosen.text, correctText:q.options.find(o=>o.correct).text });
+      document.getElementById('quizNextRow').style.display = 'flex';
+      document.getElementById('quizNextBtn').addEventListener('click', ()=>{
+        quiz.index++;
+        renderQuiz();
+      });
+      document.querySelector('.quiz-score-pill').textContent = `النتيجة: ${quiz.score}/${quiz.index+1}`;
+    });
+  });
+}
+
+function renderQuizResult(){
+  const total = quiz.questions.length;
+  const score = quiz.score;
+  const pct = Math.round((score/total)*100);
+  const ringColor = pct>=70 ? 'var(--accent)' : (pct>=40 ? 'var(--accent2)' : 'var(--danger)');
+  const verdict = pct>=70 ? 'ممتاز! 🎉' : (pct>=40 ? 'مو بطال، محتاج مراجعة 💪' : 'يُنصح بمراجعة القسم ده تاني 📚');
+  const mistakes = quiz.answers.filter(a=> !a.correct);
+  quizPanel.innerHTML = `
+    <div class="quiz-head">
+      <div><h2>🧠 نتيجة الاختبار — ${escapeHtml(quiz.langLabel)}</h2></div>
+      <button class="close" id="quizCloseBtn">✕</button>
+    </div>
+    <div class="quiz-body">
+      <div class="quiz-result">
+        <div class="ring" style="border-color:${ringColor};color:${ringColor};">${pct}%</div>
+        <h3>${score} من ${total} إجابات صحيحة</h3>
+        <p>${verdict}</p>
+        <div class="quiz-result-actions">
+          <button class="btn primary" id="quizRetryBtn">↺ إعادة الاختبار</button>
+          <button class="btn" id="quizCloseBtn2">إغلاق</button>
+        </div>
+      </div>
+      ${mistakes.length ? `<div class="quiz-review">
+        <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-family:var(--font-mono);margin-bottom:10px;">مراجعة الأخطاء (${mistakes.length})</h3>
+        ${mistakes.map(m=>`<div class="quiz-review-item">
+          <div class="qname">${escapeHtml(m.row.name)}</div>
+          <div class="yours">إجابتك: ${escapeHtml(m.yourText)}</div>
+          <div class="right">الصح: ${escapeHtml(m.correctText)}</div>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+  document.getElementById('quizCloseBtn').addEventListener('click', closeQuiz);
+  document.getElementById('quizCloseBtn2').addEventListener('click', closeQuiz);
+  document.getElementById('quizRetryBtn').addEventListener('click', openQuiz);
+}
+
 /* ---------- settings ---------- */
 const settingsOverlay = document.getElementById('settingsOverlay');
 document.getElementById('settingsBtn').addEventListener('click', ()=> settingsOverlay.classList.add('show'));
@@ -1158,11 +2046,18 @@ presetRow.querySelectorAll('.preset').forEach(el=>{
 /* ---------- view toggle ---------- */
 const viewTableBtn = document.getElementById('viewTableBtn');
 const viewBlocksBtn = document.getElementById('viewBlocksBtn');
+const viewSwipeBtn = document.getElementById('viewSwipeBtn');
+function setActiveViewBtn(btn){
+  [viewTableBtn, viewBlocksBtn, viewSwipeBtn].forEach(b=> b.classList.toggle('active', b===btn));
+}
 viewTableBtn.addEventListener('click', ()=>{
-  state.view='table'; viewTableBtn.classList.add('active'); viewBlocksBtn.classList.remove('active'); render();
+  state.view='table'; setActiveViewBtn(viewTableBtn); render();
 });
 viewBlocksBtn.addEventListener('click', ()=>{
-  state.view='blocks'; viewBlocksBtn.classList.add('active'); viewTableBtn.classList.remove('active'); render();
+  state.view='blocks'; setActiveViewBtn(viewBlocksBtn); render();
+});
+viewSwipeBtn.addEventListener('click', ()=>{
+  state.view='swipe'; swipeIndex=0; setActiveViewBtn(viewSwipeBtn); render();
 });
 
 /* ---------- add-row modal ---------- */
@@ -1209,6 +2104,11 @@ function buildPayload(){
     blockColors: Object.fromEntries(blockColors),
     customRows: customRows,
     settings: cfg,
+    swipeDesc: Object.fromEntries(swipeDesc),
+    swipeCodes: Object.fromEntries(swipeCodes),
+    swipeFrameColor: Object.fromEntries(swipeFrameColor),
+    cstdCellColors: cstdCellColors,
+    quizBank: quizBank,
   };
 }
 
@@ -1226,6 +2126,16 @@ function applyPayload(payload){
     if(m) maxSeq = Math.max(maxSeq, +m[1]);
   }));
   customSeq = maxSeq + 1;
+  swipeDesc.clear();
+  Object.entries(payload.swipeDesc||{}).forEach(([k,v])=> swipeDesc.set(k,v));
+  swipeCodes.clear();
+  Object.entries(payload.swipeCodes||{}).forEach(([k,v])=> swipeCodes.set(k,v));
+  swipeFrameColor.clear();
+  Object.entries(payload.swipeFrameColor||{}).forEach(([k,v])=> swipeFrameColor.set(k,v));
+  cstdCellColors = payload.cstdCellColors || {};
+  cstdSaveCellColors();
+  quizBank = payload.quizBank || {};
+  saveQuizBank();
   if(payload.settings){
     cfg = Object.assign({}, DEFAULTS, payload.settings);
     applyVars(cfg);
@@ -1289,6 +2199,365 @@ window.addEventListener('message', (ev)=>{
       window.parent.postMessage({type:'HUB_IMPORT_DONE', reqId: msg.reqId, app: HUB_APP_KEY, ok}, '*');
     }catch(e){}
   }
+});
+
+/* ---------- C standard keywords section (C89/90, C99, C11, C23) ---------- */
+const CSTD_DATA = [
+  { id:'c89', label:'C89/90 (ANSI C)', total:32, color:'#8FB6E8', keywords:[
+    {name:'auto', desc:'تخزين تلقائي افتراضي للمتغيرات المحلية'},
+    {name:'break', desc:'الخروج الفوري من حلقة أو switch'},
+    {name:'case', desc:'تحديد قيمة داخل جملة switch'},
+    {name:'char', desc:'نوع بيانات لتخزين محرف واحد'},
+    {name:'const', desc:'يجعل القيمة ثابتة غير قابلة للتعديل'},
+    {name:'continue', desc:'تخطي بقية الحلقة والانتقال للتكرار التالي'},
+    {name:'default', desc:'الحالة الافتراضية داخل switch'},
+    {name:'do', desc:'بداية حلقة do-while تُنفَّذ مرة على الأقل'},
+    {name:'double', desc:'نوع بيانات عشري مضاعف الدقة'},
+    {name:'else', desc:'تنفيذ بديل عند فشل شرط if'},
+    {name:'enum', desc:'تعريف نوع تعداد بقيم مسماة'},
+    {name:'extern', desc:'الإشارة إلى متغير أو دالة معرّفة خارجيًا'},
+    {name:'float', desc:'نوع بيانات عشري أحادي الدقة'},
+    {name:'for', desc:'حلقة تكرار بعدد مرات محدد'},
+    {name:'goto', desc:'قفزة مباشرة إلى تسمية (label) في الكود'},
+    {name:'if', desc:'تنفيذ شرطي بناءً على قيمة منطقية'},
+    {name:'int', desc:'نوع بيانات عدد صحيح'},
+    {name:'long', desc:'نوع عدد صحيح بحجم أكبر'},
+    {name:'register', desc:'اقتراح تخزين المتغير في سجل المعالج'},
+    {name:'return', desc:'إنهاء الدالة وإرجاع قيمة'},
+    {name:'short', desc:'نوع عدد صحيح بحجم أصغر'},
+    {name:'signed', desc:'نوع عدد يقبل قيمًا سالبة وموجبة'},
+    {name:'sizeof', desc:'حساب حجم نوع أو متغير بالبايت'},
+    {name:'static', desc:'يحافظ على قيمة المتغير بين الاستدعاءات'},
+    {name:'struct', desc:'تجميع عدة متغيرات مختلفة النوع في بنية واحدة'},
+    {name:'switch', desc:'تفرع متعدد الحالات بناءً على قيمة'},
+    {name:'typedef', desc:'إنشاء اسم بديل لنوع بيانات'},
+    {name:'union', desc:'تخزين أنواع مختلفة في نفس المساحة بالذاكرة'},
+    {name:'unsigned', desc:'نوع عدد صحيح غير سالب فقط'},
+    {name:'void', desc:'يشير لعدم وجود نوع أو قيمة إرجاع'},
+    {name:'volatile', desc:'يمنع المترجم من تحسين الوصول للمتغير'},
+    {name:'while', desc:'حلقة تكرار بناءً على شرط منطقي'},
+  ]},
+  { id:'c99', label:'C99', total:37, color:'#E8C089', keywords:[
+    {name:'inline', desc:'اقتراح للمترجم بدمج كود الدالة مباشرة'},
+    {name:'restrict', desc:'تأكيد أن المؤشر هو المسار الوحيد للوصول للبيانات'},
+    {name:'_Bool', desc:'نوع بيانات منطقي (true/false)'},
+    {name:'_Complex', desc:'نوع بيانات للأعداد المركّبة'},
+    {name:'_Imaginary', desc:'نوع بيانات للجزء التخيلي من عدد مركب'},
+  ]},
+  { id:'c11', label:'C11', total:44, color:'#9AD8C4', keywords:[
+    {name:'_Alignas', desc:'تحديد محاذاة ذاكرة مخصصة لمتغير'},
+    {name:'_Alignof', desc:'استعلام عن محاذاة نوع بيانات'},
+    {name:'_Atomic', desc:'تعريف متغير بعمليات ذرية آمنة للخيوط'},
+    {name:'_Generic', desc:'اختيار تعبير بناءً على نوع البيانات وقت الترجمة'},
+    {name:'_Noreturn', desc:'يوضح أن الدالة لا تعود أبدًا للمستدعي'},
+    {name:'_Static_assert', desc:'فحص شرط ثابت وقت الترجمة'},
+    {name:'_Thread_local', desc:'متغير له نسخة مستقلة لكل خيط تنفيذ'},
+  ]},
+  { id:'c23', label:'C23', total:67, color:'#C7CDD6', keywords:[
+    {name:'alignas', desc:'الصيغة القياسية الجديدة لتحديد المحاذاة (بديل _Alignas)'},
+    {name:'alignof', desc:'الصيغة القياسية الجديدة للاستعلام عن المحاذاة'},
+    {name:'bool', desc:'نوع منطقي أصبح كلمة مفتاحية أصلية'},
+    {name:'constexpr', desc:'متغير يُحسب وقت الترجمة بقيمة ثابتة'},
+    {name:'false', desc:'القيمة المنطقية "خطأ" كلمة مفتاحية أصلية'},
+    {name:'nullptr', desc:'قيمة مؤشر فارغ آمنة النوع'},
+    {name:'static_assert', desc:'الصيغة القياسية الجديدة للفحص وقت الترجمة'},
+    {name:'thread_local', desc:'الصيغة القياسية الجديدة لمتغير خاص بكل خيط'},
+    {name:'typeof', desc:'استنتاج نوع تعبير وقت الترجمة'},
+    {name:'typeof_unqual', desc:'استنتاج النوع بدون مؤهلات مثل const'},
+    {name:'true', desc:'القيمة المنطقية "صحيح" كلمة مفتاحية أصلية'},
+    {name:'_BitInt', desc:'نوع عدد صحيح بعرض بت مخصص'},
+    {name:'_Decimal32', desc:'نوع عشري عشاري بدقة 32 بت'},
+    {name:'_Decimal64', desc:'نوع عشري عشاري بدقة 64 بت'},
+    {name:'_Decimal128', desc:'نوع عشري عشاري بدقة 128 بت'},
+  ]},
+];
+
+const CSTD_STORE_KEY = 'cstd-keyword-notes-v1';
+let cstdNotes = {};
+try{ cstdNotes = JSON.parse(localStorage.getItem(CSTD_STORE_KEY) || '{}'); }catch(e){ cstdNotes = {}; }
+function cstdSaveNotes(){
+  try{ localStorage.setItem(CSTD_STORE_KEY, JSON.stringify(cstdNotes)); }catch(e){}
+}
+function cstdKeyId(stdId, name){ return stdId + '::' + name; }
+function cstdCurrentDesc(stdId, kw){
+  const key = cstdKeyId(stdId, kw.name);
+  return Object.prototype.hasOwnProperty.call(cstdNotes, key) ? cstdNotes[key] : kw.desc;
+}
+
+function cstdColorForType(t){
+  const palette = ['#8FB6E8','#E8C089','#9AD8C4','#C7CDD6','#E8899E','#B79AE8','#8FE8B0','#E8D089','#89D8E8','#D8A0E8','#C4E889','#E8A98F'];
+  let h = 0;
+  for(let i=0;i<t.length;i++) h = (h*31 + t.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
+}
+
+function cstdGroupByType(langKey){
+  const rows = rowsForLang(langKey);
+  const groups = {};
+  rows.forEach(r=>{
+    if(!groups[r.type]) groups[r.type] = [];
+    groups[r.type].push(r);
+  });
+  return groups;
+}
+
+/* per-cell custom colors for the "all instructions" grid — persisted separately */
+const CSTD_CELL_COLOR_KEY = 'cstd-cell-colors-v1';
+let cstdCellColors = {};
+try{ cstdCellColors = JSON.parse(localStorage.getItem(CSTD_CELL_COLOR_KEY) || '{}'); }catch(e){ cstdCellColors = {}; }
+function cstdSaveCellColors(){
+  try{ localStorage.setItem(CSTD_CELL_COLOR_KEY, JSON.stringify(cstdCellColors)); }catch(e){}
+}
+
+/* generic (all-languages) edit/save notes — separate store from the C-standard one above */
+const ALL_STORE_KEY = 'all-lang-instruction-notes-v1';
+let allLangNotes = {};
+try{ allLangNotes = JSON.parse(localStorage.getItem(ALL_STORE_KEY) || '{}'); }catch(e){ allLangNotes = {}; }
+function allLangSaveNotes(){
+  try{ localStorage.setItem(ALL_STORE_KEY, JSON.stringify(allLangNotes)); }catch(e){}
+}
+function allLangKeyId(langKey, rowId){ return langKey + '::' + rowId; }
+function allLangCurrentDesc(langKey, row){
+  const key = allLangKeyId(langKey, row.id);
+  return Object.prototype.hasOwnProperty.call(allLangNotes, key) ? allLangNotes[key] : (row.desc || '');
+}
+
+let cstdSelectedLang = 'all';
+
+function renderCStdLangBtns(){
+  const wrap = document.getElementById('cstdLangBtns');
+  let html = `<button data-lang="all" class="${cstdSelectedLang==='all'?'active':''}">🗂 كل اللغات</button>`;
+  LANG_ORDER.forEach(k=>{
+    html += `<button data-lang="${k}" class="${cstdSelectedLang===k?'active':''}">${escapeHtml(DATA[k].label.split(' ')[0])}</button>`;
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      cstdSelectedLang = b.dataset.lang;
+      renderCStd();
+    });
+  });
+}
+
+function cstdBuildTable(columns){
+  // columns: [{ label, count, color, cells: [ {id, name, dataAttrs, edited} ... ] }]
+  // Instructions are flattened into ONE grid so they spread evenly across all
+  // available columns instead of being locked under a single header column.
+  let legend = `<div class="cstd-legend">`;
+  columns.forEach(col=>{
+    legend += `<div class="lg-pill"><span class="lg-dot" style="background:${col.color};"></span><b>${escapeHtml(col.label)}</b> [${col.count}]</div>`;
+  });
+  legend += `</div>`;
+
+  const allCells = [];
+  columns.forEach(col=> col.cells.forEach(cell=> allCells.push({...cell, color:col.color, groupLabel:col.label})));
+
+  if(allCells.length===0){
+    return `<div class="cstd-table-wrap">${legend}<div class="cstd-empty">لا توجد عناصر</div></div>`;
+  }
+
+  let grid = `<div class="cstd-cell-grid">`;
+  allCells.forEach(cell=>{
+    const customColor = cstdCellColors[cell.id];
+    const bg = customColor || cell.color;
+    grid += `<div class="cstd-cell" style="background:${bg};" title="${escapeHtml(cell.groupLabel)}" ${cell.dataAttrs} data-cell-id="${escapeHtml(cell.id)}">
+      <input type="color" class="cstd-cell-color-input" value="${bg}" data-cell-id="${escapeHtml(cell.id)}" title="غيّر لون هذه الخلية">
+      <span>${escapeHtml(cell.name)}</span>
+      ${cell.edited ? '<span class="edited-flag" title="تم تعديل الشرح">✎</span>' : ''}
+    </div>`;
+  });
+  grid += `</div>`;
+
+  return `<div class="cstd-table-wrap">${legend}${grid}</div>`;
+}
+
+function renderCStd(){
+  renderCStdLangBtns();
+  const grid = document.getElementById('cstdGrid');
+  let html = '';
+
+  const langsToRender = cstdSelectedLang === 'all' ? LANG_ORDER : [cstdSelectedLang];
+
+  langsToRender.forEach(langKey=>{
+    html += `<div class="cstd-lang-block">
+      <h2 class="cstd-lang-title">${escapeHtml(DATA[langKey].label)}</h2>`;
+
+    if(langKey === 'c'){
+      // special breakdown by C standard version
+      const columns = CSTD_DATA.map(std => ({
+        label: std.label,
+        count: std.total,
+        color: std.color,
+        cells: std.keywords.map(kw => ({
+          id: 'std::' + cstdKeyId(std.id, kw.name),
+          name: kw.name,
+          edited: Object.prototype.hasOwnProperty.call(cstdNotes, cstdKeyId(std.id, kw.name)),
+          dataAttrs: `data-mode="std" data-std="${std.id}" data-kw="${escapeHtml(kw.name)}"`
+        }))
+      }));
+      html += cstdBuildTable(columns);
+    } else {
+      // generic breakdown by instruction type/category
+      const groups = cstdGroupByType(langKey);
+      const typeKeys = Object.keys(groups).sort((a,b)=> groups[b].length - groups[a].length);
+      const columns = typeKeys.map(t => ({
+        label: typeAr(t),
+        count: groups[t].length,
+        color: cstdColorForType(t),
+        cells: groups[t].map(row => ({
+          id: 'row::' + allLangKeyId(langKey, row.id),
+          name: row.name,
+          edited: Object.prototype.hasOwnProperty.call(allLangNotes, allLangKeyId(langKey, row.id)),
+          dataAttrs: `data-mode="row" data-lang="${langKey}" data-id="${escapeHtml(row.id)}"`
+        }))
+      }));
+      html += cstdBuildTable(columns);
+    }
+
+    html += `</div>`;
+  });
+
+  grid.innerHTML = html;
+  grid.querySelectorAll('.cstd-cell').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      if(el.dataset.mode === 'std'){
+        const std = CSTD_DATA.find(s=>s.id===el.dataset.std);
+        const kw = std.keywords.find(k=>k.name===el.dataset.kw);
+        openCstdDetail(std, kw);
+      } else {
+        const langKey = el.dataset.lang;
+        const row = rowsForLang(langKey).find(r=>r.id===el.dataset.id);
+        if(row) openAllLangDetail(langKey, row);
+      }
+    });
+  });
+  grid.querySelectorAll('.cstd-cell-color-input').forEach(inp=>{
+    inp.addEventListener('click', e=> e.stopPropagation());
+    inp.addEventListener('input', e=>{
+      const id = inp.dataset.cellId;
+      cstdCellColors[id] = e.target.value;
+      cstdSaveCellColors();
+      const cellEl = inp.closest('.cstd-cell');
+      if(cellEl) cellEl.style.background = e.target.value;
+    });
+  });
+}
+
+function openCstdDetail(std, kw){
+  const currentDesc = cstdCurrentDesc(std.id, kw);
+  detailPanel.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <div class="panel-title-row">
+          <span class="badge">${escapeHtml(std.label)}</span>
+          <span class="sub">كلمة مفتاحية في لغة C</span>
+        </div>
+        <h2>${escapeHtml(kw.name)}</h2>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button class="close" id="closeDetail">✕</button>
+      </div>
+    </div>
+    <div class="panel-body cstd-detail-body">
+      <div class="section">
+        <h3>الشرح (قابل للتعديل)</h3>
+        <textarea id="cstdDescInput" placeholder="اكتب شرحك الخاص لهذه الكلمة...">${escapeHtml(currentDesc)}</textarea>
+        <div class="cstd-save-row">
+          <button class="btn" id="cstdResetBtn">↺ استعادة الشرح الأصلي</button>
+          <button class="btn primary" id="cstdSaveBtn">حفظ التعديل</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeDetail').addEventListener('click', closeDetail);
+  document.getElementById('cstdSaveBtn').addEventListener('click', ()=>{
+    const val = document.getElementById('cstdDescInput').value;
+    cstdNotes[cstdKeyId(std.id, kw.name)] = val;
+    cstdSaveNotes();
+    renderCStd();
+    const btn = document.getElementById('cstdSaveBtn');
+    const old = btn.textContent; btn.textContent = 'تم الحفظ ✓';
+    setTimeout(()=>{ if(document.getElementById('cstdSaveBtn')) btn.textContent = old; }, 1200);
+  });
+  document.getElementById('cstdResetBtn').addEventListener('click', ()=>{
+    delete cstdNotes[cstdKeyId(std.id, kw.name)];
+    cstdSaveNotes();
+    document.getElementById('cstdDescInput').value = kw.desc;
+    renderCStd();
+  });
+  detailOverlay.classList.add('show');
+}
+
+function openAllLangDetail(langKey, row){
+  const currentDesc = allLangCurrentDesc(langKey, row);
+  const originalDesc = row.desc || '';
+  detailPanel.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <div class="panel-title-row">
+          <span class="badge">${escapeHtml(row.type)}</span>
+          <span class="sub">${escapeHtml(DATA[langKey].label)}</span>
+        </div>
+        <h2>${escapeHtml(row.name)}</h2>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button class="close" id="closeDetail">✕</button>
+      </div>
+    </div>
+    <div class="panel-body cstd-detail-body">
+      <div class="section">
+        <h3>الصيغة (Syntax)</h3>
+        <div class="codebox">${escapeHtml(row.syntax)}</div>
+      </div>
+      <div class="section">
+        <h3>الشرح (قابل للتعديل)</h3>
+        <textarea id="cstdDescInput" placeholder="اكتب شرحك الخاص لهذه التعليمة...">${escapeHtml(currentDesc)}</textarea>
+        <div class="cstd-save-row">
+          <button class="btn" id="cstdResetBtn">↺ استعادة الشرح الأصلي</button>
+          <button class="btn primary" id="cstdSaveBtn">حفظ التعديل</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeDetail').addEventListener('click', closeDetail);
+  document.getElementById('cstdSaveBtn').addEventListener('click', ()=>{
+    const val = document.getElementById('cstdDescInput').value;
+    allLangNotes[allLangKeyId(langKey, row.id)] = val;
+    allLangSaveNotes();
+    renderCStd();
+    const btn = document.getElementById('cstdSaveBtn');
+    const old = btn.textContent; btn.textContent = 'تم الحفظ ✓';
+    setTimeout(()=>{ if(document.getElementById('cstdSaveBtn')) btn.textContent = old; }, 1200);
+  });
+  document.getElementById('cstdResetBtn').addEventListener('click', ()=>{
+    delete allLangNotes[allLangKeyId(langKey, row.id)];
+    allLangSaveNotes();
+    document.getElementById('cstdDescInput').value = originalDesc;
+    renderCStd();
+  });
+  detailOverlay.classList.add('show');
+}
+
+/* ---------- all-instructions section toggle ---------- */
+const cstdWrap = document.getElementById('cstdWrap');
+function cstdSetMainVisible(visible){
+  const ids = ['langFilters','tableCard','pager','blocksContainer','swipeWrap'];
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.style.display = visible ? '' : 'none';
+  });
+  const toolbarEl = document.querySelector('main .toolbar');
+  if(toolbarEl) toolbarEl.style.display = visible ? '' : 'none';
+}
+document.getElementById('cstdOpenBtn').addEventListener('click', ()=>{
+  cstdSetMainVisible(false);
+  cstdWrap.style.display = 'block';
+  renderCStd();
+});
+document.getElementById('cstdBackBtn').addEventListener('click', ()=>{
+  cstdWrap.style.display = 'none';
+  cstdSetMainVisible(true);
+  render();
 });
 
 /* ---------- init ---------- */
