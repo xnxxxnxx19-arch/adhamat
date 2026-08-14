@@ -607,6 +607,7 @@ footer{max-width:1400px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);
       <span class="meta" id="selCount">لم يتم تحديد شيء</span>
       <button class="btn" id="speakSelectedBtn">🔊 قراءة المحدد بالتتابع</button>
       <button class="btn" id="shareBridgeBtn" title="يرسل التعليمات المحددة إلى تطبيقي بطاقاتي والإنجليزي">🎓 إرسال المحدد لبطاقاتي/الإنجليزي</button>
+      <button class="btn" id="toggleSelectAllBtn" title="تحديد كل التعليمات المعروضة حاليًا، أو إلغاء التحديد لو كانت كلها محددة">☑️ تحديد الكل</button>
       <button class="btn" id="clearSelBtn">✕ إلغاء التحديد</button>
       <select id="quizLenSelect" class="btn" title="عدد أسئلة الاختبار" style="cursor:pointer;">
         <option value="10">10 أسئلة</option>
@@ -920,6 +921,11 @@ function updateSelBar(){
   document.getElementById('selCount').textContent = n>0 ? `محدد: ${n} تعليمة` : 'لم يتم تحديد شيء';
   document.getElementById('speakSelectedBtn').style.opacity = n>0 ? '1' : '.5';
   document.getElementById('shareBridgeBtn').style.opacity = n>0 ? '1' : '.5';
+  const toggleBtn = document.getElementById('toggleSelectAllBtn');
+  if(toggleBtn){
+    const allSelected = areAllCurrentRowsSelected();
+    toggleBtn.textContent = allSelected ? '☐ إلغاء تحديد الكل' : '☑️ تحديد الكل';
+  }
 }
 document.getElementById('speakSelectedBtn').addEventListener('click', speakSelectedSequential);
 document.getElementById('clearSelBtn').addEventListener('click', ()=>{
@@ -927,6 +933,26 @@ document.getElementById('clearSelBtn').addEventListener('click', ()=>{
   updateSelBar();
   render();
 });
+
+/* زر واحد يبدّل بين "تحديد كل التعليمات المعروضة حاليًا" و"إلغاء تحديدها"،
+   حسب ما إذا كانت كل التعليمات المعروضة (بعد مراعاة التبويب/الفلتر/البحث) محددة بالفعل أم لا. */
+function areAllCurrentRowsSelected(){
+  const rows = currentRows();
+  if(rows.length===0) return false;
+  return rows.every(r=> selectedIds.has(r.id));
+}
+function toggleSelectAll(){
+  const rows = currentRows();
+  if(rows.length===0) return;
+  if(areAllCurrentRowsSelected()){
+    rows.forEach(r=> selectedIds.delete(r.id));
+  } else {
+    rows.forEach(r=> selectedIds.add(r.id));
+  }
+  updateSelBar();
+  render();
+}
+document.getElementById('toggleSelectAllBtn').addEventListener('click', toggleSelectAll);
 
 /* ---------- bridge to vocab-app.html / english.html ----------
    نفس مفتاح التخزين المحلي (localStorage) اللي بيستخدمه "المحرر البرمجي" فعليًا،
