@@ -400,6 +400,35 @@
   .planner-progress{display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--ink-soft); margin-inline-start:auto;}
   .planner-progress b{color:var(--ink);}
 
+  /* ---- SCRAMBLE (letter arrangement) MODE ---- */
+  .scramble-answer{
+    display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center;
+    min-height:52px; padding:8px; margin:10px 0; border:2px dashed var(--line); border-radius:8px; background:var(--paper);
+  }
+  .scramble-placeholder{font-size:12.5px; color:var(--ink-soft);}
+  .scramble-tiles{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:14px 0;}
+  .scramble-tile{
+    min-width:42px; height:42px; padding:0 10px; border-radius:8px; border:2px solid var(--ink);
+    background:var(--card); color:var(--ink); font-family:'Space Mono',monospace; font-weight:700; font-size:18px;
+    cursor:pointer; box-shadow:2px 2px 0 var(--ink); direction:ltr;
+  }
+  .scramble-tile:disabled, .scramble-tile.used{ opacity:.25; cursor:default; box-shadow:none; }
+  .scramble-tile.placed{ background:var(--gold); border-color:var(--gold-deep); box-shadow:2px 2px 0 var(--gold-deep); }
+
+  /* ---- FULL PIPELINE SESSION BANNER (كتابة + رسم + نطق + حروف) ---- */
+  #pipelineBanner{
+    display:none; background:var(--card); border:2px solid var(--ink); border-radius:8px;
+    padding:12px 14px; margin-bottom:16px; box-shadow:3px 3px 0 var(--ink);
+  }
+  .pipe-top{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; font-size:13px;}
+  .pipe-top button{padding:6px 10px; font-size:12px;}
+  .pipe-steps{display:flex; gap:8px; flex-wrap:wrap;}
+  .pipe-step{
+    font-size:12px; padding:5px 10px; border-radius:20px; border:1px solid var(--line); color:var(--ink-soft); background:var(--paper);
+  }
+  .pipe-step.pipe-current{border-color:var(--gold-deep); background:var(--gold); color:var(--ink); font-weight:700;}
+  .pipe-step.pipe-done{border-color:var(--teal); color:var(--teal); text-decoration:line-through;}
+
   /* ---- صفحات المجموعات المعزولة ---- */
   .groups-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px;}
   .group-card{background:var(--card); border:2px solid var(--line); border-radius:8px; padding:16px; text-align:right; cursor:pointer; transition:border-color .15s;}
@@ -515,11 +544,14 @@
 
   <!-- WRITING / HANDWRITING -->
   <section class="view" id="view-writing">
+    <div id="pipelineBanner"></div>
     <div id="writingSelectionBanner" style="display:none;"></div>
     <div class="catalog-tabs">
       <span class="chip" data-wmode="trace">تتبّع بخط اليد</span>
       <span class="chip" data-wmode="recall">استرجاع حر (ارسم)</span>
       <span class="chip" data-wmode="typed">تكرار كتابي</span>
+      <span class="chip" data-wmode="pronounce">🗣️ نطق</span>
+      <span class="chip" data-wmode="scramble">🔠 حروف متفرقة</span>
     </div>
     <div class="writing-toolbar">
       <button class="btn ghost small" id="toggleWritingSettings">🖋️ تخصيص خط الإرشاد</button>
@@ -608,6 +640,46 @@
       <div class="type-diff" id="typedDiff"></div>
       <div class="typo-note" id="typedTypoNote"></div>
     </div>
+
+    <!-- PRONOUNCE MODE -->
+    <div id="wPronounce" class="wpanel" style="display:none;">
+      <div class="quiz-q">اضغط على الميكروفون وانطق الكلمة الإنجليزية بصوت عالٍ:</div>
+      <div class="typed-target">
+        <span class="card-meaning" id="pronounceMeaning" style="font-size:20px;">تفاحة</span>
+        <span>
+          <button type="button" class="speak-btn" id="pronounceSpeak" title="اسمع النطق الصحيح">🔊</button>
+          <span class="progress-line" id="pronounceStreakLabel">0 / 10</span>
+        </span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="pronounceBarFill" style="width:0%"></div></div>
+      <div class="pad-controls" style="justify-content:center;">
+        <button class="btn small" id="pronounceMicBtn">🎤 اضغط وانطق</button>
+        <button class="btn ghost small" id="pronounceNext">كلمة أخرى ⟵</button>
+      </div>
+      <div class="type-live" id="pronounceHeard" style="text-align:center; direction:ltr;"></div>
+      <div class="feedback" id="pronounceFeedback" style="text-align:center;"></div>
+      <div class="typo-note" id="pronounceNote" style="text-align:center;"></div>
+    </div>
+
+    <!-- SCRAMBLE (letter arrangement) MODE -->
+    <div id="wScramble" class="wpanel" style="display:none;">
+      <div class="quiz-q">اضغط على الحروف بالترتيب الصحيح عشان تكوّن الكلمة:</div>
+      <div class="typed-target">
+        <span class="card-meaning" id="scrambleMeaning" style="font-size:20px;">تفاحة</span>
+        <span>
+          <button type="button" class="speak-btn" id="scrambleSpeak" title="اسمع نطق الكلمة">🔊</button>
+          <span class="progress-line" id="scrambleStreakLabel">0 / 10</span>
+        </span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="scrambleBarFill" style="width:0%"></div></div>
+      <div class="scramble-answer" id="scrambleAnswer"></div>
+      <div class="scramble-tiles" id="scrambleTiles"></div>
+      <div class="pad-controls" style="justify-content:center;">
+        <button class="btn ghost small" id="scrambleClear">مسح</button>
+        <button class="btn ghost small" id="scrambleNext">كلمة أخرى ⟵</button>
+      </div>
+      <div class="feedback" id="scrambleFeedback" style="text-align:center;"></div>
+    </div>
   </section>
 
   <!-- MANAGE -->
@@ -648,10 +720,11 @@
     <div id="plannerOverdueBanner" style="display:none;"></div>
     <div class="planner-summary">
       <span id="plannerSummary">0 كلمة</span>
-      <button class="btn small" id="startPlanBtn">📖 ابدأ خطة المراجعة (من الأقدم للأحدث)</button>
+      <button class="btn small" id="startFullSessionBtn">🚀 ابدأ الجلسة الشاملة (كتابة + رسم + نطق + حروف)</button>
+      <button class="btn ghost small" id="startPlanBtn">📖 ابدأ خطة المراجعة بالبطاقات فقط</button>
     </div>
     <div style="font-size:11.5px; color:var(--ink-soft); margin:-6px 0 14px;">
-      🟢 راجعتها من أقل من 3 أيام — 🟡 من 3 لـ6 أيام من غير مراجعة — 🔴 أسبوع أو أكتر (أو لسه ما اتراجعتش). كل كلمة لازم تتراجع قراءةً 10 مرات، وكتابةً 10 مرات، وهجاءً 10 مرات علشان تتقنها بالكامل.
+      🟢 راجعتها من أقل من 3 أيام — 🟡 من 3 لـ6 أيام من غير مراجعة — 🔴 أسبوع أو أكتر (أو لسه ما اتراجعتش). «الجلسة الشاملة» بتاخدك كلمة كلمة، وكل كلمة بتتراجع بالترتيب: ✍️ كتابة عادية 10 مرات، ثم 🖊️ كتابة بالرسم 10 مرات، ثم 🗣️ نطق 10 مرات، ثم 🔠 ترتيب حروف متفرقة 10 مرات — وبعدين تنتقل تلقائيًا للكلمة اللي بعدها.
     </div>
     <div id="plannerList"></div>
   </section>
@@ -708,7 +781,7 @@
     const word = Object.assign({
       id: cryptoId(),
       srs: {level:0, due: todayStr(), correct:0, wrong:0},
-      writing: {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0},
+      writing: {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0, pronounceStreak:0, pronounceCompletions:0, pronounceCorrect:0, pronounceWrong:0, scrambleStreak:0, scrambleCompletions:0, scrambleCorrect:0, scrambleWrong:0},
       log: [],
       comment: "",
       selected: false,
@@ -718,13 +791,17 @@
     return word;
   }
   function ensureWriting(w){
-    if(!w.writing) w.writing = {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0};
+    if(!w.writing) w.writing = {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0, pronounceStreak:0, pronounceCompletions:0, pronounceCorrect:0, pronounceWrong:0, scrambleStreak:0, scrambleCompletions:0, scrambleCorrect:0, scrambleWrong:0};
     const ws = w.writing;
     if(ws.typedStreak===undefined) ws.typedStreak = 0;
     if(ws.readStreak===undefined) ws.readStreak = 0;
     if(ws.readCompletions===undefined) ws.readCompletions = 0;
     if(ws.spellStreak===undefined) ws.spellStreak = 0;
     if(ws.spellCompletions===undefined) ws.spellCompletions = 0;
+    if(ws.pronounceStreak===undefined) ws.pronounceStreak = 0;
+    if(ws.pronounceCompletions===undefined) ws.pronounceCompletions = 0;
+    if(ws.scrambleStreak===undefined) ws.scrambleStreak = 0;
+    if(ws.scrambleCompletions===undefined) ws.scrambleCompletions = 0;
     return ws;
   }
   function cryptoId(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
@@ -1170,26 +1247,36 @@
   const TYPED_TARGET_REPS = 10;   // الكتابة: لازم 10 مرات صحيحة متتالية
   const READ_TARGET_REPS = 10;    // القراءة (البطاقات): لازم 10 مرات مراجعة متتالية
   const SPELL_TARGET_REPS = 10;   // الهجاء (الاسترجاع الحر): لازم 10 مرات صحيحة متتالية من الذاكرة
+  const PRONOUNCE_TARGET_REPS = 10; // النطق: لازم 10 مرات نطق صحيحة متتالية
+  const SCRAMBLE_TARGET_REPS = 10;  // حروف متفرقة: لازم 10 مرات ترتيب صحيح متتالية
   let writingMode = "trace";
   let traceWord = null, recallWord = null, typedWord = null;
   let typedStreak = 0;
 
   document.querySelectorAll("[data-wmode]").forEach(chip=>{
     chip.addEventListener("click", ()=>{
+      if(pipelineActive) stopPipelineSession();
       document.querySelectorAll("[data-wmode]").forEach(c=>c.classList.remove("active"));
       chip.classList.add("active");
       writingMode = chip.dataset.wmode;
       document.getElementById("wTrace").style.display = writingMode==="trace" ? "block":"none";
       document.getElementById("wRecall").style.display = writingMode==="recall" ? "block":"none";
       document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
+      document.getElementById("wPronounce").style.display = writingMode==="pronounce" ? "block":"none";
+      document.getElementById("wScramble").style.display = writingMode==="scramble" ? "block":"none";
       if(writingMode==="trace") startTraceRound();
       if(writingMode==="recall") startRecallRound();
       if(writingMode==="typed") startTypedRound();
+      if(writingMode==="pronounce") startPronounceRound();
+      if(writingMode==="scramble") startScrambleRound();
     });
   });
   document.querySelector("[data-wmode='trace']").classList.add("active");
 
   function renderWriting(){
+    if(pipelineActive){ activatePipelinePhaseUI(); return; }
+    const pb = document.getElementById("pipelineBanner");
+    if(pb){ pb.style.display = "none"; pb.innerHTML = ""; }
     renderSelectionBannerInto("writingSelectionBanner");
     const has = filteredWords().length > 0;
     document.getElementById("writingNoWords").style.display = has ? "none":"block";
@@ -1198,11 +1285,15 @@
     if(!has) return;
     if(writingMode==="trace") startTraceRound();
     else if(writingMode==="recall") startRecallRound();
+    else if(writingMode==="pronounce") startPronounceRound();
+    else if(writingMode==="scramble") startScrambleRound();
     else startTypedRound();
     // re-apply visibility per current mode (renderWriting may run while a non-default mode is selected)
     document.getElementById("wTrace").style.display = writingMode==="trace" ? "block":"none";
     document.getElementById("wRecall").style.display = writingMode==="recall" ? "block":"none";
     document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
+    document.getElementById("wPronounce").style.display = writingMode==="pronounce" ? "block":"none";
+    document.getElementById("wScramble").style.display = writingMode==="scramble" ? "block":"none";
   }
 
   // بيسحب كلمة عشوائية من نطاق الكلمات الحالي (المجموعة/التصنيف المختار لو فيه
@@ -1607,7 +1698,7 @@
   // ---- TRACE MODE ----
   function startTraceRound(){
     if(!tracePad) tracePad = makePad(document.getElementById("traceGuideCanvas"), document.getElementById("traceInkCanvas"));
-    traceWord = pickPracticeWord();
+    traceWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
     if(!traceWord) return;
     tracePad.clearInk();
     tracePad.drawGuideText(traceWord.word, 0.35);
@@ -1664,7 +1755,8 @@
         fb.textContent = "ممتاز! أتقنت كتابة هذه الكلمة يدويًا ✔";
         ws.traceReps = 0;
         save();
-        setTimeout(startTraceRound, 1400);
+        if(pipelineActive) setTimeout(pipelineWordDone, 1400);
+        else setTimeout(startTraceRound, 1400);
         return;
       } else {
         fb.className = "feedback ok";
@@ -1770,7 +1862,7 @@
 
   // ---- TYPED REPETITION MODE ----
   function startTypedRound(){
-    typedWord = pickPracticeWord();
+    typedWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
     if(!typedWord){ typedStreak = 0; return; }
     typedStreak = ensureWriting(typedWord).typedStreak || 0;
     document.getElementById("typedMeaning").textContent = typedWord.meaning;
@@ -1881,7 +1973,8 @@
         applyRating(typedWord, "easy", "تكرار كتابي (إتمام الدورة)");
         save();
         fb.textContent = "أتممت " + TYPED_TARGET_REPS + " مرات صحيحة متتالية! ✔";
-        setTimeout(startTypedRound, 1200);
+        if(pipelineActive) setTimeout(pipelineWordDone, 1200);
+        else setTimeout(startTypedRound, 1200);
       } else {
         fb.textContent = "صحيح، استمر!";
       }
@@ -1919,6 +2012,338 @@
   }
   document.getElementById("typedSubmit").addEventListener("click", submitTyped);
   document.getElementById("typedInput").addEventListener("keydown", e=>{ if(e.key==="Enter") submitTyped(); });
+
+  // ---- PRONOUNCE MODE (نطق) ----
+  let pronounceWord = null, pronounceStreak = 0, pronounceRecognizer = null, pronounceListening = false;
+
+  function supportsMicRecognition(){
+    return ("SpeechRecognition" in window) || ("webkitSpeechRecognition" in window);
+  }
+  function startPronounceRound(){
+    pronounceWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
+    if(!pronounceWord) return;
+    pronounceStreak = ensureWriting(pronounceWord).pronounceStreak || 0;
+    document.getElementById("pronounceMeaning").textContent = pronounceWord.meaning;
+    updatePronounceProgress();
+    document.getElementById("pronounceHeard").textContent = "";
+    document.getElementById("pronounceFeedback").textContent = "";
+    document.getElementById("pronounceFeedback").className = "feedback";
+    document.getElementById("pronounceNote").textContent = supportsMicRecognition()
+      ? "" : "المتصفح أو الجهاز ده مش بيدعم التعرف على الصوت — جرّب من كروم على أندرويد أو ديسكتوب.";
+    document.getElementById("pronounceMicBtn").disabled = !supportsMicRecognition();
+  }
+  function updatePronounceProgress(){
+    document.getElementById("pronounceStreakLabel").textContent = pronounceStreak + " / " + PRONOUNCE_TARGET_REPS;
+    document.getElementById("pronounceBarFill").style.width = Math.round((pronounceStreak/PRONOUNCE_TARGET_REPS)*100) + "%";
+  }
+  document.getElementById("pronounceSpeak").addEventListener("click", ()=> speakWord(pronounceWord));
+  document.getElementById("pronounceNext").addEventListener("click", startPronounceRound);
+  document.getElementById("pronounceMicBtn").addEventListener("click", ()=>{
+    if(!pronounceWord || pronounceListening) return;
+    if(!supportsMicRecognition()){
+      const fb = document.getElementById("pronounceFeedback");
+      fb.className = "feedback no";
+      fb.textContent = "المتصفح مش بيدعم الميكروفون.";
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    pronounceRecognizer = new SR();
+    pronounceRecognizer.lang = "en-US";
+    pronounceRecognizer.continuous = false;
+    pronounceRecognizer.interimResults = false;
+    pronounceRecognizer.maxAlternatives = 1;
+    pronounceListening = true;
+    const micBtn = document.getElementById("pronounceMicBtn");
+    micBtn.disabled = true;
+    micBtn.textContent = "🎙️ بيسمعك الآن...";
+    document.getElementById("pronounceFeedback").textContent = "";
+    pronounceRecognizer.onresult = (event)=>{
+      const said = event.results[0][0].transcript;
+      document.getElementById("pronounceHeard").textContent = 'سمعت: "' + said + '"';
+      checkPronounceAnswer(said);
+    };
+    pronounceRecognizer.onerror = (e)=>{
+      pronounceListening = false;
+      micBtn.disabled = !supportsMicRecognition();
+      micBtn.textContent = "🎤 اضغط وانطق";
+      const fb = document.getElementById("pronounceFeedback");
+      fb.className = "feedback no";
+      fb.textContent = (e.error === "not-allowed" || e.error === "audio-capture")
+        ? "محتاجين إذن الميكروفون عشان الميزة دي تشتغل."
+        : "مسمعتش حاجة واضحة، جرّب تاني 🎤";
+    };
+    pronounceRecognizer.onend = ()=>{
+      pronounceListening = false;
+      micBtn.disabled = !supportsMicRecognition();
+      micBtn.textContent = "🎤 اضغط وانطق";
+    };
+    try{ pronounceRecognizer.start(); }
+    catch(err){
+      pronounceListening = false;
+      micBtn.disabled = !supportsMicRecognition();
+      micBtn.textContent = "🎤 اضغط وانطق";
+    }
+  });
+  function checkPronounceAnswer(said){
+    if(!pronounceWord) return;
+    const ws = ensureWriting(pronounceWord);
+    const target = pronounceWord.word.trim().toLowerCase();
+    const heard = String(said||"").trim().toLowerCase().replace(/[.,!?]/g,"");
+    const { distance } = diffChars(heard, pronounceWord.word);
+    const maxLen = Math.max(heard.length, pronounceWord.word.length, 1);
+    const isClose = heard === target || (distance / maxLen) <= 0.3;
+    const fb = document.getElementById("pronounceFeedback");
+    if(isClose){
+      pronounceStreak++;
+      ws.pronounceStreak = pronounceStreak;
+      ws.pronounceCorrect = (ws.pronounceCorrect||0)+1;
+      updatePronounceProgress();
+      fb.className = "feedback ok";
+      logEvent(pronounceWord, "pronounce", "نطق صحيح — سمع البرنامج: \"" + said + "\" (" + pronounceStreak + " / " + PRONOUNCE_TARGET_REPS + ")");
+      if(pronounceStreak >= PRONOUNCE_TARGET_REPS){
+        ws.pronounceCompletions = (ws.pronounceCompletions||0)+1;
+        ws.pronounceStreak = 0;
+        applyRating(pronounceWord, "easy", "نطق (إتمام الدورة)");
+        save();
+        fb.textContent = "أتممت " + PRONOUNCE_TARGET_REPS + " مرات نطق صحيحة متتالية! ✔";
+        if(pipelineActive) setTimeout(pipelineWordDone, 1200);
+        else setTimeout(startPronounceRound, 1200);
+      } else {
+        fb.textContent = "صح! 🎉 استمر.";
+        save();
+      }
+    } else {
+      ws.pronounceWrong = (ws.pronounceWrong||0)+1;
+      pronounceStreak = 0;
+      ws.pronounceStreak = 0;
+      updatePronounceProgress();
+      fb.className = "feedback no";
+      fb.textContent = "مش نفس الكلمة — اسمع النطق الصحيح 🔊 وجرّب تاني.";
+      save();
+    }
+  }
+
+  // ---- SCRAMBLE MODE (حروف متفرقة — رتّب الحروف) ----
+  let scrambleWord = null, scrambleStreak = 0, scrambleTiles = [], scrambleAnswerIdxs = [];
+
+  function shuffleWordLetters(word){
+    const letters = word.split("");
+    if(letters.length <= 1) return letters.slice();
+    let attempt = letters.slice();
+    for(let tries=0; tries<20; tries++){
+      attempt = letters.slice();
+      for(let i=attempt.length-1; i>0; i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [attempt[i], attempt[j]] = [attempt[j], attempt[i]];
+      }
+      if(attempt.join("") !== letters.join("")) break;
+    }
+    return attempt;
+  }
+  function startScrambleRound(){
+    scrambleWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
+    if(!scrambleWord) return;
+    scrambleStreak = ensureWriting(scrambleWord).scrambleStreak || 0;
+    const letters = shuffleWordLetters(scrambleWord.word);
+    scrambleTiles = letters.map(ch=>({char:ch, used:false}));
+    scrambleAnswerIdxs = [];
+    document.getElementById("scrambleMeaning").textContent = scrambleWord.meaning;
+    updateScrambleProgress();
+    document.getElementById("scrambleFeedback").textContent = "";
+    document.getElementById("scrambleFeedback").className = "feedback";
+    renderScrambleUI();
+  }
+  function updateScrambleProgress(){
+    document.getElementById("scrambleStreakLabel").textContent = scrambleStreak + " / " + SCRAMBLE_TARGET_REPS;
+    document.getElementById("scrambleBarFill").style.width = Math.round((scrambleStreak/SCRAMBLE_TARGET_REPS)*100) + "%";
+  }
+  function renderScrambleUI(){
+    const tilesWrap = document.getElementById("scrambleTiles");
+    const answerWrap = document.getElementById("scrambleAnswer");
+    tilesWrap.innerHTML = "";
+    scrambleTiles.forEach((t,i)=>{
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "scramble-tile" + (t.used ? " used":"");
+      b.textContent = t.char;
+      b.disabled = t.used;
+      b.addEventListener("click", ()=>{
+        if(t.used) return;
+        t.used = true;
+        scrambleAnswerIdxs.push(i);
+        renderScrambleUI();
+        if(scrambleAnswerIdxs.length === scrambleTiles.length) checkScrambleAnswer();
+      });
+      tilesWrap.appendChild(b);
+    });
+    answerWrap.innerHTML = "";
+    if(scrambleAnswerIdxs.length === 0){
+      answerWrap.innerHTML = '<span class="scramble-placeholder">اضغط على الحروف بالترتيب الصحيح هنا...</span>';
+    } else {
+      scrambleAnswerIdxs.forEach((tileIdx, pos)=>{
+        const t = scrambleTiles[tileIdx];
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "scramble-tile placed";
+        b.textContent = t.char;
+        b.addEventListener("click", ()=>{
+          t.used = false;
+          scrambleAnswerIdxs.splice(pos,1);
+          renderScrambleUI();
+        });
+        answerWrap.appendChild(b);
+      });
+    }
+  }
+  document.getElementById("scrambleClear").addEventListener("click", ()=>{
+    scrambleAnswerIdxs.forEach(i=> scrambleTiles[i].used = false);
+    scrambleAnswerIdxs = [];
+    renderScrambleUI();
+  });
+  document.getElementById("scrambleNext").addEventListener("click", startScrambleRound);
+  document.getElementById("scrambleSpeak").addEventListener("click", ()=> speakWord(scrambleWord));
+  function checkScrambleAnswer(){
+    if(!scrambleWord) return;
+    const built = scrambleAnswerIdxs.map(i=> scrambleTiles[i].char).join("");
+    const target = scrambleWord.word;
+    const fb = document.getElementById("scrambleFeedback");
+    const ws = ensureWriting(scrambleWord);
+    if(built.toLowerCase() === target.toLowerCase()){
+      scrambleStreak++;
+      ws.scrambleStreak = scrambleStreak;
+      ws.scrambleCorrect = (ws.scrambleCorrect||0)+1;
+      updateScrambleProgress();
+      fb.className = "feedback ok";
+      logEvent(scrambleWord, "scramble", "ترتيب حروف صحيح (" + scrambleStreak + " / " + SCRAMBLE_TARGET_REPS + ")");
+      if(scrambleStreak >= SCRAMBLE_TARGET_REPS){
+        ws.scrambleCompletions = (ws.scrambleCompletions||0)+1;
+        ws.scrambleStreak = 0;
+        applyRating(scrambleWord, "easy", "ترتيب حروف متفرقة (إتمام الدورة)");
+        save();
+        fb.textContent = "أتممت " + SCRAMBLE_TARGET_REPS + " مرات صحيحة متتالية! ✔";
+        if(pipelineActive) setTimeout(pipelineWordDone, 1200);
+        else setTimeout(startScrambleRound, 1200);
+      } else {
+        fb.textContent = "صحيح! 🎉";
+        save();
+        setTimeout(startScrambleRound, 700);
+      }
+    } else {
+      ws.scrambleWrong = (ws.scrambleWrong||0)+1;
+      scrambleStreak = 0;
+      ws.scrambleStreak = 0;
+      updateScrambleProgress();
+      fb.className = "feedback no";
+      fb.textContent = "مش صح — رجّع الحروف وجرّب ترتيب تاني.";
+      save();
+      setTimeout(()=>{
+        scrambleTiles.forEach(t=> t.used=false);
+        scrambleAnswerIdxs = [];
+        renderScrambleUI();
+      }, 900);
+    }
+  }
+
+  /* ============================================================
+     🚀 الجلسة الشاملة (مخطط المراجعة الكامل): بتاخد قائمة كلمات وتوديك
+     كلمة كلمة، وكل كلمة بتتراجع بالترتيب: ✍️ كتابة عادية 10 مرات، ثم
+     🖊️ كتابة بالرسم 10 مرات، ثم 🗣️ نطق 10 مرات، ثم 🔠 ترتيب حروف متفرقة
+     10 مرات — وبعدين تتحول تلقائيًا للكلمة اللي بعدها لحد ما تخلص القائمة.
+  ============================================================ */
+  let pipelineActive = false;
+  let pipelineWords = [];
+  let pipelineWordIdx = 0;
+  let pipelinePhaseIdx = 0;
+  const PIPELINE_PHASES = ["typed","trace","pronounce","scramble"];
+  const PIPELINE_PHASE_META = {
+    typed:     {icon:"✍️", label:"كتابة عادية"},
+    trace:     {icon:"🖊️", label:"كتابة بالرسم"},
+    pronounce: {icon:"🗣️", label:"نطق"},
+    scramble:  {icon:"🔠", label:"حروف متفرقة"}
+  };
+  function pipelineCurrentWord(){ return pipelineWords[pipelineWordIdx] || null; }
+  function pipelineCurrentPhase(){ return PIPELINE_PHASES[pipelinePhaseIdx]; }
+
+  function startFullSession(words){
+    const list = (words||[]).filter(Boolean);
+    if(!list.length){ alert("لا توجد كلمات لبدء الجلسة الشاملة."); return; }
+    pipelineActive = true;
+    pipelineWords = list.slice();
+    pipelineWordIdx = 0;
+    pipelinePhaseIdx = 0;
+    document.querySelectorAll("nav.tabs button").forEach(b=> b.classList.toggle("active", b.dataset.view==="writing"));
+    document.querySelectorAll(".view").forEach(v=> v.classList.remove("active"));
+    document.getElementById("view-writing").classList.add("active");
+    document.getElementById("writingNoWords").style.display = "none";
+    document.querySelectorAll("#view-writing .wpanel").forEach(p=> p.style.display = "");
+    activatePipelinePhaseUI();
+  }
+  function activatePipelinePhaseUI(){
+    const phase = pipelineCurrentPhase();
+    writingMode = phase;
+    document.querySelectorAll("[data-wmode]").forEach(c=> c.classList.toggle("active", c.dataset.wmode===phase));
+    document.getElementById("wTrace").style.display = phase==="trace" ? "block":"none";
+    document.getElementById("wRecall").style.display = "none";
+    document.getElementById("wTyped").style.display = phase==="typed" ? "block":"none";
+    document.getElementById("wPronounce").style.display = phase==="pronounce" ? "block":"none";
+    document.getElementById("wScramble").style.display = phase==="scramble" ? "block":"none";
+    renderPipelineBanner();
+    if(phase==="typed") startTypedRound();
+    else if(phase==="trace") startTraceRound();
+    else if(phase==="pronounce") startPronounceRound();
+    else if(phase==="scramble") startScrambleRound();
+  }
+  function renderPipelineBanner(){
+    const banner = document.getElementById("pipelineBanner");
+    if(!banner) return;
+    if(!pipelineActive){ banner.style.display="none"; banner.innerHTML=""; return; }
+    const w = pipelineCurrentWord();
+    const stepsHtml = PIPELINE_PHASES.map((p,i)=>{
+      const meta = PIPELINE_PHASE_META[p];
+      const st = i < pipelinePhaseIdx ? "done" : (i===pipelinePhaseIdx ? "current" : "pending");
+      return '<span class="pipe-step pipe-'+st+'">'+meta.icon+' '+meta.label+(st==="done" ? " ✓":"")+'</span>';
+    }).join("");
+    banner.style.display = "block";
+    banner.innerHTML = `
+      <div class="pipe-top">
+        <strong>🚀 الجلسة الشاملة</strong>
+        <span>كلمة ${pipelineWordIdx+1} من ${pipelineWords.length}${w ? " — " + escapeHtml(w.word) : ""}</span>
+        <button class="btn ghost small" id="pipelineSkipWord">⏭ تخطي الكلمة</button>
+        <button class="btn ghost small" id="pipelineStop">⏹ إنهاء الجلسة</button>
+      </div>
+      <div class="pipe-steps">${stepsHtml}</div>
+    `;
+    document.getElementById("pipelineSkipWord").addEventListener("click", ()=>{
+      pipelinePhaseIdx = PIPELINE_PHASES.length;
+      pipelineWordDone();
+    });
+    document.getElementById("pipelineStop").addEventListener("click", stopPipelineSession);
+  }
+  function pipelineWordDone(){
+    pipelinePhaseIdx++;
+    if(pipelinePhaseIdx >= PIPELINE_PHASES.length){
+      pipelinePhaseIdx = 0;
+      pipelineWordIdx++;
+      if(pipelineWordIdx >= pipelineWords.length){
+        finishPipelineSession();
+        return;
+      }
+    }
+    activatePipelinePhaseUI();
+  }
+  function finishPipelineSession(){
+    pipelineActive = false;
+    const banner = document.getElementById("pipelineBanner");
+    if(banner){ banner.style.display = "none"; banner.innerHTML = ""; }
+    alert("🎉 خلصت الجلسة الشاملة! راجعت كل الكلمات كتابةً عاديةً، ورسمًا بخط اليد، ونطقًا، وترتيب حروف متفرقة.");
+    renderWriting();
+  }
+  function stopPipelineSession(){
+    pipelineActive = false;
+    const banner = document.getElementById("pipelineBanner");
+    if(banner){ banner.style.display = "none"; banner.innerHTML = ""; }
+    renderWriting();
+  }
 
   // ---------- MANAGE ----------
   const addWordBtn = document.getElementById("addWordBtn");
@@ -2947,15 +3372,20 @@
         <span class="pm">${escapeHtml(w.meaning)}</span>
         <span class="planner-meta">${reviewStatusLabel(r.days)}</span>
         <span class="planner-progress">
-          <span>📖 قراءة: <b>${Math.min(ws.readStreak||0, READ_TARGET_REPS)}/${READ_TARGET_REPS}</b></span>
           <span>✍️ كتابة: <b>${Math.min(ws.typedStreak||0, TYPED_TARGET_REPS)}/${TYPED_TARGET_REPS}</b></span>
-          <span>🔤 هجاء: <b>${Math.min(ws.spellStreak||0, SPELL_TARGET_REPS)}/${SPELL_TARGET_REPS}</b></span>
+          <span>🖊️ رسم: <b>${Math.min(ws.traceReps||0, TRACE_TARGET_REPS)}/${TRACE_TARGET_REPS}</b></span>
+          <span>🗣️ نطق: <b>${Math.min(ws.pronounceStreak||0, PRONOUNCE_TARGET_REPS)}/${PRONOUNCE_TARGET_REPS}</b></span>
+          <span>🔠 حروف: <b>${Math.min(ws.scrambleStreak||0, SCRAMBLE_TARGET_REPS)}/${SCRAMBLE_TARGET_REPS}</b></span>
         </span>
       `;
       list.appendChild(row);
     });
   }
   document.getElementById("startPlanBtn").addEventListener("click", startReviewPlan);
+  document.getElementById("startFullSessionBtn").addEventListener("click", ()=>{
+    const ordered = plannerSortedRows().map(r=>r.w);
+    startFullSession(ordered);
+  });
 
   // ---------- INIT ----------
   renderGroupSelect();
