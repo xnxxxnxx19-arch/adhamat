@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>بطاقاتي — دفتر مفردات إنجليزي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Caveat:wght@400;500;600;700&family=Dancing+Script:wght@400;500;600;700&family=Amiri:ital@0;1&display=swap" rel="stylesheet">
 <!-- محرك OCR حقيقي (Tesseract.js) — بيتحمّل أول مرة بس وبيتخزّن في الكاش بعدها. لو النت مقطوع
      أو التحميل فشل، التطبيق بيرجع تلقائيًا لمحرك التعرف المحلي البسيط (fallback) عشان يفضل شغال. -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -103,11 +103,61 @@
 
   /* ---- Category chips (catalog tabs) ---- */
   .catalog-tabs{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; justify-content:center;}
+  .group-select-wrap{display:flex; align-items:center; gap:6px;}
+  .group-select-wrap label{font-size:12px; color:var(--ink-soft); white-space:nowrap;}
+  select.group-select{
+    font-family:'Tajawal',sans-serif; font-size:13px; font-weight:700; color:var(--ink);
+    background:var(--card); border:2px solid var(--ink); border-radius:var(--radius);
+    padding:7px 10px; cursor:pointer; max-width:180px;
+  }
+  .writing-toolbar{display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin:-4px 0 14px;}
+  .settings-panel{
+    background:var(--card); border:2px solid var(--ink); border-radius:8px; box-shadow:var(--shadow);
+    padding:16px; margin:0 0 18px; display:flex; flex-direction:column; gap:12px;
+  }
+  .settings-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .settings-row label{font-size:13px; font-weight:700; min-width:110px;}
+  .settings-row select, .settings-row input[type="color"]{
+    font-family:'Tajawal',sans-serif; font-size:13px; background:var(--paper); color:var(--ink);
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px;
+  }
+  .settings-row input[type="range"]{flex:1; min-width:120px; accent-color:var(--gold-deep);}
+  .settings-row .val{font-family:'Space Mono',monospace; font-size:12px; color:var(--ink-soft); min-width:38px; text-align:center;}
+  .settings-preview{font-size:34px; text-align:center; padding:10px; border:1px dashed var(--line); border-radius:6px; direction:ltr;}
+  .group-form-panel{
+    background:var(--card); border:2px solid var(--ink); border-radius:8px; box-shadow:var(--shadow);
+    padding:16px; margin-bottom:18px;
+  }
+  .group-form-panel .gname{width:100%; margin-bottom:14px;}
+  .group-word-row{
+    display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:10px; margin-bottom:10px;
+    border:1px solid var(--line); border-radius:6px; position:relative;
+  }
+  .group-word-row .full{grid-column:1/-1;}
+  .group-word-row label{font-size:11px; color:var(--ink-soft); display:block; margin-bottom:3px;}
+  .group-word-row input, .group-word-row textarea{
+    width:100%; font-family:'Tajawal',sans-serif; font-size:13px; padding:7px 8px;
+    border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink);
+  }
+  .group-word-row textarea{resize:vertical; min-height:36px;}
+  .group-word-row .rm-row{
+    position:absolute; top:6px; inset-inline-end:6px; background:var(--red); color:#fff;
+    border-radius:50%; width:22px; height:22px; font-size:12px; line-height:1; border:none; cursor:pointer;
+  }
+  .word-comment{font-size:11.5px; color:var(--ink-soft); font-style:italic; margin-top:2px;}
+  .ibh-actions{display:flex; flex-wrap:wrap; gap:6px;}
   .chip{
     padding:6px 14px; border-radius:16px 16px 4px 4px; border:1.5px solid var(--gold-deep);
     background:var(--card); color:var(--ink); font-size:12px; font-weight:700;
   }
   .chip.active{background:var(--gold); color:var(--ink); border-color:var(--ink);}
+
+  .study-banner{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:var(--gold); color:var(--ink); border:2px solid var(--ink); border-radius:6px;
+    padding:9px 14px; margin-bottom:14px; font-size:13px; font-weight:700;
+  }
+  .study-banner button{background:var(--ink); color:var(--card); border-radius:4px; padding:6px 12px; font-size:12px;}
 
   /* ---- Flashcard stage ---- */
   .stage{position:relative; height:340px; display:flex; align-items:center; justify-content:center; margin-bottom:22px;}
@@ -165,6 +215,15 @@
   .word-row .cat-tag{font-size:10px; background:var(--paper); padding:3px 8px; border-radius:10px; color:var(--gold-deep); font-weight:700;}
   .row-actions{display:flex; gap:6px;}
   .row-actions button{background:transparent; border:1px solid var(--line); border-radius:4px; padding:5px 8px; font-size:12px;}
+  .word-select-wrap{display:flex; align-items:center; padding-inline-end:2px;}
+  .word-select-wrap input{width:19px; height:19px; cursor:pointer; accent-color:var(--gold-deep);}
+  .word-row-selected{box-shadow:0 0 0 2px var(--gold-deep) inset;}
+  .selection-banner{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:var(--teal); color:#fff; border:2px solid var(--ink); border-radius:6px;
+    padding:9px 14px; margin-bottom:14px; font-size:13px; font-weight:700;
+  }
+  .selection-banner button{background:var(--ink); color:var(--card); border-radius:4px; padding:6px 12px; font-size:12px; border:none;}
 
   .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; background:var(--card); border:1px solid var(--line); padding:18px; border-radius:8px; margin-bottom:20px;}
   .form-grid label{font-size:12px; color:var(--ink-soft); display:block; margin-bottom:4px;}
@@ -271,11 +330,82 @@
   .bridge-item .bm{color:var(--ink-soft); flex:1;}
   .bridge-item .bnote{font-size:11px; color:var(--ink-soft); flex:0 0 auto;}
 
+  /* ---- Import batch frames ---- */
+  .import-batch{
+    border:1.5px dashed var(--gold-deep); border-radius:8px; padding:12px; margin-bottom:16px;
+    background:rgba(200,155,60,.06);
+  }
+  .import-batch-head{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--line);
+  }
+  .ibh-title{font-weight:900; font-size:14px;}
+  .ibh-meta{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
+  .ibh-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .import-batch .word-row{background:var(--card);}
+
+  /* ---- Word history modal ---- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(28,37,65,.55); z-index:2000;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+  }
+  .modal-box{
+    background:var(--card); border-radius:10px; max-width:520px; width:100%;
+    max-height:82vh; display:flex; flex-direction:column; box-shadow:var(--shadow);
+    border:1px solid var(--line);
+  }
+  .modal-head{display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line);}
+  .modal-title{font-weight:900; font-size:17px; direction:ltr; text-align:left; font-family:'Space Mono',monospace;}
+  .modal-sub{direction:rtl; font-family:'Tajawal'; font-size:13px; color:var(--ink-soft); font-weight:400;}
+  .modal-meta{font-size:11.5px; color:var(--ink-soft); margin-top:3px;}
+  .modal-body{overflow-y:auto; padding:14px 18px; display:flex; flex-direction:column; gap:8px;}
+  .history-item{border:1px solid var(--line); border-radius:6px; padding:9px 11px; background:var(--paper);}
+  .hi-top{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:3px;}
+  .hi-type{font-size:12.5px; font-weight:700;}
+  .hi-date{font-size:11px; color:var(--ink-soft);}
+  .hi-note{font-size:13px; color:var(--ink-soft); line-height:1.5;}
+  .hi-image{display:block; max-width:230px; max-height:150px; object-fit:contain; margin-top:8px; border:1.5px solid var(--line); border-radius:6px; cursor:zoom-in; background:#fff;}
+  .hi-image-zoomed{max-width:100%; max-height:none; cursor:zoom-out;}
+
+  /* ---- Review plan / general history / overdue flashing ---- */
+  @keyframes flashPulse{
+    0%,100%{ opacity:1; }
+    50%{ opacity:.4; }
+  }
+  .tab-flash-dot{
+    display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--red);
+    margin-inline-start:6px; animation: flashPulse .9s ease-in-out infinite; vertical-align:middle;
+  }
+  .overdue-flash-banner{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:var(--red); color:#fff; border:2px solid var(--ink); border-radius:6px;
+    padding:10px 14px; margin-bottom:14px; font-size:13px; font-weight:700;
+    animation: flashPulse 1.1s ease-in-out infinite;
+  }
+  .overdue-flash-banner button{background:var(--ink); color:#fff; border-radius:4px; padding:6px 12px; font-size:12px; border:none;}
+  .planner-summary{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    margin-bottom:14px; font-size:13px;
+  }
+  .status-dot{display:inline-block; width:11px; height:11px; border-radius:50%; margin-inline-end:8px; flex-shrink:0;}
+  .planner-row.status-green .status-dot{background:var(--teal);}
+  .planner-row.status-yellow .status-dot{background:#E0A82E;}
+  .planner-row.status-red .status-dot{background:var(--red); animation: flashPulse 1s ease-in-out infinite;}
+  .planner-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:11px 14px; margin-bottom:8px;}
+  .planner-row .pw{font-family:'Space Mono',monospace; font-weight:700; min-width:100px; direction:ltr;}
+  .planner-row .pm{color:var(--ink-soft); font-size:13px; min-width:100px;}
+  .planner-meta{font-size:11.5px; color:var(--ink-soft); font-weight:700;}
+  .planner-progress{display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--ink-soft); margin-inline-start:auto;}
+  .planner-progress b{color:var(--ink);}
+
   footer{text-align:center; padding:20px; font-size:11px; color:var(--ink-soft);}
 
   @media (max-width:480px){
     .form-grid{grid-template-columns:1fr;}
     .stat-grid{grid-template-columns:repeat(2,1fr);}
+    .word-row{flex-wrap:wrap;}
+    .word-row .m{min-width:100%; order:3;}
+    .row-actions{margin-inline-start:auto;}
   }
   @media (prefers-reduced-motion: reduce){
     *{transition:none !important; animation:none !important;}
@@ -293,6 +423,10 @@
     </div>
   </div>
   <div class="top-actions">
+    <div class="group-select-wrap">
+      <label for="groupSelect">المجموعة:</label>
+      <select class="group-select" id="groupSelect" title="اختر مجموعة كلمات كاملة ليعمل عليها البرنامج بالكامل (مراجعة، اختبار، كتابة)"></select>
+    </div>
     <button class="icon-btn" id="themeToggle" title="الوضع الليلي">🌙</button>
     <input type="file" id="importFile" accept=".json" style="display:none">
     <button class="btn ghost small" id="importBtn">استيراد</button>
@@ -305,6 +439,7 @@
   <button data-view="quiz">اختبار</button>
   <button data-view="writing">الكتابة</button>
   <button data-view="manage">الكلمات</button>
+  <button data-view="planner">خطة المراجعة<span id="plannerFlashDot" class="tab-flash-dot" style="display:none;"></span></button>
   <button data-view="stats">الإحصائيات</button>
 </nav>
 
@@ -313,6 +448,7 @@
   <!-- REVIEW / FLASHCARDS -->
   <section class="view active" id="view-review">
     <div class="catalog-tabs" id="catTabs"></div>
+    <div id="studyModeBanner" style="display:none;"></div>
     <div class="progress-line">
       <span id="dueCount">0 كلمة للمراجعة اليوم</span>
       <span id="cardPos"></span>
@@ -357,6 +493,7 @@
 
   <!-- QUIZ -->
   <section class="view" id="view-quiz">
+    <div id="quizSelectionBanner" style="display:none;"></div>
     <div class="catalog-tabs">
       <span class="chip" id="quizModeChoice-mc" data-mode="mc">اختيار من متعدد</span>
       <span class="chip" id="quizModeChoice-type" data-mode="type">اكتب الترجمة</span>
@@ -367,11 +504,16 @@
 
   <!-- WRITING / HANDWRITING -->
   <section class="view" id="view-writing">
+    <div id="writingSelectionBanner" style="display:none;"></div>
     <div class="catalog-tabs">
       <span class="chip" data-wmode="trace">تتبّع بخط اليد</span>
       <span class="chip" data-wmode="recall">استرجاع حر (ارسم)</span>
       <span class="chip" data-wmode="typed">تكرار كتابي</span>
     </div>
+    <div class="writing-toolbar">
+      <button class="btn ghost small" id="toggleWritingSettings">🖋️ تخصيص خط الإرشاد</button>
+    </div>
+    <div class="settings-panel" id="writingSettingsPanel" style="display:none;"></div>
     <div style="font-size:11.5px; color:var(--ink-soft); text-align:center; margin:-10px 0 16px;">
       التحقق من الكتابة بيستخدم محرك OCR حقيقي (Tesseract) — أول مرة محتاج إنترنت لتحميله ثم بيتخزّن في المتصفح ويشتغل بدونه، ولو مفيش نت بيرجع تلقائيًا لمحرك تعرّف محلي أبسط.
     </div>
@@ -461,10 +603,13 @@
   <section class="view" id="view-manage">
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
       <button class="btn" id="addWordBtn">+ إضافة كلمة جديدة</button>
+      <button class="btn ghost" id="addGroupBtn">📦 إضافة مجموعة كلمات</button>
       <button class="btn ghost" id="importFromEditorBtn">🖥️ استيراد من المحرر أو مرجع التعليمات<span id="editorBridgeCount" class="count-pill" style="display:none;"></span></button>
     </div>
     <div id="wordForm" style="display:none;"></div>
+    <div id="groupForm" style="display:none;"></div>
     <div id="editorBridgePanel" style="display:none;"></div>
+    <div id="selectionToolbar" style="display:none;"></div>
     <div id="wordList"></div>
   </section>
 
@@ -475,6 +620,19 @@
       <div class="card-cat" style="margin-bottom:10px;">توزيع مستوى الإتقان</div>
       <canvas id="statChart" height="160"></canvas>
     </div>
+  </section>
+
+  <!-- REVIEW PLAN / GENERAL HISTORY -->
+  <section class="view" id="view-planner">
+    <div id="plannerOverdueBanner" style="display:none;"></div>
+    <div class="planner-summary">
+      <span id="plannerSummary">0 كلمة</span>
+      <button class="btn small" id="startPlanBtn">📖 ابدأ خطة المراجعة (من الأقدم للأحدث)</button>
+    </div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin:-6px 0 14px;">
+      🟢 راجعتها من أقل من 3 أيام — 🟡 من 3 لـ6 أيام من غير مراجعة — 🔴 أسبوع أو أكتر (أو لسه ما اتراجعتش). كل كلمة لازم تتراجع قراءةً 10 مرات، وكتابةً 10 مرات، وهجاءً 10 مرات علشان تتقنها بالكامل.
+    </div>
+    <div id="plannerList"></div>
   </section>
 
 </main>
@@ -505,21 +663,48 @@
       if(raw) return JSON.parse(raw);
     }catch(e){}
     return {
-      words: DEFAULT_WORDS.map(seedWord),
+      words: DEFAULT_WORDS.map(w=>seedWord(w, "كلمة افتراضية عند أول تشغيل للتطبيق")),
       theme: "light",
       history: [] // {date, correct, total}
     };
   }
-  function seedWord(w){
-    return Object.assign({
+  // كل كلمة بتحتفظ بسجل (log) لكل عملية حفظ/مراجعة أو كتابة بتحصل عليها، عشان
+  // الضغط على الكلمة في تبويب «الكلمات» يعرض تاريخها الكامل.
+  function ensureLog(w){
+    if(!Array.isArray(w.log)) w.log = [];
+    return w.log;
+  }
+  function logEvent(w, type, note, image){
+    const log = ensureLog(w);
+    const entry = {ts: Date.now(), type: type, note: note || ""};
+    if(image) entry.image = image;
+    log.push(entry);
+    if(log.length > 300) log.splice(0, log.length - 300);
+  }
+  // batch: {id, label, ts} — لو الكلمة جت من عملية استيراد جماعية، بتتحط في نفس
+  // الإطار مع باقي كلمات نفس الاستيراد لحد ما المستخدم يحذف المجموعة أو يخليها عناصر عادية.
+  function seedWord(w, originNote, batch){
+    const word = Object.assign({
       id: cryptoId(),
       srs: {level:0, due: todayStr(), correct:0, wrong:0},
-      writing: {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0}
+      writing: {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0},
+      log: [],
+      comment: "",
+      selected: false,
+      importBatch: batch || null
     }, w);
+    logEvent(word, "created", originNote || "أُضيفت يدويًا");
+    return word;
   }
   function ensureWriting(w){
-    if(!w.writing) w.writing = {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0};
-    return w.writing;
+    if(!w.writing) w.writing = {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0};
+    const ws = w.writing;
+    if(ws.typedStreak===undefined) ws.typedStreak = 0;
+    if(ws.readStreak===undefined) ws.readStreak = 0;
+    if(ws.readCompletions===undefined) ws.readCompletions = 0;
+    if(ws.spellStreak===undefined) ws.spellStreak = 0;
+    if(ws.spellCompletions===undefined) ws.spellCompletions = 0;
+    return ws;
   }
   function cryptoId(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
   function todayStr(){ return new Date().toISOString().slice(0,10); }
@@ -527,9 +712,30 @@
     const d = new Date(dateStr); d.setDate(d.getDate()+days);
     return d.toISOString().slice(0,10);
   }
+  function formatDate(ts){
+    try{
+      return new Date(ts).toLocaleString('ar-EG', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    }catch(e){ return new Date(ts).toLocaleString(); }
+  }
 
   let state = loadState();
-  function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  // ترقية بيانات قديمة محفوظة قبل إضافة السجل/مجموعات الاستيراد، عشان ميحصلش خطأ.
+  state.words.forEach(w=>{
+    ensureLog(w);
+    if(w.importBatch === undefined) w.importBatch = null;
+    if(w.comment === undefined) w.comment = "";
+    if(w.selected === undefined) w.selected = false;
+  });
+  const DEFAULT_WRITING_SETTINGS = { fontFamily:"'Space Mono', monospace", fontSizeScale:1, color:"", slant:0 };
+  function ensureWritingSettings(){
+    if(!state.writingSettings) state.writingSettings = Object.assign({}, DEFAULT_WRITING_SETTINGS);
+    return state.writingSettings;
+  }
+  ensureWritingSettings();
+  function save(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateGlobalOverdueIndicator();
+  }
 
   // ---------- THEME ----------
   const themeToggle = document.getElementById("themeToggle");
@@ -556,6 +762,7 @@
       if(btn.dataset.view === "quiz") renderQuiz();
       if(btn.dataset.view === "writing") renderWriting();
       if(btn.dataset.view === "manage") renderManage();
+      if(btn.dataset.view === "planner") renderPlanner();
       if(btn.dataset.view === "stats") renderStats();
     });
   });
@@ -573,15 +780,72 @@
       const el = document.createElement("span");
       el.className = "chip" + (cat===activeCategory ? " active":"");
       el.textContent = cat === "all" ? "الكل" : cat;
-      el.addEventListener("click", ()=>{ activeCategory = cat; renderReview(); });
+      el.addEventListener("click", ()=>{ activeCategory = cat; studyOverride = null; renderReview(); });
       wrap.appendChild(el);
     });
   }
 
+  // ---------- GROUP (SECTION) FILTER ----------
+  // كل "مجموعة" هي دفعة كلمات مضافة سوا (importBatch) وليها اسم خاص بيها. اختيار
+  // مجموعة من السيلكت ده بيخلي كل أجزاء البرنامج (المراجعة، الاختبار، الكتابة
+  // والكتابة الحرة، وحتى إدارة الكلمات) تشتغل بس على كلمات المجموعة دي.
+  let activeGroup = "all";
+  function groupsList(){
+    return importBatches().map(b=> ({id:b.info.id, label:b.info.label, count:b.words.length}));
+  }
+  function renderGroupSelect(){
+    const sel = document.getElementById("groupSelect");
+    if(!sel) return;
+    const groups = groupsList();
+    const prev = activeGroup;
+    sel.innerHTML = "";
+    const allOpt = document.createElement("option");
+    allOpt.value = "all"; allOpt.textContent = "كل الكلمات";
+    sel.appendChild(allOpt);
+    groups.forEach(g=>{
+      const opt = document.createElement("option");
+      opt.value = g.id;
+      opt.textContent = g.label + " (" + g.count + ")";
+      sel.appendChild(opt);
+    });
+    // لو المجموعة المختارة اتحذفت، ارجع لـ"كل الكلمات"
+    if(prev !== "all" && !groups.some(g=>g.id===prev)) activeGroup = "all";
+    sel.value = activeGroup;
+  }
+  function refreshActiveView(){
+    const activeBtn = document.querySelector("nav.tabs button.active");
+    const v = activeBtn ? activeBtn.dataset.view : "review";
+    studyOverride = null;
+    if(v === "review") renderReview();
+    else if(v === "quiz") renderQuiz();
+    else if(v === "writing") renderWriting();
+    else if(v === "manage") renderManage();
+    else if(v === "planner") renderPlanner();
+    else if(v === "stats") renderStats();
+  }
+  document.getElementById("groupSelect").addEventListener("change", (e)=>{
+    activeGroup = e.target.value;
+    refreshActiveView();
+  });
+
+  // لو المستخدم حدّد كلمات معيّنة يدويًا (تيك ✔ جنب كل كلمة في تبويب «الكلمات»)،
+  // التحديد ده بيبقى هو النطاق الوحيد اللي شغالة عليه كل الأوضاع (مراجعة/اختبار/كتابة)
+  // وبيتجاوز فلتر التصنيف والمجموعة لحد ما المستخدم يلغي التحديد.
+  function selectedWords(){
+    return state.words.filter(w=>w.selected);
+  }
   function filteredWords(){
-    return activeCategory==="all" ? state.words : state.words.filter(w=>(w.category||"عام")===activeCategory);
+    const sel = selectedWords();
+    if(sel.length) return sel;
+    let arr = state.words;
+    if(activeCategory!=="all") arr = arr.filter(w=>(w.category||"عام")===activeCategory);
+    if(activeGroup!=="all") arr = arr.filter(w=> w.importBatch && w.importBatch.id===activeGroup);
+    return arr;
   }
   function dueWords(){
+    // في وضع التحديد اليدوي بنعرض كل الكلمات المحددة في المراجعة بغض النظر عن
+    // تاريخ الاستحقاق، لأن التحديد نفسه معناه "عاوز أذاكر دي دلوقتي".
+    if(selectedWords().length) return filteredWords();
     const t = todayStr();
     return filteredWords().filter(w=> w.srs.due <= t);
   }
@@ -590,10 +854,27 @@
   let reviewQueue = [];
   let reviewIndex = 0;
   let flipped = false;
+  // لو المستخدم ضغط "دراسة" لكلمة أو مجموعة من تبويب «الكلمات»، بيتفعّل وضع دراسة
+  // مركّز بيتجاهل تاريخ الاستحقاق العادي ويعرض بس الكلمات المطلوبة.
+  let studyOverride = null; // {words:[...], label:string}
+
+  function studyWords(wordsArray, label){
+    if(!wordsArray || wordsArray.length===0) return;
+    studyOverride = { words: wordsArray.slice(), label: label };
+    document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.remove("active"));
+    document.querySelector('nav.tabs button[data-view="review"]').classList.add("active");
+    document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+    document.getElementById("view-review").classList.add("active");
+    renderReview();
+  }
+  function endStudyMode(){
+    studyOverride = null;
+    renderReview();
+  }
 
   function renderReview(){
     renderCatTabs();
-    reviewQueue = dueWords();
+    reviewQueue = studyOverride ? studyOverride.words.slice() : dueWords();
     reviewIndex = 0;
     flipped = false;
     updateReviewCard();
@@ -603,13 +884,47 @@
     const total = reviewQueue.length;
     const empty = document.getElementById("reviewEmpty");
     const area = document.getElementById("reviewArea");
-    document.getElementById("dueCount").textContent = total + " كلمة للمراجعة" + (activeCategory!=="all" ? " — "+activeCategory : "");
+    const banner = document.getElementById("studyModeBanner");
+    if(studyOverride){
+      banner.style.display = "block";
+      banner.innerHTML = `<div class="study-banner">
+        <span>📖 وضع دراسة مركّز: ${escapeHtml(studyOverride.label)}</span>
+        <button id="exitStudyMode">إنهاء وضع الدراسة</button>
+      </div>`;
+      document.getElementById("exitStudyMode").addEventListener("click", endStudyMode);
+      document.getElementById("dueCount").textContent = total + " كلمة في هذه الدراسة";
+    } else if(selectedWords().length){
+      const sel = selectedWords();
+      banner.style.display = "block";
+      banner.innerHTML = `<div class="selection-banner">
+        <span>🎯 وضع الكلمات المحددة: ${sel.length} كلمة (اخترتها يدويًا من تبويب «الكلمات»)</span>
+        <button id="exitSelectionMode">إلغاء التحديد</button>
+      </div>`;
+      document.getElementById("exitSelectionMode").addEventListener("click", ()=>{
+        state.words.forEach(w=> w.selected=false);
+        save();
+        renderManage();
+        renderReview();
+      });
+      document.getElementById("dueCount").textContent = total + " كلمة محددة للمذاكرة";
+    } else {
+      banner.style.display = "none";
+      banner.innerHTML = "";
+      document.getElementById("dueCount").textContent = total + " كلمة للمراجعة" + (activeCategory!=="all" ? " — "+activeCategory : "");
+    }
 
     if(total === 0){
       empty.style.display = "block";
       area.style.display = "none";
       document.getElementById("cardPos").textContent = "";
       document.getElementById("progressFill").style.width = "0%";
+      if(studyOverride || selectedWords().length){
+        empty.querySelector("h3").textContent = "خلصت دراسة هذه المجموعة 🎉";
+        empty.querySelector("p").textContent = studyOverride ? "تقدر تنهي وضع الدراسة أو تختار مجموعة تانية من تبويب «الكلمات»." : "تقدر تلغي التحديد أو تختار كلمات تانية من تبويب «الكلمات».";
+      } else {
+        empty.querySelector("h3").textContent = "لا توجد كلمات للمراجعة الآن 🎉";
+        empty.querySelector("p").textContent = "أضف كلمات جديدة من تبويب «الكلمات» أو عد لاحقاً.";
+      }
       return;
     }
     empty.style.display = "none";
@@ -633,12 +948,24 @@
     document.getElementById("cardInner").classList.toggle("flipped", flipped);
   });
 
-  document.querySelectorAll(".rate-btn").forEach(btn=>{
+  document.querySelectorAll("#reviewArea .rate-btn").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       if(reviewQueue.length===0) return;
       const w = reviewQueue[reviewIndex];
       const rate = btn.dataset.rate;
-      applyRating(w, rate);
+      applyRating(w, rate, "مراجعة البطاقات");
+      // القراءة: كل تقييم للبطاقة (متوسط/سهل) بيعتبر "قراءة" ناجحة؛ لو صعبة، العدّاد يرجع صفر.
+      const ws = ensureWriting(w);
+      if(rate === "hard"){
+        ws.readStreak = 0;
+      } else {
+        ws.readStreak = (ws.readStreak||0) + 1;
+        if(ws.readStreak >= READ_TARGET_REPS){
+          ws.readCompletions = (ws.readCompletions||0) + 1;
+          ws.readStreak = 0;
+          logEvent(w, "srs", "أتممت " + READ_TARGET_REPS + " مرات قراءة/مراجعة متتالية للبطاقة ✔");
+        }
+      }
       save();
       reviewQueue.splice(reviewIndex, 1);
       if(reviewIndex >= reviewQueue.length) reviewIndex = 0;
@@ -646,7 +973,7 @@
     });
   });
 
-  function applyRating(w, rate){
+  function applyRating(w, rate, source){
     if(rate === "hard"){
       w.srs.level = Math.max(0, w.srs.level - 1);
       w.srs.wrong += 1;
@@ -659,7 +986,11 @@
       w.srs.correct += 1;
       w.srs.due = addDays(todayStr(), INTERVALS[w.srs.level]);
     }
+    logEvent(w, "srs", (source || "حفظ/مراجعة") + " — التقييم: " + rateLabel(rate) + " (المستوى الآن: " + w.srs.level + ")");
     recordHistory(rate !== "hard");
+  }
+  function rateLabel(rate){
+    return rate === "hard" ? "صعبة ✘" : rate === "medium" ? "متوسطة ✔" : "سهلة ✔✔";
   }
 
   function recordHistory(correct){
@@ -682,16 +1013,42 @@
   });
 
   let quizWord = null;
+  // نطاق كلمات الاختبار بيلتزم بالمجموعة/التصنيف المختار من أعلى؛ لو مش كفاية كلمات
+  // في النطاق المحدد (أقل من كلمتين لازمين لعمل اختيارات)، نرجع لكل الكلمات.
+  function quizPool(){
+    const scoped = filteredWords();
+    return scoped.length >= 2 ? scoped : state.words;
+  }
   function pickQuizWord(){
-    const pool = state.words;
+    const pool = quizPool();
     if(pool.length===0) return null;
     return pool[Math.floor(Math.random()*pool.length)];
   }
 
+  // بانر بسيط بيظهر في تبويبي الاختبار والكتابة لما يكون فيه تحديد يدوي شغال،
+  // مع زر لإلغاء التحديد يرجّع البرنامج يشتغل على كل الكلمات (أو فلتر التصنيف/المجموعة).
+  function renderSelectionBannerInto(elId){
+    const el = document.getElementById(elId);
+    if(!el) return;
+    const sel = selectedWords();
+    if(sel.length === 0){ el.style.display = "none"; el.innerHTML = ""; return; }
+    el.style.display = "block";
+    el.innerHTML = `<div class="selection-banner">
+      <span>🎯 وضع الكلمات المحددة: ${sel.length} كلمة (من تبويب «الكلمات»)</span>
+      <button id="${elId}-clear">إلغاء التحديد</button>
+    </div>`;
+    document.getElementById(elId+"-clear").addEventListener("click", ()=>{
+      state.words.forEach(w=> w.selected=false);
+      save();
+      refreshActiveView();
+    });
+  }
+
   function renderQuiz(){
+    renderSelectionBannerInto("quizSelectionBanner");
     document.querySelector("[id^='quizModeChoice-"+quizMode+"']")?.classList.add("active");
     const area = document.getElementById("quizArea");
-    if(state.words.length < 2){
+    if(quizPool().length < 2){
       area.innerHTML = "<div class='empty'><h3>أضف كلمتين على الأقل لبدء الاختبار</h3></div>";
       return;
     }
@@ -703,7 +1060,7 @@
 
   function renderMCQuiz(area){
     const correct = quizWord;
-    const distractors = shuffle(state.words.filter(w=>w.id!==correct.id)).slice(0,3).map(w=>w.meaning);
+    const distractors = shuffle(quizPool().filter(w=>w.id!==correct.id)).slice(0,3).map(w=>w.meaning);
     const options = shuffle([correct.meaning, ...distractors]);
     area.innerHTML = `
       <div class="quiz-q">ما معنى هذه الكلمة؟</div>
@@ -723,7 +1080,7 @@
         if(!isCorrect){
           Array.from(wrap.children).find(c=>c.textContent===correct.meaning)?.classList.add("correct");
         }
-        applyRating(correct, isCorrect ? "medium" : "hard");
+        applyRating(correct, isCorrect ? "medium" : "hard", "اختبار (اختيار من متعدد)");
         save();
         showFeedback(isCorrect);
         setTimeout(renderQuiz, 1100);
@@ -751,7 +1108,7 @@
       const val = input.value.trim().toLowerCase();
       const target = (answerIsEnglish ? correct.word : correct.meaning).trim().toLowerCase();
       const isCorrect = val === target;
-      applyRating(correct, isCorrect ? "medium" : "hard");
+      applyRating(correct, isCorrect ? "medium" : "hard", answerIsEnglish ? "اختبار (اكتب الكلمة الإنجليزية)" : "اختبار (اكتب الترجمة)");
       save();
       showFeedback(isCorrect, isCorrect ? null : (answerIsEnglish ? correct.word : correct.meaning));
       input.disabled = true;
@@ -787,7 +1144,9 @@
 
   // ---------- WRITING / HANDWRITING PRACTICE ----------
   const TRACE_TARGET_REPS = 3;
-  const TYPED_TARGET_REPS = 5;
+  const TYPED_TARGET_REPS = 10;   // الكتابة: لازم 10 مرات صحيحة متتالية
+  const READ_TARGET_REPS = 10;    // القراءة (البطاقات): لازم 10 مرات مراجعة متتالية
+  const SPELL_TARGET_REPS = 10;   // الهجاء (الاسترجاع الحر): لازم 10 مرات صحيحة متتالية من الذاكرة
   let writingMode = "trace";
   let traceWord = null, recallWord = null, typedWord = null;
   let typedStreak = 0;
@@ -808,9 +1167,11 @@
   document.querySelector("[data-wmode='trace']").classList.add("active");
 
   function renderWriting(){
-    const has = state.words.length > 0;
+    renderSelectionBannerInto("writingSelectionBanner");
+    const has = filteredWords().length > 0;
     document.getElementById("writingNoWords").style.display = has ? "none":"block";
     document.querySelectorAll("#view-writing .wpanel").forEach(p=> p.style.display = has ? "" : "none");
+    renderWritingSettingsPanel();
     if(!has) return;
     if(writingMode==="trace") startTraceRound();
     else if(writingMode==="recall") startRecallRound();
@@ -821,11 +1182,87 @@
     document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
   }
 
+  // بيسحب كلمة عشوائية من نطاق الكلمات الحالي (المجموعة/التصنيف المختار لو فيه
+  // اختيار)، فتمارين الكتابة والاسترجاع الحر بتلتزم بنفس المجموعة المحددة من أعلى.
   function pickPracticeWord(excludeId){
-    const pool = state.words.filter(w=> w.id !== excludeId);
-    const arr = pool.length ? pool : state.words;
+    const scoped = filteredWords();
+    const base = scoped.length ? scoped : state.words;
+    const pool = base.filter(w=> w.id !== excludeId);
+    const arr = pool.length ? pool : base;
     return arr[Math.floor(Math.random()*arr.length)];
   }
+
+  // ---------- WRITING GUIDE FONT SETTINGS (حجم/نوع/لون/انحناء خط الإرشاد) ----------
+  const WRITING_FONT_OPTIONS = [
+    {value:"'Space Mono', monospace", label:"Space Mono (افتراضي)"},
+    {value:"'Georgia', serif", label:"Georgia (كلاسيكي)"},
+    {value:"'Comic Sans MS', cursive", label:"Comic Sans (بسيط)"},
+    {value:"'Caveat', cursive", label:"Caveat (خط يد منحني)"},
+    {value:"'Dancing Script', cursive", label:"Dancing Script (خط يد متصل)"},
+    {value:"'Brush Script MT', cursive", label:"Brush Script (فرشاة)"}
+  ];
+  function redrawActiveGuides(){
+    if(writingMode==="trace" && tracePad && traceWord) tracePad.drawGuideText(traceWord.word, 0.35);
+    if(writingMode==="recall" && recallPad && recallWord) recallPad.drawGuideText(recallWord.word, 0.5);
+  }
+  function renderWritingSettingsPanel(){
+    const panel = document.getElementById("writingSettingsPanel");
+    if(!panel) return;
+    const ws = ensureWritingSettings();
+    panel.innerHTML = `
+      <div class="settings-row">
+        <label>نوع القلم</label>
+        <select id="wsFontFamily">
+          ${WRITING_FONT_OPTIONS.map(o=>`<option value="${escapeAttr(o.value)}" ${o.value===ws.fontFamily?'selected':''}>${escapeHtml(o.label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>حجم الخط</label>
+        <input type="range" id="wsFontSize" min="0.6" max="1.6" step="0.05" value="${ws.fontSizeScale}">
+        <span class="val" id="wsFontSizeVal">${Math.round(ws.fontSizeScale*100)}%</span>
+      </div>
+      <div class="settings-row">
+        <label>لون الخط</label>
+        <input type="color" id="wsColor" value="${ws.color || '#A97F26'}">
+        <button class="btn ghost small" id="wsColorReset" type="button">لون افتراضي</button>
+      </div>
+      <div class="settings-row">
+        <label>الانحناء / الميل</label>
+        <input type="range" id="wsSlant" min="-30" max="30" step="1" value="${ws.slant}">
+        <span class="val" id="wsSlantVal">${ws.slant}°</span>
+      </div>
+      <div class="settings-preview" id="wsPreview" style="font-family:${ws.fontFamily}; color:${ws.color||'var(--gold-deep)'}; transform:skewX(${-ws.slant}deg); font-size:${Math.round(34*ws.fontSizeScale)}px;">Apple</div>
+    `;
+    function applyLive(){
+      ensureWritingSettings();
+      const preview = document.getElementById("wsPreview");
+      preview.style.fontFamily = ws.fontFamily;
+      preview.style.color = ws.color || 'var(--gold-deep)';
+      preview.style.transform = "skewX(" + (-ws.slant) + "deg)";
+      preview.style.fontSize = Math.round(34*ws.fontSizeScale) + "px";
+      save();
+      redrawActiveGuides();
+    }
+    document.getElementById("wsFontFamily").addEventListener("change", (e)=>{ ws.fontFamily = e.target.value; applyLive(); });
+    document.getElementById("wsFontSize").addEventListener("input", (e)=>{
+      ws.fontSizeScale = parseFloat(e.target.value);
+      document.getElementById("wsFontSizeVal").textContent = Math.round(ws.fontSizeScale*100) + "%";
+      applyLive();
+    });
+    document.getElementById("wsColor").addEventListener("input", (e)=>{ ws.color = e.target.value; applyLive(); });
+    document.getElementById("wsColorReset").addEventListener("click", ()=>{ ws.color = ""; document.getElementById("wsColor").value = "#A97F26"; applyLive(); });
+    document.getElementById("wsSlant").addEventListener("input", (e)=>{
+      ws.slant = parseInt(e.target.value, 10);
+      document.getElementById("wsSlantVal").textContent = ws.slant + "°";
+      applyLive();
+    });
+  }
+  document.getElementById("toggleWritingSettings").addEventListener("click", ()=>{
+    const panel = document.getElementById("writingSettingsPanel");
+    const show = panel.style.display === "none";
+    panel.style.display = show ? "flex" : "none";
+    if(show) renderWritingSettingsPanel();
+  });
 
   // ---- Generic two-layer canvas drawing pad (guide layer + ink layer) ----
   function makePad(guideCanvas, inkCanvas){
@@ -869,28 +1306,42 @@
       clearInk(){ iCtx.clearRect(0,0,inkCanvas.width,inkCanvas.height); },
       clearGuide(){ gCtx.clearRect(0,0,guideCanvas.width,guideCanvas.height); },
       drawGuideText(text, opacity){
+        // إعدادات خط الإرشاد القابلة للتخصيص: نوع القلم، حجمه، لونه، وميل/انحناء الحروف.
+        const ws = (typeof ensureWritingSettings === "function") ? ensureWritingSettings() : DEFAULT_WRITING_SETTINGS;
+        const family = (ws && ws.fontFamily) || "'Space Mono', monospace";
+        const sizeScale = (ws && ws.fontSizeScale) || 1;
+        const slantDeg = (ws && ws.slant) || 0;
+        const color = (ws && ws.color) ? ws.color : (getComputedStyle(document.documentElement).getPropertyValue('--gold-deep').trim() || "#A97F26");
+
         gCtx.clearRect(0,0,guideCanvas.width,guideCanvas.height);
         gCtx.save();
         gCtx.globalAlpha = opacity==null ? 0.35 : opacity;
         // نحسب حجم الخط تلقائيًا عشان الكلمة تتناسب مع مساحة اللوحة كاملة مهما كان طولها،
-        // بدل ما تتقطع أو تخرج بره الحدود لما تكون طويلة.
+        // بدل ما تتقطع أو تخرج بره الحدود لما تكون طويلة، ثم نضرب في مقياس المستخدم.
         const maxW = guideCanvas.width * 0.86;
         const maxH = guideCanvas.height * 0.62;
         let fontSize = Math.min(maxH, (guideCanvas.width / Math.max(text.length, 1)) * 1.55);
-        fontSize = Math.max(34, Math.min(fontSize, 220));
-        gCtx.font = "700 " + fontSize + "px 'Space Mono', monospace";
-        while(gCtx.measureText(text).width > maxW && fontSize > 22){
+        fontSize = Math.max(34, Math.min(fontSize, 220)) * sizeScale;
+        gCtx.font = "700 " + fontSize + "px " + family;
+        while(gCtx.measureText(text).width > maxW && fontSize > 18){
           fontSize -= 2;
-          gCtx.font = "700 " + fontSize + "px 'Space Mono', monospace";
+          gCtx.font = "700 " + fontSize + "px " + family;
         }
         gCtx.textAlign = "center";
         gCtx.textBaseline = "middle";
-        gCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--gold-deep').trim() || "#A97F26";
+        gCtx.strokeStyle = color;
         // عرض شريط الإرشاد بيتناسب مع حجم الخط — كل ما الكلمة أكبر كل ما "المسار المسموح"
         // للتتبّع بيبقى أعرض، وده بيخلي التتبّع أسهل وأكثر تسامحًا مع بساطة اليد.
         gCtx.lineWidth = Math.max(16, fontSize * 0.34);
         gCtx.lineJoin = "round";
-        gCtx.strokeText(text, guideCanvas.width/2, guideCanvas.height/2);
+        // تطبيق ميل/انحناء الحروف عن طريق "قص" (shear) أفقي حول مركز اللوحة، بدون
+        // التأثير على أبعاد الكانفاس نفسه.
+        const cx = guideCanvas.width/2, cy = guideCanvas.height/2;
+        const shear = Math.tan(-slantDeg * Math.PI/180);
+        gCtx.translate(cx, cy);
+        gCtx.transform(1, 0, shear, 1, 0, 0);
+        gCtx.translate(-cx, -cy);
+        gCtx.strokeText(text, cx, cy);
         gCtx.restore();
       },
       hasInk(){
@@ -1084,6 +1535,34 @@
     octx.drawImage(inkCanvas, 0, 0);
     return out;
   }
+  /** بتاخد "لقطة" (screenshot) من الحبر اللي كتبته فعلًا بخط إيدك على اللوحة —
+   *  بتقصّها على مساحة الكتابة نفسها (مش اللوحة كلها) وبتصغّرها عشان تتخزّن بحجم
+   *  معقول، وبترجّع الصورة كـ data URL جاهزة تتحفظ في سجل الكلمة وتتعرض تاريخيًا. */
+  function canvasSnapshotDataUrl(inkCanvas, maxWidth){
+    maxWidth = maxWidth || 420;
+    const white = inkToWhiteBgCanvas(inkCanvas);
+    const wctx = white.getContext("2d");
+    const bbox = ocrInkBBoxBrightness(wctx, white.width, white.height);
+    let sx=0, sy=0, sw=white.width, sh=white.height;
+    if(bbox){
+      const pad = Math.round(Math.max(white.width, white.height) * 0.035);
+      sx = Math.max(0, bbox.minX - pad);
+      sy = Math.max(0, bbox.minY - pad);
+      sw = Math.min(white.width - sx, bbox.w + pad*2);
+      sh = Math.min(white.height - sy, bbox.h + pad*2);
+    }
+    const scale = Math.min(1, maxWidth / sw);
+    const outW = Math.max(1, Math.round(sw*scale));
+    const outH = Math.max(1, Math.round(sh*scale));
+    const out = document.createElement("canvas");
+    out.width = outW; out.height = outH;
+    const octx = out.getContext("2d");
+    octx.fillStyle = "#fff";
+    octx.fillRect(0,0,outW,outH);
+    octx.imageSmoothingEnabled = true;
+    octx.drawImage(white, sx, sy, sw, sh, 0, 0, outW, outH);
+    return out.toDataURL("image/png");
+  }
   /** بتحاول تتعرّف على النص بمحرك Tesseract الحقيقي، ولو مش متاح (النت مقطوع/فشل التحميل)
    *  بترجع تلقائيًا لمحرك التعرف المحلي البسيط. بترجّع {text, engine, confidence}. */
   async function recognizeHandwriting(inkCanvas){
@@ -1148,6 +1627,8 @@
     const overall = Math.round(recognition*0.6 + coverage*0.2 + precision*0.2);
     const ws = ensureWriting(traceWord);
     ws.bestTraceScore = Math.max(ws.bestTraceScore||0, overall);
+    const traceSnap = canvasSnapshotDataUrl(document.getElementById("traceInkCanvas"));
+    logEvent(traceWord, "trace", "محاولة تتبّع بخط اليد — كُتب بخط اليد: \"" + (recognized || "—") + "\" — النتيجة: " + overall + "% (تعرّف " + recognition + "%، تغطية " + coverage + "%، دقة " + precision + "%)", traceSnap);
     const fb = document.getElementById("traceFeedback");
     checkBtn.disabled = false;
     document.getElementById("traceClear").disabled = false;
@@ -1155,7 +1636,7 @@
       ws.traceReps = (ws.traceReps||0) + 1;
       updateTraceRepLabel();
       if(ws.traceReps >= TRACE_TARGET_REPS){
-        applyRating(traceWord, "easy");
+        applyRating(traceWord, "easy", "تتبّع بخط اليد (إتقان)");
         fb.className = "feedback ok";
         fb.textContent = "ممتاز! أتقنت كتابة هذه الكلمة يدويًا ✔";
         ws.traceReps = 0;
@@ -1202,6 +1683,8 @@
       const recognition = Math.max(0, Math.round((1 - distance / Math.max(recallWord.word.length, recognized.length, 1)) * 100));
       document.getElementById("recallRecognition").textContent = recognition + "%" + (engine === "offline" ? " (محلي 📴)" : " (Tesseract 🌐)");
       document.getElementById("recallOcrDiff").innerHTML = renderDiffHtml(ops);
+      const recallSnap = canvasSnapshotDataUrl(document.getElementById("recallInkCanvas"));
+      logEvent(recallWord, "recall", "كشف إجابة الاسترجاع الحر — كتبت بخط يدك: \"" + (recognized || "—") + "\" (الكلمة الصحيحة: \"" + recallWord.word + "\") — دقة التعرّف: " + recognition + "%" + (engine === "offline" ? " [محرك محلي]" : " [Tesseract]"), recallSnap);
       revealBtn.disabled = false;
     }
     recallPad.drawGuideText(recallWord.word, 0.5);
@@ -1213,8 +1696,21 @@
       if(!recallWord) return;
       const ws = ensureWriting(recallWord);
       const good = btn.dataset.rrate === "easy";
-      if(good) ws.recallCorrect = (ws.recallCorrect||0)+1; else ws.recallWrong = (ws.recallWrong||0)+1;
-      applyRating(recallWord, good ? "easy" : "hard");
+      // الهجاء: كل استرجاع صح من الذاكرة بيزوّد عدّاد الهجاء، وأي خطأ يصفّره —
+      // لحد ما توصل لعشر مرات صحيحة متتالية.
+      if(good){
+        ws.recallCorrect = (ws.recallCorrect||0)+1;
+        ws.spellStreak = (ws.spellStreak||0) + 1;
+        if(ws.spellStreak >= SPELL_TARGET_REPS){
+          ws.spellCompletions = (ws.spellCompletions||0) + 1;
+          ws.spellStreak = 0;
+          logEvent(recallWord, "recall", "أتممت " + SPELL_TARGET_REPS + " مرات هجاء صحيحة متتالية من الذاكرة ✔");
+        }
+      } else {
+        ws.recallWrong = (ws.recallWrong||0)+1;
+        ws.spellStreak = 0;
+      }
+      applyRating(recallWord, good ? "easy" : "hard", "استرجاع حر (تقييم ذاتي)");
       save();
       startRecallRound();
     });
@@ -1252,8 +1748,8 @@
   // ---- TYPED REPETITION MODE ----
   function startTypedRound(){
     typedWord = pickPracticeWord();
-    typedStreak = 0;
-    if(!typedWord) return;
+    if(!typedWord){ typedStreak = 0; return; }
+    typedStreak = ensureWriting(typedWord).typedStreak || 0;
     document.getElementById("typedMeaning").textContent = typedWord.meaning;
     updateTypedProgress();
     document.getElementById("typedInput").value = "";
@@ -1350,13 +1846,16 @@
 
     if(val === target){
       typedStreak++;
+      ws.typedStreak = typedStreak;
       updateTypedProgress();
       fb.className = "feedback ok";
       diffEl.innerHTML = "";
       noteEl.textContent = "";
+      logEvent(typedWord, "typed", "كتابة صحيحة (" + typedStreak + " / " + TYPED_TARGET_REPS + ")");
       if(typedStreak >= TYPED_TARGET_REPS){
         ws.typedCompletions = (ws.typedCompletions||0)+1;
-        applyRating(typedWord, "easy");
+        ws.typedStreak = 0;
+        applyRating(typedWord, "easy", "تكرار كتابي (إتمام الدورة)");
         save();
         fb.textContent = "أتممت " + TYPED_TARGET_REPS + " مرات صحيحة متتالية! ✔";
         setTimeout(startTypedRound, 1200);
@@ -1376,13 +1875,17 @@
         // "قريب جدًا من الصح" و"مش فاكر الكلمة خالص"
         ws.typedTypos = (ws.typedTypos||0) + 1;
         typedStreak = Math.max(0, typedStreak - 1);
+        ws.typedStreak = typedStreak;
         fb.textContent = "قريب جدًا! فيه خطأ إملائي بسيط — بص على الفرق تحت:";
         noteEl.textContent = "الخطأ ده اتحسب كـ«شبه صحيح» فخصمنا تكرار واحد بس مش كل التقدم.";
+        logEvent(typedWord, "typed", "خطأ إملائي بسيط — كُتب: \"" + rawVal + "\"");
       } else {
         ws.typedMisses = (ws.typedMisses||0) + 1;
         typedStreak = 0;
+        ws.typedStreak = typedStreak;
         fb.textContent = "غير صحيح تمامًا — الكلمة الصحيحة: " + typedWord.word;
         noteEl.textContent = "العدّاد بدأ من جديد لأن الإجابة بعيدة عن الكلمة الصحيحة.";
+        logEvent(typedWord, "typed", "خطأ كامل — كُتب: \"" + rawVal + "\"");
       }
       updateTypedProgress();
       save();
@@ -1397,7 +1900,90 @@
   // ---------- MANAGE ----------
   const addWordBtn = document.getElementById("addWordBtn");
   const wordFormEl = document.getElementById("wordForm");
+  const groupFormEl = document.getElementById("groupForm");
   addWordBtn.addEventListener("click", ()=> openForm(null));
+  document.getElementById("addGroupBtn").addEventListener("click", ()=> openGroupForm());
+
+  // ============================================================
+  // إضافة مجموعة كلمات كاملة دفعة واحدة: المستخدم بيسمّي المجموعة مرة واحدة،
+  // بعدين يضيف كام كلمة يحب في صفوف ديناميكية (كل كلمة ممكن يكون ليها كومنت
+  // خاص بيها)، وعند الحفظ كل الكلمات دي بتتحط في نفس "السكشن" (importBatch)
+  // باسم المجموعة اللي كتبها، فتظهر مجمّعة في تبويب «الكلمات» وتقدر تختارها
+  // بالكامل من سيلكت المجموعة فوق.
+  // ============================================================
+  let groupRowSeq = 0;
+  function groupWordRowHtml(idx){
+    return `
+      <div class="group-word-row" data-row="${idx}">
+        <button type="button" class="rm-row" data-rm-row title="إزالة هذه الكلمة">✕</button>
+        <div><label>الكلمة الإنجليزية</label><input class="gw-word" dir="ltr"></div>
+        <div><label>المعنى بالعربية</label><input class="gw-meaning"></div>
+        <div><label>النطق (اختياري)</label><input class="gw-pron" dir="ltr"></div>
+        <div><label>التصنيف (اختياري)</label><input class="gw-cat" placeholder="Food, Travel..."></div>
+        <div class="full"><label>مثال جملة (اختياري)</label><input class="gw-example" dir="ltr"></div>
+        <div class="full"><label>كومنت على الكلمة (اختياري)</label><textarea class="gw-comment" rows="1"></textarea></div>
+      </div>
+    `;
+  }
+  function openGroupForm(){
+    groupFormEl.style.display = "block";
+    groupRowSeq = 0;
+    groupFormEl.innerHTML = `
+      <div class="group-form-panel">
+        <label style="font-size:13px; font-weight:700; display:block; margin-bottom:6px;">اسم المجموعة (السكشن)</label>
+        <input id="gf_name" class="gname" placeholder="مثلاً: أفعال الوحدة الثالثة">
+        <div id="gf_rows">${groupWordRowHtml(groupRowSeq)}</div>
+        <div class="form-actions">
+          <button class="btn ghost small" id="gfAddRow" type="button">+ كلمة تانية</button>
+          <button class="btn ghost small" id="gfCancel" type="button">إلغاء</button>
+          <button class="btn small" id="gfSave" type="button">💾 حفظ المجموعة</button>
+        </div>
+      </div>
+    `;
+    const rowsWrap = document.getElementById("gf_rows");
+    function wireRemove(){
+      rowsWrap.querySelectorAll("[data-rm-row]").forEach(btn=>{
+        btn.onclick = ()=>{
+          if(rowsWrap.querySelectorAll(".group-word-row").length <= 1) return;
+          btn.closest(".group-word-row").remove();
+        };
+      });
+    }
+    wireRemove();
+    document.getElementById("gfAddRow").addEventListener("click", ()=>{
+      groupRowSeq++;
+      rowsWrap.insertAdjacentHTML("beforeend", groupWordRowHtml(groupRowSeq));
+      wireRemove();
+    });
+    document.getElementById("gfCancel").addEventListener("click", ()=>{ groupFormEl.style.display="none"; groupFormEl.innerHTML=""; });
+    document.getElementById("gfSave").addEventListener("click", ()=>{
+      const groupName = document.getElementById("gf_name").value.trim();
+      if(!groupName){ alert("يرجى كتابة اسم للمجموعة أولاً"); return; }
+      const rows = Array.from(rowsWrap.querySelectorAll(".group-word-row"));
+      const batchInfo = { id: cryptoId(), label: groupName, ts: Date.now() };
+      let added = 0;
+      rows.forEach(row=>{
+        const w = row.querySelector(".gw-word").value.trim();
+        const m = row.querySelector(".gw-meaning").value.trim();
+        if(!w || !m) return; // كلمة ناقصة البيانات الأساسية بتتجاهل
+        const data = {
+          word: w, meaning: m,
+          pronunciation: row.querySelector(".gw-pron").value.trim(),
+          category: row.querySelector(".gw-cat").value.trim() || "عام",
+          example: row.querySelector(".gw-example").value.trim(),
+          comment: row.querySelector(".gw-comment").value.trim()
+        };
+        state.words.push(seedWord(data, "أُضيفت ضمن مجموعة \"" + groupName + "\"", batchInfo));
+        added++;
+      });
+      if(added === 0){ alert("يرجى إدخال كلمة ومعنى واحد على الأقل"); return; }
+      save();
+      groupFormEl.style.display = "none"; groupFormEl.innerHTML = "";
+      activeGroup = batchInfo.id;
+      renderManage();
+      alert("تمت إضافة " + added + " كلمة إلى مجموعة \"" + groupName + "\" ✅ — وتم اختيارها كمجموعة نشطة.");
+    });
+  }
 
   /* ============================================================
      جسر استيراد من المحرر البرمجي: أي تعليمة يحددها المستخدم هناك
@@ -1457,6 +2043,7 @@
     document.getElementById("bridgeAddSelected").addEventListener("click", ()=>{
       const checked = Array.from(panel.querySelectorAll('input[data-bidx]:checked'));
       const existingNow = existingWordSet();
+      const batchInfo = { id: cryptoId(), label: "من المحرر البرمجي — " + formatDate(Date.now()), ts: Date.now() };
       let added = 0;
       checked.forEach(chk=>{
         const it = items[+chk.dataset.bidx];
@@ -1469,7 +2056,7 @@
           example: it.example || "",
           pronunciation: "",
           category: it.lang ? ("من المحرر - " + it.lang) : "من المحرر"
-        }));
+        }, "أضيفت من جسر المحرر البرمجي", batchInfo));
         existingNow.add(key);
         added++;
       });
@@ -1490,6 +2077,7 @@
         <div><label>النطق (IPA اختياري)</label><input id="f_pron" value="${word ? escapeAttr(word.pronunciation||''):''}" dir="ltr"></div>
         <div><label>التصنيف</label><input id="f_cat" value="${word ? escapeAttr(word.category||''):''}" placeholder="Food, Travel..."></div>
         <div class="full"><label>مثال جملة</label><input id="f_example" value="${word ? escapeAttr(word.example||''):''}" dir="ltr"></div>
+        <div class="full"><label>كومنت / ملاحظة شخصية</label><input id="f_comment" value="${word ? escapeAttr(word.comment||''):''}" placeholder="أي ملاحظة تخص الكلمة دي بس..."></div>
         <div class="form-actions">
           <button class="btn ghost small" id="cancelForm">إلغاء</button>
           <button class="btn small" id="saveForm">${word ? 'حفظ التعديل':'إضافة الكلمة'}</button>
@@ -1505,12 +2093,21 @@
         word:w, meaning:m,
         pronunciation: document.getElementById("f_pron").value.trim(),
         category: document.getElementById("f_cat").value.trim() || "عام",
-        example: document.getElementById("f_example").value.trim()
+        example: document.getElementById("f_example").value.trim(),
+        comment: document.getElementById("f_comment").value.trim()
       };
       if(word){
+        const changes = [];
+        if(word.word !== data.word) changes.push("الكلمة: " + word.word + " ← " + data.word);
+        if(word.meaning !== data.meaning) changes.push("المعنى: " + word.meaning + " ← " + data.meaning);
+        if((word.category||"") !== data.category) changes.push("التصنيف: " + (word.category||"—") + " ← " + data.category);
+        if((word.pronunciation||"") !== data.pronunciation) changes.push("تعديل النطق");
+        if((word.example||"") !== data.example) changes.push("تعديل مثال الجملة");
         Object.assign(word, data);
+        logEvent(word, "edit", changes.length ? changes.join(" | ") : "تعديل بيانات الكلمة");
       } else {
-        state.words.push(seedWord(data));
+        const batchInfo = { id: cryptoId(), label: "إضافة يدوية — " + formatDate(Date.now()), ts: Date.now() };
+        state.words.push(seedWord(data, "أُضيفت يدويًا ضمن مجموعة \"" + batchInfo.label + "\"", batchInfo));
       }
       save();
       wordFormEl.style.display = "none"; wordFormEl.innerHTML = "";
@@ -1519,35 +2116,205 @@
   }
   function escapeAttr(s){ return String(s).replace(/"/g,"&quot;"); }
 
+  function buildWordRow(w){
+    const row = document.createElement("div");
+    row.className = "word-row";
+    row.style.cursor = "pointer";
+    row.style.flexWrap = "wrap";
+    row.title = "اضغط لعرض سجل الحفظ والكتابة لهذه الكلمة";
+    if(w.selected) row.classList.add("word-row-selected");
+    row.innerHTML = `
+      <label class="word-select-wrap" title="حدّد هذه الكلمة للمذاكرة">
+        <input type="checkbox" class="word-select-cb" ${w.selected ? 'checked' : ''}>
+      </label>
+      <span class="w">${escapeHtml(w.word)}</span>
+      <span class="m">${escapeHtml(w.meaning)}</span>
+      <span class="cat-tag">${escapeHtml(w.category||'عام')}</span>
+      <span class="row-actions">
+        <button data-act="study">دراسة</button>
+        <button data-act="edit">تعديل</button>
+        <button data-act="del">حذف</button>
+      </span>
+      ${w.comment ? `<div class="word-comment full" style="flex-basis:100%;">💬 ${escapeHtml(w.comment)}</div>` : ''}
+    `;
+    row.querySelector(".word-select-cb").addEventListener("click", (e)=>{
+      e.stopPropagation();
+      w.selected = e.target.checked;
+      row.classList.toggle("word-row-selected", w.selected);
+      save();
+      updateSelectionToolbar();
+    });
+    row.querySelector("[data-act='study']").addEventListener("click", (e)=>{ e.stopPropagation(); studyWords([w], w.word); });
+    row.querySelector("[data-act='edit']").addEventListener("click", (e)=>{ e.stopPropagation(); openForm(w); });
+    row.querySelector("[data-act='del']").addEventListener("click", (e)=>{
+      e.stopPropagation();
+      if(confirm("حذف هذه الكلمة؟")){
+        state.words = state.words.filter(x=>x.id!==w.id);
+        save(); renderManage();
+      }
+    });
+    row.addEventListener("click", ()=> showWordHistory(w));
+    return row;
+  }
+
+  // بيجمّع كل الكلمات اللي جاية من نفس عملية استيراد جماعية في مجموعة واحدة،
+  // مرتّبة من الأحدث للأقدم، عشان تتعرض كل مجموعة في إطارها الخاص.
+  function importBatches(){
+    const map = new Map();
+    state.words.forEach(w=>{
+      if(w.importBatch && w.importBatch.id){
+        if(!map.has(w.importBatch.id)) map.set(w.importBatch.id, {info: w.importBatch, words: []});
+        map.get(w.importBatch.id).words.push(w);
+      }
+    });
+    return Array.from(map.values()).sort((a,b)=> (b.info.ts||0) - (a.info.ts||0));
+  }
+
+  // بانر التحديد في تبويب «الكلمات» نفسه: بيعرض عدد الكلمات المحددة، وبيدّي زرار
+  // "ذاكر المحدد الآن" يوديك على المراجعة على طول، وزرار "إلغاء التحديد".
+  function updateSelectionToolbar(){
+    const bar = document.getElementById("selectionToolbar");
+    if(!bar) return;
+    const sel = selectedWords();
+    bar.style.display = "block";
+    if(sel.length === 0){
+      bar.innerHTML = `<div class="selection-banner">
+        <span>✔️ حدّد الكلمات اللي عاوز تركّز عليها بالتيك جنب كل كلمة — هتشتغل عليها المراجعة والاختبار والكتابة تلقائيًا.</span>
+      </div>`;
+    } else {
+      bar.innerHTML = `<div class="selection-banner">
+        <span>🎯 ${sel.length} كلمة محددة — المراجعة والاختبار والكتابة هتشتغل عليها بس لحد ما تلغي التحديد.</span>
+        <span style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="goStudySelected">ذاكر المحدد الآن</button>
+          <button id="clearSelection">إلغاء التحديد</button>
+        </span>
+      </div>`;
+      document.getElementById("goStudySelected").addEventListener("click", ()=> studyWords(sel, "الكلمات المحددة يدويًا"));
+      document.getElementById("clearSelection").addEventListener("click", ()=>{
+        state.words.forEach(w=> w.selected=false);
+        save();
+        renderManage();
+      });
+    }
+  }
+
   function renderManage(){
     refreshEditorBridgeButton();
+    renderGroupSelect();
+    updateSelectionToolbar();
     const list = document.getElementById("wordList");
     list.innerHTML = "";
     if(state.words.length === 0){
       list.innerHTML = "<div class='empty'><h3>لا توجد كلمات بعد</h3><p>اضغط «إضافة كلمة جديدة» للبدء.</p></div>";
       return;
     }
-    state.words.slice().reverse().forEach(w=>{
-      const row = document.createElement("div");
-      row.className = "word-row";
-      row.innerHTML = `
-        <span class="w">${escapeHtml(w.word)}</span>
-        <span class="m">${escapeHtml(w.meaning)}</span>
-        <span class="cat-tag">${escapeHtml(w.category||'عام')}</span>
-        <span class="row-actions">
-          <button data-act="edit">تعديل</button>
-          <button data-act="del">حذف</button>
-        </span>
+
+    importBatches().forEach(b=>{
+      const frame = document.createElement("div");
+      frame.className = "import-batch";
+      if(activeGroup !== "all" && activeGroup === b.info.id) frame.style.outline = "3px solid var(--gold-deep)";
+      frame.innerHTML = `
+        <div class="import-batch-head">
+          <div>
+            <div class="ibh-title">📦 ${escapeHtml(b.info.label)}</div>
+            <div class="ibh-meta">${b.words.length} كلمة — استُوردت بتاريخ ${formatDate(b.info.ts)}</div>
+          </div>
+          <div class="ibh-actions">
+            <button class="btn small" data-batch-study>📖 دراسة المجموعة</button>
+            <button class="btn ghost small" data-batch-select>🎯 اختيار كمجموعة نشطة</button>
+            <button class="btn ghost small" data-batch-rename>✏️ إعادة تسمية</button>
+            <button class="btn ghost small" data-batch-keep>إبقاء كعناصر عادية</button>
+            <button class="btn ghost small" data-batch-del>حذف المجموعة</button>
+          </div>
+        </div>
+        <div class="import-batch-body"></div>
       `;
-      row.querySelector("[data-act='edit']").addEventListener("click", ()=> openForm(w));
-      row.querySelector("[data-act='del']").addEventListener("click", ()=>{
-        if(confirm("حذف هذه الكلمة؟")){
-          state.words = state.words.filter(x=>x.id!==w.id);
+      const body = frame.querySelector(".import-batch-body");
+      b.words.slice().reverse().forEach(w=> body.appendChild(buildWordRow(w)));
+      frame.querySelector("[data-batch-study]").addEventListener("click", ()=> studyWords(b.words, b.info.label));
+      frame.querySelector("[data-batch-select]").addEventListener("click", ()=>{
+        activeGroup = b.info.id;
+        renderManage();
+        alert("تم اختيار مجموعة \"" + b.info.label + "\" كمجموعة نشطة — هتتطبق على المراجعة والاختبار والكتابة.");
+      });
+      frame.querySelector("[data-batch-rename]").addEventListener("click", ()=>{
+        const newName = prompt("اسم المجموعة الجديد:", b.info.label);
+        if(newName === null) return;
+        const trimmed = newName.trim();
+        if(!trimmed) return;
+        state.words.forEach(w=>{ if(w.importBatch && w.importBatch.id === b.info.id) w.importBatch.label = trimmed; });
+        save(); renderManage();
+      });
+      frame.querySelector("[data-batch-keep]").addEventListener("click", ()=>{
+        b.words.forEach(w=> w.importBatch = null);
+        if(activeGroup === b.info.id) activeGroup = "all";
+        save(); renderManage();
+      });
+      frame.querySelector("[data-batch-del]").addEventListener("click", ()=>{
+        if(confirm("حذف كل كلمات مجموعة \"" + b.info.label + "\" (" + b.words.length + " كلمة)؟ لا يمكن التراجع.")){
+          const ids = new Set(b.words.map(w=>w.id));
+          state.words = state.words.filter(x=>!ids.has(x.id));
+          if(activeGroup === b.info.id) activeGroup = "all";
           save(); renderManage();
         }
       });
-      list.appendChild(row);
+      list.appendChild(frame);
     });
+
+    state.words.filter(w=>!w.importBatch).slice().reverse().forEach(w=> list.appendChild(buildWordRow(w)));
+  }
+
+  // ---------- WORD HISTORY MODAL ----------
+  const LOG_TYPE_LABELS = {
+    created: "🆕 إضافة",
+    edit: "✏️ تعديل بيانات",
+    srs: "🧠 حفظ / مراجعة",
+    trace: "✍️ تتبّع بخط اليد",
+    recall: "🖊️ استرجاع حر",
+    typed: "⌨️ تكرار كتابي"
+  };
+  function showWordHistory(w){
+    ensureLog(w);
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    const entries = w.log.slice().reverse();
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">${escapeHtml(w.word)} <span class="modal-sub">— ${escapeHtml(w.meaning)}</span></div>
+            <div class="modal-meta">${entries.length} حدث مسجّل في سجل هذه الكلمة</div>
+          </div>
+          <button class="icon-btn" id="closeHistoryModal">✕</button>
+        </div>
+        <div class="modal-body" id="historyList"></div>
+      </div>
+    `;
+    const listEl = overlay.querySelector("#historyList");
+    if(entries.length === 0){
+      listEl.innerHTML = "<div class='empty'><p>لا يوجد سجل بعد لهذه الكلمة.</p></div>";
+    } else {
+      entries.forEach(en=>{
+        const item = document.createElement("div");
+        item.className = "history-item";
+        item.innerHTML = `
+          <div class="hi-top">
+            <span class="hi-type">${LOG_TYPE_LABELS[en.type] || en.type}</span>
+            <span class="hi-date mono">${formatDate(en.ts)}</span>
+          </div>
+          <div class="hi-note">${escapeHtml(en.note || "")}</div>
+          ${en.image ? `<img class="hi-image" src="${en.image}" alt="لقطة من كتابتك بخط اليد">` : ''}
+        `;
+        if(en.image){
+          const imgEl = item.querySelector(".hi-image");
+          imgEl.addEventListener("click", ()=> imgEl.classList.toggle("hi-image-zoomed"));
+        }
+        listEl.appendChild(item);
+      });
+    }
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", (e)=>{ if(e.target === overlay) document.body.removeChild(overlay); });
+    overlay.querySelector("#closeHistoryModal").addEventListener("click", ()=> document.body.removeChild(overlay));
   }
 
   // ---------- IMPORT / EXPORT ----------
@@ -1710,7 +2477,10 @@
         e.target.value = "";
         return;
       }
-      const imported = items.map(seedWord);
+      // كل ملف يتم استيراده بيتحط في مجموعة/إطار خاص بيه، عشان تقدر تحذف كل
+      // الاستيراد ده مرة واحدة أو تخليه يندمج كعناصر عادية في القائمة.
+      const batchInfo = { id: cryptoId(), label: "استيراد: " + file.name, ts: Date.now() };
+      const imported = items.map(it => seedWord(it, "مستوردة ضمن مجموعة \"" + batchInfo.label + "\"", batchInfo));
       state.words = state.words.concat(imported);
       save();
       renderManage(); renderReview();
@@ -1740,6 +2510,8 @@
     const recallAcc = recallTotal ? Math.round((recallCorrect/recallTotal)*100) : 0;
     const typedTypos = state.words.reduce((s,w)=> s+((w.writing&&w.writing.typedTypos)||0),0);
     const typedMisses = state.words.reduce((s,w)=> s+((w.writing&&w.writing.typedMisses)||0),0);
+    const readCompletions = state.words.reduce((s,w)=> s+((w.writing&&w.writing.readCompletions)||0),0);
+    const spellCompletions = state.words.reduce((s,w)=> s+((w.writing&&w.writing.spellCompletions)||0),0);
     const avgTraceScore = (()=>{
       const scores = state.words.map(w=> (w.writing&&w.writing.bestTraceScore)||0).filter(v=>v>0);
       return scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
@@ -1754,7 +2526,9 @@
       <div class="stat-box"><div class="n">${streak}</div><div class="l">أيام متتالية 🔥</div></div>
       <div class="stat-box"><div class="n">${avgTraceScore}%</div><div class="l">متوسط دقة التتبّع اليدوي</div></div>
       <div class="stat-box"><div class="n">${recallAcc}%</div><div class="l">دقة الاسترجاع الحر</div></div>
-      <div class="stat-box"><div class="n">${totalTypedDone}</div><div class="l">دورات كتابة مكتملة</div></div>
+      <div class="stat-box"><div class="n">${totalTypedDone}</div><div class="l">دورات كتابة مكتملة (10×)</div></div>
+      <div class="stat-box"><div class="n">${readCompletions}</div><div class="l">دورات قراءة مكتملة (10×)</div></div>
+      <div class="stat-box"><div class="n">${spellCompletions}</div><div class="l">دورات هجاء مكتملة (10×)</div></div>
       <div class="stat-box"><div class="n">${totalTraceReps}</div><div class="l">تكرارات تتبّع ناجحة</div></div>
       <div class="stat-box"><div class="n">${typedTypos}</div><div class="l">أخطاء إملائية بسيطة (كتابة)</div></div>
       <div class="stat-box"><div class="n">${typedMisses}</div><div class="l">أخطاء كتابة كاملة</div></div>
@@ -1808,9 +2582,111 @@
     });
   }
 
+  // ---------- خطة المراجعة (السجل العام) ----------
+  // بنعتبر أي حدث من النوعين دول "مراجعة فعلية" للكلمة: تقييم بطاقة/اختبار (srs)،
+  // أو أي محاولة كتابة/تتبّع/استرجاع حر (trace/recall/typed).
+  const REVIEW_LOG_TYPES = new Set(["srs","trace","recall","typed"]);
+  function lastStudiedTs(w){
+    const log = w.log || [];
+    for(let i=log.length-1; i>=0; i--){
+      if(REVIEW_LOG_TYPES.has(log[i].type)) return log[i].ts;
+    }
+    return null;
+  }
+  function daysSinceTs(ts){
+    if(ts==null) return Infinity;
+    return (Date.now() - ts) / 86400000;
+  }
+  function reviewStatusClass(days){
+    if(days >= 7) return "status-red";
+    if(days >= 3) return "status-yellow";
+    return "status-green";
+  }
+  function reviewStatusLabel(days){
+    if(!isFinite(days)) return "لسه ما اتراجعتش خالص";
+    const d = Math.floor(days);
+    if(d<=0) return "آخر مراجعة: النهاردة";
+    if(d===1) return "آخر مراجعة: من يوم واحد";
+    return "آخر مراجعة: من " + d + " يوم";
+  }
+  // مؤشر التنبيه الفلاش: بيفضل شغال في أي تبويب طول ما فيه كلمة فاتها أسبوع من غير مراجعة.
+  function updateGlobalOverdueIndicator(){
+    const dot = document.getElementById("plannerFlashDot");
+    if(!dot) return;
+    const overdue = state.words.some(w=> daysSinceTs(lastStudiedTs(w)) >= 7);
+    dot.style.display = overdue ? "inline-block" : "none";
+  }
+  function plannerSortedRows(){
+    return state.words.map(w=> ({w, days: daysSinceTs(lastStudiedTs(w))}))
+      .sort((a,b)=>{
+        const da = isFinite(a.days) ? a.days : Number.MAX_SAFE_INTEGER;
+        const db = isFinite(b.days) ? b.days : Number.MAX_SAFE_INTEGER;
+        return db - da; // تنازلي: الأقدم مراجعة (أو اللي لسه ما اتراجعتش) في الأول
+      });
+  }
+  // بيحدد كل كلمات الخطة يدويًا (زي تحديد ✔ في تبويب الكلمات) عشان الاختبار
+  // والكتابة كمان يشتغلوا عليها بس، وبيبدأ مراجعة بالبطاقات بترتيب الأقدم فالأحدث.
+  function startReviewPlan(){
+    const ordered = plannerSortedRows().map(r=>r.w);
+    if(ordered.length === 0) return;
+    state.words.forEach(w=> w.selected = true);
+    save();
+    renderManage();
+    studyWords(ordered, "خطة المراجعة (من الأقدم للأحدث)");
+  }
+  function renderPlanner(){
+    const rows = plannerSortedRows();
+    const overdueCount = rows.filter(r=> r.days >= 7).length;
+    const dueSoonCount = rows.filter(r=> r.days >= 3 && r.days < 7).length;
+
+    const banner = document.getElementById("plannerOverdueBanner");
+    if(overdueCount > 0){
+      banner.style.display = "flex";
+      banner.className = "overdue-flash-banner";
+      banner.innerHTML = `<span>🔴 عندك ${overdueCount} كلمة فاتها أسبوع أو أكتر من غير مراجعة!</span>
+        <button id="plannerBannerGo">ابدأ المراجعة دلوقتي</button>`;
+      document.getElementById("plannerBannerGo").addEventListener("click", startReviewPlan);
+    } else {
+      banner.style.display = "none";
+      banner.innerHTML = "";
+    }
+    updateGlobalOverdueIndicator();
+
+    document.getElementById("plannerSummary").textContent =
+      rows.length + " كلمة إجمالاً — 🔴 " + overdueCount + " متأخرة أسبوع+ — 🟡 " + dueSoonCount + " من 3 لـ6 أيام";
+
+    const list = document.getElementById("plannerList");
+    if(rows.length === 0){
+      list.innerHTML = "<div class='empty'><h3>لا توجد كلمات بعد</h3><p>ضيف كلمات من تبويب «الكلمات» الأول.</p></div>";
+      return;
+    }
+    list.innerHTML = "";
+    rows.forEach(r=>{
+      const w = r.w;
+      const ws = ensureWriting(w);
+      const row = document.createElement("div");
+      row.className = "planner-row " + reviewStatusClass(r.days);
+      row.innerHTML = `
+        <span class="status-dot"></span>
+        <span class="pw">${escapeHtml(w.word)}</span>
+        <span class="pm">${escapeHtml(w.meaning)}</span>
+        <span class="planner-meta">${reviewStatusLabel(r.days)}</span>
+        <span class="planner-progress">
+          <span>📖 قراءة: <b>${Math.min(ws.readStreak||0, READ_TARGET_REPS)}/${READ_TARGET_REPS}</b></span>
+          <span>✍️ كتابة: <b>${Math.min(ws.typedStreak||0, TYPED_TARGET_REPS)}/${TYPED_TARGET_REPS}</b></span>
+          <span>🔤 هجاء: <b>${Math.min(ws.spellStreak||0, SPELL_TARGET_REPS)}/${SPELL_TARGET_REPS}</b></span>
+        </span>
+      `;
+      list.appendChild(row);
+    });
+  }
+  document.getElementById("startPlanBtn").addEventListener("click", startReviewPlan);
+
   // ---------- INIT ----------
+  renderGroupSelect();
   renderReview();
   refreshEditorBridgeButton();
+  updateGlobalOverdueIndicator();
   window.addEventListener("resize", ()=>{
     if(document.getElementById("view-stats").classList.contains("active")) drawLevelChart();
   });
