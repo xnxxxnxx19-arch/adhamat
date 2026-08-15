@@ -480,6 +480,8 @@
   <button data-view="manage">الكلمات</button>
   <button data-view="groups">المجموعات</button>
   <button data-view="planner">خطة المراجعة<span id="plannerFlashDot" class="tab-flash-dot" style="display:none;"></span></button>
+  <button data-view="algorithms">🧩 خوارزميات</button>
+  <button data-view="sentences">📝 جمل</button>
   <button data-view="stats">الإحصائيات</button>
 </nav>
 
@@ -570,7 +572,7 @@
     <div id="wTrace" class="wpanel">
       <div class="progress-line">
         <span id="traceWordCat">التصنيف</span>
-        <span id="traceRepCount">0 / 3 تكرارات ناجحة</span>
+        <span id="traceRepCount">0 / 10 تكرارات ناجحة</span>
       </div>
       <div class="pad-wrap" id="tracePad">
         <div class="pad-canvas-frame">
@@ -627,7 +629,7 @@
         <span class="card-meaning" id="typedMeaning" style="font-size:20px;">تفاحة</span>
         <span>
           <button type="button" class="speak-btn" id="typedSpeak" title="اسمع نطق الكلمة">🔊</button>
-          <span class="progress-line" id="typedStreakLabel">0 / 5</span>
+          <span class="progress-line" id="typedStreakLabel">0 / 10</span>
         </span>
       </div>
       <div class="bar"><div class="bar-fill" id="typedBarFill" style="width:0%"></div></div>
@@ -717,6 +719,7 @@
 
   <!-- REVIEW PLAN / GENERAL HISTORY -->
   <section class="view" id="view-planner">
+    <div id="plannerScopeNote" style="display:none;"></div>
     <div id="plannerOverdueBanner" style="display:none;"></div>
     <div class="planner-summary">
       <span id="plannerSummary">0 كلمة</span>
@@ -727,6 +730,131 @@
       🟢 راجعتها من أقل من 3 أيام — 🟡 من 3 لـ6 أيام من غير مراجعة — 🔴 أسبوع أو أكتر (أو لسه ما اتراجعتش). «الجلسة الشاملة» بتاخدك كلمة كلمة، وكل كلمة بتتراجع بالترتيب: ✍️ كتابة عادية 10 مرات، ثم 🖊️ كتابة بالرسم 10 مرات، ثم 🗣️ نطق 10 مرات، ثم 🔠 ترتيب حروف متفرقة 10 مرات — وبعدين تنتقل تلقائيًا للكلمة اللي بعدها.
     </div>
     <div id="plannerList"></div>
+  </section>
+
+  <!-- ALGORITHMS / CODE MATCHING REVIEW -->
+  <section class="view" id="view-algorithms">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+      <button class="btn" id="addAlgoBtn">+ إضافة خوارزمية / كود</button>
+    </div>
+    <div id="algoForm" style="display:none;"></div>
+    <div class="progress-line">
+      <span id="algoDueCount">0 خوارزمية للمراجعة اليوم</span>
+      <span id="algoCardPos"></span>
+    </div>
+    <div id="algoReviewArea"></div>
+    <div class="empty" id="algoEmpty" style="display:none;">
+      <h3>لا توجد خوارزميات للمراجعة الآن 🎉</h3>
+    </div>
+    <h3 style="margin:26px 0 10px;">كل الخوارزميات</h3>
+    <div id="algoList"></div>
+  </section>
+
+  <!-- SENTENCES REVIEW -->
+  <section class="view" id="view-sentences">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+      <button class="btn" id="addSentBtn">+ إضافة جملة</button>
+    </div>
+    <div id="sentForm" style="display:none;"></div>
+    <div class="catalog-tabs">
+      <span class="chip" data-smode="typed">✍️ كتابة عادية</span>
+      <span class="chip" data-smode="trace">🖊️ كتابة بخط اليد</span>
+      <span class="chip" data-smode="pronounce">🗣️ نطق</span>
+      <span class="chip" data-smode="scramble">🔠 ترتيب الجملة</span>
+    </div>
+    <div class="empty" id="sentNoWords" style="display:none;">
+      <h3>أضف جملة أولاً</h3>
+      <p>تحتاج جملة واحدة على الأقل لبدء المراجعة.</p>
+    </div>
+
+    <!-- SENTENCE TYPED MODE -->
+    <div id="sTyped" class="wpanel">
+      <div class="quiz-q">اكتب الجملة كاملة زي ما هي:</div>
+      <div class="typed-target">
+        <span class="card-meaning" id="sTypedMeaning" style="font-size:18px;">—</span>
+        <span>
+          <button type="button" class="speak-btn" id="sTypedSpeak" title="اسمع نطق الجملة">🔊</button>
+          <span class="progress-line" id="sTypedStreakLabel">0 / 10</span>
+        </span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="sTypedBarFill" style="width:0%"></div></div>
+      <div class="type-row">
+        <input type="text" id="sTypedInput" autocomplete="off" dir="ltr" placeholder="type the sentence here">
+        <button class="btn small" id="sTypedSubmit">تحقّق</button>
+      </div>
+      <div class="feedback" id="sTypedFeedback"></div>
+      <div class="type-diff" id="sTypedDiff"></div>
+      <div class="typo-note" id="sTypedTypoNote"></div>
+    </div>
+
+    <!-- SENTENCE TRACE MODE (word by word handwriting) -->
+    <div id="sTrace" class="wpanel" style="display:none;">
+      <div class="progress-line">
+        <span id="sTraceWordPos">كلمة 1 من 1</span>
+        <span id="sTraceRepCount">0 / 10 جُمل كاملة ناجحة</span>
+      </div>
+      <div class="pad-wrap" id="sTracePad">
+        <div class="pad-canvas-frame">
+          <canvas id="sTraceGuideCanvas" width="960" height="540"></canvas>
+          <canvas id="sTraceInkCanvas" width="960" height="540"></canvas>
+        </div>
+        <button type="button" class="pad-fs-clear-btn" id="sTraceFsClear">🗑 مسح</button>
+        <button type="button" class="pad-expand-btn" id="sTraceExpandBtn" title="تكبير للشاشة الكاملة">⛶</button>
+      </div>
+      <div class="pad-controls">
+        <button class="btn ghost small" id="sTraceClear">مسح</button>
+        <button class="btn small" id="sTraceCheck">تحقّق من الكلمة</button>
+        <button class="btn ghost small" id="sTraceNext">جملة أخرى ⟵</button>
+      </div>
+      <div class="score-row" id="sTraceScoreRow" style="display:none;">
+        <div class="score-box"><span class="n" id="sTraceRecognition">0%</span><span class="l">دقة التعرّف</span></div>
+      </div>
+      <div class="type-diff" id="sTraceOcrDiff"></div>
+      <div class="feedback" id="sTraceFeedback"></div>
+    </div>
+
+    <!-- SENTENCE PRONOUNCE MODE -->
+    <div id="sPronounce" class="wpanel" style="display:none;">
+      <div class="quiz-q">اضغط على الميكروفون وانطق الجملة كاملة بصوت عالٍ:</div>
+      <div class="typed-target">
+        <span class="card-meaning" id="sPronounceMeaning" style="font-size:18px;">—</span>
+        <span>
+          <button type="button" class="speak-btn" id="sPronounceSpeak" title="اسمع النطق الصحيح">🔊</button>
+          <span class="progress-line" id="sPronounceStreakLabel">0 / 10</span>
+        </span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="sPronounceBarFill" style="width:0%"></div></div>
+      <div class="pad-controls" style="justify-content:center;">
+        <button class="btn small" id="sPronounceMicBtn">🎤 اضغط وانطق</button>
+        <button class="btn ghost small" id="sPronounceNext">جملة أخرى ⟵</button>
+      </div>
+      <div class="type-live" id="sPronounceHeard" style="text-align:center; direction:ltr;"></div>
+      <div class="feedback" id="sPronounceFeedback" style="text-align:center;"></div>
+      <div class="typo-note" id="sPronounceNote" style="text-align:center;"></div>
+    </div>
+
+    <!-- SENTENCE SCRAMBLE (word order) MODE -->
+    <div id="sScramble" class="wpanel" style="display:none;">
+      <div class="quiz-q">اضغط على الكلمات بالترتيب الصحيح عشان تكوّن الجملة:</div>
+      <div class="typed-target">
+        <span class="card-meaning" id="sScrambleMeaning" style="font-size:18px;">—</span>
+        <span>
+          <button type="button" class="speak-btn" id="sScrambleSpeak" title="اسمع نطق الجملة">🔊</button>
+          <span class="progress-line" id="sScrambleStreakLabel">0 / 10</span>
+        </span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="sScrambleBarFill" style="width:0%"></div></div>
+      <div class="scramble-answer" id="sScrambleAnswer"></div>
+      <div class="scramble-tiles" id="sScrambleTiles"></div>
+      <div class="pad-controls" style="justify-content:center;">
+        <button class="btn ghost small" id="sScrambleClear">مسح</button>
+        <button class="btn ghost small" id="sScrambleNext">جملة أخرى ⟵</button>
+      </div>
+      <div class="feedback" id="sScrambleFeedback" style="text-align:center;"></div>
+    </div>
+
+    <h3 style="margin:26px 0 10px;">كل الجمل</h3>
+    <div id="sentList"></div>
   </section>
 
 </main>
@@ -758,6 +886,8 @@
     }catch(e){}
     return {
       words: DEFAULT_WORDS.map(w=>seedWord(w, "كلمة افتراضية عند أول تشغيل للتطبيق")),
+      algorithms: [],
+      sentences: [],
       theme: "light",
       history: [] // {date, correct, total}
     };
@@ -824,6 +954,14 @@
     if(w.comment === undefined) w.comment = "";
     if(w.selected === undefined) w.selected = false;
   });
+  // ترقية بيانات قديمة محفوظة قبل إضافة مراجعة الخوارزميات/الجمل.
+  if(!Array.isArray(state.algorithms)) state.algorithms = [];
+  if(!Array.isArray(state.sentences)) state.sentences = [];
+  state.algorithms.forEach(a=>{ ensureLog(a); if(a.streak===undefined) a.streak = 0; });
+  state.sentences.forEach(s=>{
+    ensureLog(s);
+    if(!s.writing) s.writing = {typedStreak:0, traceReps:0, pronounceStreak:0, scrambleStreak:0};
+  });
   const DEFAULT_WRITING_SETTINGS = { fontFamily:"'Space Mono', monospace", fontSizeScale:1, color:"", slant:0 };
   function ensureWritingSettings(){
     if(!state.writingSettings) state.writingSettings = Object.assign({}, DEFAULT_WRITING_SETTINGS);
@@ -862,6 +1000,8 @@
       if(btn.dataset.view === "manage") renderManage();
       if(btn.dataset.view === "groups") renderGroupsView();
       if(btn.dataset.view === "planner") renderPlanner();
+      if(btn.dataset.view === "algorithms") renderAlgorithms();
+      if(btn.dataset.view === "sentences") renderSentences();
       if(btn.dataset.view === "stats") renderStats();
     });
   });
@@ -921,6 +1061,8 @@
     else if(v === "manage") renderManage();
     else if(v === "groups") renderGroupsView();
     else if(v === "planner") renderPlanner();
+    else if(v === "algorithms") renderAlgorithms();
+    else if(v === "sentences") renderSentences();
     else if(v === "stats") renderStats();
   }
   document.getElementById("groupSelect").addEventListener("change", (e)=>{
@@ -1243,7 +1385,7 @@
   }
 
   // ---------- WRITING / HANDWRITING PRACTICE ----------
-  const TRACE_TARGET_REPS = 3;
+  const TRACE_TARGET_REPS = 10;
   const TYPED_TARGET_REPS = 10;   // الكتابة: لازم 10 مرات صحيحة متتالية
   const READ_TARGET_REPS = 10;    // القراءة (البطاقات): لازم 10 مرات مراجعة متتالية
   const SPELL_TARGET_REPS = 10;   // الهجاء (الاسترجاع الحر): لازم 10 مرات صحيحة متتالية من الذاكرة
@@ -3316,8 +3458,18 @@
     const overdue = state.words.some(w=> daysSinceTs(lastStudiedTs(w)) >= 7);
     dot.style.display = overdue ? "inline-block" : "none";
   }
+  // بنبني قائمة الخطة بس من نطاق المصدر/المجموعة المختارة فوق (activeGroup)، مش
+  // من كل الكلمات، عشان الخطة ما تخلطش كلمات مجموعة مع مجموعة تانية. لو "كل
+  // الكلمات" هي المختارة، بنوضح ده في الملخص عشان المستخدم يعرف إنه ممكن يحصل خلط
+  // ولازم يختار مصدر واحد من قايمة "المجموعة" فوق لو عاوز عزل كامل.
+  function plannerScopedWords(){
+    let arr = state.words;
+    if(activeGroup !== "all") arr = arr.filter(w=> w.importBatch && w.importBatch.id === activeGroup);
+    else if(activeCategory !== "all") arr = arr.filter(w=> (w.category||"عام") === activeCategory);
+    return arr;
+  }
   function plannerSortedRows(){
-    return state.words.map(w=> ({w, days: daysSinceTs(lastStudiedTs(w))}))
+    return plannerScopedWords().map(w=> ({w, days: daysSinceTs(lastStudiedTs(w))}))
       .sort((a,b)=>{
         const da = isFinite(a.days) ? a.days : Number.MAX_SAFE_INTEGER;
         const db = isFinite(b.days) ? b.days : Number.MAX_SAFE_INTEGER;
@@ -3352,12 +3504,29 @@
     }
     updateGlobalOverdueIndicator();
 
+    const scopeGroups = groupsList();
+    const scopeLabel = activeGroup !== "all"
+      ? (scopeGroups.find(g=>g.id===activeGroup)?.label || "مصدر محدد")
+      : (activeCategory !== "all" ? activeCategory : null);
+    const scopeNote = document.getElementById("plannerScopeNote");
+    if(scopeNote){
+      if(scopeLabel){
+        scopeNote.style.display = "block";
+        scopeNote.className = "typo-note";
+        scopeNote.textContent = "📦 الخطة دلوقتي مقتصرة على مصدر: \"" + scopeLabel + "\" فقط — مفيش خلط مع مصادر تانية.";
+      } else {
+        scopeNote.style.display = "block";
+        scopeNote.className = "typo-note";
+        scopeNote.textContent = "⚠️ مفيش مصدر محدد دلوقتي، فالخطة بتعرض كل الكلمات من كل المصادر مع بعض. لو عاوز تراجع مصدر لوحده من غير أي خلط، اختاره من قايمة \"المجموعة\" فوق في الهيدر الأول.";
+      }
+    }
+
     document.getElementById("plannerSummary").textContent =
       rows.length + " كلمة إجمالاً — 🔴 " + overdueCount + " متأخرة أسبوع+ — 🟡 " + dueSoonCount + " من 3 لـ6 أيام";
 
     const list = document.getElementById("plannerList");
     if(rows.length === 0){
-      list.innerHTML = "<div class='empty'><h3>لا توجد كلمات بعد</h3><p>ضيف كلمات من تبويب «الكلمات» الأول.</p></div>";
+      list.innerHTML = "<div class='empty'><h3>لا توجد كلمات في نطاق المصدر ده</h3><p>جرّب تختار مصدر تاني من قايمة \"المجموعة\" فوق، أو ضيف كلمات من تبويب «الكلمات» الأول.</p></div>";
       return;
     }
     list.innerHTML = "";
@@ -3386,6 +3555,674 @@
     const ordered = plannerSortedRows().map(r=>r.w);
     startFullSession(ordered);
   });
+
+  /* ============================================================
+     🧩 مراجعة الخوارزميات / الأكواد — نظام مطابقة: بتكتب اسم الخوارزمية
+     والكود، ولما ييجي معاد المراجعة بتدخل تكتب الكود من الذاكرة وهو
+     بيطابقه (بمرونة بسيطة في المسافات والأسطر الفاضية بس المنطق لازم
+     يتطابق تمامًا)، وبعد 10 مرات صح متتالية بيتقدّم معاد المراجعة تلقائيًا
+     وبيتنقل تلقائيًا للخوارزمية اللي بعدها في قائمة المستحقات.
+  ============================================================ */
+  const ALGO_TARGET_REPS = 10;
+  function seedAlgo(a){
+    const item = Object.assign({
+      id: cryptoId(),
+      title: "", code: "", note: "", category: "عام",
+      srs: {level:0, due: todayStr(), correct:0, wrong:0},
+      streak: 0,
+      log: []
+    }, a);
+    logEvent(item, "created", "أُضيفت يدويًا");
+    return item;
+  }
+  // تطبيع الكود: بيشيل المسافات الزيادة أول/آخر كل سطر، وبيوحّد المسافات الداخلية
+  // لمسافة واحدة، وبيشيل الأسطر الفاضية تمامًا — عشان المطابقة تبقى فيها مرونة في
+  // الشكل (مسافات/أسطر) لكن لازم يفضل منطق الكود (كل التوكنز) متطابق تمامًا.
+  function normalizeCode(s){
+    return String(s||"")
+      .replace(/\r\n/g,"\n")
+      .split("\n")
+      .map(line=> line.trim().replace(/\s+/g," "))
+      .filter(line=> line.length>0)
+      .join("\n");
+  }
+  function dueAlgorithms(){
+    const t = todayStr();
+    return state.algorithms.filter(a=> a.srs.due <= t);
+  }
+  let algoQueue = [], algoIndex = 0, algoStreak = 0;
+  function renderAlgorithms(){
+    renderAlgoList();
+    algoQueue = dueAlgorithms();
+    algoIndex = 0;
+    renderAlgoReview();
+  }
+  function renderAlgoReview(){
+    const area = document.getElementById("algoReviewArea");
+    const empty = document.getElementById("algoEmpty");
+    const total = algoQueue.length;
+    document.getElementById("algoDueCount").textContent = total + " خوارزمية للمراجعة اليوم";
+    if(total === 0){
+      area.innerHTML = ""; empty.style.display = "block";
+      document.getElementById("algoCardPos").textContent = "";
+      return;
+    }
+    empty.style.display = "none";
+    if(algoIndex >= total) algoIndex = 0;
+    const a = algoQueue[algoIndex];
+    algoStreak = a.streak || 0;
+    document.getElementById("algoCardPos").textContent = (algoIndex+1) + " / " + total;
+    area.innerHTML = `
+      <div class="wpanel">
+        <div class="quiz-q">اكتب كود الخوارزمية دي من الذاكرة:</div>
+        <div class="typed-target">
+          <span class="card-meaning" style="font-size:19px;">${escapeHtml(a.title)}</span>
+          <span class="progress-line" id="algoStreakLabel">${algoStreak} / ${ALGO_TARGET_REPS}</span>
+        </div>
+        ${a.note ? `<div class="typo-note" style="margin-bottom:8px;">${escapeHtml(a.note)}</div>` : ""}
+        <div class="bar"><div class="bar-fill" id="algoBarFill" style="width:${Math.round((algoStreak/ALGO_TARGET_REPS)*100)}%"></div></div>
+        <textarea id="algoInput" dir="ltr" rows="10" placeholder="اكتب الكود هنا..." style="width:100%; font-family:'Space Mono',monospace; font-size:14px; padding:10px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--ink);"></textarea>
+        <div class="pad-controls">
+          <button class="btn small" id="algoSubmit">تحقّق</button>
+          <button class="btn ghost small" id="algoSkip">تخطي ⟵</button>
+        </div>
+        <div class="feedback" id="algoFeedback"></div>
+        <div class="type-diff" id="algoDiff"></div>
+      </div>
+    `;
+    document.getElementById("algoSubmit").addEventListener("click", submitAlgo);
+    document.getElementById("algoSkip").addEventListener("click", ()=>{ algoIndex = (algoIndex+1) % algoQueue.length; renderAlgoReview(); });
+  }
+  function submitAlgo(){
+    const a = algoQueue[algoIndex];
+    if(!a) return;
+    const input = document.getElementById("algoInput");
+    const rawVal = input.value;
+    const fb = document.getElementById("algoFeedback");
+    const diffEl = document.getElementById("algoDiff");
+    const normIn = normalizeCode(rawVal);
+    const normTarget = normalizeCode(a.code);
+    if(normIn === normTarget){
+      algoStreak = (a.streak||0) + 1;
+      a.streak = algoStreak;
+      document.getElementById("algoStreakLabel").textContent = algoStreak + " / " + ALGO_TARGET_REPS;
+      document.getElementById("algoBarFill").style.width = Math.round((algoStreak/ALGO_TARGET_REPS)*100) + "%";
+      fb.className = "feedback ok";
+      diffEl.innerHTML = "";
+      logEvent(a, "algo", "مطابقة كود صحيحة (" + algoStreak + " / " + ALGO_TARGET_REPS + ")");
+      if(algoStreak >= ALGO_TARGET_REPS){
+        a.streak = 0;
+        applyRating(a, "easy", "مطابقة خوارزمية (إتمام الدورة)");
+        save();
+        fb.textContent = "أتممت " + ALGO_TARGET_REPS + " مرات مطابقة صحيحة متتالية! ✔ هتترجع تاني حسب معاد المراجعة الجديد.";
+        setTimeout(()=>{
+          algoQueue = dueAlgorithms();
+          if(algoIndex >= algoQueue.length) algoIndex = 0;
+          renderAlgoList();
+          renderAlgoReview();
+        }, 1400);
+      } else {
+        fb.textContent = "مطابقة صحيحة! استمر.";
+        save();
+        setTimeout(()=>{ input.value=""; renderAlgoReview(); }, 900);
+      }
+    } else {
+      algoStreak = 0;
+      a.streak = 0;
+      document.getElementById("algoStreakLabel").textContent = algoStreak + " / " + ALGO_TARGET_REPS;
+      document.getElementById("algoBarFill").style.width = "0%";
+      fb.className = "feedback no";
+      fb.textContent = "مش متطابق تمامًا — قارن الفرق تحت (المسافات والأسطر الفاضية مسموح فيها، بس المنطق لازم يتطابق):";
+      const {ops} = diffChars(rawVal.trim(), a.code.trim());
+      diffEl.innerHTML = renderDiffHtml(ops);
+      logEvent(a, "algo", "مطابقة كود غير صحيحة");
+      save();
+    }
+  }
+  function renderAlgoList(){
+    const wrap = document.getElementById("algoList");
+    if(!wrap) return;
+    if(state.algorithms.length === 0){
+      wrap.innerHTML = "<div class='empty'><h3>لا توجد خوارزميات بعد</h3><p>ضيف خوارزمية أو كود عشان تبدأ تراجعه.</p></div>";
+      return;
+    }
+    const t = todayStr();
+    wrap.innerHTML = "";
+    state.algorithms.forEach(a=>{
+      const row = document.createElement("div");
+      row.className = "planner-row";
+      const dueLabel = a.srs.due <= t ? "🔴 مستحقة اليوم" : "🟢 المراجعة القادمة: " + a.srs.due;
+      row.innerHTML = `
+        <span class="pw">${escapeHtml(a.title)}</span>
+        <span class="pm">${escapeHtml(a.category||"عام")}</span>
+        <span class="planner-meta">${dueLabel}</span>
+        <span class="planner-progress">
+          <button class="btn ghost small algo-edit" data-id="${a.id}">تعديل</button>
+          <button class="btn ghost small algo-del" data-id="${a.id}">حذف</button>
+        </span>
+      `;
+      wrap.appendChild(row);
+    });
+    wrap.querySelectorAll(".algo-edit").forEach(btn=> btn.addEventListener("click", ()=> openAlgoForm(state.algorithms.find(a=>a.id===btn.dataset.id))));
+    wrap.querySelectorAll(".algo-del").forEach(btn=> btn.addEventListener("click", ()=>{
+      if(!confirm("متأكد إنك عاوز تحذف الخوارزمية دي؟")) return;
+      state.algorithms = state.algorithms.filter(a=>a.id!==btn.dataset.id);
+      save(); renderAlgorithms();
+    }));
+  }
+  function openAlgoForm(algo){
+    const form = document.getElementById("algoForm");
+    form.style.display = "block";
+    form.innerHTML = `
+      <div class="wpanel" style="margin-bottom:16px;">
+        <div class="group-word-row full"><label>اسم الخوارزمية</label><input id="algoTitle" value="${escapeAttr(algo?algo.title:'')}" placeholder="مثال: Binary Search"></div>
+        <div class="group-word-row full"><label>التصنيف (اختياري)</label><input id="algoCat" value="${escapeAttr(algo?algo.category:'')}" placeholder="مثال: Sorting, DP..."></div>
+        <div class="group-word-row full"><label>ملاحظة/وصف تظهر وقت المراجعة (اختياري)</label><textarea id="algoNote">${escapeHtml(algo ? (algo.note||'') : '')}</textarea></div>
+        <div class="group-word-row full"><label>الكود</label><textarea id="algoCode" dir="ltr" style="font-family:'Space Mono',monospace; min-height:160px;">${escapeHtml(algo?algo.code:'')}</textarea></div>
+        <div class="pad-controls">
+          <button class="btn small" id="algoFormSave">${algo?"حفظ التعديل":"إضافة"}</button>
+          <button class="btn ghost small" id="algoFormCancel">إلغاء</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("algoFormCancel").addEventListener("click", ()=>{ form.style.display="none"; form.innerHTML=""; });
+    document.getElementById("algoFormSave").addEventListener("click", ()=>{
+      const title = document.getElementById("algoTitle").value.trim();
+      const code = document.getElementById("algoCode").value;
+      if(!title || !code.trim()){ alert("لازم اسم وكود على الأقل."); return; }
+      const cat = document.getElementById("algoCat").value.trim() || "عام";
+      const note = document.getElementById("algoNote").value.trim();
+      if(algo){
+        algo.title = title; algo.code = code; algo.category = cat; algo.note = note;
+        logEvent(algo, "edited", "تم تعديل بيانات الخوارزمية");
+      } else {
+        state.algorithms.push(seedAlgo({title, code, category:cat, note}));
+      }
+      save();
+      form.style.display = "none"; form.innerHTML = "";
+      renderAlgorithms();
+    });
+  }
+  document.getElementById("addAlgoBtn").addEventListener("click", ()=> openAlgoForm(null));
+
+  /* ============================================================
+     📝 مراجعة الجمل: كتابة عادية، كتابة بخط اليد (كلمة كلمة بنفس محرك
+     OCR المستخدم في الكلمات)، نطق، وترتيب الجملة (كلمة كلمة مش حرف
+     حرف). كل وضع محتاج 10 مرات نجاح متتالية قبل ما يتقدّم معاد
+     المراجعة، وبعدين بيقترح جملة تانية تلقائيًا.
+  ============================================================ */
+  const SENT_TARGET_REPS = 10;
+  function seedSentence(s){
+    const item = Object.assign({
+      id: cryptoId(),
+      text: "", meaning: "", category: "عام",
+      srs: {level:0, due: todayStr(), correct:0, wrong:0},
+      writing: {typedStreak:0, traceReps:0, pronounceStreak:0, scrambleStreak:0},
+      log: []
+    }, s);
+    logEvent(item, "created", "أُضيفت يدويًا");
+    return item;
+  }
+  function ensureSentWriting(s){
+    if(!s.writing) s.writing = {typedStreak:0, traceReps:0, pronounceStreak:0, scrambleStreak:0};
+    return s.writing;
+  }
+  function normalizeSentence(s){
+    return String(s||"").trim().toLowerCase().replace(/\s+/g," ").replace(/[.,!?;:]/g,"");
+  }
+  function pickPracticeSentence(excludeId){
+    if(!state.sentences.length) return null;
+    const t = todayStr();
+    const due = state.sentences.filter(s=> s.srs.due <= t);
+    const base = due.length ? due : state.sentences;
+    const pool = base.filter(s=> s.id !== excludeId);
+    const arr = pool.length ? pool : base;
+    return arr[Math.floor(Math.random()*arr.length)];
+  }
+  function speakText(text){
+    if(!text || !("speechSynthesis" in window)) return;
+    try{
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "en-US"; utter.rate = 0.9;
+      window.speechSynthesis.speak(utter);
+    }catch(e){}
+  }
+
+  let sentMode = "typed";
+  document.querySelectorAll("[data-smode]").forEach(chip=>{
+    chip.addEventListener("click", ()=>{
+      document.querySelectorAll("[data-smode]").forEach(c=>c.classList.remove("active"));
+      chip.classList.add("active");
+      sentMode = chip.dataset.smode;
+      showSentMode();
+    });
+  });
+  document.querySelector("[data-smode='typed']").classList.add("active");
+  function showSentMode(){
+    document.getElementById("sTyped").style.display = sentMode==="typed" ? "block":"none";
+    document.getElementById("sTrace").style.display = sentMode==="trace" ? "block":"none";
+    document.getElementById("sPronounce").style.display = sentMode==="pronounce" ? "block":"none";
+    document.getElementById("sScramble").style.display = sentMode==="scramble" ? "block":"none";
+    if(sentMode==="typed") startSentTypedRound();
+    else if(sentMode==="trace") startSentTraceRound();
+    else if(sentMode==="pronounce") startSentPronounceRound();
+    else if(sentMode==="scramble") startSentScrambleRound();
+  }
+  function renderSentences(){
+    renderSentList();
+    const has = state.sentences.length > 0;
+    document.getElementById("sentNoWords").style.display = has ? "none":"block";
+    document.querySelectorAll("#view-sentences .wpanel").forEach(p=> p.style.display = has ? "" : "none");
+    if(!has) return;
+    showSentMode();
+  }
+
+  // ---- SENTENCE TYPED MODE ----
+  let sentTypedWord = null, sentTypedStreak = 0;
+  function startSentTypedRound(){
+    sentTypedWord = pickPracticeSentence();
+    if(!sentTypedWord) return;
+    sentTypedStreak = ensureSentWriting(sentTypedWord).typedStreak || 0;
+    document.getElementById("sTypedMeaning").textContent = sentTypedWord.meaning || "بدون ترجمة — اكتب الجملة من الذاكرة";
+    updateSentTypedProgress();
+    document.getElementById("sTypedInput").value = "";
+    document.getElementById("sTypedFeedback").textContent = "";
+    document.getElementById("sTypedFeedback").className = "feedback";
+    document.getElementById("sTypedDiff").innerHTML = "";
+    document.getElementById("sTypedTypoNote").textContent = "";
+  }
+  function updateSentTypedProgress(){
+    document.getElementById("sTypedStreakLabel").textContent = sentTypedStreak + " / " + SENT_TARGET_REPS;
+    document.getElementById("sTypedBarFill").style.width = Math.round((sentTypedStreak/SENT_TARGET_REPS)*100) + "%";
+  }
+  document.getElementById("sTypedSpeak").addEventListener("click", ()=> speakText(sentTypedWord && sentTypedWord.text));
+  function submitSentTyped(){
+    if(!sentTypedWord) return;
+    const input = document.getElementById("sTypedInput");
+    const rawVal = input.value.trim();
+    const val = normalizeSentence(rawVal);
+    const target = normalizeSentence(sentTypedWord.text);
+    const fb = document.getElementById("sTypedFeedback");
+    const diffEl = document.getElementById("sTypedDiff");
+    const noteEl = document.getElementById("sTypedTypoNote");
+    const ws = ensureSentWriting(sentTypedWord);
+    if(val === target){
+      sentTypedStreak++;
+      ws.typedStreak = sentTypedStreak;
+      updateSentTypedProgress();
+      fb.className = "feedback ok";
+      diffEl.innerHTML = ""; noteEl.textContent = "";
+      logEvent(sentTypedWord, "typed", "كتابة جملة صحيحة (" + sentTypedStreak + " / " + SENT_TARGET_REPS + ")");
+      if(sentTypedStreak >= SENT_TARGET_REPS){
+        ws.typedStreak = 0;
+        applyRating(sentTypedWord, "easy", "كتابة جملة (إتمام الدورة)");
+        save();
+        fb.textContent = "أتممت " + SENT_TARGET_REPS + " مرات صحيحة متتالية! ✔";
+        setTimeout(startSentTypedRound, 1200);
+      } else { fb.textContent = "صحيح، استمر!"; }
+    } else {
+      const {ops, distance} = diffChars(rawVal, sentTypedWord.text);
+      const maxLen = Math.max(rawVal.length, sentTypedWord.text.length, 1);
+      const isCloseTypo = rawVal.length > 0 && (distance / maxLen) <= 0.2;
+      diffEl.innerHTML = renderDiffHtml(ops);
+      fb.className = "feedback no";
+      if(isCloseTypo){
+        sentTypedStreak = Math.max(0, sentTypedStreak - 1);
+        ws.typedStreak = sentTypedStreak;
+        fb.textContent = "قريب جدًا! فيه خطأ بسيط — بص على الفرق تحت:";
+        noteEl.textContent = "خصمنا تكرار واحد بس مش كل التقدم.";
+        logEvent(sentTypedWord, "typed", "خطأ بسيط في كتابة الجملة");
+      } else {
+        sentTypedStreak = 0;
+        ws.typedStreak = 0;
+        fb.textContent = "غير صحيح — الجملة الصحيحة: " + sentTypedWord.text;
+        noteEl.textContent = "العدّاد بدأ من جديد.";
+        logEvent(sentTypedWord, "typed", "خطأ كامل في كتابة الجملة");
+      }
+      updateSentTypedProgress();
+      save();
+    }
+    input.value = ""; input.focus();
+  }
+  document.getElementById("sTypedSubmit").addEventListener("click", submitSentTyped);
+  document.getElementById("sTypedInput").addEventListener("keydown", e=>{ if(e.key==="Enter") submitSentTyped(); });
+
+  // ---- SENTENCE TRACE MODE (handwriting, word by word — reuses the same OCR pad engine) ----
+  let sTracePad = null, sentTraceWord = null, sTraceWords = [], sTraceWordIdx = 0;
+  function startSentTraceRound(){
+    if(!sTracePad) sTracePad = makePad(document.getElementById("sTraceGuideCanvas"), document.getElementById("sTraceInkCanvas"));
+    sentTraceWord = pickPracticeSentence();
+    if(!sentTraceWord) return;
+    sTraceWords = sentTraceWord.text.trim().split(/\s+/);
+    sTraceWordIdx = 0;
+    updateSentTraceRepLabel();
+    drawSentTraceWord();
+  }
+  function drawSentTraceWord(){
+    sTracePad.clearInk();
+    sTracePad.drawGuideText(sTraceWords[sTraceWordIdx] || "", 0.35);
+    document.getElementById("sTraceWordPos").textContent = "كلمة " + (sTraceWordIdx+1) + " من " + sTraceWords.length;
+    document.getElementById("sTraceScoreRow").style.display = "none";
+    document.getElementById("sTraceOcrDiff").innerHTML = "";
+    document.getElementById("sTraceFeedback").textContent = "";
+  }
+  function updateSentTraceRepLabel(){
+    const reps = sentTraceWord ? ensureSentWriting(sentTraceWord).traceReps : 0;
+    document.getElementById("sTraceRepCount").textContent = Math.min(reps, SENT_TARGET_REPS) + " / " + SENT_TARGET_REPS + " جُمل كاملة ناجحة";
+  }
+  document.getElementById("sTraceClear").addEventListener("click", ()=> sTracePad && sTracePad.clearInk());
+  document.getElementById("sTraceNext").addEventListener("click", startSentTraceRound);
+  document.getElementById("sTraceCheck").addEventListener("click", async ()=>{
+    if(!sTracePad || !sentTraceWord) return;
+    if(!sTracePad.hasInk()){
+      document.getElementById("sTraceFeedback").className = "feedback no";
+      document.getElementById("sTraceFeedback").textContent = "ارسم فوق الكلمة أولاً.";
+      return;
+    }
+    const checkBtn = document.getElementById("sTraceCheck");
+    checkBtn.disabled = true;
+    document.getElementById("sTraceFeedback").textContent = "جارِ التعرّف... ⏳";
+    const { text: recognized, engine } = await recognizeHandwriting(document.getElementById("sTraceInkCanvas"));
+    const target = sTraceWords[sTraceWordIdx];
+    const {ops, distance} = diffChars(recognized, target);
+    const recognition = Math.max(0, Math.round((1 - distance / Math.max(target.length, recognized.length, 1)) * 100));
+    document.getElementById("sTraceScoreRow").style.display = "flex";
+    document.getElementById("sTraceRecognition").textContent = recognition + "%" + (engine==="offline" ? " (محلي 📴)":" (Tesseract 🌐)");
+    document.getElementById("sTraceOcrDiff").innerHTML = renderDiffHtml(ops);
+    const fb = document.getElementById("sTraceFeedback");
+    checkBtn.disabled = false;
+    const ws = ensureSentWriting(sentTraceWord);
+    if(recognition >= 55){
+      sTraceWordIdx++;
+      if(sTraceWordIdx >= sTraceWords.length){
+        ws.traceReps = (ws.traceReps||0) + 1;
+        updateSentTraceRepLabel();
+        logEvent(sentTraceWord, "trace", "تتبّع الجملة كاملة بنجاح (" + ws.traceReps + " / " + SENT_TARGET_REPS + ")");
+        if(ws.traceReps >= SENT_TARGET_REPS){
+          applyRating(sentTraceWord, "easy", "تتبّع جملة بخط اليد (إتقان)");
+          fb.className = "feedback ok";
+          fb.textContent = "ممتاز! أتقنت كتابة الجملة دي بخط اليد ✔";
+          ws.traceReps = 0;
+        } else {
+          fb.className = "feedback ok";
+          fb.textContent = "خلصت الجملة صح! هنعيدها تاني كمان مرة (" + ws.traceReps + " / " + SENT_TARGET_REPS + ").";
+        }
+        save();
+        setTimeout(startSentTraceRound, 1400);
+        return;
+      } else {
+        fb.className = "feedback ok";
+        fb.textContent = "صح! كمّل الكلمة اللي بعدها.";
+        drawSentTraceWord();
+      }
+    } else {
+      fb.className = "feedback no";
+      fb.textContent = "حاول تتبّع الكلمة دي بدقة أكبر.";
+    }
+    save();
+  });
+
+  // ---- SENTENCE PRONOUNCE MODE ----
+  let sentPronounceWord = null, sentPronounceStreak = 0, sPronounceRecognizer = null, sPronounceListening = false;
+  function startSentPronounceRound(){
+    sentPronounceWord = pickPracticeSentence();
+    if(!sentPronounceWord) return;
+    sentPronounceStreak = ensureSentWriting(sentPronounceWord).pronounceStreak || 0;
+    document.getElementById("sPronounceMeaning").textContent = sentPronounceWord.meaning || sentPronounceWord.text;
+    updateSentPronounceProgress();
+    document.getElementById("sPronounceHeard").textContent = "";
+    document.getElementById("sPronounceFeedback").textContent = "";
+    document.getElementById("sPronounceFeedback").className = "feedback";
+    document.getElementById("sPronounceNote").textContent = supportsMicRecognition() ? "" : "الجهاز ده مش بيدعم التعرف على الصوت.";
+    document.getElementById("sPronounceMicBtn").disabled = !supportsMicRecognition();
+  }
+  function updateSentPronounceProgress(){
+    document.getElementById("sPronounceStreakLabel").textContent = sentPronounceStreak + " / " + SENT_TARGET_REPS;
+    document.getElementById("sPronounceBarFill").style.width = Math.round((sentPronounceStreak/SENT_TARGET_REPS)*100) + "%";
+  }
+  document.getElementById("sPronounceSpeak").addEventListener("click", ()=> speakText(sentPronounceWord && sentPronounceWord.text));
+  document.getElementById("sPronounceNext").addEventListener("click", startSentPronounceRound);
+  document.getElementById("sPronounceMicBtn").addEventListener("click", ()=>{
+    if(!sentPronounceWord || sPronounceListening) return;
+    if(!supportsMicRecognition()) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    sPronounceRecognizer = new SR();
+    sPronounceRecognizer.lang = "en-US";
+    sPronounceRecognizer.continuous = false;
+    sPronounceRecognizer.interimResults = false;
+    sPronounceRecognizer.maxAlternatives = 1;
+    sPronounceListening = true;
+    const micBtn = document.getElementById("sPronounceMicBtn");
+    micBtn.disabled = true; micBtn.textContent = "🎙️ بيسمعك الآن...";
+    document.getElementById("sPronounceFeedback").textContent = "";
+    sPronounceRecognizer.onresult = (event)=>{
+      const said = event.results[0][0].transcript;
+      document.getElementById("sPronounceHeard").textContent = 'سمعت: "' + said + '"';
+      checkSentPronounceAnswer(said);
+    };
+    sPronounceRecognizer.onerror = (e)=>{
+      sPronounceListening = false;
+      micBtn.disabled = !supportsMicRecognition(); micBtn.textContent = "🎤 اضغط وانطق";
+      const fb = document.getElementById("sPronounceFeedback");
+      fb.className = "feedback no";
+      fb.textContent = (e.error==="not-allowed"||e.error==="audio-capture") ? "محتاجين إذن الميكروفون." : "مسمعتش حاجة واضحة، جرّب تاني 🎤";
+    };
+    sPronounceRecognizer.onend = ()=>{ sPronounceListening=false; micBtn.disabled=!supportsMicRecognition(); micBtn.textContent="🎤 اضغط وانطق"; };
+    try{ sPronounceRecognizer.start(); }
+    catch(err){ sPronounceListening=false; micBtn.disabled=!supportsMicRecognition(); micBtn.textContent="🎤 اضغط وانطق"; }
+  });
+  function checkSentPronounceAnswer(said){
+    if(!sentPronounceWord) return;
+    const ws = ensureSentWriting(sentPronounceWord);
+    const heard = normalizeSentence(said);
+    const target = normalizeSentence(sentPronounceWord.text);
+    const {distance} = diffChars(heard, target);
+    const maxLen = Math.max(heard.length, target.length, 1);
+    const isClose = heard === target || (distance / maxLen) <= 0.3;
+    const fb = document.getElementById("sPronounceFeedback");
+    if(isClose){
+      sentPronounceStreak++;
+      ws.pronounceStreak = sentPronounceStreak;
+      updateSentPronounceProgress();
+      fb.className = "feedback ok";
+      logEvent(sentPronounceWord, "pronounce", "نطق جملة صحيح (" + sentPronounceStreak + " / " + SENT_TARGET_REPS + ")");
+      if(sentPronounceStreak >= SENT_TARGET_REPS){
+        ws.pronounceStreak = 0;
+        applyRating(sentPronounceWord, "easy", "نطق جملة (إتمام الدورة)");
+        save();
+        fb.textContent = "أتممت " + SENT_TARGET_REPS + " مرات نطق صحيحة متتالية! ✔";
+        setTimeout(startSentPronounceRound, 1200);
+      } else { fb.textContent = "صح! 🎉 استمر."; save(); }
+    } else {
+      sentPronounceStreak = 0; ws.pronounceStreak = 0;
+      updateSentPronounceProgress();
+      fb.className = "feedback no";
+      fb.textContent = "مش نفس الجملة — جرّب تاني.";
+      save();
+    }
+  }
+
+  // ---- SENTENCE SCRAMBLE MODE (word order, not letters) ----
+  let sentScrambleWord = null, sentScrambleStreak = 0, sScrambleTiles = [], sScrambleAnswerIdxs = [];
+  function shuffleArrayNoRepeat(arr){
+    const a = arr.slice();
+    if(a.length <= 1) return a;
+    let attempt = a.slice();
+    for(let tries=0; tries<20; tries++){
+      attempt = a.slice();
+      for(let i=attempt.length-1; i>0; i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [attempt[i], attempt[j]] = [attempt[j], attempt[i]];
+      }
+      if(attempt.join(" ") !== a.join(" ")) break;
+    }
+    return attempt;
+  }
+  function startSentScrambleRound(){
+    sentScrambleWord = pickPracticeSentence();
+    if(!sentScrambleWord) return;
+    sentScrambleStreak = ensureSentWriting(sentScrambleWord).scrambleStreak || 0;
+    const words = sentScrambleWord.text.trim().split(/\s+/);
+    const shuffled = shuffleArrayNoRepeat(words);
+    sScrambleTiles = shuffled.map(w=>({word:w, used:false}));
+    sScrambleAnswerIdxs = [];
+    document.getElementById("sScrambleMeaning").textContent = sentScrambleWord.meaning || "رتّب كلمات الجملة";
+    updateSentScrambleProgress();
+    document.getElementById("sScrambleFeedback").textContent = "";
+    document.getElementById("sScrambleFeedback").className = "feedback";
+    renderSentScrambleUI();
+  }
+  function updateSentScrambleProgress(){
+    document.getElementById("sScrambleStreakLabel").textContent = sentScrambleStreak + " / " + SENT_TARGET_REPS;
+    document.getElementById("sScrambleBarFill").style.width = Math.round((sentScrambleStreak/SENT_TARGET_REPS)*100) + "%";
+  }
+  function renderSentScrambleUI(){
+    const tilesWrap = document.getElementById("sScrambleTiles");
+    const answerWrap = document.getElementById("sScrambleAnswer");
+    tilesWrap.innerHTML = "";
+    sScrambleTiles.forEach((t,i)=>{
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "scramble-tile" + (t.used ? " used":"");
+      b.textContent = t.word;
+      b.disabled = t.used;
+      b.addEventListener("click", ()=>{
+        if(t.used) return;
+        t.used = true;
+        sScrambleAnswerIdxs.push(i);
+        renderSentScrambleUI();
+        if(sScrambleAnswerIdxs.length === sScrambleTiles.length) checkSentScrambleAnswer();
+      });
+      tilesWrap.appendChild(b);
+    });
+    answerWrap.innerHTML = "";
+    if(sScrambleAnswerIdxs.length === 0){
+      answerWrap.innerHTML = '<span class="scramble-placeholder">اضغط على الكلمات بالترتيب الصحيح هنا...</span>';
+    } else {
+      sScrambleAnswerIdxs.forEach((tileIdx, pos)=>{
+        const t = sScrambleTiles[tileIdx];
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "scramble-tile placed";
+        b.textContent = t.word;
+        b.addEventListener("click", ()=>{
+          t.used = false;
+          sScrambleAnswerIdxs.splice(pos,1);
+          renderSentScrambleUI();
+        });
+        answerWrap.appendChild(b);
+      });
+    }
+  }
+  document.getElementById("sScrambleClear").addEventListener("click", ()=>{
+    sScrambleAnswerIdxs.forEach(i=> sScrambleTiles[i].used=false);
+    sScrambleAnswerIdxs = [];
+    renderSentScrambleUI();
+  });
+  document.getElementById("sScrambleNext").addEventListener("click", startSentScrambleRound);
+  document.getElementById("sScrambleSpeak").addEventListener("click", ()=> speakText(sentScrambleWord && sentScrambleWord.text));
+  function checkSentScrambleAnswer(){
+    if(!sentScrambleWord) return;
+    const built = sScrambleAnswerIdxs.map(i=> sScrambleTiles[i].word).join(" ");
+    const target = sentScrambleWord.text.trim();
+    const fb = document.getElementById("sScrambleFeedback");
+    const ws = ensureSentWriting(sentScrambleWord);
+    if(normalizeSentence(built) === normalizeSentence(target)){
+      sentScrambleStreak++;
+      ws.scrambleStreak = sentScrambleStreak;
+      updateSentScrambleProgress();
+      fb.className = "feedback ok";
+      logEvent(sentScrambleWord, "scramble", "ترتيب جملة صحيح (" + sentScrambleStreak + " / " + SENT_TARGET_REPS + ")");
+      if(sentScrambleStreak >= SENT_TARGET_REPS){
+        ws.scrambleStreak = 0;
+        applyRating(sentScrambleWord, "easy", "ترتيب جملة (إتمام الدورة)");
+        save();
+        fb.textContent = "أتممت " + SENT_TARGET_REPS + " مرات صحيحة متتالية! ✔";
+        setTimeout(startSentScrambleRound, 1200);
+      } else {
+        fb.textContent = "صحيح! 🎉";
+        save();
+        setTimeout(startSentScrambleRound, 700);
+      }
+    } else {
+      sentScrambleStreak = 0; ws.scrambleStreak = 0;
+      updateSentScrambleProgress();
+      fb.className = "feedback no";
+      fb.textContent = "الترتيب مش صح — رجّع الكلمات وجرّب تاني.";
+      save();
+      setTimeout(()=>{
+        sScrambleTiles.forEach(t=> t.used=false);
+        sScrambleAnswerIdxs = [];
+        renderSentScrambleUI();
+      }, 900);
+    }
+  }
+
+  // ---- SENTENCE LIST / MANAGE ----
+  function renderSentList(){
+    const wrap = document.getElementById("sentList");
+    if(!wrap) return;
+    if(state.sentences.length === 0){
+      wrap.innerHTML = "<div class='empty'><h3>لا توجد جمل بعد</h3><p>ضيف جملة عشان تبدأ تراجعها.</p></div>";
+      return;
+    }
+    const t = todayStr();
+    wrap.innerHTML = "";
+    state.sentences.forEach(s=>{
+      const row = document.createElement("div");
+      row.className = "planner-row";
+      const dueLabel = s.srs.due <= t ? "🔴 مستحقة اليوم" : "🟢 القادمة: " + s.srs.due;
+      row.innerHTML = `
+        <span class="pw" style="direction:ltr; min-width:auto; max-width:280px; white-space:normal;">${escapeHtml(s.text)}</span>
+        <span class="pm">${escapeHtml(s.meaning||"")}</span>
+        <span class="planner-meta">${dueLabel}</span>
+        <span class="planner-progress">
+          <button class="btn ghost small sent-edit" data-id="${s.id}">تعديل</button>
+          <button class="btn ghost small sent-del" data-id="${s.id}">حذف</button>
+        </span>
+      `;
+      wrap.appendChild(row);
+    });
+    wrap.querySelectorAll(".sent-edit").forEach(btn=> btn.addEventListener("click", ()=> openSentForm(state.sentences.find(s=>s.id===btn.dataset.id))));
+    wrap.querySelectorAll(".sent-del").forEach(btn=> btn.addEventListener("click", ()=>{
+      if(!confirm("متأكد إنك عاوز تحذف الجملة دي؟")) return;
+      state.sentences = state.sentences.filter(s=>s.id!==btn.dataset.id);
+      save(); renderSentences();
+    }));
+  }
+  function openSentForm(sent){
+    const form = document.getElementById("sentForm");
+    form.style.display = "block";
+    form.innerHTML = `
+      <div class="wpanel" style="margin-bottom:16px;">
+        <div class="group-word-row full"><label>الجملة (إنجليزي)</label><textarea id="sentText" dir="ltr">${escapeHtml(sent?sent.text:'')}</textarea></div>
+        <div class="group-word-row full"><label>المعنى/الترجمة (اختياري)</label><textarea id="sentMeaning">${escapeHtml(sent?(sent.meaning||''):'')}</textarea></div>
+        <div class="group-word-row full"><label>التصنيف (اختياري)</label><input id="sentCat" value="${escapeAttr(sent?sent.category:'')}"></div>
+        <div class="pad-controls">
+          <button class="btn small" id="sentFormSave">${sent?"حفظ التعديل":"إضافة"}</button>
+          <button class="btn ghost small" id="sentFormCancel">إلغاء</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("sentFormCancel").addEventListener("click", ()=>{ form.style.display="none"; form.innerHTML=""; });
+    document.getElementById("sentFormSave").addEventListener("click", ()=>{
+      const text = document.getElementById("sentText").value.trim();
+      if(!text){ alert("لازم تكتب الجملة الأول."); return; }
+      const meaning = document.getElementById("sentMeaning").value.trim();
+      const cat = document.getElementById("sentCat").value.trim() || "عام";
+      if(sent){
+        sent.text = text; sent.meaning = meaning; sent.category = cat;
+        logEvent(sent, "edited", "تم تعديل بيانات الجملة");
+      } else {
+        state.sentences.push(seedSentence({text, meaning, category:cat}));
+      }
+      save();
+      form.style.display = "none"; form.innerHTML = "";
+      renderSentences();
+    });
+  }
+  document.getElementById("addSentBtn").addEventListener("click", ()=> openSentForm(null));
 
   // ---------- INIT ----------
   renderGroupSelect();
