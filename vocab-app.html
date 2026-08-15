@@ -436,8 +436,8 @@
       <select class="group-select" id="groupSelect" title="اختر مجموعة كلمات كاملة ليعمل عليها البرنامج بالكامل (مراجعة، اختبار، كتابة)"></select>
     </div>
     <button class="icon-btn" id="themeToggle" title="الوضع الليلي">🌙</button>
-    <input type="file" id="importFile" accept=".json" style="display:none">
-    <button class="btn ghost small" id="importBtn">استيراد</button>
+    <input type="file" id="importFile" accept=".json,.txt,text/plain,application/json" style="display:none">
+    <button class="btn ghost small" id="importBtn" title="يدعم ملفات JSON وملفات نصية (.txt)">استيراد</button>
     <button class="btn ghost small" id="exportBtn">تصدير</button>
   </div>
 </header>
@@ -2189,25 +2189,27 @@
     return Array.from(map.values()).sort((a,b)=> (b.info.ts||0) - (a.info.ts||0));
   }
 
-  // بانر التحديد في تبويب «الكلمات» نفسه: بيعرض عدد الكلمات المحددة، وبيدّي زرار
-  // "ذاكر المحدد الآن" يوديك على المراجعة على طول، وزرار "إلغاء التحديد".
+  // بانر التحديد في تبويب «الكلمات» نفسه: بيعرض عدد الكلمات المحددة، وزرار "تحديد
+  // الكل" ظاهر دايمًا بغض النظر عن حالة التحديد، بالإضافة لزرار "ذاكر المحدد الآن"
+  // وزرار "إلغاء التحديد" لما يكون فيه كلمات محددة.
   function updateSelectionToolbar(){
     const bar = document.getElementById("selectionToolbar");
     if(!bar) return;
     const sel = selectedWords();
     bar.style.display = "block";
-    if(sel.length === 0){
-      bar.innerHTML = `<div class="selection-banner">
-        <span>✔️ حدّد الكلمات اللي عاوز تركّز عليها بالتيك جنب كل كلمة — هتشتغل عليها المراجعة والاختبار والكتابة تلقائيًا.</span>
-      </div>`;
-    } else {
-      bar.innerHTML = `<div class="selection-banner">
-        <span>🎯 ${sel.length} كلمة محددة — المراجعة والاختبار والكتابة هتشتغل عليها بس لحد ما تلغي التحديد.</span>
-        <span style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button id="goStudySelected">ذاكر المحدد الآن</button>
-          <button id="clearSelection">إلغاء التحديد</button>
-        </span>
-      </div>`;
+    bar.innerHTML = `<div class="selection-banner">
+      <span>${sel.length ? "🎯 " + sel.length + " كلمة محددة — المراجعة والاختبار والكتابة هتشتغل عليها بس لحد ما تلغي التحديد." : "✔️ حدّد الكلمات اللي عاوز تركّز عليها بالتيك جنب كل كلمة — هتشتغل عليها المراجعة والاختبار والكتابة تلقائيًا."}</span>
+      <span style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="selectAllWordsBtn">تحديد الكل</button>
+        ${sel.length ? `<button id="goStudySelected">ذاكر المحدد الآن</button><button id="clearSelection">إلغاء التحديد</button>` : ""}
+      </span>
+    </div>`;
+    document.getElementById("selectAllWordsBtn").addEventListener("click", ()=>{
+      state.words.forEach(w=> w.selected = true);
+      save();
+      renderManage();
+    });
+    if(sel.length){
       document.getElementById("goStudySelected").addEventListener("click", ()=> studyWords(sel, "الكلمات المحددة يدويًا"));
       document.getElementById("clearSelection").addEventListener("click", ()=>{
         state.words.forEach(w=> w.selected=false);
@@ -2476,23 +2478,59 @@
     return {items, skipped, fieldsUsed: usedKeys};
   }
 
+  // ---- استيراد من ملف نصي عادي (.txt): كل سطر = كلمة، مفصول عن معناها بفاصل شائع.
+  // بيدعم: تاب، أو " - "، أو " – "، أو ":"، أو "="، أو فاصلة. أسطر تبدأ بـ # أو // بتتجاهل كتعليق.
+  function smartExtractWordsFromText(text){
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
+    const sepRegexes = [/\t+/, /\s+-\s+/, /\s+–\s+/, /\s*:\s+/, /\s*=\s+/, /\s*,\s+/];
+    const items = [];
+    let skipped = 0;
+    lines.forEach(line=>{
+      if(line.startsWith("#") || line.startsWith("//")) return;
+      let parts = null;
+      for(const re of sepRegexes){
+        const candidate = line.split(re);
+        if(candidate.length >= 2 && candidate[0].trim() && candidate[1].trim()){ parts = candidate; break; }
+      }
+      if(!parts){ skipped++; return; }
+      const word = parts[0].trim();
+      const meaning = parts[1].trim();
+      const example = (parts[2]||"").trim();
+      if(!word || !meaning){ skipped++; return; }
+      items.push({word, meaning, example, pronunciation:"", category:"عام"});
+    });
+    return {items, skipped, fieldsUsed: null};
+  }
+
   document.getElementById("importBtn").addEventListener("click", ()=> document.getElementById("importFile").click());
   document.getElementById("importFile").addEventListener("change", (e)=>{
     const file = e.target.files[0];
     if(!file) return;
+    const looksJson = /\.json$/i.test(file.name) || file.type === "application/json";
     const reader = new FileReader();
     reader.onload = ()=>{
-      let json;
+      const raw = reader.result;
+      let result = null;
+
+      // بنجرب الأول تفسير الملف كـ JSON (سواء كان امتداده .json أو حتى .txt فيه JSON
+      // متخزّن جواه)، ولو فشل بنعامله كملف نصي عادي مفصول بفواصل.
       try{
-        json = JSON.parse(reader.result);
+        const json = JSON.parse(raw);
+        result = smartExtractWords(json);
       }catch(err){
-        alert("تعذّرت قراءة الملف: هذا ليس ملف JSON صالحًا.");
-        e.target.value = "";
-        return;
+        if(looksJson){
+          alert("تعذّرت قراءة الملف: هذا ليس ملف JSON صالحًا.");
+          e.target.value = "";
+          return;
+        }
       }
-      const {items, skipped, fieldsUsed} = smartExtractWords(json);
+      if(!result || result.items.length === 0){
+        result = smartExtractWordsFromText(raw);
+      }
+
+      const {items, skipped} = result;
       if(items.length === 0){
-        alert("لم أتمكن من العثور على كلمات داخل هذا الملف. تأكد أن الملف يحتوي على قائمة عناصر بها نص للكلمة والمعنى على الأقل.");
+        alert("لم أتمكن من العثور على كلمات داخل هذا الملف. للملفات النصية اكتب كل كلمة في سطر بالشكل: word - meaning");
         e.target.value = "";
         return;
       }
@@ -2644,6 +2682,7 @@
           <button class="btn small" id="gpStudy">📖 مراجعة هذه المجموعة فقط</button>
           <button class="btn ghost small" id="gpQuiz">📝 اختبار هذه المجموعة فقط</button>
           <button class="btn ghost small" id="gpWriting">✍️ كتابة هذه المجموعة فقط</button>
+          <button class="btn ghost small" id="gpSelectAll">✔️ تحديد الكل في المجموعة</button>
           <button class="btn ghost small" id="gpRename">✏️ إعادة تسمية</button>
           <button class="btn ghost small" id="gpDel">حذف المجموعة</button>
         </div>
@@ -2660,6 +2699,11 @@
       content.querySelector("#gpWriting").addEventListener("click", ()=>{
         isolateGroupSelection(b.words);
         switchToView("writing");
+      });
+      content.querySelector("#gpSelectAll").addEventListener("click", ()=>{
+        b.words.forEach(w=> w.selected = true);
+        save();
+        renderGroupsView();
       });
       content.querySelector("#gpRename").addEventListener("click", ()=>{
         const newName = prompt("اسم المجموعة الجديد:", b.info.label);
