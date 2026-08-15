@@ -73,20 +73,28 @@
     font-family:'Tajawal',sans-serif; cursor:pointer; border:none;
     border-radius:var(--radius); font-weight:700; font-size:14px;
   }
+  button:disabled{cursor:not-allowed; opacity:.55;}
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible{
+    outline:2.5px solid var(--gold-deep); outline-offset:2px;
+  }
   .btn{
     background:var(--ink); color:var(--card); padding:9px 16px;
     box-shadow:2px 2px 0 var(--gold);
-    transition:transform .15s;
+    transition:transform .15s, box-shadow .15s, background .15s, opacity .15s;
   }
-  .btn:hover{transform:translate(-1px,-1px);}
-  .btn:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--gold);}
+  .btn:hover:not(:disabled){transform:translate(-1px,-1px); box-shadow:3px 3px 0 var(--gold);}
+  .btn:active:not(:disabled){transform:translate(1px,1px); box-shadow:1px 1px 0 var(--gold);}
   .btn.ghost{background:transparent; color:var(--ink); box-shadow:none; border:2px solid var(--ink);}
+  .btn.ghost:hover:not(:disabled){background:var(--ink); color:var(--card); transform:translateY(-1px);}
+  .btn.ghost:active:not(:disabled){transform:translateY(0);}
   .btn.small{padding:6px 10px; font-size:12px;}
   .icon-btn{
     width:36px;height:36px; border-radius:50%; background:var(--card);
     border:2px solid var(--ink); display:flex; align-items:center; justify-content:center;
-    font-size:16px;
+    font-size:16px; transition:transform .15s, background .15s;
   }
+  .icon-btn:hover{transform:scale(1.08) rotate(-6deg); background:var(--gold);}
+  .icon-btn:active{transform:scale(.96);}
 
   nav.tabs{
     display:flex; gap:0; padding:0 26px; overflow-x:auto; border-bottom:1px solid var(--line);
@@ -94,12 +102,15 @@
   nav.tabs button{
     background:transparent; padding:12px 18px; color:var(--ink-soft);
     border-bottom:3px solid transparent; white-space:nowrap; font-size:14px;
+    transition:color .15s, border-color .15s, background .15s;
   }
+  nav.tabs button:hover{color:var(--ink); background:rgba(200,155,60,.10);}
   nav.tabs button.active{color:var(--ink); border-bottom-color:var(--red);}
 
   main{max-width:760px; margin:0 auto; padding:30px 20px 80px;}
   .view{display:none;}
-  .view.active{display:block;}
+  .view.active{display:block; animation:viewFade .22s ease;}
+  @keyframes viewFade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
 
   /* ---- Category chips (catalog tabs) ---- */
   .catalog-tabs{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; justify-content:center;}
@@ -149,7 +160,9 @@
   .chip{
     padding:6px 14px; border-radius:16px 16px 4px 4px; border:1.5px solid var(--gold-deep);
     background:var(--card); color:var(--ink); font-size:12px; font-weight:700;
+    transition:transform .12s, background .15s, box-shadow .15s;
   }
+  .chip:hover{transform:translateY(-2px); box-shadow:1px 2px 0 var(--gold-deep);}
   .chip.active{background:var(--gold); color:var(--ink); border-color:var(--ink);}
 
   .study-banner{
@@ -193,7 +206,9 @@
   .flip-hint{font-size:11px; color:var(--ink-soft); text-align:center; margin-top:auto;}
 
   .rate-row{display:flex; gap:10px; justify-content:center; margin-top:6px;}
-  .rate-btn{padding:10px 18px; border-radius:20px; font-size:13px; color:#fff;}
+  .rate-btn{padding:10px 18px; border-radius:20px; font-size:13px; color:#fff; transition:transform .15s, box-shadow .15s;}
+  .rate-btn:hover:not(:disabled){transform:translateY(-2px); box-shadow:0 4px 0 rgba(0,0,0,.15);}
+  .rate-btn:active:not(:disabled){transform:translateY(0); box-shadow:none;}
   .rate-btn.hard{background:var(--red);}
   .rate-btn.medium{background:var(--gold-deep);}
   .rate-btn.easy{background:var(--teal);}
@@ -209,12 +224,15 @@
   .word-row{
     display:flex; align-items:center; gap:12px; background:var(--card);
     border:1px solid var(--line); border-radius:6px; padding:12px 14px; margin-bottom:8px;
+    transition:border-color .15s, box-shadow .15s;
   }
+  .word-row:hover{border-color:var(--gold-deep); box-shadow:1px 1px 0 var(--line);}
   .word-row .w{font-family:'Space Mono',monospace; font-weight:700; min-width:110px; direction:ltr;}
   .word-row .m{flex:1; color:var(--ink-soft); font-size:14px;}
   .word-row .cat-tag{font-size:10px; background:var(--paper); padding:3px 8px; border-radius:10px; color:var(--gold-deep); font-weight:700;}
   .row-actions{display:flex; gap:6px;}
-  .row-actions button{background:transparent; border:1px solid var(--line); border-radius:4px; padding:5px 8px; font-size:12px;}
+  .row-actions button{background:transparent; border:1px solid var(--line); border-radius:4px; padding:5px 8px; font-size:12px; transition:background .15s, border-color .15s;}
+  .row-actions button:hover{background:var(--paper); border-color:var(--gold-deep);}
   .word-select-wrap{display:flex; align-items:center; padding-inline-end:2px;}
   .word-select-wrap input{width:19px; height:19px; cursor:pointer; accent-color:var(--gold-deep);}
   .word-row-selected{box-shadow:0 0 0 2px var(--gold-deep) inset;}
@@ -241,8 +259,9 @@
   .options{display:grid; gap:10px;}
   .opt{
     text-align:right; padding:12px 14px; border:1.5px solid var(--line); border-radius:6px;
-    background:var(--paper); color:var(--ink); font-size:14px;
+    background:var(--paper); color:var(--ink); font-size:14px; transition:border-color .15s, transform .12s;
   }
+  .opt:hover:not(:disabled){border-color:var(--gold-deep); transform:translateY(-1px);}
   .opt.correct{border-color:var(--teal); background:rgba(46,110,98,.15);}
   .opt.wrong{border-color:var(--red); background:rgba(163,51,61,.15);}
   .type-row{display:flex; gap:10px; margin-top:6px;}
@@ -439,6 +458,104 @@
 
   footer{text-align:center; padding:20px; font-size:11px; color:var(--ink-soft);}
 
+  /* ---- Toasts ---- */
+  #toastStack{
+    position:fixed; bottom:18px; inset-inline-end:18px; z-index:999;
+    display:flex; flex-direction:column; gap:8px; max-width:320px;
+  }
+  .toast{
+    background:var(--ink); color:var(--card); padding:11px 16px; border-radius:8px;
+    box-shadow:var(--shadow); font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px;
+    animation:toastIn .25s ease; border-inline-start:4px solid var(--gold);
+  }
+  .toast.warn{border-inline-start-color:var(--red);}
+  .toast.ok{border-inline-start-color:var(--teal);}
+  .toast.leaving{animation:toastOut .2s ease forwards;}
+  @keyframes toastIn{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
+  @keyframes toastOut{to{opacity:0; transform:translateX(12px);}}
+
+  /* ---- Import hub (modal + dropzone) ---- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(28,37,65,.55); z-index:900;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+  }
+  .modal-box{
+    background:var(--card); border:2px solid var(--ink); border-radius:10px; box-shadow:var(--shadow);
+    padding:20px; max-width:520px; width:100%; max-height:86vh; overflow:auto;
+  }
+  .modal-box h3{margin:0 0 6px;}
+  .modal-box .sub{font-size:12px; color:var(--ink-soft); margin:0 0 14px;}
+  .import-methods{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:14px;}
+  .import-method-btn{
+    background:var(--paper); border:2px solid var(--line); border-radius:8px; padding:14px 8px;
+    text-align:center; font-size:12.5px; font-weight:700; color:var(--ink); display:flex; flex-direction:column; gap:6px; align-items:center;
+  }
+  .import-method-btn:hover{border-color:var(--gold-deep);}
+  .import-method-btn .ic{font-size:22px;}
+  .dropzone{
+    border:2.5px dashed var(--line); border-radius:8px; padding:22px 12px; text-align:center;
+    font-size:13px; color:var(--ink-soft); margin-bottom:12px; transition:border-color .15s, background .15s;
+  }
+  .dropzone.drag{border-color:var(--gold-deep); background:rgba(200,155,60,.12); color:var(--ink);}
+  body.app-drag-active::after{
+    content:"أفلت الملفات هنا للاستيراد 📥"; position:fixed; inset:0; z-index:850;
+    background:rgba(200,155,60,.18); border:4px dashed var(--gold-deep);
+    display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900; color:var(--ink);
+    pointer-events:none;
+  }
+  .import-paste-area{width:100%; min-height:130px; font-family:'Space Mono',monospace; font-size:13px; direction:ltr; text-align:left;
+    border:1px solid var(--line); border-radius:6px; padding:10px; background:var(--paper); color:var(--ink); resize:vertical;}
+  .import-scope-name{width:100%; margin-top:10px;}
+  .import-progress{font-size:12px; color:var(--ink-soft); margin-top:8px; text-align:center;}
+
+  /* ---- Manage: toolbar (sort/filter) + batch multi-select ---- */
+  .manage-toolbar{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:0 0 14px;
+    background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+  }
+  .manage-toolbar .field{display:flex; align-items:center; gap:6px;}
+  .manage-toolbar label{font-size:12px; color:var(--ink-soft); white-space:nowrap;}
+  .manage-toolbar select, .manage-toolbar input[type="search"]{
+    font-family:'Tajawal',sans-serif; font-size:12.5px; background:var(--paper); color:var(--ink);
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px;
+  }
+  .manage-toolbar input[type="search"]{min-width:140px; flex:1;}
+  .batch-check{width:18px; height:18px; cursor:pointer; accent-color:var(--gold-deep); margin-inline-end:8px;}
+  .ibh-title-row{display:flex; align-items:center; gap:4px;}
+  .batch-bulkbar{
+    display:none; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:var(--gold); color:var(--ink); border:2px solid var(--ink); border-radius:6px;
+    padding:9px 14px; margin-bottom:14px; font-size:13px; font-weight:700;
+  }
+  .batch-bulkbar.show{display:flex;}
+  .batch-bulkbar button{background:var(--ink); color:var(--card); border-radius:4px; padding:6px 12px; font-size:12px;}
+
+  /* ---- Matching game ---- */
+  .match-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .match-col{display:flex; flex-direction:column; gap:8px;}
+  .match-tile{
+    background:var(--card); border:2px solid var(--line); border-radius:8px; padding:10px 12px;
+    font-size:13.5px; font-weight:700; text-align:center; cursor:pointer; min-height:44px;
+    display:flex; align-items:center; justify-content:center; transition:transform .12s, border-color .12s;
+  }
+  .match-tile.eng{direction:ltr;}
+  .match-tile:hover{transform:translateY(-1px); border-color:var(--gold-deep);}
+  .match-tile.selected{border-color:var(--gold-deep); background:var(--gold); box-shadow:2px 2px 0 var(--ink);}
+  .match-tile.correct{border-color:var(--teal); background:var(--teal); color:#fff; cursor:default; opacity:.85;}
+  .match-tile.wrong-flash{animation:matchShake .35s;}
+  @keyframes matchShake{0%,100%{transform:translateX(0);} 25%{transform:translateX(-5px);} 75%{transform:translateX(5px);}}
+  .match-meta{display:flex; justify-content:space-between; align-items:center; font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;}
+
+  /* ---- Fill-in-the-blank writing mode ---- */
+  .blank-sentence{
+    font-family:'Space Mono',monospace; font-size:18px; direction:ltr; text-align:center;
+    background:var(--card); border:1px dashed var(--line); border-radius:8px; padding:16px 12px; margin-bottom:14px;
+  }
+  .blank-sentence .gap{
+    display:inline-block; min-width:70px; border-bottom:2px solid var(--red); color:var(--red); font-weight:700;
+  }
+  .hint-row{display:flex; justify-content:center; gap:8px; margin-top:8px;}
+
   @media (max-width:480px){
     .form-grid{grid-template-columns:1fr;}
     .stat-grid{grid-template-columns:repeat(2,1fr);}
@@ -467,11 +584,13 @@
       <select class="group-select" id="groupSelect" title="اختر مجموعة كلمات كاملة ليعمل عليها البرنامج بالكامل (مراجعة، اختبار، كتابة)"></select>
     </div>
     <button class="icon-btn" id="themeToggle" title="الوضع الليلي">🌙</button>
-    <input type="file" id="importFile" accept=".json,.txt,text/plain,application/json" style="display:none">
-    <button class="btn ghost small" id="importBtn" title="يدعم ملفات JSON وملفات نصية (.txt)">استيراد</button>
+    <input type="file" id="importFile" accept=".json,.txt,.csv,text/plain,application/json,text/csv,image/*" multiple style="display:none">
+    <button class="btn ghost small" id="importBtn" title="استيراد من ملفات، صور، أو نص ملصوق">📥 استيراد</button>
     <button class="btn ghost small" id="exportBtn">تصدير</button>
   </div>
 </header>
+
+<div id="toastStack" aria-live="polite"></div>
 
 <nav class="tabs">
   <button data-view="review" class="active">المراجعة</button>
@@ -540,6 +659,8 @@
       <span class="chip" id="quizModeChoice-mc" data-mode="mc">اختيار من متعدد</span>
       <span class="chip" id="quizModeChoice-type" data-mode="type">اكتب الترجمة</span>
       <span class="chip" id="quizModeChoice-en" data-mode="en">اكتب الكلمة الإنجليزية</span>
+      <span class="chip" id="quizModeChoice-match" data-mode="match">🧩 لعبة التوصيل</span>
+      <span class="chip" id="quizModeChoice-speed" data-mode="speed">⏱️ اختبار سريع</span>
     </div>
     <div class="quiz-card" id="quizArea"></div>
   </section>
@@ -554,6 +675,7 @@
       <span class="chip" data-wmode="typed">تكرار كتابي</span>
       <span class="chip" data-wmode="pronounce">🗣️ نطق</span>
       <span class="chip" data-wmode="scramble">🔠 حروف متفرقة</span>
+      <span class="chip" data-wmode="blank">📝 املأ الفراغ</span>
     </div>
     <div class="writing-toolbar">
       <button class="btn ghost small" id="toggleWritingSettings">🖋️ تخصيص خط الإرشاد</button>
@@ -682,6 +804,22 @@
       </div>
       <div class="feedback" id="scrambleFeedback" style="text-align:center;"></div>
     </div>
+
+    <!-- FILL-IN-THE-BLANK MODE (uses the word's own example sentence) -->
+    <div id="wBlank" class="wpanel" style="display:none;">
+      <div class="quiz-q">اكتب الكلمة الناقصة عشان تكمل الجملة صح:</div>
+      <div class="blank-sentence" id="blankSentence">—</div>
+      <div class="type-row">
+        <input type="text" id="blankInput" autocomplete="off" dir="ltr" placeholder="type the missing word">
+        <button class="btn small" id="blankSubmit">تحقّق</button>
+      </div>
+      <div class="hint-row">
+        <button class="btn ghost small" id="blankHint">💡 لمّح لي بأول حرف</button>
+        <button class="btn ghost small" id="blankNext">كلمة أخرى ⟵</button>
+      </div>
+      <div class="feedback" id="blankFeedback" style="text-align:center;"></div>
+      <div class="typo-note" id="blankHintNote" style="text-align:center;"></div>
+    </div>
   </section>
 
   <!-- MANAGE -->
@@ -696,6 +834,38 @@
     <div id="groupForm" style="display:none;"></div>
     <div id="editorBridgePanel" style="display:none;"></div>
     <div id="englishBridgePanel" style="display:none;"></div>
+    <div class="manage-toolbar">
+      <div class="field"><input type="search" id="manageSearch" placeholder="🔎 ابحث عن كلمة أو معنى..."></div>
+      <div class="field">
+        <label for="manageSort">ترتيب:</label>
+        <select id="manageSort">
+          <option value="date-desc">الأحدث أولاً</option>
+          <option value="date-asc">الأقدم أولاً</option>
+          <option value="alpha">أبجديًا (A→Z)</option>
+          <option value="level-desc">الأكثر إتقانًا أولاً</option>
+          <option value="level-asc">الأقل إتقانًا أولاً</option>
+          <option value="due">الأقرب استحقاقًا للمراجعة</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="manageFilter">فلتر:</label>
+        <select id="manageFilter">
+          <option value="all">كل الكلمات</option>
+          <option value="due">مستحقة اليوم فقط</option>
+          <option value="mastered">متقنة فقط</option>
+          <option value="needs">تحتاج تركيز (مستوى منخفض)</option>
+        </select>
+      </div>
+    </div>
+    <div class="batch-bulkbar" id="batchBulkBar">
+      <span id="batchBulkLabel">0 مجموعة محددة</span>
+      <span style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="bulkStudyBtn">📖 ذاكر المجموعات المحددة</button>
+        <button id="bulkMergeBtn">🔗 دمج في مجموعة واحدة</button>
+        <button id="bulkDelBtn">🗑️ حذف المجموعات المحددة</button>
+        <button id="bulkClearBtn">إلغاء التحديد</button>
+      </span>
+    </div>
     <div id="selectionToolbar" style="display:none;"></div>
     <div id="wordList"></div>
   </section>
@@ -859,6 +1029,8 @@
 
 </main>
 
+<div id="importHubOverlay" style="display:none;"></div>
+
 <footer>يعمل بالكامل داخل متصفحك — لا اتصال إنترنت مطلوب، وبياناتك محفوظة محلياً.</footer>
 
 <script>
@@ -911,7 +1083,7 @@
     const word = Object.assign({
       id: cryptoId(),
       srs: {level:0, due: todayStr(), correct:0, wrong:0},
-      writing: {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0, pronounceStreak:0, pronounceCompletions:0, pronounceCorrect:0, pronounceWrong:0, scrambleStreak:0, scrambleCompletions:0, scrambleCorrect:0, scrambleWrong:0},
+      writing: {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0, pronounceStreak:0, pronounceCompletions:0, pronounceCorrect:0, pronounceWrong:0, scrambleStreak:0, scrambleCompletions:0, scrambleCorrect:0, scrambleWrong:0, blankStreak:0, blankCompletions:0, blankCorrect:0, blankWrong:0, blankHintsUsed:0},
       log: [],
       comment: "",
       selected: false,
@@ -921,7 +1093,7 @@
     return word;
   }
   function ensureWriting(w){
-    if(!w.writing) w.writing = {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0, pronounceStreak:0, pronounceCompletions:0, pronounceCorrect:0, pronounceWrong:0, scrambleStreak:0, scrambleCompletions:0, scrambleCorrect:0, scrambleWrong:0};
+    if(!w.writing) w.writing = {traceReps:0, recallCorrect:0, recallWrong:0, bestTraceScore:0, typedCompletions:0, typedStreak:0, readStreak:0, readCompletions:0, spellStreak:0, spellCompletions:0, pronounceStreak:0, pronounceCompletions:0, pronounceCorrect:0, pronounceWrong:0, scrambleStreak:0, scrambleCompletions:0, scrambleCorrect:0, scrambleWrong:0, blankStreak:0, blankCompletions:0, blankCorrect:0, blankWrong:0, blankHintsUsed:0};
     const ws = w.writing;
     if(ws.typedStreak===undefined) ws.typedStreak = 0;
     if(ws.readStreak===undefined) ws.readStreak = 0;
@@ -932,6 +1104,8 @@
     if(ws.pronounceCompletions===undefined) ws.pronounceCompletions = 0;
     if(ws.scrambleStreak===undefined) ws.scrambleStreak = 0;
     if(ws.scrambleCompletions===undefined) ws.scrambleCompletions = 0;
+    if(ws.blankStreak===undefined) ws.blankStreak = 0;
+    if(ws.blankCompletions===undefined) ws.blankCompletions = 0;
     return ws;
   }
   function cryptoId(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
@@ -1249,6 +1423,7 @@
     el.addEventListener("click", ()=>{
       document.querySelectorAll("[id^='quizModeChoice']").forEach(e=>e.classList.remove("active"));
       el.classList.add("active");
+      if(speedTimerHandle){ clearInterval(speedTimerHandle); speedTimerHandle=null; speedActive=false; }
       quizMode = el.dataset.mode;
       renderQuiz();
     });
@@ -1294,10 +1469,155 @@
       area.innerHTML = "<div class='empty'><h3>أضف كلمتين على الأقل لبدء الاختبار</h3></div>";
       return;
     }
+    if(quizMode === "match"){ renderMatchQuiz(area); return; }
+    if(quizMode === "speed"){ renderSpeedQuiz(area); return; }
     quizWord = pickQuizWord();
     if(quizMode === "mc") renderMCQuiz(area);
     else if(quizMode === "type") renderTypeQuiz(area, "en-to-ar");
     else renderTypeQuiz(area, "ar-to-en");
+  }
+
+  // ---- MATCHING GAME: touch/click a word then its meaning to pair them up ----
+  function renderMatchQuiz(area){
+    const pool = shuffle(quizPool()).slice(0, 6);
+    if(pool.length < 2){
+      area.innerHTML = "<div class='empty'><h3>أضف كلمتين على الأقل لبدء لعبة التوصيل</h3></div>";
+      return;
+    }
+    const words = shuffle(pool);
+    const meanings = shuffle(pool);
+    let selWord = null, selMeaning = null, matched = 0, mistakes = 0;
+    const startTs = Date.now();
+    area.innerHTML = `
+      <div class="quiz-q">وصّل كل كلمة بمعناها الصحيح:</div>
+      <div class="match-meta"><span id="matchProgress">0 / ${pool.length} تم التوصيل</span><span id="matchMistakes">0 أخطاء</span></div>
+      <div class="match-grid">
+        <div class="match-col" id="matchWordsCol"></div>
+        <div class="match-col" id="matchMeaningsCol"></div>
+      </div>
+      <div class="feedback" id="quizFeedback"></div>
+    `;
+    const wordsCol = document.getElementById("matchWordsCol");
+    const meaningsCol = document.getElementById("matchMeaningsCol");
+    words.forEach(w=>{
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "match-tile eng";
+      b.textContent = w.word;
+      b.dataset.id = w.id;
+      b.addEventListener("click", ()=> onPick(b, w, "word"));
+      wordsCol.appendChild(b);
+    });
+    meanings.forEach(w=>{
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "match-tile";
+      b.textContent = w.meaning;
+      b.dataset.id = w.id;
+      b.addEventListener("click", ()=> onPick(b, w, "meaning"));
+      meaningsCol.appendChild(b);
+    });
+    function onPick(btn, w, kind){
+      if(btn.classList.contains("correct")) return;
+      if(kind === "word"){
+        if(selWord) selWord.el.classList.remove("selected");
+        selWord = {el:btn, w};
+        btn.classList.add("selected");
+      } else {
+        if(selMeaning) selMeaning.el.classList.remove("selected");
+        selMeaning = {el:btn, w};
+        btn.classList.add("selected");
+      }
+      if(selWord && selMeaning){
+        const isMatch = selWord.w.id === selMeaning.w.id;
+        if(isMatch){
+          selWord.el.classList.remove("selected"); selMeaning.el.classList.remove("selected");
+          selWord.el.classList.add("correct"); selMeaning.el.classList.add("correct");
+          applyRating(selWord.w, "easy", "اختبار (لعبة التوصيل)");
+          matched++;
+          document.getElementById("matchProgress").textContent = matched + " / " + pool.length + " تم التوصيل";
+          selWord = null; selMeaning = null;
+          save();
+          if(matched === pool.length){
+            const secs = Math.round((Date.now()-startTs)/1000);
+            const fb = document.getElementById("quizFeedback");
+            fb.className = "feedback ok";
+            fb.textContent = "🎉 أحسنت! وصّلت كل الكلمات في " + secs + " ثانية بـ" + mistakes + " خطأ.";
+            setTimeout(renderQuiz, 1400);
+          }
+        } else {
+          mistakes++;
+          document.getElementById("matchMistakes").textContent = mistakes + " أخطاء";
+          [selWord.el, selMeaning.el].forEach(el=> el.classList.add("wrong-flash"));
+          const w1 = selWord, m1 = selMeaning;
+          setTimeout(()=>{
+            w1.el.classList.remove("selected","wrong-flash");
+            m1.el.classList.remove("selected","wrong-flash");
+          }, 380);
+          selWord = null; selMeaning = null;
+        }
+      }
+    }
+  }
+
+  // ---- SPEED QUIZ: rapid-fire multiple choice against a countdown clock ----
+  let speedTimerHandle = null, speedTimeLeft = 0, speedScore = 0, speedActive = false;
+  function renderSpeedQuiz(area){
+    if(speedTimerHandle) clearInterval(speedTimerHandle);
+    if(quizPool().length < 2){
+      area.innerHTML = "<div class='empty'><h3>أضف كلمتين على الأقل لبدء الاختبار السريع</h3></div>";
+      return;
+    }
+    speedScore = 0; speedTimeLeft = 30; speedActive = true;
+    area.innerHTML = `
+      <div class="quiz-q">اختبار سريع — أجب على أكبر عدد ممكن قبل نفاد الوقت!</div>
+      <div class="match-meta"><span id="speedScoreLabel">النتيجة: 0</span><span id="speedTimeLabel">⏱️ 30 ث</span></div>
+      <div class="bar"><div class="bar-fill" id="speedBarFill" style="width:100%"></div></div>
+      <div id="speedRoundArea" style="margin-top:14px;"></div>
+    `;
+    nextSpeedRound();
+    speedTimerHandle = setInterval(()=>{
+      speedTimeLeft--;
+      const lbl = document.getElementById("speedTimeLabel");
+      const fill = document.getElementById("speedBarFill");
+      if(lbl) lbl.textContent = "⏱️ " + speedTimeLeft + " ث";
+      if(fill) fill.style.width = Math.max(0,(speedTimeLeft/30*100)) + "%";
+      if(speedTimeLeft <= 0){
+        clearInterval(speedTimerHandle);
+        speedActive = false;
+        const roundArea = document.getElementById("speedRoundArea");
+        if(roundArea) roundArea.innerHTML = `<div class="feedback ok">⏰ انتهى الوقت! نتيجتك النهائية: ${speedScore}</div>
+          <div class="pad-controls" style="justify-content:center; margin-top:10px;"><button class="btn small" id="speedRestart">إعادة المحاولة</button></div>`;
+        document.getElementById("speedRestart")?.addEventListener("click", ()=> renderSpeedQuiz(document.getElementById("quizArea")));
+        toast("انتهى الاختبار السريع — نتيجتك: " + speedScore, "ok");
+      }
+    }, 1000);
+    function nextSpeedRound(){
+      if(!speedActive) return;
+      const correct = pickQuizWord();
+      const distractors = shuffle(quizPool().filter(w=>w.id!==correct.id)).slice(0,3).map(w=>w.meaning);
+      const options = shuffle([correct.meaning, ...distractors]);
+      const roundArea = document.getElementById("speedRoundArea");
+      if(!roundArea) return;
+      roundArea.innerHTML = `<div class="quiz-word">${escapeHtml(correct.word)}</div><div class="options" id="speedOptsWrap"></div>`;
+      const wrap = document.getElementById("speedOptsWrap");
+      options.forEach(opt=>{
+        const b = document.createElement("button");
+        b.className = "opt";
+        b.textContent = opt;
+        b.addEventListener("click", ()=>{
+          if(!speedActive) return;
+          const isCorrect = opt === correct.meaning;
+          Array.from(wrap.children).forEach(c=>c.disabled = true);
+          b.classList.add(isCorrect ? "correct":"wrong");
+          if(isCorrect){ speedScore++; document.getElementById("speedScoreLabel").textContent = "النتيجة: " + speedScore; }
+          applyRating(correct, isCorrect ? "medium" : "hard", "اختبار (سريع)");
+          save();
+          setTimeout(nextSpeedRound, 420);
+        });
+        wrap.appendChild(b);
+      });
+    }
   }
 
   function renderMCQuiz(area){
@@ -1384,6 +1704,20 @@
     return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   }
 
+  // ---------- TOASTS (replaces jarring alert() popups for non-blocking feedback) ----------
+  function toast(msg, kind){
+    const stack = document.getElementById("toastStack");
+    if(!stack){ return; }
+    const el = document.createElement("div");
+    el.className = "toast" + (kind ? " " + kind : "");
+    el.textContent = msg;
+    stack.appendChild(el);
+    setTimeout(()=>{
+      el.classList.add("leaving");
+      setTimeout(()=> el.remove(), 220);
+    }, 3200);
+  }
+
   // ---------- WRITING / HANDWRITING PRACTICE ----------
   const TRACE_TARGET_REPS = 10;
   const TYPED_TARGET_REPS = 10;   // الكتابة: لازم 10 مرات صحيحة متتالية
@@ -1391,6 +1725,7 @@
   const SPELL_TARGET_REPS = 10;   // الهجاء (الاسترجاع الحر): لازم 10 مرات صحيحة متتالية من الذاكرة
   const PRONOUNCE_TARGET_REPS = 10; // النطق: لازم 10 مرات نطق صحيحة متتالية
   const SCRAMBLE_TARGET_REPS = 10;  // حروف متفرقة: لازم 10 مرات ترتيب صحيح متتالية
+  const BLANK_TARGET_REPS = 10;     // املأ الفراغ: لازم 10 مرات صحيحة متتالية
   let writingMode = "trace";
   let traceWord = null, recallWord = null, typedWord = null;
   let typedStreak = 0;
@@ -1406,11 +1741,13 @@
       document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
       document.getElementById("wPronounce").style.display = writingMode==="pronounce" ? "block":"none";
       document.getElementById("wScramble").style.display = writingMode==="scramble" ? "block":"none";
+      document.getElementById("wBlank").style.display = writingMode==="blank" ? "block":"none";
       if(writingMode==="trace") startTraceRound();
       if(writingMode==="recall") startRecallRound();
       if(writingMode==="typed") startTypedRound();
       if(writingMode==="pronounce") startPronounceRound();
       if(writingMode==="scramble") startScrambleRound();
+      if(writingMode==="blank") startBlankRound();
     });
   });
   document.querySelector("[data-wmode='trace']").classList.add("active");
@@ -1429,6 +1766,7 @@
     else if(writingMode==="recall") startRecallRound();
     else if(writingMode==="pronounce") startPronounceRound();
     else if(writingMode==="scramble") startScrambleRound();
+    else if(writingMode==="blank") startBlankRound();
     else startTypedRound();
     // re-apply visibility per current mode (renderWriting may run while a non-default mode is selected)
     document.getElementById("wTrace").style.display = writingMode==="trace" ? "block":"none";
@@ -1436,6 +1774,7 @@
     document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
     document.getElementById("wPronounce").style.display = writingMode==="pronounce" ? "block":"none";
     document.getElementById("wScramble").style.display = writingMode==="scramble" ? "block":"none";
+    document.getElementById("wBlank").style.display = writingMode==="blank" ? "block":"none";
   }
 
   // بيسحب كلمة عشوائية من نطاق الكلمات الحالي (المجموعة/التصنيف المختار لو فيه
@@ -2386,6 +2725,88 @@
     }
   }
 
+  // ---- FILL-IN-THE-BLANK MODE (املأ الفراغ) — يستخدم جملة المثال الخاصة
+  // بالكلمة لو موجودة، وإلا بيبني جملة بسيطة بديلة، وبيدعم تلميح بأول حرف. ----
+  let blankWord = null, blankStreak = 0, blankHintUsed = false;
+  function buildBlankSentence(w){
+    const word = w.word;
+    const esc = word.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    if(w.example && w.example.trim()){
+      const re = new RegExp("\\b" + esc + "\\b", "i");
+      if(re.test(w.example)) return w.example.replace(re, "_____");
+      // الكلمة مش موجودة نصًا مطابقًا داخل المثال (زمن مختلف/جمع...) — نضيفها لسياق بسيط
+      return w.example + " ( _____ = " + w.meaning + " )";
+    }
+    return "I want to use the word _____ in a sentence. ( " + w.meaning + " )";
+  }
+  function startBlankRound(){
+    blankWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
+    if(!blankWord) return;
+    blankStreak = ensureWriting(blankWord).blankStreak || 0;
+    blankHintUsed = false;
+    document.getElementById("blankSentence").innerHTML = escapeHtml(buildBlankSentence(blankWord)).replace("_____", "<span class='gap'>_____</span>");
+    const input = document.getElementById("blankInput");
+    input.value = "";
+    input.disabled = false;
+    input.focus();
+    document.getElementById("blankSubmit").disabled = false;
+    document.getElementById("blankFeedback").textContent = "";
+    document.getElementById("blankFeedback").className = "feedback";
+    document.getElementById("blankHintNote").textContent = "";
+  }
+  function checkBlankAnswer(){
+    if(!blankWord) return;
+    const input = document.getElementById("blankInput");
+    const val = input.value.trim().toLowerCase();
+    const target = blankWord.word.trim().toLowerCase();
+    const fb = document.getElementById("blankFeedback");
+    const ws = ensureWriting(blankWord);
+    const isCorrect = val === target;
+    input.disabled = true;
+    document.getElementById("blankSubmit").disabled = true;
+    if(isCorrect && !blankHintUsed){
+      blankStreak++;
+      ws.blankStreak = blankStreak;
+      ws.blankCorrect = (ws.blankCorrect||0)+1;
+      fb.className = "feedback ok";
+      logEvent(blankWord, "blank", "إملأ الفراغ صحيح (" + blankStreak + " / " + BLANK_TARGET_REPS + ")");
+      if(blankStreak >= BLANK_TARGET_REPS){
+        ws.blankCompletions = (ws.blankCompletions||0)+1;
+        ws.blankStreak = 0;
+        applyRating(blankWord, "easy", "املأ الفراغ (إتمام الدورة)");
+        save();
+        fb.textContent = "أتممت " + BLANK_TARGET_REPS + " مرات صحيحة متتالية! ✔";
+        if(pipelineActive) setTimeout(pipelineWordDone, 1200);
+        else setTimeout(startBlankRound, 1200);
+      } else {
+        fb.textContent = "صحيح! 🎉";
+        save();
+        setTimeout(startBlankRound, 800);
+      }
+    } else {
+      ws.blankWrong = (ws.blankWrong||0)+1;
+      blankStreak = 0;
+      ws.blankStreak = 0;
+      fb.className = "feedback no";
+      fb.textContent = isCorrect
+        ? "صح، لكن مستخدمًا تلميح — جرّب من غير تلميح المرة الجاية عشان تحسب."
+        : ("مش صح — الكلمة الصحيحة: " + blankWord.word);
+      save();
+      setTimeout(startBlankRound, 1400);
+    }
+  }
+  document.getElementById("blankSubmit").addEventListener("click", checkBlankAnswer);
+  document.getElementById("blankInput").addEventListener("keydown", e=>{ if(e.key==="Enter") checkBlankAnswer(); });
+  document.getElementById("blankNext").addEventListener("click", startBlankRound);
+  document.getElementById("blankHint").addEventListener("click", ()=>{
+    if(!blankWord) return;
+    blankHintUsed = true;
+    const ws = ensureWriting(blankWord);
+    ws.blankHintsUsed = (ws.blankHintsUsed||0)+1;
+    save();
+    document.getElementById("blankHintNote").textContent = "💡 أول حرف: " + blankWord.word[0].toUpperCase() + " — (استخدام التلميح مش هيحسب ضمن السلسلة المتتالية)";
+  });
+
   /* ============================================================
      🚀 الجلسة الشاملة (مخطط المراجعة الكامل): بتاخد قائمة كلمات وتوديك
      كلمة كلمة، وكل كلمة بتتراجع بالترتيب: ✍️ كتابة عادية 10 مرات، ثم
@@ -2396,19 +2817,20 @@
   let pipelineWords = [];
   let pipelineWordIdx = 0;
   let pipelinePhaseIdx = 0;
-  const PIPELINE_PHASES = ["typed","trace","pronounce","scramble"];
+  const PIPELINE_PHASES = ["typed","trace","pronounce","scramble","blank"];
   const PIPELINE_PHASE_META = {
     typed:     {icon:"✍️", label:"كتابة عادية"},
     trace:     {icon:"🖊️", label:"كتابة بالرسم"},
     pronounce: {icon:"🗣️", label:"نطق"},
-    scramble:  {icon:"🔠", label:"حروف متفرقة"}
+    scramble:  {icon:"🔠", label:"حروف متفرقة"},
+    blank:     {icon:"📝", label:"املأ الفراغ"}
   };
   function pipelineCurrentWord(){ return pipelineWords[pipelineWordIdx] || null; }
   function pipelineCurrentPhase(){ return PIPELINE_PHASES[pipelinePhaseIdx]; }
 
   function startFullSession(words){
     const list = (words||[]).filter(Boolean);
-    if(!list.length){ alert("لا توجد كلمات لبدء الجلسة الشاملة."); return; }
+    if(!list.length){ toast("لا توجد كلمات لبدء الجلسة الشاملة.", "warn"); return; }
     pipelineActive = true;
     pipelineWords = list.slice();
     pipelineWordIdx = 0;
@@ -2429,11 +2851,13 @@
     document.getElementById("wTyped").style.display = phase==="typed" ? "block":"none";
     document.getElementById("wPronounce").style.display = phase==="pronounce" ? "block":"none";
     document.getElementById("wScramble").style.display = phase==="scramble" ? "block":"none";
+    document.getElementById("wBlank").style.display = phase==="blank" ? "block":"none";
     renderPipelineBanner();
     if(phase==="typed") startTypedRound();
     else if(phase==="trace") startTraceRound();
     else if(phase==="pronounce") startPronounceRound();
     else if(phase==="scramble") startScrambleRound();
+    else if(phase==="blank") startBlankRound();
   }
   function renderPipelineBanner(){
     const banner = document.getElementById("pipelineBanner");
@@ -2477,7 +2901,7 @@
     pipelineActive = false;
     const banner = document.getElementById("pipelineBanner");
     if(banner){ banner.style.display = "none"; banner.innerHTML = ""; }
-    alert("🎉 خلصت الجلسة الشاملة! راجعت كل الكلمات كتابةً عاديةً، ورسمًا بخط اليد، ونطقًا، وترتيب حروف متفرقة.");
+    toast("🎉 خلصت الجلسة الشاملة! راجعت كل الكلمات كتابةً وخطًا ونطقًا وترتيب حروف وإملأ الفراغ.", "ok");
     renderWriting();
   }
   function stopPipelineSession(){
@@ -2548,7 +2972,7 @@
     document.getElementById("gfCancel").addEventListener("click", ()=>{ groupFormEl.style.display="none"; groupFormEl.innerHTML=""; });
     document.getElementById("gfSave").addEventListener("click", ()=>{
       const groupName = document.getElementById("gf_name").value.trim();
-      if(!groupName){ alert("يرجى كتابة اسم للمجموعة أولاً"); return; }
+      if(!groupName){ toast("يرجى كتابة اسم للمجموعة أولاً", "warn"); return; }
       const rows = Array.from(rowsWrap.querySelectorAll(".group-word-row"));
       const batchInfo = { id: cryptoId(), label: groupName, ts: Date.now() };
       let added = 0;
@@ -2566,12 +2990,12 @@
         state.words.push(seedWord(data, "أُضيفت ضمن مجموعة \"" + groupName + "\"", batchInfo));
         added++;
       });
-      if(added === 0){ alert("يرجى إدخال كلمة ومعنى واحد على الأقل"); return; }
+      if(added === 0){ toast("يرجى إدخال كلمة ومعنى واحد على الأقل", "warn"); return; }
       save();
       groupFormEl.style.display = "none"; groupFormEl.innerHTML = "";
       activeGroup = batchInfo.id;
       renderManage();
-      alert("تمت إضافة " + added + " كلمة إلى مجموعة \"" + groupName + "\" ✅ — وتم اختيارها كمجموعة نشطة.");
+      toast("تمت إضافة " + added + " كلمة إلى مجموعة \"" + groupName + "\" ✅", "ok");
     });
   }
 
@@ -2652,7 +3076,7 @@
       });
       if(added){ save(); renderManage(); }
       panel.style.display = "none"; panel.innerHTML = "";
-      alert(added ? ("تمت إضافة " + added + " كلمة جديدة ✅") : "لم يتم اختيار أي كلمة جديدة.");
+      toast(added ? ("تمت إضافة " + added + " كلمة جديدة ✅") : "لم يتم اختيار أي كلمة جديدة.", added ? "ok" : "warn");
     });
   }
   document.getElementById("importFromEditorBtn").addEventListener("click", renderEditorBridgePanel);
@@ -2756,7 +3180,7 @@
       });
       if(added){ save(); renderManage(); }
       panel.style.display = "none"; panel.innerHTML = "";
-      alert(added ? ("تمت إضافة " + added + " كلمة جديدة ✅") : "لم يتم اختيار أي كلمة جديدة.");
+      toast(added ? ("تمت إضافة " + added + " كلمة جديدة ✅") : "لم يتم اختيار أي كلمة جديدة.", added ? "ok" : "warn");
     });
   }
   document.getElementById("importFromEnglishBtn").addEventListener("click", renderEnglishBridgePanel);
@@ -2782,7 +3206,7 @@
     document.getElementById("saveForm").addEventListener("click", ()=>{
       const w = document.getElementById("f_word").value.trim();
       const m = document.getElementById("f_meaning").value.trim();
-      if(!w || !m){ alert("يرجى إدخال الكلمة والمعنى على الأقل"); return; }
+      if(!w || !m){ toast("يرجى إدخال الكلمة والمعنى على الأقل", "warn"); return; }
       const data = {
         word:w, meaning:m,
         pronunciation: document.getElementById("f_pron").value.trim(),
@@ -2894,11 +3318,73 @@
     }
   }
 
+  // ---- فرز/فلترة/بحث في تبويب «الكلمات» ----
+  let manageSort = "date-desc", manageFilter = "all", manageSearch = "";
+  document.getElementById("manageSort").addEventListener("change", e=>{ manageSort = e.target.value; renderManage(); });
+  document.getElementById("manageFilter").addEventListener("change", e=>{ manageFilter = e.target.value; renderManage(); });
+  document.getElementById("manageSearch").addEventListener("input", e=>{ manageSearch = e.target.value.trim().toLowerCase(); renderManage(); });
+  function applyManageFilterSort(arr){
+    let out = arr;
+    const t = todayStr();
+    if(manageFilter === "due") out = out.filter(w=> w.srs.due <= t);
+    else if(manageFilter === "mastered") out = out.filter(w=> w.srs.level >= 4);
+    else if(manageFilter === "needs") out = out.filter(w=> w.srs.level < 2);
+    if(manageSearch) out = out.filter(w=> w.word.toLowerCase().includes(manageSearch) || (w.meaning||"").toLowerCase().includes(manageSearch));
+    out = out.slice();
+    if(manageSort === "date-desc") out.reverse();
+    else if(manageSort === "date-asc"){ /* already oldest→newest */ }
+    else if(manageSort === "alpha") out.sort((a,b)=> a.word.localeCompare(b.word));
+    else if(manageSort === "level-desc") out.sort((a,b)=> b.srs.level - a.srs.level);
+    else if(manageSort === "level-asc") out.sort((a,b)=> a.srs.level - b.srs.level);
+    else if(manageSort === "due") out.sort((a,b)=> (a.srs.due||"").localeCompare(b.srs.due||""));
+    return out;
+  }
+
+  // ---- تحديد عدة مجموعات (Batches) دفعة واحدة عشان دراسة/دمج/حذف جماعي ----
+  let selectedBatchIds = new Set();
+  function updateBatchBulkBar(){
+    const bar = document.getElementById("batchBulkBar");
+    if(!bar) return;
+    bar.classList.toggle("show", selectedBatchIds.size > 0);
+    document.getElementById("batchBulkLabel").textContent = selectedBatchIds.size + " مجموعة محددة";
+  }
+  document.getElementById("bulkClearBtn").addEventListener("click", ()=>{ selectedBatchIds.clear(); renderManage(); });
+  document.getElementById("bulkStudyBtn").addEventListener("click", ()=>{
+    const batches = importBatches().filter(b=> selectedBatchIds.has(b.info.id));
+    const words = batches.flatMap(b=> b.words);
+    if(!words.length){ toast("لا توجد كلمات في المجموعات المحددة.", "warn"); return; }
+    studyWords(words, batches.map(b=>b.info.label).join(" + "));
+  });
+  document.getElementById("bulkMergeBtn").addEventListener("click", ()=>{
+    const batches = importBatches().filter(b=> selectedBatchIds.has(b.info.id));
+    if(batches.length < 2){ toast("حدد مجموعتين على الأقل للدمج.", "warn"); return; }
+    const newName = prompt("اسم المجموعة المدموجة:", batches.map(b=>b.info.label).join(" + "));
+    if(newName === null) return;
+    const label = newName.trim() || batches.map(b=>b.info.label).join(" + ");
+    const mergedInfo = { id: cryptoId(), label, ts: Date.now() };
+    batches.forEach(b=> b.words.forEach(w=> w.importBatch = mergedInfo));
+    selectedBatchIds.clear();
+    activeGroup = mergedInfo.id;
+    save(); renderManage();
+    toast("تم دمج " + batches.length + " مجموعات في \"" + label + "\" ✅", "ok");
+  });
+  document.getElementById("bulkDelBtn").addEventListener("click", ()=>{
+    const batches = importBatches().filter(b=> selectedBatchIds.has(b.info.id));
+    const total = batches.reduce((s,b)=>s+b.words.length,0);
+    if(!confirm("حذف " + batches.length + " مجموعة (" + total + " كلمة) نهائيًا؟")) return;
+    const ids = new Set(batches.flatMap(b=> b.words.map(w=>w.id)));
+    state.words = state.words.filter(w=>!ids.has(w.id));
+    if(selectedBatchIds.has(activeGroup)) activeGroup = "all";
+    selectedBatchIds.clear();
+    save(); renderManage();
+  });
+
   function renderManage(){
     refreshEditorBridgeButton();
     refreshEnglishBridgeButton();
     renderGroupSelect();
     updateSelectionToolbar();
+    updateBatchBulkBar();
     const list = document.getElementById("wordList");
     list.innerHTML = "";
     if(state.words.length === 0){
@@ -2906,15 +3392,22 @@
       return;
     }
 
+    let anyVisible = false;
     importBatches().forEach(b=>{
+      const visibleWords = applyManageFilterSort(b.words);
+      if(visibleWords.length === 0) return;
+      anyVisible = true;
       const frame = document.createElement("div");
       frame.className = "import-batch";
       if(activeGroup !== "all" && activeGroup === b.info.id) frame.style.outline = "3px solid var(--gold-deep)";
       frame.innerHTML = `
         <div class="import-batch-head">
-          <div>
-            <div class="ibh-title">📦 ${escapeHtml(b.info.label)}</div>
-            <div class="ibh-meta">${b.words.length} كلمة — استُوردت بتاريخ ${formatDate(b.info.ts)}</div>
+          <div class="ibh-title-row">
+            <input type="checkbox" class="batch-check" id="bchk-${b.info.id}" ${selectedBatchIds.has(b.info.id)?"checked":""} title="تحديد المجموعة للعمليات الجماعية">
+            <div>
+              <div class="ibh-title">📦 ${escapeHtml(b.info.label)}</div>
+              <div class="ibh-meta">${b.words.length} كلمة (${visibleWords.length} ظاهرة) — استُوردت بتاريخ ${formatDate(b.info.ts)}</div>
+            </div>
           </div>
           <div class="ibh-actions">
             <button class="btn small" data-batch-study>📖 دراسة المجموعة</button>
@@ -2927,12 +3420,16 @@
         <div class="import-batch-body"></div>
       `;
       const body = frame.querySelector(".import-batch-body");
-      b.words.slice().reverse().forEach(w=> body.appendChild(buildWordRow(w)));
+      visibleWords.forEach(w=> body.appendChild(buildWordRow(w)));
+      frame.querySelector(".batch-check").addEventListener("change", (e)=>{
+        if(e.target.checked) selectedBatchIds.add(b.info.id); else selectedBatchIds.delete(b.info.id);
+        updateBatchBulkBar();
+      });
       frame.querySelector("[data-batch-study]").addEventListener("click", ()=> studyWords(b.words, b.info.label));
       frame.querySelector("[data-batch-select]").addEventListener("click", ()=>{
         activeGroup = b.info.id;
         renderManage();
-        alert("تم اختيار مجموعة \"" + b.info.label + "\" كمجموعة نشطة — هتتطبق على المراجعة والاختبار والكتابة.");
+        toast("تم اختيار مجموعة \"" + b.info.label + "\" كمجموعة نشطة ✅", "ok");
       });
       frame.querySelector("[data-batch-rename]").addEventListener("click", ()=>{
         const newName = prompt("اسم المجموعة الجديد:", b.info.label);
@@ -2945,6 +3442,7 @@
       frame.querySelector("[data-batch-keep]").addEventListener("click", ()=>{
         b.words.forEach(w=> w.importBatch = null);
         if(activeGroup === b.info.id) activeGroup = "all";
+        selectedBatchIds.delete(b.info.id);
         save(); renderManage();
       });
       frame.querySelector("[data-batch-del]").addEventListener("click", ()=>{
@@ -2952,13 +3450,19 @@
           const ids = new Set(b.words.map(w=>w.id));
           state.words = state.words.filter(x=>!ids.has(x.id));
           if(activeGroup === b.info.id) activeGroup = "all";
+          selectedBatchIds.delete(b.info.id);
           save(); renderManage();
         }
       });
       list.appendChild(frame);
     });
 
-    state.words.filter(w=>!w.importBatch).slice().reverse().forEach(w=> list.appendChild(buildWordRow(w)));
+    const ungrouped = applyManageFilterSort(state.words.filter(w=>!w.importBatch));
+    ungrouped.forEach(w=>{ anyVisible = true; list.appendChild(buildWordRow(w)); });
+
+    if(!anyVisible){
+      list.innerHTML += "<div class='empty'><h3>لا توجد كلمات مطابقة</h3><p>جرّب تغيير الفلتر أو مسح كلمة البحث.</p></div>";
+    }
   }
 
   // ---------- WORD HISTORY MODAL ----------
@@ -3178,52 +3682,273 @@
     return {items, skipped, fieldsUsed: null};
   }
 
-  document.getElementById("importBtn").addEventListener("click", ()=> document.getElementById("importFile").click());
-  document.getElementById("importFile").addEventListener("change", (e)=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    const looksJson = /\.json$/i.test(file.name) || file.type === "application/json";
-    const reader = new FileReader();
-    reader.onload = ()=>{
-      const raw = reader.result;
-      let result = null;
+  // ---- استيراد من CSV: بيكتشف صف العناوين (word/meaning/example/...) تلقائيًا لو
+  // موجود، وإلا بيتعامل مع الأعمدة بالترتيب (كلمة، معنى، مثال). بيدعم القيم بين
+  // علامتي اقتباس اللي جواها فواصل.
+  function splitCsvLine(line){
+    const out = []; let cur = ""; let inQ = false;
+    for(let i=0;i<line.length;i++){
+      const c = line[i];
+      if(c === '"'){
+        if(inQ && line[i+1] === '"'){ cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if(c === ',' && !inQ){ out.push(cur); cur = ""; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out.map(s=>s.trim());
+  }
+  function smartExtractWordsFromCSV(text){
+    const rows = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0).map(splitCsvLine);
+    if(rows.length===0) return {items:[], skipped:0, fieldsUsed:null};
+    let start = 0;
+    let colMap = {word:0, meaning:1, example:2, pronunciation:3, category:4};
+    const head = rows[0].map(h=>h.toLowerCase());
+    const findCol = (aliases)=> head.findIndex(h=> aliases.some(a=> h.includes(a)));
+    const wCol = findCol(ALIASES.word), mCol = findCol(ALIASES.meaning);
+    if(wCol>-1 && mCol>-1){
+      start = 1;
+      colMap = {
+        word:wCol, meaning:mCol,
+        example: findCol(ALIASES.example),
+        pronunciation: findCol(ALIASES.pronunciation),
+        category: findCol(ALIASES.category)
+      };
+    }
+    const items = []; let skipped = 0;
+    for(let i=start;i<rows.length;i++){
+      const r = rows[i];
+      const word = (r[colMap.word]||"").trim();
+      const meaning = (r[colMap.meaning]||"").trim();
+      if(!word || !meaning){ skipped++; continue; }
+      items.push({
+        word, meaning,
+        example: colMap.example>-1 ? (r[colMap.example]||"").trim() : "",
+        pronunciation: colMap.pronunciation>-1 ? (r[colMap.pronunciation]||"").trim() : "",
+        category: (colMap.category>-1 ? (r[colMap.category]||"").trim() : "") || "عام"
+      });
+    }
+    return {items, skipped, fieldsUsed: null};
+  }
 
-      // بنجرب الأول تفسير الملف كـ JSON (سواء كان امتداده .json أو حتى .txt فيه JSON
-      // متخزّن جواه)، ولو فشل بنعامله كملف نصي عادي مفصول بفواصل.
+  // ---- المحرّك الموحّد لتفسير أي محتوى نصي خام: بيجرّب JSON الأول، بعدين CSV
+  // (لو فيه فاصلة منتظمة في كل الأسطر)، بعدين الصيغة النصية الحرة كملاذ أخير.
+  function smartExtractAny(raw, filename){
+    const looksJson = /^\s*[\[{]/.test(raw);
+    if(looksJson){
       try{
         const json = JSON.parse(raw);
-        result = smartExtractWords(json);
-      }catch(err){
-        if(looksJson){
-          alert("تعذّرت قراءة الملف: هذا ليس ملف JSON صالحًا.");
-          e.target.value = "";
-          return;
-        }
-      }
-      if(!result || result.items.length === 0){
-        result = smartExtractWordsFromText(raw);
-      }
+        const r = smartExtractWords(json);
+        if(r.items.length>0) return r;
+      }catch(err){ /* fallthrough */ }
+    }
+    const looksCsv = /\.csv$/i.test(filename||"") || (raw.split(/\r?\n/).slice(0,5).filter(l=>l.trim()).every(l=> l.split(",").length>=2));
+    if(looksCsv){
+      const r = smartExtractWordsFromCSV(raw);
+      if(r.items.length>0) return r;
+    }
+    return smartExtractWordsFromText(raw);
+  }
 
-      const {items, skipped} = result;
-      if(items.length === 0){
-        alert("لم أتمكن من العثور على كلمات داخل هذا الملف. للملفات النصية اكتب كل كلمة في سطر بالشكل: word - meaning");
-        e.target.value = "";
-        return;
-      }
-      // كل ملف يتم استيراده بيتحط في مجموعة/إطار خاص بيه، عشان تقدر تحذف كل
-      // الاستيراد ده مرة واحدة أو تخليه يندمج كعناصر عادية في القائمة.
-      const batchInfo = { id: cryptoId(), label: "استيراد: " + file.name, ts: Date.now() };
-      const imported = items.map(it => seedWord(it, "مستوردة ضمن مجموعة \"" + batchInfo.label + "\"", batchInfo));
-      state.words = state.words.concat(imported);
-      save();
-      renderManage(); renderReview();
-      let msg = "تم استيراد " + imported.length + " عنصر بنجاح.";
-      if(skipped>0) msg += "\nتم تجاهل " + skipped + " عنصر لعدم احتوائه على بيانات كافية.";
-      alert(msg);
-    };
-    reader.readAsText(file);
+  /* ============ مركز الاستيراد الذكي: ملفات متعددة، صور (OCR)، نص ملصوق —
+     كل عملية استيراد بتتحط في نطاقها/مجموعتها الخاصة، وقبل الإضافة بتظهر
+     معاينة تقدر تحدد فيها أنهي عناصر تتضاف فعليًا. ============ */
+  function openImportHub(){
+    const ov = document.getElementById("importHubOverlay");
+    ov.style.display = "flex";
+    ov.innerHTML = `
+      <div class="modal-overlay" id="importHubBackdrop">
+        <div class="modal-box">
+          <h3>📥 استيراد كلمات</h3>
+          <p class="sub">اختر مصدر الاستيراد — كل عملية هتتحط في مجموعتها الخاصة وهتقدر تختار مننها إيه قبل الإضافة.</p>
+          <div class="import-methods">
+            <button type="button" class="import-method-btn" id="imPickFile"><span class="ic">📄</span>ملفات JSON / TXT / CSV</button>
+            <button type="button" class="import-method-btn" id="imPickImage"><span class="ic">🖼️</span>صورة (تعرّف ضوئي OCR)</button>
+            <button type="button" class="import-method-btn" id="imPaste"><span class="ic">📋</span>لصق نص</button>
+            <button type="button" class="import-method-btn" id="imClose"><span class="ic">✖️</span>إغلاق</button>
+          </div>
+          <div class="dropzone" id="importDropzone">أو اسحب وأفلت أي ملفات (JSON / TXT / CSV / صور) هنا مباشرة</div>
+          <div id="importHubExtra"></div>
+        </div>
+      </div>
+    `;
+    document.getElementById("imClose").addEventListener("click", closeImportHub);
+    document.getElementById("importHubBackdrop").addEventListener("click", (e)=>{ if(e.target.id==="importHubBackdrop") closeImportHub(); });
+    document.getElementById("imPickFile").addEventListener("click", ()=>{
+      const inp = document.getElementById("importFile");
+      inp.accept = ".json,.txt,.csv,text/plain,application/json,text/csv";
+      inp.click();
+    });
+    document.getElementById("imPickImage").addEventListener("click", ()=>{
+      const inp = document.getElementById("importFile");
+      inp.accept = "image/*";
+      inp.click();
+    });
+    document.getElementById("imPaste").addEventListener("click", renderPasteImportPanel);
+    const dz = document.getElementById("importDropzone");
+    dz.addEventListener("dragover", e=>{ e.preventDefault(); dz.classList.add("drag"); });
+    dz.addEventListener("dragleave", ()=> dz.classList.remove("drag"));
+    dz.addEventListener("drop", e=>{
+      e.preventDefault(); dz.classList.remove("drag");
+      if(e.dataTransfer.files && e.dataTransfer.files.length) handleImportFiles(Array.from(e.dataTransfer.files));
+    });
+  }
+  function closeImportHub(){
+    document.getElementById("importHubOverlay").style.display = "none";
+    document.getElementById("importHubOverlay").innerHTML = "";
+  }
+  document.getElementById("importBtn").addEventListener("click", openImportHub);
+
+  // سحب وإفلات على مستوى الصفحة كلها (مش بس داخل المودال) — عشان "الاستيراد من
+  // كل حاجة" يبقى سهل: تسحب ملف من أي مكان وتفلته في أي وقت.
+  ["dragenter","dragover"].forEach(ev=> window.addEventListener(ev, e=>{
+    if(e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes("Files")){
+      e.preventDefault();
+      document.body.classList.add("app-drag-active");
+    }
+  }));
+  ["dragleave","drop"].forEach(ev=> window.addEventListener(ev, e=>{
+    if(ev==="drop") e.preventDefault();
+    document.body.classList.remove("app-drag-active");
+  }));
+  window.addEventListener("drop", e=>{
+    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
+      e.preventDefault();
+      handleImportFiles(Array.from(e.dataTransfer.files));
+    }
+  });
+
+  function renderPasteImportPanel(){
+    const extra = document.getElementById("importHubExtra");
+    extra.innerHTML = `
+      <textarea class="import-paste-area" id="importPasteText" placeholder="الصق هنا أي نص فيه كلمات ومعانيها — سطر لكل كلمة، مثال:&#10;apple - تفاحة&#10;book: كتاب"></textarea>
+      <input type="text" class="import-scope-name" id="importPasteLabel" placeholder="اسم المجموعة (اختياري)">
+      <div class="pad-controls" style="justify-content:center; margin-top:10px;">
+        <button class="btn small" id="importPasteGo">معاينة الاستيراد</button>
+      </div>
+    `;
+    document.getElementById("importPasteGo").addEventListener("click", ()=>{
+      const raw = document.getElementById("importPasteText").value;
+      if(!raw.trim()){ toast("الصق نص فيه كلمات أولاً.", "warn"); return; }
+      const label = document.getElementById("importPasteLabel").value.trim() || "استيراد: نص ملصوق";
+      const result = smartExtractAny(raw, "");
+      if(result.items.length===0){ toast("لم يتم العثور على كلمات في النص الملصوق.", "warn"); return; }
+      showImportPreview(result.items, result.skipped, label);
+    });
+  }
+
+  document.getElementById("importFile").addEventListener("change", (e)=>{
+    const files = Array.from(e.target.files||[]);
+    if(files.length) handleImportFiles(files);
     e.target.value = "";
   });
+
+  // بيتعامل مع كذا ملف مرة واحدة (كل ملف بيتقرا حسب نوعه: صورة → OCR، وإلا نص)
+  function handleImportFiles(files){
+    files.forEach(file=>{
+      const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
+      if(isImage){ importFromImage(file); return; }
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        const result = smartExtractAny(reader.result, file.name);
+        if(result.items.length === 0){
+          toast("لم يتم العثور على كلمات داخل \"" + file.name + "\".", "warn");
+          return;
+        }
+        showImportPreview(result.items, result.skipped, "استيراد: " + file.name);
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  // ---- استيراد من صورة: بيستخدم Tesseract.js (لو متاح ومحمَّل) عشان يقرأ أي
+  // نص كلمات/معاني من صورة (سكرين شوت، صفحة كتاب، الخ)، وبعدين يمرّره لنفس
+  // محرك التفسير الذكي للنصوص.
+  async function importFromImage(file){
+    const extra = document.getElementById("importHubExtra") || document.getElementById("toastStack");
+    toast("📷 جاري تحليل الصورة بالتعرّف الضوئي (OCR)…ممكن ياخد شوية وقت أول مرة.", "ok");
+    if(typeof Tesseract === "undefined"){
+      toast("تعذّر تحميل محرك OCR (يحتاج إنترنت أول مرة). جرّب لصق النص يدويًا بدل كده.", "warn");
+      return;
+    }
+    try{
+      const url = URL.createObjectURL(file);
+      const { data } = await Tesseract.recognize(url, "eng+ara");
+      URL.revokeObjectURL(url);
+      const text = (data && data.text) || "";
+      if(!text.trim()){
+        toast("مفيش نص واضح اتقري من الصورة.", "warn");
+        return;
+      }
+      const result = smartExtractAny(text, "");
+      if(result.items.length === 0){
+        toast("اتقري نص من الصورة لكن مقدرتش أطلع منه كلمات ومعاني.", "warn");
+        return;
+      }
+      showImportPreview(result.items, result.skipped, "استيراد: صورة " + file.name);
+    }catch(err){
+      toast("حصل خطأ أثناء تحليل الصورة: " + String(err).slice(0,80), "warn");
+    }
+  }
+
+  // ---- معاينة الاستيراد: قائمة بكل العناصر اللي اتفسّرت من المصدر، كل عنصر
+  // بجانبه تيك تقدر تلغيه لو مش عاوزه، واسم المجموعة قابل للتعديل. بعد التأكيد
+  // بس بيتحط العناصر المحددة في نطاقها/مجموعتها الخاصة.
+  function showImportPreview(items, skipped, defaultLabel){
+    const ov = document.getElementById("importHubOverlay");
+    ov.style.display = "flex";
+    const rowsHtml = items.map((it,i)=>`
+      <label class="group-word-row" style="display:flex; align-items:center; gap:10px; grid-template-columns:none; cursor:pointer;">
+        <input type="checkbox" class="batch-check" checked data-idx="${i}" style="flex:none;">
+        <span style="flex:1; min-width:0;">
+          <b style="direction:ltr; display:inline-block;">${escapeHtml(it.word)}</b>
+          <span style="color:var(--ink-soft);"> — ${escapeHtml(it.meaning)}</span>
+        </span>
+      </label>
+    `).join("");
+    ov.innerHTML = `
+      <div class="modal-overlay" id="importPreviewBackdrop">
+        <div class="modal-box">
+          <h3>معاينة الاستيراد</h3>
+          <p class="sub">تم العثور على ${items.length} عنصر${skipped?(" (وتجاهل " + skipped + " عنصر ناقص البيانات)"):""}. ألغِ تحديد أي عنصر مش عاوزه، ثم أكّد الاستيراد.</p>
+          <input type="text" class="import-scope-name" id="previewLabel" value="${escapeAttr(defaultLabel)}" placeholder="اسم المجموعة">
+          <div class="pad-controls" style="justify-content:flex-start; margin:10px 0;">
+            <button class="btn ghost small" id="previewSelectAll">تحديد الكل</button>
+            <button class="btn ghost small" id="previewSelectNone">إلغاء الكل</button>
+          </div>
+          <div style="max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px;">${rowsHtml}</div>
+          <div class="pad-controls" style="justify-content:center; margin-top:14px;">
+            <button class="btn small" id="previewConfirm">استيراد المحدد ✅</button>
+            <button class="btn ghost small" id="previewCancel">إلغاء</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const checks = ()=> Array.from(ov.querySelectorAll(".batch-check"));
+    document.getElementById("previewSelectAll").addEventListener("click", ()=> checks().forEach(c=>c.checked=true));
+    document.getElementById("previewSelectNone").addEventListener("click", ()=> checks().forEach(c=>c.checked=false));
+    document.getElementById("previewCancel").addEventListener("click", closeImportHub);
+    document.getElementById("importPreviewBackdrop").addEventListener("click", (e)=>{ if(e.target.id==="importPreviewBackdrop") closeImportHub(); });
+    document.getElementById("previewConfirm").addEventListener("click", ()=>{
+      const selectedIdxs = checks().filter(c=>c.checked).map(c=> Number(c.dataset.idx));
+      if(selectedIdxs.length === 0){ toast("حدد عنصر واحد على الأقل.", "warn"); return; }
+      const label = document.getElementById("previewLabel").value.trim() || defaultLabel;
+      const chosen = selectedIdxs.map(i=> items[i]);
+      commitImportBatch(chosen, label);
+      closeImportHub();
+    });
+  }
+
+  // كل استيراد بيتحط في مجموعة/إطار (importBatch) خاص بيه — النطاق ده بيتحكم
+  // في التحديد والدراسة والحذف الجماعي من تبويب «الكلمات».
+  function commitImportBatch(items, label){
+    const batchInfo = { id: cryptoId(), label: label, ts: Date.now() };
+    const imported = items.map(it => seedWord(it, "مستوردة ضمن مجموعة \"" + batchInfo.label + "\"", batchInfo));
+    state.words = state.words.concat(imported);
+    save();
+    renderManage(); renderReview();
+    toast("تم استيراد " + imported.length + " كلمة إلى مجموعة \"" + label + "\" ✅", "ok");
+  }
 
   // ---------- STATS ----------
   function renderStats(){
@@ -3245,6 +3970,11 @@
     const typedMisses = state.words.reduce((s,w)=> s+((w.writing&&w.writing.typedMisses)||0),0);
     const readCompletions = state.words.reduce((s,w)=> s+((w.writing&&w.writing.readCompletions)||0),0);
     const spellCompletions = state.words.reduce((s,w)=> s+((w.writing&&w.writing.spellCompletions)||0),0);
+    const scrambleCompletions = state.words.reduce((s,w)=> s+((w.writing&&w.writing.scrambleCompletions)||0),0);
+    const blankCompletions = state.words.reduce((s,w)=> s+((w.writing&&w.writing.blankCompletions)||0),0);
+    const blankCorrect = state.words.reduce((s,w)=> s+((w.writing&&w.writing.blankCorrect)||0),0);
+    const blankWrong = state.words.reduce((s,w)=> s+((w.writing&&w.writing.blankWrong)||0),0);
+    const blankAcc = (blankCorrect+blankWrong) ? Math.round((blankCorrect/(blankCorrect+blankWrong))*100) : 0;
     const avgTraceScore = (()=>{
       const scores = state.words.map(w=> (w.writing&&w.writing.bestTraceScore)||0).filter(v=>v>0);
       return scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
@@ -3262,6 +3992,9 @@
       <div class="stat-box"><div class="n">${totalTypedDone}</div><div class="l">دورات كتابة مكتملة (10×)</div></div>
       <div class="stat-box"><div class="n">${readCompletions}</div><div class="l">دورات قراءة مكتملة (10×)</div></div>
       <div class="stat-box"><div class="n">${spellCompletions}</div><div class="l">دورات هجاء مكتملة (10×)</div></div>
+      <div class="stat-box"><div class="n">${scrambleCompletions}</div><div class="l">دورات حروف متفرقة مكتملة (10×)</div></div>
+      <div class="stat-box"><div class="n">${blankCompletions}</div><div class="l">دورات إملأ الفراغ مكتملة (10×)</div></div>
+      <div class="stat-box"><div class="n">${blankAcc}%</div><div class="l">دقة إملأ الفراغ</div></div>
       <div class="stat-box"><div class="n">${totalTraceReps}</div><div class="l">تكرارات تتبّع ناجحة</div></div>
       <div class="stat-box"><div class="n">${typedTypos}</div><div class="l">أخطاء إملائية بسيطة (كتابة)</div></div>
       <div class="stat-box"><div class="n">${typedMisses}</div><div class="l">أخطاء كتابة كاملة</div></div>
@@ -3729,7 +4462,7 @@
     document.getElementById("algoFormSave").addEventListener("click", ()=>{
       const title = document.getElementById("algoTitle").value.trim();
       const code = document.getElementById("algoCode").value;
-      if(!title || !code.trim()){ alert("لازم اسم وكود على الأقل."); return; }
+      if(!title || !code.trim()){ toast("لازم اسم وكود على الأقل.", "warn"); return; }
       const cat = document.getElementById("algoCat").value.trim() || "عام";
       const note = document.getElementById("algoNote").value.trim();
       if(algo){
@@ -4208,7 +4941,7 @@
     document.getElementById("sentFormCancel").addEventListener("click", ()=>{ form.style.display="none"; form.innerHTML=""; });
     document.getElementById("sentFormSave").addEventListener("click", ()=>{
       const text = document.getElementById("sentText").value.trim();
-      if(!text){ alert("لازم تكتب الجملة الأول."); return; }
+      if(!text){ toast("لازم تكتب الجملة الأول.", "warn"); return; }
       const meaning = document.getElementById("sentMeaning").value.trim();
       const cat = document.getElementById("sentCat").value.trim() || "عام";
       if(sent){
