@@ -329,6 +329,8 @@
   .bridge-item .bt{direction:ltr; font-family:'Space Mono',monospace; font-weight:700; flex:0 0 auto;}
   .bridge-item .bm{color:var(--ink-soft); flex:1;}
   .bridge-item .bnote{font-size:11px; color:var(--ink-soft); flex:0 0 auto;}
+  .bridge-group{border:1px solid var(--line); border-radius:8px; padding:6px; background:rgba(0,0,0,.02);}
+  .bridge-group-head{background:transparent; border:none; padding:6px 10px;}
 
   /* ---- Import batch frames ---- */
   .import-batch{
@@ -614,10 +616,12 @@
       <button class="btn" id="addWordBtn">+ إضافة كلمة جديدة</button>
       <button class="btn ghost" id="addGroupBtn">📦 إضافة مجموعة كلمات</button>
       <button class="btn ghost" id="importFromEditorBtn">🖥️ استيراد من المحرر أو مرجع التعليمات<span id="editorBridgeCount" class="count-pill" style="display:none;"></span></button>
+      <button class="btn ghost" id="importFromEnglishBtn">📘 استيراد من برنامج تعلم الإنجليزي<span id="englishBridgeCount" class="count-pill" style="display:none;"></span></button>
     </div>
     <div id="wordForm" style="display:none;"></div>
     <div id="groupForm" style="display:none;"></div>
     <div id="editorBridgePanel" style="display:none;"></div>
+    <div id="englishBridgePanel" style="display:none;"></div>
     <div id="selectionToolbar" style="display:none;"></div>
     <div id="wordList"></div>
   </section>
@@ -2087,6 +2091,110 @@
   document.getElementById("importFromEditorBtn").addEventListener("click", renderEditorBridgePanel);
   window.addEventListener('storage', (e)=>{ if(e.key === 'bridge-editor-instructions') refreshEditorBridgeButton(); });
 
+  /* ============================================================
+     جسر استيراد من برنامج تعلم الإنجليزي: أي كلمات أو مجموعة كلمات
+     (زي حروف الجر) يحددها المستخدم هناك بعلامة ✔ في عمود 🔊 وبعدين
+     يدوس "إرسال المحدد لبرنامج المفردات" — بتوصل هنا كمرشّحة للإضافة.
+     قراءة فقط من مفتاح localStorage المشترك 'bridge-english-to-vocab'.
+  ============================================================ */
+  function getEnglishBridgeItems(){
+    try{
+      const raw = localStorage.getItem('bridge-english-to-vocab');
+      const items = raw ? JSON.parse(raw) : [];
+      return Array.isArray(items) ? items : [];
+    }catch(e){ return []; }
+  }
+  function refreshEnglishBridgeButton(){
+    const badge = document.getElementById("englishBridgeCount");
+    if(!badge) return;
+    const existing = existingWordSet();
+    const items = getEnglishBridgeItems();
+    const newOnes = items.filter(it => it && it.term && !existing.has(String(it.term).trim().toLowerCase()));
+    if(newOnes.length){ badge.style.display = "inline-flex"; badge.textContent = newOnes.length; }
+    else{ badge.style.display = "none"; }
+  }
+  function renderEnglishBridgePanel(){
+    const panel = document.getElementById("englishBridgePanel");
+    const items = getEnglishBridgeItems();
+    if(!items.length){
+      panel.innerHTML = `<div class="empty"><h3>لا توجد كلمات محددة</h3><p>افتح برنامج «تعلم الإنجليزي»، حدد كلمة أو مجموعة كلمات كاملة (زي حروف الجر) بعلامة ✔ في عمود 🔊، دوس «إرسال المحدد لبرنامج المفردات»، وارجع تاني.</p></div>`;
+      panel.style.display = "block";
+      return;
+    }
+    const existing = existingWordSet();
+    // تجميع حسب القسم اللي جاية منه كل كلمة (زي "Prepositions — حروف الجر")
+    const groups = {};
+    items.forEach((it,i)=>{
+      const g = (it && it.section) || "عام";
+      if(!groups[g]) groups[g] = [];
+      groups[g].push(i);
+    });
+    panel.innerHTML = `
+      <div class="bridge-list">
+        ${Object.keys(groups).map(g=>{
+          const idxs = groups[g];
+          return `
+          <div class="bridge-group">
+            <label class="bridge-item bridge-group-head">
+              <input type="checkbox" class="bridge-group-check" data-group="${escapeAttr(g)}" checked>
+              <strong>${escapeHtml(g)}</strong> <span class="bnote">(${idxs.length})</span>
+            </label>
+            ${idxs.map(i=>{
+              const it = items[i];
+              const already = it && it.term && existing.has(String(it.term).trim().toLowerCase());
+              return `
+              <label class="bridge-item" style="padding-inline-start:26px;">
+                <input type="checkbox" data-bidx="${i}" data-group="${escapeAttr(g)}" ${already?'disabled':'checked'}>
+                <span class="bt">${escapeHtml(it && it.term || '')}</span>
+                <span class="bm">${escapeHtml(it && it.meaning || '')}</span>
+                ${already?'<span class="bnote">(مضافة بالفعل)</span>':''}
+              </label>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="form-actions">
+        <button class="btn ghost small" id="englishBridgeCancel">إغلاق</button>
+        <button class="btn small" id="englishBridgeAddSelected">+ إضافة المحدد</button>
+      </div>
+    `;
+    panel.style.display = "block";
+    panel.querySelectorAll(".bridge-group-check").forEach(gchk=>{
+      gchk.addEventListener("change", ()=>{
+        panel.querySelectorAll(`input[data-bidx][data-group="${gchk.dataset.group}"]:not(:disabled)`).forEach(chk=>{
+          chk.checked = gchk.checked;
+        });
+      });
+    });
+    document.getElementById("englishBridgeCancel").addEventListener("click", ()=>{ panel.style.display="none"; panel.innerHTML=""; });
+    document.getElementById("englishBridgeAddSelected").addEventListener("click", ()=>{
+      const checked = Array.from(panel.querySelectorAll('input[data-bidx]:checked'));
+      const existingNow = existingWordSet();
+      const batchInfo = { id: cryptoId(), label: "من برنامج تعلم الإنجليزي — " + formatDate(Date.now()), ts: Date.now() };
+      let added = 0;
+      checked.forEach(chk=>{
+        const it = items[+chk.dataset.bidx];
+        if(!it || !it.term) return;
+        const key = String(it.term).trim().toLowerCase();
+        if(existingNow.has(key)) return;
+        state.words.push(seedWord({
+          word: it.term,
+          meaning: it.meaning || "",
+          example: it.example || "",
+          pronunciation: "",
+          category: it.section || "من الإنجليزي"
+        }, "أُضيفت من جسر برنامج تعلم الإنجليزي", batchInfo));
+        existingNow.add(key);
+        added++;
+      });
+      if(added){ save(); renderManage(); }
+      panel.style.display = "none"; panel.innerHTML = "";
+      alert(added ? ("تمت إضافة " + added + " كلمة جديدة ✅") : "لم يتم اختيار أي كلمة جديدة.");
+    });
+  }
+  document.getElementById("importFromEnglishBtn").addEventListener("click", renderEnglishBridgePanel);
+  window.addEventListener('storage', (e)=>{ if(e.key === 'bridge-english-to-vocab') refreshEnglishBridgeButton(); });
+
   function openForm(word){
     wordFormEl.style.display = "block";
     wordFormEl.innerHTML = `
@@ -2221,6 +2329,7 @@
 
   function renderManage(){
     refreshEditorBridgeButton();
+    refreshEnglishBridgeButton();
     renderGroupSelect();
     updateSelectionToolbar();
     const list = document.getElementById("wordList");
@@ -2852,6 +2961,7 @@
   renderGroupSelect();
   renderReview();
   refreshEditorBridgeButton();
+  refreshEnglishBridgeButton();
   updateGlobalOverdueIndicator();
   window.addEventListener("resize", ()=>{
     if(document.getElementById("view-stats").classList.contains("active")) drawLevelChart();

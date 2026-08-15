@@ -176,6 +176,7 @@
   #btnSpeakSelected{background:var(--teal);}
   #btnStopSpeak{background:var(--red);}
   #btnClearSelection{background:#8a8370;}
+  #btnSendToVocab{background:var(--gold); color:var(--ink);}
   #btnStartDictation{background:var(--orange);}
   #btnStopDictation{background:var(--red);}
   #btnPushToTalk{
@@ -517,6 +518,7 @@
   <button id="btnSpeakSelected">🔊 انطق الكلمات المحددة</button>
   <button id="btnStopSpeak">⏹ إيقاف</button>
   <button id="btnClearSelection">مسح التحديد ✖</button>
+  <button id="btnSendToVocab">📥 إرسال المحدد لبرنامج المفردات</button>
   <label>محرك التعرف على الصوت:
     <select id="recognitionEngine">
       <option value="browser" selected>سريع (متصفح)</option>
@@ -1749,6 +1751,72 @@ function updateSelectionCount(){
   const el = document.getElementById('selectionCount');
   if(!el) return;
   el.textContent = selectedRows.size > 0 ? `الكلمات المحددة للنطق: ${selectedRows.size}` : '';
+}
+
+/* ============================================================
+   جسر إرسال إلى برنامج المفردات: الكلمات المحددة هنا (بعلامة ✔
+   في عمود 🔊) بتتبعت كمرشّحة لبرنامج "بطاقاتي — دفتر مفردات"
+   عن طريق مفتاح localStorage مشترك. القراءة والحذف بتتم من هناك؛
+   إحنا بس بنضيف/بنحدّث هنا (اتجاه واحد من هنا لهناك).
+============================================================ */
+const VOCAB_BRIDGE_KEY = 'bridge-english-to-vocab';
+
+function pickTermIdx(section){
+  const { kinds, sentenceCol } = section;
+  let idx = kinds.findIndex(k => k === 'static');
+  if(idx === -1) idx = kinds.findIndex((k,i) => k === 'en' && i !== sentenceCol);
+  if(idx === -1) idx = kinds.findIndex((k,i) => k === 'ar' && i !== sentenceCol);
+  if(idx === -1) idx = kinds.length > 1 ? 1 : 0;
+  return idx;
+}
+
+function buildVocabEntryFromRow(section, row){
+  const termIdx = pickTermIdx(section);
+  const meaningIdx = section.kinds.findIndex(k => k === 'ar');
+  let exampleIdx = section.sentenceCol;
+  if(exampleIdx == null || exampleIdx === termIdx){
+    exampleIdx = section.kinds.findIndex((k,i) => k === 'en' && i !== termIdx);
+  }
+  const term = String(row.values[termIdx] ?? '').trim();
+  const meaning = meaningIdx !== -1 ? String(row.values[meaningIdx] ?? '').trim() : '';
+  const example = exampleIdx != null && exampleIdx !== -1 ? String(row.values[exampleIdx] ?? '').trim() : '';
+  return { term, meaning, example, section: section.title || section.sub || section.id };
+}
+
+function sendSelectedToVocab(){
+  if(selectedRows.size === 0){
+    document.getElementById('scoreboard').textContent =
+      "محددتش أي كلمات — حط علامة ✔ في عمود 🔊 جنب الكلمات (أو حدد قسم كامل زي حروف الجر من زر تحديد الكل) وبعدين دوس الزرار ده تاني.";
+    return;
+  }
+  let raw = [];
+  try{
+    const existing = localStorage.getItem(VOCAB_BRIDGE_KEY);
+    raw = existing ? JSON.parse(existing) : [];
+    if(!Array.isArray(raw)) raw = [];
+  }catch(e){ raw = []; }
+
+  const seen = new Set(raw.map(it => String(it && it.term || '').trim().toLowerCase()));
+  let added = 0;
+  sections.forEach(section => {
+    const rows = getRowsInOrder(section);
+    rows.forEach(row => {
+      const key = section.id + '::' + row.id;
+      if(!selectedRows.has(key)) return;
+      const entry = buildVocabEntryFromRow(section, row);
+      if(!entry.term) return;
+      const k = entry.term.toLowerCase();
+      if(seen.has(k)) return;
+      seen.add(k);
+      raw.push(entry);
+      added++;
+    });
+  });
+
+  localStorage.setItem(VOCAB_BRIDGE_KEY, JSON.stringify(raw));
+  document.getElementById('scoreboard').textContent = added > 0
+    ? `تم إرسال ${added} كلمة جديدة لبرنامج المفردات ✅ — افتح "بطاقاتي" وادخل "إدارة الكلمات" واستوردها من هناك.`
+    : "الكلمات المحددة كلها متبعتة قبل كده لبرنامج المفردات.";
 }
 
 /* ============ WHISPER (free, in-browser, push-to-talk speech recognition) ============ */
@@ -4385,6 +4453,7 @@ document.getElementById('btnSaveOrder').addEventListener('click', saveEverything
 document.getElementById('btnSpeakSelected').addEventListener('click', speakSelected);
 document.getElementById('btnStopSpeak').addEventListener('click', stopSpeaking);
 document.getElementById('btnClearSelection').addEventListener('click', clearSelection);
+document.getElementById('btnSendToVocab').addEventListener('click', sendSelectedToVocab);
 document.getElementById('btnStartDictation').addEventListener('click', startDictationQuiz);
 document.getElementById('btnStopDictation').addEventListener('click', stopDictationQuiz);
 
