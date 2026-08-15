@@ -398,6 +398,14 @@
   .planner-progress{display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--ink-soft); margin-inline-start:auto;}
   .planner-progress b{color:var(--ink);}
 
+  /* ---- صفحات المجموعات المعزولة ---- */
+  .groups-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px;}
+  .group-card{background:var(--card); border:2px solid var(--line); border-radius:8px; padding:16px; text-align:right; cursor:pointer; transition:border-color .15s;}
+  .group-card:hover{border-color:var(--gold-deep);}
+  .group-card .gc-title{font-weight:800; font-size:15px; margin-bottom:4px;}
+  .group-card .gc-meta{font-size:12px; color:var(--ink-soft);}
+  .group-detail-actions{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0;}
+
   footer{text-align:center; padding:20px; font-size:11px; color:var(--ink-soft);}
 
   @media (max-width:480px){
@@ -439,6 +447,7 @@
   <button data-view="quiz">اختبار</button>
   <button data-view="writing">الكتابة</button>
   <button data-view="manage">الكلمات</button>
+  <button data-view="groups">المجموعات</button>
   <button data-view="planner">خطة المراجعة<span id="plannerFlashDot" class="tab-flash-dot" style="display:none;"></span></button>
   <button data-view="stats">الإحصائيات</button>
 </nav>
@@ -622,6 +631,14 @@
     </div>
   </section>
 
+  <!-- GROUPS (صفحة معزولة لكل مجموعة كلمات على حدة) -->
+  <section class="view" id="view-groups">
+    <div id="groupsBackRow" style="display:none; margin-bottom:12px;">
+      <button class="btn ghost small" id="groupsBackBtn">→ كل المجموعات</button>
+    </div>
+    <div id="groupsContent"></div>
+  </section>
+
   <!-- REVIEW PLAN / GENERAL HISTORY -->
   <section class="view" id="view-planner">
     <div id="plannerOverdueBanner" style="display:none;"></div>
@@ -762,6 +779,7 @@
       if(btn.dataset.view === "quiz") renderQuiz();
       if(btn.dataset.view === "writing") renderWriting();
       if(btn.dataset.view === "manage") renderManage();
+      if(btn.dataset.view === "groups") renderGroupsView();
       if(btn.dataset.view === "planner") renderPlanner();
       if(btn.dataset.view === "stats") renderStats();
     });
@@ -820,6 +838,7 @@
     else if(v === "quiz") renderQuiz();
     else if(v === "writing") renderWriting();
     else if(v === "manage") renderManage();
+    else if(v === "groups") renderGroupsView();
     else if(v === "planner") renderPlanner();
     else if(v === "stats") renderStats();
   }
@@ -2581,6 +2600,109 @@
       if(val>0) ctx.fillText(String(val), x+barW*0.3, y-4);
     });
   }
+
+  // ---------- صفحات المجموعات المعزولة ----------
+  // كل مجموعة كلمات (importBatch) بتاخد صفحتها الخاصة هنا — بعيد تمامًا عن باقي
+  // المجموعات وعن الكلمات المفردة، عشان مفيش تداخل بين الأنواع المختلفة.
+  let activeGroupPage = null; // null = شبكة كل المجموعات، أو id المجموعة المفتوحة حاليًا
+
+  function isolateGroupSelection(words){
+    const ids = new Set(words.map(w=>w.id));
+    state.words.forEach(w=> w.selected = ids.has(w.id));
+    save();
+    renderManage();
+  }
+  function switchToView(viewName){
+    document.querySelectorAll("nav.tabs button").forEach(b=> b.classList.toggle("active", b.dataset.view===viewName));
+    document.querySelectorAll(".view").forEach(v=> v.classList.toggle("active", v.id === "view-"+viewName));
+    if(viewName === "review") renderReview();
+    else if(viewName === "quiz") renderQuiz();
+    else if(viewName === "writing") renderWriting();
+    else if(viewName === "manage") renderManage();
+    else if(viewName === "groups") renderGroupsView();
+    else if(viewName === "planner") renderPlanner();
+    else if(viewName === "stats") renderStats();
+  }
+
+  function renderGroupsView(){
+    const backRow = document.getElementById("groupsBackRow");
+    const content = document.getElementById("groupsContent");
+    const batches = importBatches();
+
+    if(activeGroupPage){
+      const b = batches.find(x=> x.info.id === activeGroupPage);
+      if(!b){ activeGroupPage = null; renderGroupsView(); return; }
+      backRow.style.display = "block";
+      content.innerHTML = `
+        <div class="import-batch-head" style="margin-bottom:10px;">
+          <div>
+            <div class="ibh-title">📦 ${escapeHtml(b.info.label)}</div>
+            <div class="ibh-meta">${b.words.length} كلمة — استُوردت بتاريخ ${formatDate(b.info.ts)}</div>
+          </div>
+        </div>
+        <div class="group-detail-actions">
+          <button class="btn small" id="gpStudy">📖 مراجعة هذه المجموعة فقط</button>
+          <button class="btn ghost small" id="gpQuiz">📝 اختبار هذه المجموعة فقط</button>
+          <button class="btn ghost small" id="gpWriting">✍️ كتابة هذه المجموعة فقط</button>
+          <button class="btn ghost small" id="gpRename">✏️ إعادة تسمية</button>
+          <button class="btn ghost small" id="gpDel">حذف المجموعة</button>
+        </div>
+        <div id="gpWordList"></div>
+      `;
+      const listEl = content.querySelector("#gpWordList");
+      b.words.slice().reverse().forEach(w=> listEl.appendChild(buildWordRow(w)));
+
+      content.querySelector("#gpStudy").addEventListener("click", ()=> studyWords(b.words, b.info.label));
+      content.querySelector("#gpQuiz").addEventListener("click", ()=>{
+        isolateGroupSelection(b.words);
+        switchToView("quiz");
+      });
+      content.querySelector("#gpWriting").addEventListener("click", ()=>{
+        isolateGroupSelection(b.words);
+        switchToView("writing");
+      });
+      content.querySelector("#gpRename").addEventListener("click", ()=>{
+        const newName = prompt("اسم المجموعة الجديد:", b.info.label);
+        if(newName === null) return;
+        const trimmed = newName.trim();
+        if(!trimmed) return;
+        state.words.forEach(w=>{ if(w.importBatch && w.importBatch.id === b.info.id) w.importBatch.label = trimmed; });
+        save();
+        renderGroupsView();
+      });
+      content.querySelector("#gpDel").addEventListener("click", ()=>{
+        if(confirm("حذف كل كلمات مجموعة \"" + b.info.label + "\" (" + b.words.length + " كلمة)؟ لا يمكن التراجع.")){
+          const ids = new Set(b.words.map(w=>w.id));
+          state.words = state.words.filter(x=>!ids.has(x.id));
+          if(activeGroup === b.info.id) activeGroup = "all";
+          activeGroupPage = null;
+          save();
+          renderGroupsView();
+        }
+      });
+    } else {
+      backRow.style.display = "none";
+      if(batches.length === 0){
+        content.innerHTML = "<div class='empty'><h3>لا توجد مجموعات بعد</h3><p>ضيف مجموعة كلمات من تبويب «الكلمات» (زرار «📦 إضافة مجموعة كلمات»)، وهتظهر هنا بصفحتها المستقلة أول ما تضيفها.</p></div>";
+        return;
+      }
+      const grid = document.createElement("div");
+      grid.className = "groups-grid";
+      batches.forEach(b=>{
+        const card = document.createElement("div");
+        card.className = "group-card";
+        card.innerHTML = `
+          <div class="gc-title">📦 ${escapeHtml(b.info.label)}</div>
+          <div class="gc-meta">${b.words.length} كلمة — ${formatDate(b.info.ts)}</div>
+        `;
+        card.addEventListener("click", ()=>{ activeGroupPage = b.info.id; renderGroupsView(); });
+        grid.appendChild(card);
+      });
+      content.innerHTML = "";
+      content.appendChild(grid);
+    }
+  }
+  document.getElementById("groupsBackBtn").addEventListener("click", ()=>{ activeGroupPage = null; renderGroupsView(); });
 
   // ---------- خطة المراجعة (السجل العام) ----------
   // بنعتبر أي حدث من النوعين دول "مراجعة فعلية" للكلمة: تقييم بطاقة/اختبار (srs)،
