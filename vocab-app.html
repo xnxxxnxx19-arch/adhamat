@@ -556,6 +556,18 @@
   }
   .hint-row{display:flex; justify-content:center; gap:8px; margin-top:8px;}
 
+  /* ---- Auto-cycle banner (writing/quiz "stick to same word" mode) ---- */
+  .cycle-banner{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:space-between;
+    background:var(--gold); border:2px solid var(--ink); border-radius:8px; padding:10px 14px; margin-bottom:16px;
+    font-size:13px; font-weight:700; color:var(--ink);
+  }
+  .cycle-steps{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .cycle-step{padding:4px 10px; border-radius:12px; background:var(--card); border:1px solid var(--ink); font-size:11.5px; opacity:.55;}
+  .cycle-step.current{opacity:1; background:var(--ink); color:var(--card);}
+  .cycle-step.done{opacity:.8; text-decoration:line-through; background:var(--teal); color:#fff; border-color:var(--teal);}
+  .cycle-arrow{opacity:.6; font-size:12px;}
+
   @media (max-width:480px){
     .form-grid{grid-template-columns:1fr;}
     .stat-grid{grid-template-columns:repeat(2,1fr);}
@@ -583,6 +595,7 @@
       <label for="groupSelect">المجموعة:</label>
       <select class="group-select" id="groupSelect" title="اختر مجموعة كلمات كاملة ليعمل عليها البرنامج بالكامل (مراجعة، اختبار، كتابة)"></select>
     </div>
+    <button class="icon-btn" id="repSettingsBtn" title="عدد مرات التكرار المطلوبة">🔁</button>
     <button class="icon-btn" id="themeToggle" title="الوضع الليلي">🌙</button>
     <input type="file" id="importFile" accept=".json,.txt,.csv,text/plain,application/json,text/csv,image/*" multiple style="display:none">
     <button class="btn ghost small" id="importBtn" title="استيراد من ملفات، صور، أو نص ملصوق">📥 استيراد</button>
@@ -610,6 +623,7 @@
   <section class="view active" id="view-review">
     <div class="catalog-tabs" id="catTabs"></div>
     <div id="studyModeBanner" style="display:none;"></div>
+    <div id="reviewCycleBanner" class="cycle-banner" style="display:none;"></div>
     <div class="progress-line">
       <span id="dueCount">0 كلمة للمراجعة اليوم</span>
       <span id="cardPos"></span>
@@ -655,6 +669,7 @@
   <!-- QUIZ -->
   <section class="view" id="view-quiz">
     <div id="quizSelectionBanner" style="display:none;"></div>
+    <div id="quizCycleBanner" class="cycle-banner" style="display:none;"></div>
     <div class="catalog-tabs">
       <span class="chip" id="quizModeChoice-mc" data-mode="mc">اختيار من متعدد</span>
       <span class="chip" id="quizModeChoice-type" data-mode="type">اكتب الترجمة</span>
@@ -668,6 +683,7 @@
   <!-- WRITING / HANDWRITING -->
   <section class="view" id="view-writing">
     <div id="pipelineBanner"></div>
+    <div id="writingCycleBanner" class="cycle-banner" style="display:none;"></div>
     <div id="writingSelectionBanner" style="display:none;"></div>
     <div class="catalog-tabs">
       <span class="chip" data-wmode="trace">تتبّع بخط اليد</span>
@@ -1061,6 +1077,7 @@
       algorithms: [],
       sentences: [],
       theme: "light",
+      settings: {repTarget: 10, cycleWriting: false, cycleQuiz: false, cycleReview: false},
       history: [] // {date, correct, total}
     };
   }
@@ -1121,6 +1138,11 @@
   }
 
   let state = loadState();
+  if(!state.settings) state.settings = {};
+  if(!state.settings.repTarget) state.settings.repTarget = 10;
+  if(state.settings.cycleWriting === undefined) state.settings.cycleWriting = false;
+  if(state.settings.cycleQuiz === undefined) state.settings.cycleQuiz = false;
+  if(state.settings.cycleReview === undefined) state.settings.cycleReview = false;
   // ترقية بيانات قديمة محفوظة قبل إضافة السجل/مجموعات الاستيراد، عشان ميحصلش خطأ.
   state.words.forEach(w=>{
     ensureLog(w);
@@ -1348,6 +1370,7 @@
 
     if(reviewIndex >= total){ reviewIndex = 0; }
     const w = reviewQueue[reviewIndex];
+    renderReviewCycleBanner(w);
     document.getElementById("frontCat").textContent = (w.category||"عام").toUpperCase();
     document.getElementById("frontWord").textContent = w.word;
     document.getElementById("frontPron").textContent = w.pronunciation ? "/"+w.pronunciation+"/" : "";
@@ -1364,6 +1387,21 @@
     document.getElementById("cardInner").classList.toggle("flipped", flipped);
   });
 
+  // 🔁 وضع الدورة في المراجعة: بيوريك تقدمك في إتقان نفس الكرت الحالي (بدل ما
+  // ينتقل الكرت لكلمة تانية على طول بمجرد ما تقيّمها) — لحد ما توصل لعدد
+  // التكرار المطلوب من التقييمات "مش صعبة" المتتالية.
+  function renderReviewCycleBanner(w){
+    const el = document.getElementById("reviewCycleBanner");
+    if(!el) return;
+    if(!state.settings.cycleReview || !w){ el.style.display = "none"; el.innerHTML = ""; return; }
+    const ws = ensureWriting(w);
+    el.style.display = "flex";
+    el.innerHTML = `
+      <span>🔁 التزام بنفس البطاقة: <b style="direction:ltr; display:inline-block;">${escapeHtml(w.word)}</b></span>
+      <span class="cycle-steps"><span class="cycle-step current">${(ws.readStreak||0)} / ${READ_TARGET_REPS} تقييمات غير صعبة متتالية</span></span>
+    `;
+  }
+
   document.querySelectorAll("#reviewArea .rate-btn").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       if(reviewQueue.length===0) return;
@@ -1372,6 +1410,7 @@
       applyRating(w, rate, "مراجعة البطاقات");
       // القراءة: كل تقييم للبطاقة (متوسط/سهل) بيعتبر "قراءة" ناجحة؛ لو صعبة، العدّاد يرجع صفر.
       const ws = ensureWriting(w);
+      let completed = false;
       if(rate === "hard"){
         ws.readStreak = 0;
       } else {
@@ -1379,10 +1418,20 @@
         if(ws.readStreak >= READ_TARGET_REPS){
           ws.readCompletions = (ws.readCompletions||0) + 1;
           ws.readStreak = 0;
+          completed = true;
           logEvent(w, "srs", "أتممت " + READ_TARGET_REPS + " مرات قراءة/مراجعة متتالية للبطاقة ✔");
         }
       }
       save();
+      // في وضع «الدورة»: نفضل على نفس الكرت (بنقلبه لواجهته الأمامية تاني) لحد
+      // ما يوصل لعدد التكرار المطلوب، وبعدها بس ننتقل لكرت تاني من الطابور.
+      if(state.settings.cycleReview && !completed){
+        flipped = false;
+        document.getElementById("cardInner").classList.remove("flipped");
+        renderReviewCycleBanner(w);
+        return;
+      }
+      if(completed) toast("🎉 أتقنت هذه البطاقة! هننتقل لكرت تاني.", "ok");
       reviewQueue.splice(reviewIndex, 1);
       if(reviewIndex >= reviewQueue.length) reviewIndex = 0;
       updateReviewCard();
@@ -1419,8 +1468,65 @@
 
   // ---------- QUIZ ----------
   let quizMode = "mc";
+  /* ============================================================
+     🔁 وضع الدورة التلقائية لصفحة الاختبار: نفس الكلمة بتتنقل بين
+     اختيار من متعدد (N) → اكتب الترجمة (N) → اكتب الإنجليزية (N)،
+     وبعدين كلمة جديدة، وهكذا. يتفعّل من إعدادات 🔁 (state.settings.cycleQuiz).
+  ============================================================ */
+  const QUIZ_CYCLE_STAGES = ["mc","type","en"];
+  const QUIZ_CYCLE_LABELS = {mc:"اختيار من متعدد", type:"اكتب الترجمة", en:"اكتب الإنجليزية"};
+  let quizCycleActive = false;
+  let quizCycleStageIdx = 0;
+  let quizCycleWord = null;
+  let quizCycleStreak = 0;
+  function renderQuizCycleBanner(){
+    const el = document.getElementById("quizCycleBanner");
+    if(!el) return;
+    if(!quizCycleActive || !quizCycleWord){ el.style.display = "none"; el.innerHTML = ""; return; }
+    el.style.display = "flex";
+    const stepsHtml = QUIZ_CYCLE_STAGES.map((s,i)=>{
+      const cls = i < quizCycleStageIdx ? "done" : (i === quizCycleStageIdx ? "current" : "");
+      const count = i === quizCycleStageIdx ? (quizCycleStreak + " / " + state.settings.repTarget) : "";
+      return `<span class="cycle-step ${cls}">${QUIZ_CYCLE_LABELS[s]}${count ? " ("+count+")" : ""}</span>`;
+    }).join("<span class='cycle-arrow'>←</span>");
+    el.innerHTML = `
+      <span>🔁 دورة تلقائية على كلمة: <b style="direction:ltr; display:inline-block;">${escapeHtml(quizCycleWord.word)}</b></span>
+      <span class="cycle-steps">${stepsHtml}</span>
+      <button type="button" class="btn ghost small" id="stopQuizCycleBtn">إيقاف الدورة</button>
+    `;
+    document.getElementById("stopQuizCycleBtn").addEventListener("click", ()=>{
+      quizCycleActive = false; quizCycleWord = null;
+      renderQuiz();
+    });
+  }
+  function startQuizCycle(){
+    quizCycleActive = true;
+    quizCycleStageIdx = 0;
+    quizCycleStreak = 0;
+    quizCycleWord = pickQuizWord();
+  }
+  // بتتنادى بعد كل إجابة (صح أو غلط) وهي المسؤولة عن تحديد إمتى ننتقل لمرحلة
+  // جديدة أو كلمة جديدة.
+  function quizCycleAdvance(isCorrect){
+    if(isCorrect){
+      quizCycleStreak++;
+      if(quizCycleStreak >= state.settings.repTarget){
+        quizCycleStreak = 0;
+        quizCycleStageIdx++;
+        if(quizCycleStageIdx >= QUIZ_CYCLE_STAGES.length){
+          quizCycleStageIdx = 0;
+          quizCycleWord = pickQuizWord();
+          toast("🎉 خلصت دورة اختبار كاملة للكلمة السابقة — كلمة جديدة!", "ok");
+        }
+      }
+    } else {
+      quizCycleStreak = 0;
+    }
+  }
+
   document.querySelectorAll("[id^='quizModeChoice']").forEach(el=>{
     el.addEventListener("click", ()=>{
+      if(quizCycleActive){ quizCycleActive = false; quizCycleWord = null; }
       document.querySelectorAll("[id^='quizModeChoice']").forEach(e=>e.classList.remove("active"));
       el.classList.add("active");
       if(speedTimerHandle){ clearInterval(speedTimerHandle); speedTimerHandle=null; speedActive=false; }
@@ -1463,12 +1569,31 @@
 
   function renderQuiz(){
     renderSelectionBannerInto("quizSelectionBanner");
-    document.querySelector("[id^='quizModeChoice-"+quizMode+"']")?.classList.add("active");
+    document.querySelectorAll("[id^='quizModeChoice']").forEach(e=>e.classList.remove("active"));
     const area = document.getElementById("quizArea");
     if(quizPool().length < 2){
       area.innerHTML = "<div class='empty'><h3>أضف كلمتين على الأقل لبدء الاختبار</h3></div>";
+      const banner = document.getElementById("quizCycleBanner");
+      if(banner){ banner.style.display = "none"; banner.innerHTML = ""; }
       return;
     }
+
+    // ---- وضع الدورة التلقائية: نفس الكلمة تتنقل تلقائيًا بين المراحل الثلاث ----
+    if(state.settings.cycleQuiz){
+      if(!quizCycleActive || !quizCycleWord) startQuizCycle();
+      quizMode = QUIZ_CYCLE_STAGES[quizCycleStageIdx];
+      document.querySelector("[id^='quizModeChoice-"+quizMode+"']")?.classList.add("active");
+      renderQuizCycleBanner();
+      quizWord = quizCycleWord;
+      if(quizMode === "mc") renderMCQuiz(area);
+      else if(quizMode === "type") renderTypeQuiz(area, "en-to-ar");
+      else renderTypeQuiz(area, "ar-to-en");
+      return;
+    }
+    const banner = document.getElementById("quizCycleBanner");
+    if(banner){ banner.style.display = "none"; banner.innerHTML = ""; }
+
+    document.querySelector("[id^='quizModeChoice-"+quizMode+"']")?.classList.add("active");
     if(quizMode === "match"){ renderMatchQuiz(area); return; }
     if(quizMode === "speed"){ renderSpeedQuiz(area); return; }
     quizWord = pickQuizWord();
@@ -1643,6 +1768,7 @@
           Array.from(wrap.children).find(c=>c.textContent===correct.meaning)?.classList.add("correct");
         }
         applyRating(correct, isCorrect ? "medium" : "hard", "اختبار (اختيار من متعدد)");
+        if(state.settings.cycleQuiz) quizCycleAdvance(isCorrect);
         save();
         showFeedback(isCorrect);
         setTimeout(renderQuiz, 1100);
@@ -1671,6 +1797,7 @@
       const target = (answerIsEnglish ? correct.word : correct.meaning).trim().toLowerCase();
       const isCorrect = val === target;
       applyRating(correct, isCorrect ? "medium" : "hard", answerIsEnglish ? "اختبار (اكتب الكلمة الإنجليزية)" : "اختبار (اكتب الترجمة)");
+      if(state.settings.cycleQuiz) quizCycleAdvance(isCorrect);
       save();
       showFeedback(isCorrect, isCorrect ? null : (answerIsEnglish ? correct.word : correct.meaning));
       input.disabled = true;
@@ -1704,7 +1831,60 @@
     return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   }
 
-  // ---------- TOASTS (replaces jarring alert() popups for non-blocking feedback) ----------
+  // ---------- إعدادات التكرار العامة + وضع "الدورة التلقائية" (نفس الكلمة تتنقل
+  // بين المراحل بالترتيب قبل الانتقال لكلمة جديدة) للكتابة/الاختبار/المراجعة ----------
+  function openRepSettings(){
+    const ov = document.getElementById("importHubOverlay");
+    ov.style.display = "flex";
+    const n = state.settings.repTarget;
+    ov.innerHTML = `
+      <div class="modal-overlay" id="repSettingsBackdrop">
+        <div class="modal-box">
+          <h3>🔁 عدد مرات التكرار</h3>
+          <p class="sub">حدد كام مرة صح متتالية مطلوبة قبل ما تعتبر الكلمة "خلصت" في أي وضع (كتابة، نطق، ترتيب، إملأ فراغ...).</p>
+          <input type="number" id="repTargetInput" min="1" max="999" value="${n}" style="width:100%; font-size:22px; text-align:center; padding:10px; border:2px solid var(--line); border-radius:8px; margin-bottom:10px;">
+          <div class="import-methods" style="grid-template-columns:repeat(4,1fr);">
+            ${[2,3,5,10,20,50,100,200].map(v=>`<button type="button" class="import-method-btn" data-preset="${v}" style="padding:8px 4px;">${v}</button>`).join("")}
+          </div>
+          <hr style="margin:16px 0; border:none; border-top:1px solid var(--line);">
+          <h3 style="font-size:15px;">🔁 وضع الدورة التلقائية لكل كلمة</h3>
+          <p class="sub">لما يتفعّل: الكلمة بتفضل ثابتة وبتتنقل تلقائيًا بين المراحل (كتابة ← استرجاع حر ← ترتيب حروف) بنفس عدد التكرار، وبعد ما تخلص المراحل كلها بينتقل تلقائيًا لكلمة تانية، وهكذا بلا توقف.</p>
+          <label class="group-word-row" style="cursor:pointer; grid-template-columns:none; display:flex; gap:10px; align-items:center;">
+            <input type="checkbox" class="batch-check" id="cycleWritingChk" ${state.settings.cycleWriting?"checked":""}><span>تفعيل في صفحة «الكتابة»</span>
+          </label>
+          <label class="group-word-row" style="cursor:pointer; grid-template-columns:none; display:flex; gap:10px; align-items:center;">
+            <input type="checkbox" class="batch-check" id="cycleQuizChk" ${state.settings.cycleQuiz?"checked":""}><span>تفعيل في صفحة «الاختبار»</span>
+          </label>
+          <label class="group-word-row" style="cursor:pointer; grid-template-columns:none; display:flex; gap:10px; align-items:center;">
+            <input type="checkbox" class="batch-check" id="cycleReviewChk" ${state.settings.cycleReview?"checked":""}><span>الالتزام بنفس البطاقة في «المراجعة» لحد ما تتقنها</span>
+          </label>
+          <div class="pad-controls" style="justify-content:center; margin-top:16px;">
+            <button class="btn small" id="repSettingsApply">تطبيق ✅</button>
+            <button class="btn ghost small" id="repSettingsClose">إغلاق</button>
+          </div>
+        </div>
+      </div>
+    `;
+    ov.querySelectorAll("[data-preset]").forEach(b=> b.addEventListener("click", ()=>{
+      document.getElementById("repTargetInput").value = b.dataset.preset;
+    }));
+    document.getElementById("repSettingsClose").addEventListener("click", closeImportHub);
+    document.getElementById("repSettingsBackdrop").addEventListener("click", (e)=>{ if(e.target.id==="repSettingsBackdrop") closeImportHub(); });
+    document.getElementById("repSettingsApply").addEventListener("click", ()=>{
+      const val = document.getElementById("repTargetInput").value;
+      setRepTarget(val);
+      state.settings.cycleWriting = document.getElementById("cycleWritingChk").checked;
+      state.settings.cycleQuiz = document.getElementById("cycleQuizChk").checked;
+      state.settings.cycleReview = document.getElementById("cycleReviewChk").checked;
+      save();
+      closeImportHub();
+      if(document.getElementById("view-writing").classList.contains("active")) renderWriting();
+      if(document.getElementById("view-quiz").classList.contains("active")) renderQuiz();
+    });
+  }
+  document.getElementById("repSettingsBtn").addEventListener("click", openRepSettings);
+
+
   function toast(msg, kind){
     const stack = document.getElementById("toastStack");
     if(!stack){ return; }
@@ -1719,20 +1899,99 @@
   }
 
   // ---------- WRITING / HANDWRITING PRACTICE ----------
-  const TRACE_TARGET_REPS = 10;
-  const TYPED_TARGET_REPS = 10;   // الكتابة: لازم 10 مرات صحيحة متتالية
-  const READ_TARGET_REPS = 10;    // القراءة (البطاقات): لازم 10 مرات مراجعة متتالية
-  const SPELL_TARGET_REPS = 10;   // الهجاء (الاسترجاع الحر): لازم 10 مرات صحيحة متتالية من الذاكرة
-  const PRONOUNCE_TARGET_REPS = 10; // النطق: لازم 10 مرات نطق صحيحة متتالية
-  const SCRAMBLE_TARGET_REPS = 10;  // حروف متفرقة: لازم 10 مرات ترتيب صحيح متتالية
-  const BLANK_TARGET_REPS = 10;     // املأ الفراغ: لازم 10 مرات صحيحة متتالية
+  let TRACE_TARGET_REPS = state.settings.repTarget; // قابل للتغيير من إعدادات التكرار
+  let TYPED_TARGET_REPS = state.settings.repTarget; // قابل للتغيير من إعدادات التكرار
+  let READ_TARGET_REPS = state.settings.repTarget; // قابل للتغيير من إعدادات التكرار
+  let SPELL_TARGET_REPS = state.settings.repTarget; // قابل للتغيير من إعدادات التكرار
+  let PRONOUNCE_TARGET_REPS = state.settings.repTarget; // قابل للتغيير من إعدادات التكرار
+  let SCRAMBLE_TARGET_REPS = state.settings.repTarget; // قابل للتغيير من إعدادات التكرار
+  let BLANK_TARGET_REPS = state.settings.repTarget; // قابل للتغيير من إعدادات التكرار
+
+  // عدد التكرارات ده رقم واحد بيتحكم في كل أوضاع الكتابة/النطق/الترتيب دفعة
+  // واحدة (مرتين، 4، 5، 10، 100... أي رقم يحدده المستخدم من الإعدادات).
+  function setRepTarget(n){
+    n = Math.max(1, Math.min(999, Math.round(Number(n)) || 10));
+    state.settings.repTarget = n;
+    TRACE_TARGET_REPS = n; TYPED_TARGET_REPS = n; READ_TARGET_REPS = n;
+    SPELL_TARGET_REPS = n; PRONOUNCE_TARGET_REPS = n; SCRAMBLE_TARGET_REPS = n;
+    BLANK_TARGET_REPS = n; ALGO_TARGET_REPS = n; SENT_TARGET_REPS = n;
+    save();
+    toast("تم ضبط عدد التكرارات المطلوبة إلى " + n + " ✅", "ok");
+    if(typeof renderWriting === "function" && document.getElementById("view-writing").classList.contains("active")) renderWriting();
+  }
   let writingMode = "trace";
   let traceWord = null, recallWord = null, typedWord = null;
   let typedStreak = 0;
 
+  /* ============================================================
+     🔁 وضع الدورة التلقائية لصفحة الكتابة: نفس الكلمة بتتنقل تلقائيًا
+     كتابة (N) → استرجاع حر (N) → ترتيب حروف (N)، وبعدين كلمة جديدة، وهكذا
+     من غير توقف. يتفعّل من إعدادات 🔁 في الهيدر (state.settings.cycleWriting).
+  ============================================================ */
+  const WRITING_CYCLE_STAGES = ["typed","recall","scramble"];
+  const WRITING_CYCLE_LABELS = {typed:"✍️ كتابة", recall:"🖊️ استرجاع حر", scramble:"🔠 ترتيب حروف"};
+  let cycleActive = false;
+  let cycleStageIdx = 0;
+  let cycleWord = null;
+  function cycleCurrentStage(){ return WRITING_CYCLE_STAGES[cycleStageIdx]; }
+  function renderCycleBanner(){
+    const el = document.getElementById("writingCycleBanner");
+    if(!el) return;
+    if(!cycleActive || !cycleWord){ el.style.display = "none"; el.innerHTML = ""; return; }
+    el.style.display = "flex";
+    const stepsHtml = WRITING_CYCLE_STAGES.map((s,i)=>{
+      const cls = i < cycleStageIdx ? "done" : (i === cycleStageIdx ? "current" : "");
+      return `<span class="cycle-step ${cls}">${WRITING_CYCLE_LABELS[s]}</span>`;
+    }).join("<span class='cycle-arrow'>←</span>");
+    el.innerHTML = `
+      <span>🔁 دورة تلقائية على كلمة: <b style="direction:ltr; display:inline-block;">${escapeHtml(cycleWord.word)}</b></span>
+      <span class="cycle-steps">${stepsHtml}</span>
+      <button type="button" class="btn ghost small" id="stopCycleBtn">إيقاف الدورة</button>
+    `;
+    document.getElementById("stopCycleBtn").addEventListener("click", stopWritingCycle);
+  }
+  function startWritingCycle(){
+    cycleActive = true;
+    cycleStageIdx = 0;
+    cycleWord = pickPracticeWord();
+    goToCycleStage();
+  }
+  function stopWritingCycle(){
+    cycleActive = false;
+    cycleWord = null;
+    renderCycleBanner();
+  }
+  function goToCycleStage(){
+    if(!cycleWord) return;
+    writingMode = cycleCurrentStage();
+    document.querySelectorAll("[data-wmode]").forEach(c=> c.classList.toggle("active", c.dataset.wmode===writingMode));
+    document.getElementById("wTrace").style.display = "none";
+    document.getElementById("wRecall").style.display = writingMode==="recall" ? "block":"none";
+    document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
+    document.getElementById("wPronounce").style.display = "none";
+    document.getElementById("wScramble").style.display = writingMode==="scramble" ? "block":"none";
+    document.getElementById("wBlank").style.display = "none";
+    renderCycleBanner();
+    if(writingMode==="typed") startTypedRound();
+    else if(writingMode==="recall") startRecallRound();
+    else if(writingMode==="scramble") startScrambleRound();
+  }
+  // بتتنادى لما كلمة تخلّص مرحلتها الحالية بالكامل (N تكرار صحيح متتالي)
+  function cycleAdvanceFromWriting(){
+    if(!cycleActive) return;
+    cycleStageIdx++;
+    if(cycleStageIdx >= WRITING_CYCLE_STAGES.length){
+      cycleStageIdx = 0;
+      cycleWord = pickPracticeWord();
+      toast("🎉 خلصت دورة كاملة للكلمة السابقة — يلا كلمة جديدة!", "ok");
+    }
+    goToCycleStage();
+  }
+
   document.querySelectorAll("[data-wmode]").forEach(chip=>{
     chip.addEventListener("click", ()=>{
       if(pipelineActive) stopPipelineSession();
+      if(cycleActive) stopWritingCycle();
       document.querySelectorAll("[data-wmode]").forEach(c=>c.classList.remove("active"));
       chip.classList.add("active");
       writingMode = chip.dataset.wmode;
@@ -1761,7 +2020,12 @@
     document.getElementById("writingNoWords").style.display = has ? "none":"block";
     document.querySelectorAll("#view-writing .wpanel").forEach(p=> p.style.display = has ? "" : "none");
     renderWritingSettingsPanel();
-    if(!has) return;
+    if(!has){ stopWritingCycle(); return; }
+    if(state.settings.cycleWriting){
+      if(!cycleActive) startWritingCycle(); else goToCycleStage();
+      return;
+    }
+    if(cycleActive) stopWritingCycle();
     if(writingMode==="trace") startTraceRound();
     else if(writingMode==="recall") startRecallRound();
     else if(writingMode==="pronounce") startPronounceRound();
@@ -2253,7 +2517,7 @@
   // ---- RECALL MODE (freehand from memory) ----
   function startRecallRound(){
     if(!recallPad) recallPad = makePad(document.getElementById("recallGuideCanvas"), document.getElementById("recallInkCanvas"));
-    recallWord = pickPracticeWord();
+    recallWord = cycleActive ? cycleWord : pickPracticeWord();
     if(!recallWord) return;
     recallPad.clearInk();
     recallPad.clearGuide();
@@ -2292,6 +2556,7 @@
       if(!recallWord) return;
       const ws = ensureWriting(recallWord);
       const good = btn.dataset.rrate === "easy";
+      let completed = false;
       // الهجاء: كل استرجاع صح من الذاكرة بيزوّد عدّاد الهجاء، وأي خطأ يصفّره —
       // لحد ما توصل لعشر مرات صحيحة متتالية.
       if(good){
@@ -2300,6 +2565,7 @@
         if(ws.spellStreak >= SPELL_TARGET_REPS){
           ws.spellCompletions = (ws.spellCompletions||0) + 1;
           ws.spellStreak = 0;
+          completed = true;
           logEvent(recallWord, "recall", "أتممت " + SPELL_TARGET_REPS + " مرات هجاء صحيحة متتالية من الذاكرة ✔");
         }
       } else {
@@ -2308,7 +2574,8 @@
       }
       applyRating(recallWord, good ? "easy" : "hard", "استرجاع حر (تقييم ذاتي)");
       save();
-      startRecallRound();
+      if(completed && cycleActive) setTimeout(cycleAdvanceFromWriting, 400);
+      else startRecallRound();
     });
   });
 
@@ -2343,7 +2610,7 @@
 
   // ---- TYPED REPETITION MODE ----
   function startTypedRound(){
-    typedWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
+    typedWord = pipelineActive ? pipelineCurrentWord() : (cycleActive ? cycleWord : pickPracticeWord());
     if(!typedWord){ typedStreak = 0; return; }
     typedStreak = ensureWriting(typedWord).typedStreak || 0;
     document.getElementById("typedMeaning").textContent = typedWord.meaning;
@@ -2455,6 +2722,7 @@
         save();
         fb.textContent = "أتممت " + TYPED_TARGET_REPS + " مرات صحيحة متتالية! ✔";
         if(pipelineActive) setTimeout(pipelineWordDone, 1200);
+        else if(cycleActive) setTimeout(cycleAdvanceFromWriting, 1200);
         else setTimeout(startTypedRound, 1200);
       } else {
         fb.textContent = "صحيح، استمر!";
@@ -2622,13 +2890,25 @@
     return attempt;
   }
   function startScrambleRound(){
-    scrambleWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
+    scrambleWord = pipelineActive ? pipelineCurrentWord() : (cycleActive ? cycleWord : pickPracticeWord());
     if(!scrambleWord) return;
     scrambleStreak = ensureWriting(scrambleWord).scrambleStreak || 0;
     const letters = shuffleWordLetters(scrambleWord.word);
     scrambleTiles = letters.map(ch=>({char:ch, used:false}));
     scrambleAnswerIdxs = [];
     document.getElementById("scrambleMeaning").textContent = scrambleWord.meaning;
+    updateScrambleProgress();
+    document.getElementById("scrambleFeedback").textContent = "";
+    document.getElementById("scrambleFeedback").className = "feedback";
+    renderScrambleUI();
+  }
+  // زي startScrambleRound بالظبط لكن من غير ما يلقّط كلمة جديدة — بيفضل على نفس
+  // الكلمة الحالية ويعمل بس تشكيل حروف جديد، عشان الدورة تفضل متتالية عليها.
+  function continueScrambleRound(){
+    if(!scrambleWord) return startScrambleRound();
+    const letters = shuffleWordLetters(scrambleWord.word);
+    scrambleTiles = letters.map(ch=>({char:ch, used:false}));
+    scrambleAnswerIdxs = [];
     updateScrambleProgress();
     document.getElementById("scrambleFeedback").textContent = "";
     document.getElementById("scrambleFeedback").className = "feedback";
@@ -2703,11 +2983,14 @@
         save();
         fb.textContent = "أتممت " + SCRAMBLE_TARGET_REPS + " مرات صحيحة متتالية! ✔";
         if(pipelineActive) setTimeout(pipelineWordDone, 1200);
+        else if(cycleActive) setTimeout(cycleAdvanceFromWriting, 1200);
         else setTimeout(startScrambleRound, 1200);
       } else {
         fb.textContent = "صحيح! 🎉";
         save();
-        setTimeout(startScrambleRound, 700);
+        // نفضل على نفس الكلمة لحد ما نخلّص الدورة كاملة — بنعيد بس تشكيل الحروف
+        // من جديد بدل ما نلقّط كلمة عشوائية تانية في النص.
+        setTimeout(continueScrambleRound, 700);
       }
     } else {
       ws.scrambleWrong = (ws.scrambleWrong||0)+1;
@@ -2740,9 +3023,23 @@
     return "I want to use the word _____ in a sentence. ( " + w.meaning + " )";
   }
   function startBlankRound(){
-    blankWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
+    blankWord = pipelineActive ? pipelineCurrentWord() : (cycleActive ? cycleWord : pickPracticeWord());
     if(!blankWord) return;
     blankStreak = ensureWriting(blankWord).blankStreak || 0;
+    blankHintUsed = false;
+    document.getElementById("blankSentence").innerHTML = escapeHtml(buildBlankSentence(blankWord)).replace("_____", "<span class='gap'>_____</span>");
+    const input = document.getElementById("blankInput");
+    input.value = "";
+    input.disabled = false;
+    input.focus();
+    document.getElementById("blankSubmit").disabled = false;
+    document.getElementById("blankFeedback").textContent = "";
+    document.getElementById("blankFeedback").className = "feedback";
+    document.getElementById("blankHintNote").textContent = "";
+  }
+  // نفس startBlankRound بس من غير ما يغيّر الكلمة — بيفضل على نفس الكلمة الحالية.
+  function continueBlankRound(){
+    if(!blankWord) return startBlankRound();
     blankHintUsed = false;
     document.getElementById("blankSentence").innerHTML = escapeHtml(buildBlankSentence(blankWord)).replace("_____", "<span class='gap'>_____</span>");
     const input = document.getElementById("blankInput");
@@ -2777,11 +3074,12 @@
         save();
         fb.textContent = "أتممت " + BLANK_TARGET_REPS + " مرات صحيحة متتالية! ✔";
         if(pipelineActive) setTimeout(pipelineWordDone, 1200);
+        else if(cycleActive) setTimeout(cycleAdvanceFromWriting, 1200);
         else setTimeout(startBlankRound, 1200);
       } else {
         fb.textContent = "صحيح! 🎉";
         save();
-        setTimeout(startBlankRound, 800);
+        setTimeout(continueBlankRound, 800);
       }
     } else {
       ws.blankWrong = (ws.blankWrong||0)+1;
@@ -2792,7 +3090,7 @@
         ? "صح، لكن مستخدمًا تلميح — جرّب من غير تلميح المرة الجاية عشان تحسب."
         : ("مش صح — الكلمة الصحيحة: " + blankWord.word);
       save();
-      setTimeout(startBlankRound, 1400);
+      setTimeout(continueBlankRound, 1400);
     }
   }
   document.getElementById("blankSubmit").addEventListener("click", checkBlankAnswer);
@@ -4296,7 +4594,7 @@
      يتطابق تمامًا)، وبعد 10 مرات صح متتالية بيتقدّم معاد المراجعة تلقائيًا
      وبيتنقل تلقائيًا للخوارزمية اللي بعدها في قائمة المستحقات.
   ============================================================ */
-  const ALGO_TARGET_REPS = 10;
+  let ALGO_TARGET_REPS = state.settings.repTarget;
   function seedAlgo(a){
     const item = Object.assign({
       id: cryptoId(),
@@ -4484,7 +4782,7 @@
      حرف). كل وضع محتاج 10 مرات نجاح متتالية قبل ما يتقدّم معاد
      المراجعة، وبعدين بيقترح جملة تانية تلقائيًا.
   ============================================================ */
-  const SENT_TARGET_REPS = 10;
+  let SENT_TARGET_REPS = state.settings.repTarget;
   function seedSentence(s){
     const item = Object.assign({
       id: cryptoId(),
