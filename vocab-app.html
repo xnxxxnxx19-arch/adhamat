@@ -22,6 +22,9 @@
     --line:#D8CFAE;
     --shadow: 0 10px 30px rgba(28,37,65,.12);
     --radius: 3px;
+    --accent-grad: linear-gradient(135deg,#C89B3C,#A97F26);
+    --glow: none;
+    --dots-op: .06;
   }
   [data-theme="dark"]{
     --paper:#12172A;
@@ -34,6 +37,51 @@
     --teal:#5FBBA6;
     --line:#333F5E;
     --shadow: 0 10px 30px rgba(0,0,0,.4);
+    --accent-grad: linear-gradient(135deg,#D9AE4E,#E8C46B);
+    --dots-op: .04;
+  }
+  [data-theme="neon"]{
+    --paper:#0A0E1C;
+    --card:#131B30;
+    --ink:#EAF0FF;
+    --ink-soft:#8C97C4;
+    --gold:#8B5CF6;
+    --gold-deep:#00E5FF;
+    --red:#FF4D6D;
+    --teal:#39FF9E;
+    --line:#232C4A;
+    --shadow: 0 10px 34px rgba(0,0,0,.55);
+    --accent-grad: linear-gradient(135deg,#8B5CF6,#00E5FF);
+    --glow: 0 0 22px rgba(139,92,246,.45);
+    --dots-op: .09;
+  }
+  [data-theme="ocean"]{
+    --paper:#E9F6F8;
+    --card:#FFFFFF;
+    --ink:#0B3B4A;
+    --ink-soft:#4C7A88;
+    --gold:#0EA5E9;
+    --gold-deep:#0284C7;
+    --red:#E24C4C;
+    --teal:#0D9488;
+    --line:#CDE8ED;
+    --shadow: 0 10px 30px rgba(11,59,74,.12);
+    --accent-grad: linear-gradient(135deg,#0EA5E9,#14B8A6);
+    --dots-op: .07;
+  }
+  [data-theme="forest"]{
+    --paper:#F1F7EC;
+    --card:#FFFFFF;
+    --ink:#22381F;
+    --ink-soft:#5B7A54;
+    --gold:#22C55E;
+    --gold-deep:#15803D;
+    --red:#D6473F;
+    --teal:#0D9488;
+    --line:#D9E8D0;
+    --shadow: 0 10px 30px rgba(34,56,31,.12);
+    --accent-grad: linear-gradient(135deg,#65A30D,#16A34A);
+    --dots-op: .06;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -44,12 +92,19 @@
     min-height:100vh;
     transition:background .3s, color .3s;
     background-image:
-      radial-gradient(circle at 1px 1px, rgba(28,37,65,.06) 1px, transparent 0);
+      radial-gradient(circle at 1px 1px, rgba(28,37,65,var(--dots-op)) 1px, transparent 0);
     background-size: 22px 22px;
   }
-  [data-theme="dark"] body{
-    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,.04) 1px, transparent 0);
+  [data-theme="dark"] body, [data-theme="neon"] body{
+    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,var(--dots-op)) 1px, transparent 0);
     background-size: 22px 22px;
+  }
+  [data-theme="neon"] body{
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,.07) 1px, transparent 0),
+      radial-gradient(ellipse 700px 400px at 15% -5%, rgba(139,92,246,.20), transparent 60%),
+      radial-gradient(ellipse 700px 400px at 100% 10%, rgba(0,229,255,.14), transparent 60%);
+    background-size: 22px 22px, auto, auto;
   }
   .mono{font-family:'Space Mono',monospace;}
 
@@ -568,6 +623,119 @@
   .cycle-step.done{opacity:.8; text-decoration:line-through; background:var(--teal); color:#fff; border-color:var(--teal);}
   .cycle-arrow{opacity:.6; font-size:12px;}
 
+  /* ---- Collapsible-list toggle buttons ---- */
+  [data-collapse-toggle]{
+    font-weight:700; direction:rtl;
+  }
+
+  /* ---- Theme picker ---- */
+  .theme-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px;}
+  .theme-swatch{
+    position:relative; background:var(--paper); border:2px solid var(--line); border-radius:10px;
+    padding:14px 10px 12px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:4px;
+    transition:border-color .15s, transform .15s;
+  }
+  .theme-swatch:hover{transform:translateY(-2px);}
+  .theme-swatch.active{border-color:var(--gold-deep); box-shadow:var(--glow), 0 0 0 2px var(--gold) inset;}
+  .theme-swatch-dots{display:flex; gap:4px; margin-bottom:4px;}
+  .theme-swatch-dots .dot{width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,.15);}
+  [data-theme-preview="light"] .d1{background:#EAE3CC;} [data-theme-preview="light"] .d2{background:#C89B3C;} [data-theme-preview="light"] .d3{background:#1C2541;}
+  [data-theme-preview="dark"] .d1{background:#12172A;} [data-theme-preview="dark"] .d2{background:#D9AE4E;} [data-theme-preview="dark"] .d3{background:#EFE9D8;}
+  [data-theme-preview="neon"] .d1{background:#0A0E1C;} [data-theme-preview="neon"] .d2{background:#8B5CF6;} [data-theme-preview="neon"] .d3{background:#00E5FF;}
+  [data-theme-preview="ocean"] .d1{background:#E9F6F8;} [data-theme-preview="ocean"] .d2{background:#0EA5E9;} [data-theme-preview="ocean"] .d3{background:#0D9488;}
+  [data-theme-preview="forest"] .d1{background:#F1F7EC;} [data-theme-preview="forest"] .d2{background:#22C55E;} [data-theme-preview="forest"] .d3{background:#15803D;}
+  .theme-swatch-icon{font-size:20px;}
+  .theme-swatch-name{font-weight:800; font-size:13px;}
+  .theme-swatch-desc{font-size:11px; color:var(--ink-soft);}
+  .theme-swatch-check{font-size:10.5px; font-weight:800; color:var(--teal); margin-top:2px;}
+
+  /* ---- Confetti ---- */
+  .confetti-piece{position:fixed; top:-12px; width:8px; height:14px; z-index:997; pointer-events:none;}
+  @keyframes confettiFall{ to{ transform:translateY(112vh) rotate(720deg); opacity:.25; } }
+
+  /* ================= DASHBOARD ================= */
+  .dash-hero{
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    background:var(--accent-grad); color:#fff; border-radius:14px; padding:20px 22px; margin-bottom:18px;
+    box-shadow:var(--shadow), var(--glow);
+  }
+  .dash-greeting{font-size:19px; font-weight:900;}
+  .dash-date{font-size:12.5px; opacity:.9; margin-top:2px;}
+  .dash-streak{text-align:center; background:rgba(255,255,255,.18); border-radius:10px; padding:8px 18px; backdrop-filter:blur(2px);}
+  .dash-streak-num{font-size:26px; font-weight:900; line-height:1;}
+  .dash-streak-label{font-size:11px; opacity:.9; margin-top:2px;}
+
+  .dash-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px;
+    box-shadow:var(--shadow); margin-bottom:16px;
+  }
+  .dash-grid{display:grid; grid-template-columns:auto 1fr; gap:14px; margin-bottom:16px; align-items:stretch;}
+  @media (max-width:560px){ .dash-grid{grid-template-columns:1fr;} }
+  .dash-goal{display:flex; flex-direction:column; align-items:center; gap:8px; justify-content:center; margin-bottom:0;}
+  .ring-wrap{position:relative; width:120px; height:120px;}
+  .progress-ring{width:120px; height:120px; transform:rotate(-90deg);}
+  .ring-bg{fill:none; stroke:var(--line); stroke-width:10;}
+  .ring-fg{
+    fill:none; stroke:url(#dashGrad); stroke-width:10; stroke-linecap:round;
+    stroke-dasharray:326.7; stroke-dashoffset:326.7; transition:stroke-dashoffset .8s ease;
+  }
+  .ring-label{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:900; color:var(--ink);}
+  .dash-goal-text{text-align:center;}
+  .dash-goal-count{font-size:15px; font-weight:800;}
+  .dash-goal-text .l{font-size:11.5px; color:var(--ink-soft);}
+  .dash-stats-mini{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:0;}
+  .dsm-box{background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px; text-align:center;}
+  .dsm-box .n{font-size:20px; font-weight:900; color:var(--gold-deep);}
+  .dsm-box .l{font-size:11px; color:var(--ink-soft); margin-top:2px;}
+
+  .dash-actions{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;}
+  .dash-action-btn{
+    background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 6px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--ink);
+    transition:transform .15s, box-shadow .15s, border-color .15s;
+  }
+  .dash-action-btn:hover{transform:translateY(-2px); border-color:var(--gold-deep); box-shadow:var(--shadow);}
+  .dash-action-btn .dab-ic{font-size:22px;}
+
+  .dash-wod{background:var(--accent-grad); color:#fff;}
+  .dash-wod .wod-tag{font-size:11px; font-weight:800; opacity:.85; letter-spacing:.5px;}
+  .dash-wod .wod-word{font-size:24px; font-weight:900; direction:ltr; margin:4px 0 2px;}
+  .dash-wod .wod-meaning{font-size:15px; opacity:.95;}
+  .dash-wod .wod-example{font-size:12.5px; opacity:.85; margin-top:8px; direction:ltr; font-style:italic;}
+  .dash-wod button{background:rgba(255,255,255,.22); color:#fff; margin-top:10px;}
+
+  .dash-two-col{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media (max-width:620px){ .dash-two-col{grid-template-columns:1fr;} }
+  .dash-card-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .dash-card-head h3{margin:0; font-size:14px;}
+
+  .badge-row{display:flex; flex-wrap:wrap; gap:8px;}
+  .badge-pill{
+    width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:20px; background:var(--paper); border:2px solid var(--line);
+  }
+  .badge-pill.unlocked{border-color:var(--gold-deep); background:var(--accent-grad); box-shadow:var(--glow);}
+  .badge-pill.locked{filter:grayscale(1); opacity:.4;}
+  .badge-empty{font-size:12.5px; color:var(--ink-soft);}
+
+  .activity-row{display:flex; gap:10px; align-items:flex-start; padding:7px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
+  .activity-row:last-child{border-bottom:none;}
+  .activity-ic{font-size:15px;}
+  .activity-text{flex:1; color:var(--ink);}
+  .activity-time{color:var(--ink-soft); font-size:11px; white-space:nowrap;}
+
+  /* ---- Full achievements grid (modal) ---- */
+  .achv-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px;}
+  .achv-card{
+    display:flex; gap:10px; align-items:center; background:var(--paper); border:1px solid var(--line);
+    border-radius:10px; padding:10px;
+  }
+  .achv-card.unlocked{border-color:var(--gold-deep);}
+  .achv-card.locked{opacity:.5;}
+  .achv-ic{font-size:24px; width:36px; text-align:center;}
+  .achv-title{font-size:12.5px; font-weight:800;}
+  .achv-desc{font-size:10.5px; color:var(--ink-soft);}
+
   @media (max-width:480px){
     .form-grid{grid-template-columns:1fr;}
     .stat-grid{grid-template-columns:repeat(2,1fr);}
@@ -582,6 +750,15 @@
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute;">
+  <defs>
+    <linearGradient id="dashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:var(--gold)"></stop>
+      <stop offset="100%" style="stop-color:var(--gold-deep)"></stop>
+    </linearGradient>
+  </defs>
+</svg>
+
 <header>
   <div class="brand">
     <div class="stamp">EN</div>
@@ -595,6 +772,7 @@
       <label for="groupSelect">المجموعة:</label>
       <select class="group-select" id="groupSelect" title="اختر مجموعة كلمات كاملة ليعمل عليها البرنامج بالكامل (مراجعة، اختبار، كتابة)"></select>
     </div>
+    <button class="icon-btn" id="themePickerBtn" title="اختر ثيم التطبيق">🎨</button>
     <button class="icon-btn" id="repSettingsBtn" title="عدد مرات التكرار المطلوبة">🔁</button>
     <button class="icon-btn" id="themeToggle" title="الوضع الليلي">🌙</button>
     <input type="file" id="importFile" accept=".json,.txt,.csv,text/plain,application/json,text/csv,image/*" multiple style="display:none">
@@ -606,7 +784,8 @@
 <div id="toastStack" aria-live="polite"></div>
 
 <nav class="tabs">
-  <button data-view="review" class="active">المراجعة</button>
+  <button data-view="dashboard" class="active">🏠 الرئيسية</button>
+  <button data-view="review">المراجعة</button>
   <button data-view="quiz">اختبار</button>
   <button data-view="writing">الكتابة</button>
   <button data-view="manage">الكلمات</button>
@@ -620,7 +799,59 @@
 <main>
 
   <!-- REVIEW / FLASHCARDS -->
-  <section class="view active" id="view-review">
+  <!-- DASHBOARD -->
+  <section class="view active" id="view-dashboard">
+    <div class="dash-hero">
+      <div class="dash-hero-text">
+        <div class="dash-greeting" id="dashGreeting">أهلاً بيك 👋</div>
+        <div class="dash-date" id="dashDate"></div>
+      </div>
+      <div class="dash-streak" id="dashStreak">
+        <div class="dash-streak-num">0</div>
+        <div class="dash-streak-label">يوم متتالي 🔥</div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="dash-card dash-goal">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 120 120" class="progress-ring">
+            <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+            <circle class="ring-fg" id="dashRingFg" cx="60" cy="60" r="52"></circle>
+          </svg>
+          <div class="ring-label" id="dashRingLabel">0%</div>
+        </div>
+        <div class="dash-goal-text">
+          <div class="dash-goal-count" id="dashGoalCount">0 / 20</div>
+          <div class="l">هدف اليوم (مراجعات)</div>
+        </div>
+        <button class="btn ghost small" id="dashGoalEdit">✏️ عدّل الهدف</button>
+      </div>
+      <div class="dash-card dash-stats-mini" id="dashStatsMini"></div>
+    </div>
+
+    <div class="dash-actions">
+      <button class="dash-action-btn" data-goto="review"><span class="dab-ic">📖</span><span>مراجعة</span></button>
+      <button class="dash-action-btn" data-goto="quiz"><span class="dab-ic">🧠</span><span>اختبار</span></button>
+      <button class="dash-action-btn" data-goto="writing"><span class="dab-ic">✍️</span><span>كتابة</span></button>
+      <button class="dash-action-btn" data-goto="planner"><span class="dab-ic">🗓️</span><span>خطة</span></button>
+    </div>
+
+    <div class="dash-card dash-wod" id="dashWordOfDay"></div>
+
+    <div class="dash-two-col">
+      <div class="dash-card">
+        <div class="dash-card-head"><h3>🏅 إنجازاتك</h3><button class="btn ghost small" id="dashAllBadges">عرض الكل</button></div>
+        <div class="badge-row" id="dashBadgeRow"></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-head"><h3>🕘 آخر نشاط</h3></div>
+        <div id="dashActivity"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-review">
     <div class="catalog-tabs" id="catTabs"></div>
     <div id="studyModeBanner" style="display:none;"></div>
     <div id="reviewCycleBanner" class="cycle-banner" style="display:none;"></div>
@@ -933,6 +1164,7 @@
       <h3>لا توجد خوارزميات للمراجعة الآن 🎉</h3>
     </div>
     <h3 style="margin:26px 0 10px;">كل الخوارزميات</h3>
+    <div class="pad-controls" style="justify-content:flex-end;"><button class="btn ghost small" data-collapse-toggle="algoList" style="display:none;"></button></div>
     <div id="algoList"></div>
   </section>
 
@@ -1040,6 +1272,7 @@
     </div>
 
     <h3 style="margin:26px 0 10px;">كل الجمل</h3>
+    <div class="pad-controls" style="justify-content:flex-end;"><button class="btn ghost small" data-collapse-toggle="sentList" style="display:none;"></button></div>
     <div id="sentList"></div>
   </section>
 
@@ -1077,7 +1310,7 @@
       algorithms: [],
       sentences: [],
       theme: "light",
-      settings: {repTarget: 10, cycleWriting: false, cycleQuiz: false, cycleReview: false},
+      settings: {repTarget: 10, cycleWriting: false, cycleQuiz: false, cycleReview: false, dailyGoal: 20, seenBadges: []},
       history: [] // {date, correct, total}
     };
   }
@@ -1143,6 +1376,8 @@
   if(state.settings.cycleWriting === undefined) state.settings.cycleWriting = false;
   if(state.settings.cycleQuiz === undefined) state.settings.cycleQuiz = false;
   if(state.settings.cycleReview === undefined) state.settings.cycleReview = false;
+  if(!state.settings.dailyGoal) state.settings.dailyGoal = 20;
+  if(!Array.isArray(state.settings.seenBadges)) state.settings.seenBadges = [];
   // ترقية بيانات قديمة محفوظة قبل إضافة السجل/مجموعات الاستيراد، عشان ميحصلش خطأ.
   state.words.forEach(w=>{
     ensureLog(w);
@@ -1167,19 +1402,298 @@
   function save(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     updateGlobalOverdueIndicator();
+    checkAchievements();
+  }
+
+  // ---------- 🎉 كونفيتي احتفالي (بدون أي مكتبات خارجية) ----------
+  function fireConfetti(count){
+    count = count || 40;
+    const colors = ["var(--gold)","var(--gold-deep)","var(--teal)","var(--red)"];
+    for(let i=0;i<count;i++){
+      const el = document.createElement("div");
+      el.className = "confetti-piece";
+      el.style.left = (Math.random()*100) + "vw";
+      el.style.background = colors[Math.floor(Math.random()*colors.length)];
+      el.style.borderRadius = Math.random() > 0.5 ? "50%" : "2px";
+      const dur = (2.2 + Math.random()*1.6);
+      el.style.animation = "confettiFall " + dur.toFixed(2) + "s linear forwards";
+      el.style.animationDelay = (Math.random()*0.35) + "s";
+      document.body.appendChild(el);
+      setTimeout(()=> el.remove(), (dur+0.4)*1000);
+    }
+  }
+
+  // ---------- 🏅 نظام الإنجازات: مجموعة أهداف محسوبة من بيانات المستخدم الفعلية —
+  // كل ما توصل لهدف جديد، بيتفتح إنجاز مع احتفال كونفيتي وتنبيه. ----------
+  function computeCoreStats(){
+    const total = state.words.length;
+    const mastered = state.words.filter(w=>w.srs.level>=4).length;
+    const dueToday = dueWordsAll().length;
+    const totalReviews = state.words.reduce((s,w)=>s+w.srs.correct+w.srs.wrong,0);
+    const totalCorrect = state.words.reduce((s,w)=>s+w.srs.correct,0);
+    const accuracy = totalReviews ? Math.round((totalCorrect/totalReviews)*100) : 0;
+    const streak = computeStreak();
+    const typedDone = state.words.reduce((s,w)=> s+((w.writing&&w.writing.typedCompletions)||0),0);
+    const scrambleDone = state.words.reduce((s,w)=> s+((w.writing&&w.writing.scrambleCompletions)||0),0);
+    const batchesCount = importBatches().length;
+    const t = todayStr();
+    const todayEntry = state.history.find(h=>h.date===t);
+    const doneToday = todayEntry ? todayEntry.total : 0;
+    return {total, mastered, dueToday, totalReviews, accuracy, streak, typedDone, scrambleDone, batchesCount, doneToday};
+  }
+  const ACHIEVEMENTS = [
+    {id:"first_word",   icon:"🌱", title:"أول خطوة",     desc:"أضفت أول كلمة لمكتبتك",         check:s=> s.total>=1},
+    {id:"lib_50",       icon:"📚", title:"مكتبة ناشئة",   desc:"وصلت لـ 50 كلمة",               check:s=> s.total>=50},
+    {id:"lib_200",      icon:"🏛️", title:"مكتبة ضخمة",    desc:"وصلت لـ 200 كلمة",              check:s=> s.total>=200},
+    {id:"streak_7",     icon:"🔥", title:"أسبوع ملتزم",   desc:"7 أيام مذاكرة متتالية",         check:s=> s.streak>=7},
+    {id:"streak_30",    icon:"🌋", title:"شهر كامل",      desc:"30 يوم مذاكرة متتالية",         check:s=> s.streak>=30},
+    {id:"mastered_1",   icon:"⭐", title:"أول إتقان",     desc:"أتقنت أول كلمة",                check:s=> s.mastered>=1},
+    {id:"mastered_50",  icon:"💎", title:"خبير مفردات",   desc:"أتقنت 50 كلمة",                 check:s=> s.mastered>=50},
+    {id:"mastered_200", icon:"👑", title:"أسطورة",        desc:"أتقنت 200 كلمة",                check:s=> s.mastered>=200},
+    {id:"accuracy_90",  icon:"🎯", title:"دقة قناص",      desc:"دقة 90%+ (بعد 30 مراجعة)",      check:s=> s.totalReviews>=30 && s.accuracy>=90},
+    {id:"writer_20",    icon:"✍️", title:"كاتب مجتهد",    desc:"20 دورة كتابة كاملة",           check:s=> s.typedDone>=20},
+    {id:"scrambler_20", icon:"🔠", title:"سيد الترتيب",   desc:"20 دورة ترتيب حروف",            check:s=> s.scrambleDone>=20},
+    {id:"importer_5",   icon:"📥", title:"مستورد نشيط",   desc:"5 عمليات استيراد أو أكتر",      check:s=> s.batchesCount>=5},
+    {id:"reviews_500",  icon:"🚀", title:"مثابر",         desc:"500 مراجعة منجزة",              check:s=> s.totalReviews>=500}
+  ];
+  function checkAchievements(){
+    const s = computeCoreStats();
+    const newly = [];
+    ACHIEVEMENTS.forEach(a=>{
+      if(a.check(s) && !state.settings.seenBadges.includes(a.id)){
+        state.settings.seenBadges.push(a.id);
+        newly.push(a);
+      }
+    });
+    if(newly.length > 0){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); // حفظ صامت (تجنب استدعاء save() بشكل متكرر)
+      newly.forEach((a,i)=> setTimeout(()=>{
+        toast("🏅 إنجاز جديد: " + a.title + " — " + a.desc, "ok");
+        fireConfetti(50);
+      }, i*700));
+      const dashView = document.getElementById("view-dashboard");
+      if(dashView && dashView.classList.contains("active") && typeof renderDashboard === "function") setTimeout(renderDashboard, newly.length*700 + 200);
+    }
+  }
+
+  // ---------- 🏠 لوحة التحكم الرئيسية (Dashboard) ----------
+  function greetingText(){
+    const h = new Date().getHours();
+    if(h < 5) return "🌙 سهر مثمر!";
+    if(h < 12) return "☀️ صباح الخير";
+    if(h < 17) return "🌤️ نهارك سعيد";
+    if(h < 21) return "🌇 مساء الخير";
+    return "🌙 مساء النور";
+  }
+  function timeAgo(ts){
+    const diff = Math.max(0, Date.now() - ts);
+    const m = Math.floor(diff/60000);
+    if(m < 1) return "الآن";
+    if(m < 60) return "منذ " + m + " دقيقة";
+    const h = Math.floor(m/60);
+    if(h < 24) return "منذ " + h + " ساعة";
+    const d = Math.floor(h/24);
+    if(d < 30) return "منذ " + d + " يوم";
+    return "منذ " + Math.floor(d/30) + " شهر";
+  }
+  const ACTIVITY_ICONS = {created:"➕", srs:"📖", typed:"✍️", recall:"🖊️", pronounce:"🗣️", scramble:"🔠", blank:"📝", trace:"🖌️"};
+  function recentActivity(limit){
+    limit = limit || 6;
+    const all = [];
+    state.words.forEach(w=>{ (w.log||[]).forEach(e=> all.push({ts:e.ts, type:e.type, note:e.note, word:w.word})); });
+    state.algorithms.forEach(a=>{ (a.log||[]).forEach(e=> all.push({ts:e.ts, type:e.type, note:e.note, word:a.title})); });
+    state.sentences.forEach(s=>{ (s.log||[]).forEach(e=> all.push({ts:e.ts, type:e.type, note:e.note, word:s.text})); });
+    all.sort((a,b)=> b.ts - a.ts);
+    return all.slice(0, limit);
+  }
+  function wordOfTheDay(){
+    if(state.words.length === 0) return null;
+    const seed = Number(todayStr().split("-").join(""));
+    const idx = seed % state.words.length;
+    return state.words[idx];
+  }
+  function renderBadgeRow(){
+    const row = document.getElementById("dashBadgeRow");
+    if(!row) return;
+    row.innerHTML = "";
+    if(state.settings.seenBadges.length === 0){
+      row.innerHTML = "<span class='badge-empty'>ذاكر وأضف كلمات عشان تفتح أول إنجاز 🏅</span>";
+      return;
+    }
+    ACHIEVEMENTS.filter(a=> state.settings.seenBadges.includes(a.id)).slice(0,8).forEach(a=>{
+      const pill = document.createElement("span");
+      pill.className = "badge-pill unlocked";
+      pill.title = a.title + " — " + a.desc;
+      pill.textContent = a.icon;
+      row.appendChild(pill);
+    });
+  }
+  function openAchievementsModal(){
+    const ov = document.getElementById("importHubOverlay");
+    ov.style.display = "flex";
+    const unlockedCount = state.settings.seenBadges.length;
+    ov.innerHTML = `
+      <div class="modal-overlay" id="achvBackdrop">
+        <div class="modal-box">
+          <h3>🏅 كل الإنجازات</h3>
+          <p class="sub">فتحت ${unlockedCount} من ${ACHIEVEMENTS.length} إنجاز.</p>
+          <div class="achv-grid" id="achvGrid"></div>
+          <div class="pad-controls" style="justify-content:center; margin-top:14px;">
+            <button class="btn ghost small" id="achvClose">إغلاق</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const grid = document.getElementById("achvGrid");
+    ACHIEVEMENTS.forEach(a=>{
+      const unlocked = state.settings.seenBadges.includes(a.id);
+      const card = document.createElement("div");
+      card.className = "achv-card " + (unlocked ? "unlocked":"locked");
+      card.innerHTML = `
+        <span class="achv-ic">${unlocked ? a.icon : "🔒"}</span>
+        <span>
+          <div class="achv-title">${escapeHtml(a.title)}</div>
+          <div class="achv-desc">${escapeHtml(a.desc)}</div>
+        </span>
+      `;
+      grid.appendChild(card);
+    });
+    document.getElementById("achvClose").addEventListener("click", closeImportHub);
+    document.getElementById("achvBackdrop").addEventListener("click", (e)=>{ if(e.target.id==="achvBackdrop") closeImportHub(); });
+  }
+  document.getElementById("dashAllBadges").addEventListener("click", openAchievementsModal);
+  document.getElementById("dashGoalEdit").addEventListener("click", ()=>{
+    const val = prompt("كام مراجعة تحب يكون هدفك اليومي؟", state.settings.dailyGoal);
+    if(val === null) return;
+    const n = Math.max(1, Math.min(999, Math.round(Number(val)) || state.settings.dailyGoal));
+    state.settings.dailyGoal = n;
+    save();
+    renderDashboard();
+  });
+  document.querySelectorAll(".dash-action-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=> switchToView(btn.dataset.goto));
+  });
+  function renderDashboard(){
+    const s = computeCoreStats();
+    document.getElementById("dashGreeting").textContent = greetingText();
+    document.getElementById("dashDate").textContent = new Date().toLocaleDateString("ar-EG", {weekday:"long", year:"numeric", month:"long", day:"numeric"});
+    document.getElementById("dashStreak").querySelector(".dash-streak-num").textContent = s.streak;
+
+    // حلقة هدف اليوم
+    const goal = state.settings.dailyGoal || 20;
+    const pct = Math.max(0, Math.min(100, Math.round((s.doneToday/goal)*100)));
+    const circumference = 326.7256;
+    const ring = document.getElementById("dashRingFg");
+    ring.style.strokeDashoffset = (circumference * (1 - pct/100)).toFixed(1);
+    document.getElementById("dashRingLabel").textContent = pct + "%";
+    document.getElementById("dashGoalCount").textContent = s.doneToday + " / " + goal;
+
+    document.getElementById("dashStatsMini").innerHTML = `
+      <div class="dsm-box"><div class="n">${s.total}</div><div class="l">إجمالي الكلمات</div></div>
+      <div class="dsm-box"><div class="n">${s.mastered}</div><div class="l">متقنة</div></div>
+      <div class="dsm-box"><div class="n">${s.dueToday}</div><div class="l">مستحقة اليوم</div></div>
+      <div class="dsm-box"><div class="n">${s.accuracy}%</div><div class="l">الدقة</div></div>
+    `;
+
+    // كلمة اليوم
+    const wod = wordOfTheDay();
+    const wodEl = document.getElementById("dashWordOfDay");
+    if(!wod){
+      wodEl.innerHTML = `<div class="wod-tag">كلمة اليوم</div><div class="wod-word">—</div><div class="wod-meaning">أضف كلمات الأول عشان تشوف كلمة كل يوم هنا</div>`;
+    } else {
+      wodEl.innerHTML = `
+        <div class="wod-tag">✨ كلمة اليوم</div>
+        <div class="wod-word">${escapeHtml(wod.word)}</div>
+        <div class="wod-meaning">${escapeHtml(wod.meaning)}</div>
+        ${wod.example ? `<div class="wod-example">${escapeHtml(wod.example)}</div>` : ""}
+        <button class="btn small" id="dashWodSpeak">🔊 استمع للنطق</button>
+      `;
+      document.getElementById("dashWodSpeak").addEventListener("click", ()=> speakWord(wod));
+    }
+
+    renderBadgeRow();
+
+    // آخر نشاط
+    const activityEl = document.getElementById("dashActivity");
+    const acts = recentActivity(6);
+    if(acts.length === 0){
+      activityEl.innerHTML = "<span class='badge-empty'>لسه مفيش نشاط — ابدأ أول مراجعة!</span>";
+    } else {
+      activityEl.innerHTML = acts.map(a=>`
+        <div class="activity-row">
+          <span class="activity-ic">${ACTIVITY_ICONS[a.type] || "•"}</span>
+          <span class="activity-text"><b style="direction:ltr; display:inline-block;">${escapeHtml(a.word)}</b> — ${escapeHtml(a.note||"")}</span>
+          <span class="activity-time">${timeAgo(a.ts)}</span>
+        </div>
+      `).join("");
+    }
   }
 
   // ---------- THEME ----------
+  const THEME_LIST = [
+    {id:"light",  icon:"☀️", name:"كلاسيكي فاتح",  desc:"الطابع الورقي الأصلي"},
+    {id:"dark",   icon:"🌙", name:"داكن",          desc:"مريح للعين ليلاً"},
+    {id:"neon",   icon:"⚡", name:"نيون رقمي",      desc:"طابع ديجيتال متوهج"},
+    {id:"ocean",  icon:"🌊", name:"المحيط",         desc:"أزرق وتركواز هادئ"},
+    {id:"forest", icon:"🌲", name:"الغابة",         desc:"أخضر طبيعي مريح"}
+  ];
   const themeToggle = document.getElementById("themeToggle");
+  function currentThemeMeta(){ return THEME_LIST.find(t=>t.id===state.theme) || THEME_LIST[0]; }
   function applyTheme(){
     document.documentElement.setAttribute("data-theme", state.theme);
-    themeToggle.textContent = state.theme === "dark" ? "☀️" : "🌙";
+    themeToggle.textContent = currentThemeMeta().icon;
+    themeToggle.title = "الثيم الحالي: " + currentThemeMeta().name + " (اضغط للتبديل السريع)";
   }
   themeToggle.addEventListener("click", ()=>{
-    state.theme = state.theme === "dark" ? "light" : "dark";
+    const idx = THEME_LIST.findIndex(t=>t.id===state.theme);
+    state.theme = THEME_LIST[(idx+1) % THEME_LIST.length].id;
     applyTheme(); save();
+    toast(currentThemeMeta().icon + " تم التبديل إلى ثيم: " + currentThemeMeta().name, "ok");
   });
   applyTheme();
+
+  function openThemePicker(){
+    const ov = document.getElementById("importHubOverlay");
+    ov.style.display = "flex";
+    ov.innerHTML = `
+      <div class="modal-overlay" id="themePickerBackdrop">
+        <div class="modal-box">
+          <h3>🎨 اختر ثيم التطبيق</h3>
+          <p class="sub">كل ثيم بيغيّر شكل التطبيق بالكامل — جرّب وشوف اللي يريحك.</p>
+          <div class="theme-grid" id="themeGrid"></div>
+          <div class="pad-controls" style="justify-content:center; margin-top:14px;">
+            <button class="btn ghost small" id="themePickerClose">إغلاق</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const grid = document.getElementById("themeGrid");
+    THEME_LIST.forEach(t=>{
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "theme-swatch" + (state.theme===t.id ? " active":"");
+      card.setAttribute("data-theme-preview", t.id);
+      card.innerHTML = `
+        <span class="theme-swatch-dots">
+          <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+        </span>
+        <span class="theme-swatch-icon">${t.icon}</span>
+        <span class="theme-swatch-name">${t.name}</span>
+        <span class="theme-swatch-desc">${t.desc}</span>
+        ${state.theme===t.id ? '<span class="theme-swatch-check">✓ الحالي</span>' : ''}
+      `;
+      card.addEventListener("click", ()=>{
+        state.theme = t.id;
+        applyTheme(); save();
+        closeImportHub();
+        toast(t.icon + " تم تفعيل ثيم: " + t.name, "ok");
+      });
+      grid.appendChild(card);
+    });
+    document.getElementById("themePickerClose").addEventListener("click", closeImportHub);
+    document.getElementById("themePickerBackdrop").addEventListener("click", (e)=>{ if(e.target.id==="themePickerBackdrop") closeImportHub(); });
+  }
+  document.getElementById("themePickerBtn").addEventListener("click", openThemePicker);
 
   // ---------- TABS / VIEWS ----------
   const tabButtons = document.querySelectorAll("nav.tabs button");
@@ -1190,6 +1704,7 @@
       btn.classList.add("active");
       views.forEach(v=>v.classList.remove("active"));
       document.getElementById("view-"+btn.dataset.view).classList.add("active");
+      if(btn.dataset.view === "dashboard") renderDashboard();
       if(btn.dataset.view === "review") renderReview();
       if(btn.dataset.view === "quiz") renderQuiz();
       if(btn.dataset.view === "writing") renderWriting();
@@ -1251,7 +1766,8 @@
     const activeBtn = document.querySelector("nav.tabs button.active");
     const v = activeBtn ? activeBtn.dataset.view : "review";
     studyOverride = null;
-    if(v === "review") renderReview();
+    if(v === "dashboard") renderDashboard();
+    else if(v === "review") renderReview();
     else if(v === "quiz") renderQuiz();
     else if(v === "writing") renderWriting();
     else if(v === "manage") renderManage();
@@ -1439,6 +1955,7 @@
   });
 
   function applyRating(w, rate, source){
+    const wasMastered = w.srs.level >= 4;
     if(rate === "hard"){
       w.srs.level = Math.max(0, w.srs.level - 1);
       w.srs.wrong += 1;
@@ -1453,6 +1970,11 @@
     }
     logEvent(w, "srs", (source || "حفظ/مراجعة") + " — التقييم: " + rateLabel(rate) + " (المستوى الآن: " + w.srs.level + ")");
     recordHistory(rate !== "hard");
+    // 🎉 احتفال صغير أول ما الكلمة توصل لمستوى الإتقان
+    if(!wasMastered && w.srs.level >= 4){
+      toast("⭐ أتقنت كلمة \"" + w.word + "\"!", "ok");
+      fireConfetti(22);
+    }
   }
   function rateLabel(rate){
     return rate === "hard" ? "صعبة ✘" : rate === "medium" ? "متوسطة ✔" : "سهلة ✔✔";
@@ -1829,6 +2351,36 @@
   }
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  // ---------- قوائم قابلة للطي: أي قائمة طويلة بيتضاف لها زرار "عرض الكل / طي
+  // القائمة" تلقائيًا لو عدد عناصرها أكتر من الحد المسموح — بيوفّر مساحة في
+  // الصفحة وبيفتكر آخر حالة (مطوية/مفتوحة) لحد ما تتفاعل معاها تاني. ----------
+  const collapsedListState = {};
+  function makeCollapsible(containerEl, opts){
+    if(!containerEl) return;
+    const items = Array.from(containerEl.querySelectorAll(opts.itemSelector));
+    const total = items.length;
+    const visibleCount = opts.visibleCount || 6;
+    const scope = opts.scopeEl || containerEl.parentElement;
+    const toggleBtn = scope ? scope.querySelector('[data-collapse-toggle="' + opts.key + '"]') : null;
+    if(total <= visibleCount){
+      items.forEach(it=> it.style.display = "");
+      if(toggleBtn) toggleBtn.style.display = "none";
+      return;
+    }
+    if(collapsedListState[opts.key] === undefined) collapsedListState[opts.key] = true; // مطوية افتراضيًا لو كبيرة
+    const collapsed = collapsedListState[opts.key];
+    items.forEach((it,i)=> it.style.display = (collapsed && i >= visibleCount) ? "none" : "");
+    if(toggleBtn){
+      toggleBtn.style.display = "inline-flex";
+      toggleBtn.textContent = collapsed ? ("⌄ عرض الكل (" + total + ")") : "⌃ طي القائمة";
+      toggleBtn.onclick = ()=>{
+        collapsedListState[opts.key] = !collapsedListState[opts.key];
+        makeCollapsible(containerEl, opts);
+        toggleBtn.scrollIntoView({block:"nearest", behavior:"smooth"});
+      };
+    }
   }
 
   // ---------- إعدادات التكرار العامة + وضع "الدورة التلقائية" (نفس الكلمة تتنقل
@@ -3713,12 +4265,14 @@
             <button class="btn ghost small" data-batch-rename>✏️ إعادة تسمية</button>
             <button class="btn ghost small" data-batch-keep>إبقاء كعناصر عادية</button>
             <button class="btn ghost small" data-batch-del>حذف المجموعة</button>
+            <button class="btn ghost small" data-collapse-toggle="batch-${b.info.id}" style="display:none;"></button>
           </div>
         </div>
         <div class="import-batch-body"></div>
       `;
       const body = frame.querySelector(".import-batch-body");
       visibleWords.forEach(w=> body.appendChild(buildWordRow(w)));
+      makeCollapsible(body, {key:"batch-"+b.info.id, itemSelector:".word-row", visibleCount:6, scopeEl:frame});
       frame.querySelector(".batch-check").addEventListener("change", (e)=>{
         if(e.target.checked) selectedBatchIds.add(b.info.id); else selectedBatchIds.delete(b.info.id);
         updateBatchBulkBar();
@@ -3756,7 +4310,29 @@
     });
 
     const ungrouped = applyManageFilterSort(state.words.filter(w=>!w.importBatch));
-    ungrouped.forEach(w=>{ anyVisible = true; list.appendChild(buildWordRow(w)); });
+    if(ungrouped.length > 0){
+      anyVisible = true;
+      const frame = document.createElement("div");
+      frame.className = "import-batch";
+      frame.innerHTML = `
+        <div class="import-batch-head">
+          <div class="ibh-title-row">
+            <div>
+              <div class="ibh-title">📄 كلمات بدون مجموعة</div>
+              <div class="ibh-meta">${ungrouped.length} كلمة</div>
+            </div>
+          </div>
+          <div class="ibh-actions">
+            <button class="btn ghost small" data-collapse-toggle="ungrouped" style="display:none;"></button>
+          </div>
+        </div>
+        <div class="import-batch-body"></div>
+      `;
+      const body = frame.querySelector(".import-batch-body");
+      ungrouped.forEach(w=> body.appendChild(buildWordRow(w)));
+      makeCollapsible(body, {key:"ungrouped", itemSelector:".word-row", visibleCount:8, scopeEl:frame});
+      list.appendChild(frame);
+    }
 
     if(!anyVisible){
       list.innerHTML += "<div class='empty'><h3>لا توجد كلمات مطابقة</h3><p>جرّب تغيير الفلتر أو مسح كلمة البحث.</p></div>";
@@ -4360,7 +4936,8 @@
   function switchToView(viewName){
     document.querySelectorAll("nav.tabs button").forEach(b=> b.classList.toggle("active", b.dataset.view===viewName));
     document.querySelectorAll(".view").forEach(v=> v.classList.toggle("active", v.id === "view-"+viewName));
-    if(viewName === "review") renderReview();
+    if(viewName === "dashboard") renderDashboard();
+    else if(viewName === "review") renderReview();
     else if(viewName === "quiz") renderQuiz();
     else if(viewName === "writing") renderWriting();
     else if(viewName === "manage") renderManage();
@@ -4715,6 +5292,8 @@
     if(!wrap) return;
     if(state.algorithms.length === 0){
       wrap.innerHTML = "<div class='empty'><h3>لا توجد خوارزميات بعد</h3><p>ضيف خوارزمية أو كود عشان تبدأ تراجعه.</p></div>";
+      const tb = document.querySelector('[data-collapse-toggle="algoList"]');
+      if(tb) tb.style.display = "none";
       return;
     }
     const t = todayStr();
@@ -4734,6 +5313,7 @@
       `;
       wrap.appendChild(row);
     });
+    makeCollapsible(wrap, {key:"algoList", itemSelector:".planner-row", visibleCount:8, scopeEl:document.getElementById("view-algorithms")});
     wrap.querySelectorAll(".algo-edit").forEach(btn=> btn.addEventListener("click", ()=> openAlgoForm(state.algorithms.find(a=>a.id===btn.dataset.id))));
     wrap.querySelectorAll(".algo-del").forEach(btn=> btn.addEventListener("click", ()=>{
       if(!confirm("متأكد إنك عاوز تحذف الخوارزمية دي؟")) return;
@@ -5196,6 +5776,8 @@
     if(!wrap) return;
     if(state.sentences.length === 0){
       wrap.innerHTML = "<div class='empty'><h3>لا توجد جمل بعد</h3><p>ضيف جملة عشان تبدأ تراجعها.</p></div>";
+      const tb = document.querySelector('[data-collapse-toggle="sentList"]');
+      if(tb) tb.style.display = "none";
       return;
     }
     const t = todayStr();
@@ -5215,6 +5797,7 @@
       `;
       wrap.appendChild(row);
     });
+    makeCollapsible(wrap, {key:"sentList", itemSelector:".planner-row", visibleCount:8, scopeEl:document.getElementById("view-sentences")});
     wrap.querySelectorAll(".sent-edit").forEach(btn=> btn.addEventListener("click", ()=> openSentForm(state.sentences.find(s=>s.id===btn.dataset.id))));
     wrap.querySelectorAll(".sent-del").forEach(btn=> btn.addEventListener("click", ()=>{
       if(!confirm("متأكد إنك عاوز تحذف الجملة دي؟")) return;
@@ -5257,6 +5840,7 @@
 
   // ---------- INIT ----------
   renderGroupSelect();
+  renderDashboard();
   renderReview();
   refreshEditorBridgeButton();
   refreshEnglishBridgeButton();
