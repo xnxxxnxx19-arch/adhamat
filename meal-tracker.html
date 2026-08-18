@@ -361,7 +361,14 @@ function timeToMinutes(str){ const [h,m]=str.split(':').map(Number); return h*60
 
 /* ================= تخزين ================= */
 function loadData(){ try{ return JSON.parse(localStorage.getItem('mt_data')||'{}'); }catch(e){ return {}; } }
-function saveData(d){ localStorage.setItem('mt_data', JSON.stringify(d)); }
+function saveData(d){
+  try{
+    localStorage.setItem('mt_data', JSON.stringify(d));
+  }catch(e){
+    alert('فشل حفظ البيانات! السبب المحتمل: مساحة التخزين المحلي في المتصفح ممتلئة.\n\nتفاصيل الخطأ: ' + e.message + '\n\nجرّب تصدير بياناتك (لو فيه زرار تصدير) أو امسح بيانات قديمة من إعدادات المتصفح لهذا الموقع.');
+    throw e;
+  }
+}
 function loadSettings(){
   const def = { targetDaily:2000, targetBreakfast:500, targetLunch:800, targetDinner:700,
     timeBreakfast:'08:00', timeLunch:'14:30', timeDinner:'20:30', tolerance:60, webhookUrl:'' };
@@ -446,15 +453,21 @@ function addItemsToLog(meal, items, dateKey, ts){
 }
 
 function handleAdd(){
-  const text = msgInput.value.trim(); if(!text) return;
-  const now = new Date();
-  const {meal, items, warnings} = parseMessage(text);
-  if(items.length){ addItemsToLog(meal, items, todayKey(now), now.toISOString()); renderAll(); }
-  const fb = document.getElementById('feedback'); fb.classList.add('show');
-  let html = `تم تحديد الوجبة: <b>${MEAL_LABEL[meal]}</b> — وقت التسجيل: <b>${fmtTime(now)}</b><br>`;
-  if(items.length) html += items.map(it=>`• ${it.name} (${it.weight} جم) → ${it.kcal} سعرة`).join('<br>');
-  if(warnings.length) html += '<br>' + warnings.map(w=>`<span class="warn">⚠ ${w}</span>`).join('<br>');
-  fb.innerHTML = html; msgInput.value='';
+  try{
+    const text = msgInput.value.trim(); if(!text) return;
+    const now = new Date();
+    const {meal, items, warnings} = parseMessage(text);
+    if(items.length){ addItemsToLog(meal, items, todayKey(now), now.toISOString()); renderAll(); }
+    const fb = document.getElementById('feedback'); fb.classList.add('show');
+    let html = `تم تحديد الوجبة: <b>${MEAL_LABEL[meal]}</b> — وقت التسجيل: <b>${fmtTime(now)}</b><br>`;
+    if(items.length) html += items.map(it=>`• ${it.name} (${it.weight} جم) → ${it.kcal} سعرة`).join('<br>');
+    if(warnings.length) html += '<br>' + warnings.map(w=>`<span class="warn">⚠ ${w}</span>`).join('<br>');
+    fb.innerHTML = html; msgInput.value='';
+  }catch(e){
+    const fb = document.getElementById('feedback'); fb.classList.add('show');
+    fb.innerHTML = '<span class="warn">⚠ حصل خطأ أثناء التسجيل: ' + e.message + '</span>';
+    console.error(e);
+  }
 }
 function toggleManual(){
   const el=document.getElementById('manualForm');
@@ -469,25 +482,30 @@ function toggleManual(){
   }
 }
 function handleManualAdd(){
-  const meal = manMeal.value; const name = manFood.value.trim(); const weight = +manWeight.value || 150;
-  const matched = matchFood(name) || name; const kcal = Math.round((FOOD_DB[matched]||150) * weight/100);
+  try{
+    const meal = manMeal.value; const name = manFood.value.trim(); const weight = +manWeight.value || 150;
+    const matched = matchFood(name) || name; const kcal = Math.round((FOOD_DB[matched]||150) * weight/100);
 
-  let dateKey = todayKey();
-  let ts = new Date().toISOString();
-  const dateVal = document.getElementById('manDate').value; // "YYYY-MM-DD"
-  const timeVal = document.getElementById('manTime').value; // "HH:MM"
-  if(dateVal) dateKey = dateVal;
-  if(dateVal && timeVal){
-    ts = new Date(dateVal+'T'+timeVal+':00').toISOString();
-  } else if(timeVal){
-    const now = new Date();
-    const [hh,mm] = timeVal.split(':').map(Number);
-    now.setHours(hh, mm, 0, 0);
-    ts = now.toISOString();
+    let dateKey = todayKey();
+    let ts = new Date().toISOString();
+    const dateVal = document.getElementById('manDate').value; // "YYYY-MM-DD"
+    const timeVal = document.getElementById('manTime').value; // "HH:MM"
+    if(dateVal) dateKey = dateVal;
+    if(dateVal && timeVal){
+      ts = new Date(dateVal+'T'+timeVal+':00').toISOString();
+    } else if(timeVal){
+      const now = new Date();
+      const [hh,mm] = timeVal.split(':').map(Number);
+      now.setHours(hh, mm, 0, 0);
+      ts = now.toISOString();
+    }
+
+    addItemsToLog(meal, [{name:matched, weight, kcal, approx:!FOOD_DB[matched]}], dateKey, ts);
+    renderAll(); manFood.value='';
+  }catch(e){
+    alert('حصل خطأ أثناء الإضافة اليدوية: ' + e.message);
+    console.error(e);
   }
-
-  addItemsToLog(meal, [{name:matched, weight, kcal, approx:!FOOD_DB[matched]}], dateKey, ts);
-  renderAll(); manFood.value='';
 }
 
 /* ================= السجل (التذاكر) ================= */
