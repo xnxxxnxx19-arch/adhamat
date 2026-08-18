@@ -359,14 +359,62 @@ function fmtDate(key){ const [y,m,d]=key.split('-').map(Number); const dt=new Da
 function fmtTime(ts){ if(!ts) return '--:--'; const d=new Date(ts); return d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}); }
 function timeToMinutes(str){ const [h,m]=str.split(':').map(Number); return h*60+m; }
 
-/* ================= تخزين ================= */
-function loadData(){ try{ return JSON.parse(localStorage.getItem('mt_data')||'{}'); }catch(e){ return {}; } }
-function saveData(d){
+/* ================= تخزين (IndexedDB — مساحة أكبر بكتير من localStorage) ================= */
+let _idbPromise = null;
+function idbOpen(){
+  if(_idbPromise) return _idbPromise;
+  _idbPromise = new Promise((resolve, reject)=>{
+    const req = indexedDB.open('mt_db', 1);
+    req.onupgradeneeded = ()=>{ if(!req.result.objectStoreNames.contains('kv')) req.result.createObjectStore('kv'); };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+  return _idbPromise;
+}
+function idbGet(db, key){
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction('kv','readonly');
+    const req = tx.objectStore('kv').get(key);
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+function idbSet(db, key, value){
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction('kv','readwrite');
+    tx.objectStore('kv').put(value, key);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+/* بيحمّل البيانات من IndexedDB، ولو أول مرة (ولسه فيه بيانات قديمة في localStorage) بينقلها تلقائيًا */
+async function loadData(){
   try{
-    localStorage.setItem('mt_data', JSON.stringify(d));
+    const db = await idbOpen();
+    let data = await idbGet(db, 'mt_data');
+    if(data == null){
+      try{
+        const old = localStorage.getItem('mt_data');
+        if(old){
+          data = JSON.parse(old);
+          await idbSet(db, 'mt_data', data);
+          localStorage.removeItem('mt_data'); // نفضي المساحة القديمة بعد النقل
+        }
+      }catch(e){ /* تجاهل أخطاء النقل */ }
+    }
+    return data || {};
   }catch(e){
-    alert('فشل حفظ البيانات! السبب المحتمل: مساحة التخزين المحلي في المتصفح ممتلئة.\n\nتفاصيل الخطأ: ' + e.message + '\n\nجرّب تصدير بياناتك (لو فيه زرار تصدير) أو امسح بيانات قديمة من إعدادات المتصفح لهذا الموقع.');
-    throw e;
+    console.error('IndexedDB مش متاح، هنرجع لـ localStorage كحل احتياطي', e);
+    try{ return JSON.parse(localStorage.getItem('mt_data')||'{}'); }catch(e2){ return {}; }
+  }
+}
+async function saveData(d){
+  try{
+    const db = await idbOpen();
+    await idbSet(db, 'mt_data', d);
+  }catch(e){
+    alert('فشل حفظ البيانات!\n\nتفاصيل الخطأ: ' + e.message);
+    console.error(e);
   }
 }
 function loadSettings(){
@@ -376,7 +424,7 @@ function loadSettings(){
 }
 function saveSettingsObj(s){ localStorage.setItem('mt_settings', JSON.stringify(s)); }
 
-let DATA = loadData();
+let DATA = {};
 let SETTINGS = loadSettings();
 const MEAL_LABEL = {breakfast:'فطار', lunch:'غداء', dinner:'عشاء'};
 const WEEKDAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
@@ -953,8 +1001,9 @@ function renderFoodDB(){
 function fillFoodDatalist(){ foodList.innerHTML = Object.keys(FOOD_DB).map(k=>`<option value="${k}">`).join(''); }
 function renderAll(){ renderTickets(); renderActivePanel(); }
 
-fillSettingsForm(); fillFoodDatalist(); updateNotifStatus(); renderAll();
-setInterval(checkReminders, 60000); checkReminders();
+fillSettingsForm(); fillFoodDatalist(); updateNotifStatus();
+loadData().then(d=>{ DATA = d; renderAll(); checkReminders(); }).catch(e=>{ console.error(e); renderAll(); });
+setInterval(checkReminders, 60000);
 setInterval(updateNotifStatus, 5000);
 
 /* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============ */
@@ -962,21 +1011,29 @@ window.addEventListener('message', function(ev){
   var msg = ev.data;
   if(!msg || typeof msg !== 'object') return;
   if(msg.type === 'HUB_EXPORT_REQUEST'){
-    var data = {
-      'mt_data': localStorage.getItem('mt_data'),
-      'mt_settings': localStorage.getItem('mt_settings')
-    };
-    ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'meals', data: data }, '*');
+    idbOpen().then(function(db){ return idbGet(db, 'mt_data'); }).then(function(mtData){
+      var data = {
+        'mt_data': JSON.stringify(mtData || {}),
+        'mt_settings': localStorage.getItem('mt_settings')
+      };
+      ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'meals', data: data }, '*');
+    }).catch(function(e){
+      ev.source.postMessage({ type:'HUB_EXPORT_RESPONSE', reqId: msg.reqId, app:'meals', data:{}, error:String(e) }, '*');
+    });
   } else if(msg.type === 'HUB_IMPORT_REQUEST' && msg.app === 'meals'){
-    try{
-      var d = msg.data || {};
-      if(typeof d['mt_data'] === 'string') localStorage.setItem('mt_data', d['mt_data']);
+    var d = msg.data || {};
+    var p = Promise.resolve();
+    if(typeof d['mt_data'] === 'string'){
+      p = idbOpen().then(function(db){ return idbSet(db, 'mt_data', JSON.parse(d['mt_data'])); });
+    }
+    p.then(function(){
       if(typeof d['mt_settings'] === 'string') localStorage.setItem('mt_settings', d['mt_settings']);
       ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'meals', ok:true }, '*');
-    }catch(e){
+    }).catch(function(e){
       ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'meals', ok:false, error:String(e) }, '*');
-    }
-    setTimeout(function(){ location.reload(); }, 200);
+    }).finally(function(){
+      setTimeout(function(){ location.reload(); }, 200);
+    });
   }
 });
 </script>
