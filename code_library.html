@@ -192,6 +192,8 @@
   }
   .autosave-status{font-size:12px; color:var(--ink-soft); white-space:nowrap;}
   .autosave-status.on{color:var(--accent-dark); font-weight:700;}
+  .autosave-status.pending{color:#b8860b; font-weight:700;}
+  .autosave-status.err{color:var(--danger); font-weight:700;}
 
   /* ============ layout ============ */
   main{padding:24px; max-width:980px; margin:0 auto;}
@@ -1071,8 +1073,12 @@
      بدل الصورة نفسها. النتيجة: localStorage فاضي وخفيف، والصور بتتحفظ زي ما هي بالظبط من غير
      أي ضغط أو تصغير في الجودة. */
   const IMG_DB_NAME = "code-library-images-db";
-  const IMG_DB_VERSION = 1;
+  const IMG_DB_VERSION = 2;
   const IMG_STORE = "images";
+  // مساحة تخزين البيانات الرئيسية (النصوص/الفهارس/السكشنات) — بقت في IndexedDB بدل localStorage
+  // لأن IndexedDB مساحته بتكبر تلقائيًا مع حجم بيانات الجهاز (غالبًا جيجات)، عكس localStorage
+  // اللي عنده سقف ثابت صغير (5-10 ميجا تقريبًا) مبيكبرش مهما كان الجهاز فاضي.
+  const APP_STORE = "app_data";
   let imgDbPromise = null;
 
   function openImageDB(){
@@ -1083,6 +1089,7 @@
       req.onupgradeneeded = () => {
         const db = req.result;
         if(!db.objectStoreNames.contains(IMG_STORE)) db.createObjectStore(IMG_STORE);
+        if(!db.objectStoreNames.contains(APP_STORE)) db.createObjectStore(APP_STORE);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -1119,6 +1126,26 @@
     }catch(e){ /* تجاهل لو فشل الحذف */ }
   }
   function genImageId(){ return "idbimg_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,9); }
+
+  /* ============ تخزين بيانات التطبيق الرئيسية (نصوص/فهارس/سكشنات) في IndexedDB ============ */
+  async function idbPutAppData(key, value){
+    const db = await openImageDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(APP_STORE, "readwrite");
+      tx.objectStore(APP_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function idbGetAppData(key){
+    const db = await openImageDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(APP_STORE, "readonly");
+      const req = tx.objectStore(APP_STORE).get(key);
+      req.onsuccess = () => resolve(req.result === undefined ? null : req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
 
   /* ============================== تصنيف الملفات العامة (PDF/صوت/فيديو/غيرها) ============================== */
   function fileKindFromMime(mime, name){
@@ -4891,31 +4918,58 @@
   });
 
   /* ============================== AUTO-SAVE ============================== */
-  // الطبقة الأساسية والدائمة: حفظ تلقائي صامت في localStorage بعد أي تعديل — شغالة فورًا
+  // الطبقة الأساسية والدائمة: حفظ تلقائي صامت في IndexedDB بعد أي تعديل — شغالة فورًا
   // من غير أي إعداد من المستخدم، وبتفضل محفوظة حتى لو قفل المتصفح أو رجع بعد فترة طويلة.
-  // ربط ملف حقيقي (File System Access API) طبقة اختيارية إضافية فوقها لمن يحب نسخة احتياطية
-  // فعلية على جهازه، ومتاحة بس على Chrome/Edge على الكمبيوتر.
-  const LOCAL_STORAGE_KEY = "code-library-autosave-v1";
+  // ليه IndexedDB بدل localStorage؟ localStorage عنده سقف ثابت وصغير (5-10 ميجا تقريبًا)
+  // مبيتغيّرش مهما كبرت بياناتك أو مهما كانت مساحة جهازك فاضية. IndexedDB مختلف: مساحته
+  // بتتحسب من مساحة القرص الفعلية المتاحة على الجهاز وبتكبر تلقائيًا مع الحاجة (عادة عشرات
+  // أو مئات الجيجا)، فكل ما بياناتك تكبر، المساحة المتاحة ليها بتكبر معاها من غير أي تدخل.
+  // localStorage اتسيب بس كطبقة قراءة قديمة (Legacy) لترحيل بيانات كانت متخزنة فيه قبل
+  // هذا التحديث، وكـ نسخة احتياطية طارئة صغيرة لو IndexedDB مش متاح خالص.
+  // ربط ملف حقيقي (File System Access API) طبقة اختيارية إضافية فوق كل ده لمن يحب نسخة
+  // احتياطية فعلية على جهازه، ومتاحة بس على Chrome/Edge على الكمبيوتر.
+  const LOCAL_STORAGE_KEY = "code-library-autosave-v1"; // مفتاح قديم — للترحيل/الطوارئ فقط
+  const APP_DATA_KEY = "main";
+  let usingIndexedDBStorage = true; // بيتحول false لو IndexedDB مش متاح خالص في المتصفح ده
 
-  function loadFromLocalStorage(){
+  function applyLoadedPayload(data){
+    if(Array.isArray(data.indexes) && data.indexes.length){
+      indexes = data.indexes.map(ix=>({
+        id: (ix && ix.id) || idxUid(),
+        title: (ix && typeof ix.title === "string" && ix.title.trim()) ? ix.title : "فهرس",
+        sections: (ix && Array.isArray(ix.sections)) ? ix.sections : []
+      }));
+      activeIndexIdx = Number.isInteger(data.activeIndexIdx) ? data.activeIndexIdx : 0;
+    } else if(Array.isArray(data.sections)){
+      // صيغة قديمة قبل دعم الفهارس المتعددة — تتحول تلقائيًا لفهرس واحد
+      indexes = [{ id: idxUid(), title: "الفهرس الرئيسي", sections: data.sections }];
+      activeIndexIdx = 0;
+    }
+    if(data.langRules && typeof data.langRules === "object") langRules = Object.assign(langRules, data.langRules);
+    if(Array.isArray(data.customFormatRules)) customFormatRules = data.customFormatRules;
+  }
+
+  // التحميل عند بدء التشغيل: بيدوّر أول حاجة في IndexedDB (المكان الرئيسي حاليًا).
+  // لو مفيش حاجة هناك، بيدوّر في localStorage القديم (بيانات من قبل هذا التحديث)
+  // ولو لقاها، بيحمّلها وبعدين يرحّلها لـ IndexedDB فورًا ويفضي localStorage منها.
+  async function loadAppData(){
+    try{
+      const idbData = await idbGetAppData(APP_DATA_KEY);
+      if(idbData && typeof idbData === "object"){
+        applyLoadedPayload(idbData);
+        ensureIndexes();
+        return true;
+      }
+    }catch(e){
+      console.warn("IndexedDB مش متاح للقراءة، هنجرب localStorage:", e);
+      usingIndexedDBStorage = false;
+    }
+    // مفيش حاجة في IndexedDB (أو مش متاح) — نجرب localStorage القديم كـ fallback/ترحيل
     try{
       const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
       if(!raw) return false;
       const data = JSON.parse(raw);
-      if(Array.isArray(data.indexes) && data.indexes.length){
-        indexes = data.indexes.map(ix=>({
-          id: (ix && ix.id) || idxUid(),
-          title: (ix && typeof ix.title === "string" && ix.title.trim()) ? ix.title : "فهرس",
-          sections: (ix && Array.isArray(ix.sections)) ? ix.sections : []
-        }));
-        activeIndexIdx = Number.isInteger(data.activeIndexIdx) ? data.activeIndexIdx : 0;
-      } else if(Array.isArray(data.sections)){
-        // صيغة قديمة قبل دعم الفهارس المتعددة — تتحول تلقائيًا لفهرس واحد
-        indexes = [{ id: idxUid(), title: "الفهرس الرئيسي", sections: data.sections }];
-        activeIndexIdx = 0;
-      }
-      if(data.langRules && typeof data.langRules === "object") langRules = Object.assign(langRules, data.langRules);
-      if(Array.isArray(data.customFormatRules)) customFormatRules = data.customFormatRules;
+      applyLoadedPayload(data);
       ensureIndexes();
       return true;
     }catch(e){
@@ -4924,14 +4978,83 @@
     }
   }
 
-  function saveToLocalStorage(){
+  function getLocalStorageUsageKB(){
     try{
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentPayload()));
+      let total = 0;
+      for(let i=0; i<localStorage.length; i++){
+        const k = localStorage.key(i);
+        const v = localStorage.getItem(k) || "";
+        total += (k.length + v.length);
+      }
+      return Math.round(total / 1024); // تقريبي (UTF-16 كل حرف تقريبًا 2 بايت، مقبول للتقدير)
+    }catch(e){ return null; }
+  }
+
+  // بيرجع تقدير مساحة IndexedDB المستخدمة/المتاحة على الجهاز (لو المتصفح بيدعم الـ API ده)
+  async function getStorageEstimate(){
+    try{
+      if(navigator.storage && navigator.storage.estimate){
+        const est = await navigator.storage.estimate();
+        return { usageMB: Math.round((est.usage||0)/1024/1024*10)/10, quotaMB: Math.round((est.quota||0)/1024/1024) };
+      }
+    }catch(e){}
+    return null;
+  }
+
+  let lastSaveErrorDetail = null;
+
+  // الحفظ الفعلي: IndexedDB أولًا (الطبقة الرئيسية، مساحتها بتكبر تلقائيًا مع بيانات الجهاز).
+  // لو فشل لأي سبب، نجرب localStorage كطبقة طوارئ (سقفها صغير وثابت، لكن أفضل من ولا حاجة).
+  async function saveAppData(){
+    const payload = currentPayload();
+    if(usingIndexedDBStorage){
+      try{
+        await idbPutAppData(APP_DATA_KEY, payload);
+        lastSaveErrorDetail = null;
+        // بمجرد ما IndexedDB بقى المصدر الرئيسي، نفضي أي نسخة قديمة تقيلة من localStorage
+        // تدريجيًا (لو موجودة) عشان نرجّع مساحته فاضية لأي استخدام تاني في المتصفح.
+        try{ localStorage.removeItem(LOCAL_STORAGE_KEY); }catch(e){}
+        return true;
+      }catch(e){
+        console.warn("تعذّر الحفظ في IndexedDB، هنجرب localStorage كطوارئ:", e);
+        lastSaveErrorDetail = e;
+        usingIndexedDBStorage = false; // منجربش IndexedDB تاني كل مرة لو فشل بشكل دائم
+      }
+    }
+    try{
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
+      lastSaveErrorDetail = null;
       return true;
     }catch(e){
-      console.warn("تعذّر الحفظ التلقائي المحلي:", e);
+      console.warn("تعذّر الحفظ التلقائي (كل الطبقات):", e);
+      lastSaveErrorDetail = e;
       return false;
     }
+  }
+
+  // بيرجع رسالة واضحة عن السبب الحقيقي للفشل بدل التخمين
+  async function diagnoseSaveFailure(){
+    const e = lastSaveErrorDetail;
+    const name = e ? (e.name || "") : "";
+    const est = await getStorageEstimate();
+    const kb = getLocalStorageUsageKB();
+    const spaceInfo = est ? ("المساحة المستخدمة على الجهاز: ~" + est.usageMB + " م.ب من أصل ~" + est.quotaMB + " م.ب متاحة.") : "";
+    if(!usingIndexedDBStorage){
+      if(name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED"){
+        return "IndexedDB مش شغال، وبالتالي بنستخدم مساحة المتصفح الاحتياطية (localStorage) اللي سقفها صغير وامتلا فعلًا (~" + (kb!==null?kb+" ك.ب":"غير معروف") + "). " + spaceInfo + " جرّب تسمح لمساحة IndexedDB من إعدادات المتصفح، أو صدّر نسخة احتياطية (💾 تنزيل نسخة) وامسح بيانات قديمة.";
+      }
+      return "IndexedDB (المساحة الرئيسية اللي بتكبر تلقائيًا) مش متاح في المتصفح ده، فبنستخدم مساحة احتياطية صغيرة بدلًا منه. " + (e ? ("الخطأ: " + (e.message||name)) : "") + " جرّب تفتح الصفحة في تاب عادي (مش خفي) أو متصفح تاني.";
+    }
+    if(name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED"){
+      return "امتلأت مساحة تخزين الجهاز فعلًا. " + spaceInfo + " جرّب: صدّر نسخة احتياطية (💾 تنزيل نسخة) ثم امسح فهارس/سكشنات أو صور قديمة مش محتاجها، أو فضّي مساحة على الجهاز نفسه.";
+    }
+    if(name === "SecurityError"){
+      return "المتصفح مانع الوصول لمساحة التخزين — ده بيحصل عادةً في وضع التصفح الخفي (Private/Incognito) أو لو الصفحة متحمّلة جوه iframe من موقع تاني. افتح الصفحة في تاب عادي (مش خفي) وجرّب تاني.";
+    }
+    if(e){
+      return "خطأ: " + (e.message || name || String(e)) + ". " + spaceInfo;
+    }
+    return "سبب غير معروف. " + spaceInfo + " جرّب تاني، ولو استمر صدّر نسخة احتياطية فورًا (💾 تنزيل نسخة) عشان محتواك ميضيعش.";
   }
 
   let fileHandle = null;
@@ -4955,6 +5078,26 @@
     }
   });
 
+  // بيضبط شكل مؤشر الحالة في الهيدر — 3 حالات واضحة:
+  // pending (🟡 لسه بيتعدل / بيتحفظ)، ok (🟢 اتحفظ فعلاً)، err (🔴 فشل الحفظ)
+  function setSaveStatus(kind, text){
+    autosaveStatusEl.textContent = text;
+    autosaveStatusEl.classList.remove("on", "pending", "err");
+    if(kind === "ok") autosaveStatusEl.classList.add("on");
+    else if(kind === "pending") autosaveStatusEl.classList.add("pending");
+    else if(kind === "err"){
+      autosaveStatusEl.classList.add("err");
+      text = text + " (اضغط هنا لمعرفة السبب)";
+      autosaveStatusEl.textContent = text;
+    }
+  }
+  // اضغط على علامة الحالة وقت ما تبقى حمرا عشان تعرف السبب الحقيقي بالتفصيل
+  autosaveStatusEl.style.cursor = "pointer";
+  autosaveStatusEl.addEventListener("click", async ()=>{
+    if(!autosaveStatusEl.classList.contains("err")) return;
+    showToast(await diagnoseSaveFailure(), "err", 8000);
+  });
+
   async function writeToHandle(){
     if(!fileHandle) return;
     try{
@@ -4962,29 +5105,57 @@
       await writable.write(JSON.stringify(currentPayload(), null, 2));
       await writable.close();
       const t = new Date().toLocaleTimeString("ar-EG",{hour:'2-digit',minute:'2-digit'});
-      autosaveStatusEl.textContent = "🟢 محفوظ في المتصفح + الملف — آخر حفظ: " + t;
-      autosaveStatusEl.classList.add("on");
+      setSaveStatus("ok", "🟢 محفوظ في المتصفح + الملف — آخر حفظ: " + t);
     }catch(err){
       console.warn("تعذّر الحفظ في الملف المرتبط:", err);
-      autosaveStatusEl.textContent = "🟠 المتصفح محفوظ، لكن تعذّر الحفظ في الملف المرتبط";
-      autosaveStatusEl.classList.add("on"); // localStorage layer still succeeded
+      setSaveStatus("err", "🟠 المتصفح محفوظ، لكن تعذّر الحفظ في الملف المرتبط");
     }
   }
 
   function scheduleAutoSave(){
     if(indexes[activeIndexIdx]) indexes[activeIndexIdx].sections = sections;
+    // إشارة فورية إن فيه تعديل لسه ماتحفظش — تتحدث فورًا وقت الكتابة، قبل ما التأخير يخلص
+    setSaveStatus("pending", "🟡 جارِ الحفظ…");
     clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(()=>{
-      const ok = saveToLocalStorage();
+    autoSaveTimer = setTimeout(async ()=>{
+      autoSaveTimer = null;
+      const ok = await saveAppData();
       if(fileHandle){
         writeToHandle(); // يحدّث نص الحالة بنفسه بعد ما يحاول الكتابة في الملف
       } else {
         const t = new Date().toLocaleTimeString("ar-EG",{hour:'2-digit',minute:'2-digit'});
-        autosaveStatusEl.textContent = ok ? ("🟢 يُحفظ تلقائيًا في المتصفح — آخر حفظ: " + t) : "🟠 تعذّر الحفظ التلقائي في المتصفح";
-        autosaveStatusEl.classList.toggle("on", ok);
+        setSaveStatus(ok ? "ok" : "err", ok ? ("🟢 محفوظ — آخر حفظ: " + t) : "🔴 تعذّر الحفظ التلقائي");
       }
     }, 500);
   }
+
+  // حفظ فوري إجباري (بدون تأخير) — بيتنادى لما فيه احتمال إن الصفحة هتتقفل أو تختفي
+  // عشان لو المستخدم أضاف سكشن وقفل بسرعة قبل ما التأخير (500ms) بتاع scheduleAutoSave يخلص،
+  // التعديل الأخير يتحفظ فورًا وميضاعش. بنكتب كمان نسخة احتياطية صغيرة synchronous في
+  // localStorage كطبقة أمان إضافية، لأن الكتابة في IndexedDB async ومش مضمونة تخلص لو
+  // الصفحة اتقفلت فعليًا قبل ما الـ browser يخلص العملية.
+  function flushAutoSaveNow(){
+    if(autoSaveTimer){
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+    if(indexes[activeIndexIdx]) indexes[activeIndexIdx].sections = sections;
+    try{ localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentPayload())); }catch(e){ /* أفضل جهد فقط — مش المصدر الرئيسي */ }
+    saveAppData().then(ok=>{
+      const t = new Date().toLocaleTimeString("ar-EG",{hour:'2-digit',minute:'2-digit'});
+      setSaveStatus(ok ? "ok" : "err", ok ? ("🟢 محفوظ — آخر حفظ: " + t) : "🔴 تعذّر الحفظ التلقائي");
+    });
+    if(fileHandle){
+      // كتابة الملف الحقيقي async ومش مضمونة تخلص وقت الإغلاق، لكن الطبقتين فوق
+      // بيضمنوا إن آخر نسخة محفوظة محليًا مهما حصل.
+      writeToHandle();
+    }
+  }
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.visibilityState === "hidden") flushAutoSaveNow();
+  });
+  window.addEventListener("pagehide", flushAutoSaveNow);
+  window.addEventListener("beforeunload", flushAutoSaveNow);
 
   /* ============================== search / toggles ============================== */
   searchBox.addEventListener("input", renderToc);
@@ -5023,8 +5194,9 @@
   });
 
   /* ============ جسر التصدير/الاستيراد الموحّد (مع لوحة التطبيقات) ============
-     بما إن الصور بقت متخزنة في IndexedDB مش localStorage، لازم وقت التصدير الموحّد
-     ندمج الصور كـ base64 جوه البيانات (عشان الملف الموحّد يبقى محمول ومحتوي كل حاجة
+     البيانات الرئيسية بقت في IndexedDB (مش localStorage)، فجسر الـ hub ده لازم يقرأ/يكتب
+     من هناك مباشرة. وبما إن الصور بقت متخزنة في IndexedDB منفصلة كمان، لازم وقت التصدير
+     الموحّد ندمج الصور كـ base64 جوه البيانات (عشان الملف الموحّد يبقى محمول ومحتوي كل حاجة
      فعلًا)، ووقت الاستيراد نرجّعها تاني لـ IndexedDB بجودتها الكاملة. */
   window.addEventListener('message', async function(ev){
     var msg = ev.data;
@@ -5035,9 +5207,13 @@
         'code-library-theme': localStorage.getItem(THEME_KEY)
       };
       try{
-        var raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if(raw){
-          var payload = JSON.parse(raw);
+        var payload = await idbGetAppData(APP_DATA_KEY);
+        if(!payload){
+          // احتياطي: لو لسه فيه بيانات قديمة في localStorage لم تترحّل بعد
+          var raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+          payload = raw ? JSON.parse(raw) : null;
+        }
+        if(payload){
           payload.indexes = await embedAllImagesAsBase64(payload.indexes || []);
           data['code-library-autosave-v1'] = JSON.stringify(payload);
         } else {
@@ -5055,7 +5231,8 @@
         if(typeof d['code-library-autosave-v1'] === 'string'){
           var parsed = JSON.parse(d['code-library-autosave-v1']);
           parsed.indexes = await migrateAllImagesToIndexedDB(parsed.indexes || []);
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsed));
+          await idbPutAppData(APP_DATA_KEY, parsed);
+          try{ localStorage.removeItem(LOCAL_STORAGE_KEY); }catch(e){}
         }
         ev.source.postMessage({ type:'HUB_IMPORT_DONE', reqId: msg.reqId, app:'codelib', ok:true }, '*');
       }catch(e){
@@ -5410,13 +5587,19 @@
 
   /* ============================== init ============================== */
   loadTheme();
-  loadFromLocalStorage();
-  ensureIndexes();
-  renderAll();
+  (async function initApp(){
+    await loadAppData();
+    ensureIndexes();
+    renderAll();
 
-  // ترحيل الصور القديمة (اللي كانت متخزنة كـ base64 جوه localStorage قبل هذا التحديث)
-  // لمساحة IndexedDB تلقائيًا في الخلفية، عشان تفضى مساحة localStorage تدريجيًا.
-  (async function migrateLegacyImagesOnce(){
+    // طلب "تخزين دائم" من المتصفح — بيقلل احتمالية إن المتصفح يمسح بيانات IndexedDB
+    // تلقائيًا وقت ضيق المساحة على الجهاز (بيحصل بس مع مساحات التخزين "المؤقتة").
+    try{
+      if(navigator.storage && navigator.storage.persist){ await navigator.storage.persist(); }
+    }catch(e){}
+
+    // ترحيل البيانات القديمة اللي كانت متخزنة في localStorage قبل هذا التحديث
+    // (النصوص + أي صور base64 قديمة) لمساحة IndexedDB الرئيسية تلقائيًا في الخلفية.
     try{
       let hasLegacy = false;
       for(const ix of indexes){
@@ -5433,10 +5616,12 @@
       if(hasLegacy){
         indexes = await migrateAllImagesToIndexedDB(indexes);
         ensureIndexes();
-        saveToLocalStorage();
+      }
+      if(hasLegacy || localStorage.getItem(LOCAL_STORAGE_KEY)){
+        await saveAppData(); // بيحفظ في IndexedDB وبيفضي localStorage القديم تلقائيًا
         renderAll();
       }
-    }catch(e){ console.warn("تعذّر ترحيل الصور القديمة تلقائيًا:", e); }
+    }catch(e){ console.warn("تعذّر ترحيل البيانات القديمة تلقائيًا:", e); }
   })();
 })();
 </script>
