@@ -623,6 +623,24 @@
   .cycle-step.done{opacity:.8; text-decoration:line-through; background:var(--teal); color:#fff; border-color:var(--teal);}
   .cycle-arrow{opacity:.6; font-size:12px;}
 
+  /* ---- Word detail bar (writing page — consistent across every stage) ---- */
+  .word-detail-bar{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:10px 14px; margin-bottom:16px; display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px;
+    font-size:12.5px;
+  }
+  .wdb-item{display:flex; align-items:center; gap:5px; color:var(--ink);}
+  .wdb-item .wdb-label{color:var(--ink-soft); font-size:11px;}
+  .wdb-item b{direction:ltr; display:inline-block;}
+  .wdb-level{display:inline-flex; gap:2px;}
+  .wdb-level .dot{width:8px; height:8px; border-radius:50%; background:var(--line);}
+  .wdb-level .dot.on{background:var(--gold-deep);}
+  .wdb-example-toggle{margin-inline-start:auto;}
+  .wdb-example{
+    flex-basis:100%; font-size:12px; color:var(--ink-soft); font-style:italic; direction:ltr;
+    border-top:1px dashed var(--line); padding-top:8px; margin-top:2px;
+  }
+
   /* ---- Collapsible-list toggle buttons ---- */
   [data-collapse-toggle]{
     font-weight:700; direction:rtl;
@@ -936,6 +954,11 @@
       <h3>أضف كلمات أولاً</h3>
       <p>تحتاج إلى كلمة واحدة على الأقل لبدء تمارين الكتابة.</p>
     </div>
+
+    <!-- شريط تفاصيل الكلمة: ثابت وموحّد فى كل مراحل صفحة الكتابة (تتبع/استرجاع/
+         كتابة/نطق/ترتيب/فراغ) — بيوري التصنيف والمعنى والنطق الصوتي ومستوى
+         الإتقان، مع زرار اختياري لعرض جملة المثال وقت ما تحتاجها. -->
+    <div id="wordDetailBar" class="word-detail-bar" style="display:none;"></div>
 
     <!-- TRACE MODE -->
     <div id="wTrace" class="wpanel">
@@ -1310,7 +1333,7 @@
       algorithms: [],
       sentences: [],
       theme: "light",
-      settings: {repTarget: 10, cycleWriting: false, cycleQuiz: false, cycleReview: false, dailyGoal: 20, seenBadges: []},
+      settings: {repTarget: 10, cycleWriting: true, cycleQuiz: false, cycleReview: false, dailyGoal: 20, seenBadges: [], fullCycleDefaultApplied: true},
       history: [] // {date, correct, total}
     };
   }
@@ -1378,6 +1401,13 @@
   if(state.settings.cycleReview === undefined) state.settings.cycleReview = false;
   if(!state.settings.dailyGoal) state.settings.dailyGoal = 20;
   if(!Array.isArray(state.settings.seenBadges)) state.settings.seenBadges = [];
+  // النظام الدوار الكامل (تتبع→استرجاع→كتابة→نطق→ترتيب→فراغ) بقى هو الافتراضي
+  // فى صفحة الكتابة. الفعّلها مرة واحدة تلقائيًا لأي بيانات قديمة، وبعد كده
+  // بنحترم اختيار المستخدم لو قفلها بنفسه.
+  if(!state.settings.fullCycleDefaultApplied){
+    state.settings.cycleWriting = true;
+    state.settings.fullCycleDefaultApplied = true;
+  }
   // ترقية بيانات قديمة محفوظة قبل إضافة السجل/مجموعات الاستيراد، عشان ميحصلش خطأ.
   state.words.forEach(w=>{
     ensureLog(w);
@@ -2399,8 +2429,8 @@
             ${[2,3,5,10,20,50,100,200].map(v=>`<button type="button" class="import-method-btn" data-preset="${v}" style="padding:8px 4px;">${v}</button>`).join("")}
           </div>
           <hr style="margin:16px 0; border:none; border-top:1px solid var(--line);">
-          <h3 style="font-size:15px;">🔁 وضع الدورة التلقائية لكل كلمة</h3>
-          <p class="sub">لما يتفعّل: الكلمة بتفضل ثابتة وبتتنقل تلقائيًا بين المراحل (كتابة ← استرجاع حر ← ترتيب حروف) بنفس عدد التكرار، وبعد ما تخلص المراحل كلها بينتقل تلقائيًا لكلمة تانية، وهكذا بلا توقف.</p>
+          <h3 style="font-size:15px;">🔁 نظام التنقل الدوار بين الكلمات (صفحة الكتابة)</h3>
+          <p class="sub">الوضع الافتراضي: كل كلمة بتفضل ثابتة وبتتنقل تلقائيًا بالترتيب: 🖊️ تتبع بخط اليد ← 🧠 استرجاع حر ← ✍️ كتابة ← 🗣️ نطق ← 🔠 ترتيب حروف ← 📝 إملأ الفراغ، بنفس عدد التكرار فى كل مرحلة — وبعد ما تخلص كل المراحل بتنتقل تلقائيًا لكلمة جديدة وتبدأ الدورة من أول مرحلة تاني، وهكذا بلا توقف. تقدر توقفها فى أي وقت من زرار "إيقاف الدورة" اللي بيظهر فوق صفحة الكتابة.</p>
           <label class="group-word-row" style="cursor:pointer; grid-template-columns:none; display:flex; gap:10px; align-items:center;">
             <input type="checkbox" class="batch-check" id="cycleWritingChk" ${state.settings.cycleWriting?"checked":""}><span>تفعيل في صفحة «الكتابة»</span>
           </label>
@@ -2471,17 +2501,50 @@
     toast("تم ضبط عدد التكرارات المطلوبة إلى " + n + " ✅", "ok");
     if(typeof renderWriting === "function" && document.getElementById("view-writing").classList.contains("active")) renderWriting();
   }
+  // ---------- شريط تفاصيل الكلمة: موحّد فى كل مراحل صفحة الكتابة الست ----------
+  function updateWordDetailBar(w){
+    const bar = document.getElementById("wordDetailBar");
+    if(!bar) return;
+    if(!w){ bar.style.display = "none"; bar.innerHTML = ""; return; }
+    bar.style.display = "flex";
+    const level = w.srs ? w.srs.level : 0;
+    const dotsHtml = Array.from({length:5}, (_,i)=> `<span class="dot ${i<level ? "on":""}"></span>`).join("");
+    const hasExample = w.example && w.example.trim();
+    bar.innerHTML = `
+      <span class="wdb-item"><span class="wdb-label">📁</span><b>${escapeHtml(w.category || "عام")}</b></span>
+      <span class="wdb-item"><span class="wdb-label">المعنى:</span><b style="direction:rtl;">${escapeHtml(w.meaning || "—")}</b></span>
+      ${w.pronunciation ? `<span class="wdb-item"><span class="wdb-label">🗣️ النطق:</span><b>${escapeHtml(w.pronunciation)}</b></span>` : ""}
+      <span class="wdb-item"><span class="wdb-label">الإتقان:</span><span class="wdb-level">${dotsHtml}</span></span>
+      ${hasExample ? `<button type="button" class="btn ghost small wdb-example-toggle" id="wdbExampleToggle">💡 عرض جملة المثال</button>` : ""}
+      ${hasExample ? `<div class="wdb-example" id="wdbExampleText" style="display:none;">"${escapeHtml(w.example)}"</div>` : ""}
+    `;
+    const toggleBtn = document.getElementById("wdbExampleToggle");
+    if(toggleBtn){
+      toggleBtn.addEventListener("click", ()=>{
+        const ex = document.getElementById("wdbExampleText");
+        const showing = ex.style.display !== "none";
+        ex.style.display = showing ? "none" : "block";
+        toggleBtn.textContent = showing ? "💡 عرض جملة المثال" : "🙈 إخفاء جملة المثال";
+      });
+    }
+  }
+
   let writingMode = "trace";
   let traceWord = null, recallWord = null, typedWord = null;
   let typedStreak = 0;
 
   /* ============================================================
-     🔁 وضع الدورة التلقائية لصفحة الكتابة: نفس الكلمة بتتنقل تلقائيًا
-     كتابة (N) → استرجاع حر (N) → ترتيب حروف (N)، وبعدين كلمة جديدة، وهكذا
-     من غير توقف. يتفعّل من إعدادات 🔁 في الهيدر (state.settings.cycleWriting).
+     🔁 نظام التنقل الدوار بين الكلمات في صفحة الكتابة (مفعّل افتراضيًا):
+     كل كلمة بتفضل ثابتة وبتتنقل تلقائيًا بالترتيب: 🖊️ تتبع بخط اليد (N) →
+     🧠 استرجاع حر (N) → ✍️ كتابة (N) → 🗣️ نطق (N) → 🔠 ترتيب حروف (N) →
+     📝 إملأ الفراغ (N) — وبعدين تنتقل تلقائيًا لكلمة جديدة وتُعيد الدورة من
+     أول مرحلة، وهكذا من غير توقف. يتحكم فيه إعداد 🔁 (state.settings.cycleWriting).
   ============================================================ */
-  const WRITING_CYCLE_STAGES = ["typed","recall","scramble"];
-  const WRITING_CYCLE_LABELS = {typed:"✍️ كتابة", recall:"🖊️ استرجاع حر", scramble:"🔠 ترتيب حروف"};
+  const WRITING_CYCLE_STAGES = ["trace","recall","typed","pronounce","scramble","blank"];
+  const WRITING_CYCLE_LABELS = {
+    trace:"🖊️ تتبع بخط اليد", recall:"🧠 استرجاع حر", typed:"✍️ كتابة",
+    pronounce:"🗣️ نطق", scramble:"🔠 ترتيب حروف", blank:"📝 إملأ الفراغ"
+  };
   let cycleActive = false;
   let cycleStageIdx = 0;
   let cycleWord = null;
@@ -2517,16 +2580,20 @@
     if(!cycleWord) return;
     writingMode = cycleCurrentStage();
     document.querySelectorAll("[data-wmode]").forEach(c=> c.classList.toggle("active", c.dataset.wmode===writingMode));
-    document.getElementById("wTrace").style.display = "none";
+    document.getElementById("wTrace").style.display = writingMode==="trace" ? "block":"none";
     document.getElementById("wRecall").style.display = writingMode==="recall" ? "block":"none";
     document.getElementById("wTyped").style.display = writingMode==="typed" ? "block":"none";
-    document.getElementById("wPronounce").style.display = "none";
+    document.getElementById("wPronounce").style.display = writingMode==="pronounce" ? "block":"none";
     document.getElementById("wScramble").style.display = writingMode==="scramble" ? "block":"none";
-    document.getElementById("wBlank").style.display = "none";
+    document.getElementById("wBlank").style.display = writingMode==="blank" ? "block":"none";
     renderCycleBanner();
-    if(writingMode==="typed") startTypedRound();
+    updateWordDetailBar(cycleWord);
+    if(writingMode==="trace") startTraceRound();
     else if(writingMode==="recall") startRecallRound();
+    else if(writingMode==="typed") startTypedRound();
+    else if(writingMode==="pronounce") startPronounceRound();
     else if(writingMode==="scramble") startScrambleRound();
+    else if(writingMode==="blank") startBlankRound();
   }
   // بتتنادى لما كلمة تخلّص مرحلتها الحالية بالكامل (N تكرار صحيح متتالي)
   function cycleAdvanceFromWriting(){
@@ -2535,7 +2602,7 @@
     if(cycleStageIdx >= WRITING_CYCLE_STAGES.length){
       cycleStageIdx = 0;
       cycleWord = pickPracticeWord();
-      toast("🎉 خلصت دورة كاملة للكلمة السابقة — يلا كلمة جديدة!", "ok");
+      toast("🎉 خلصت دورة كاملة (6 مراحل) للكلمة السابقة — يلا كلمة جديدة!", "ok");
     }
     goToCycleStage();
   }
@@ -2572,7 +2639,7 @@
     document.getElementById("writingNoWords").style.display = has ? "none":"block";
     document.querySelectorAll("#view-writing .wpanel").forEach(p=> p.style.display = has ? "" : "none");
     renderWritingSettingsPanel();
-    if(!has){ stopWritingCycle(); return; }
+    if(!has){ stopWritingCycle(); updateWordDetailBar(null); return; }
     if(state.settings.cycleWriting){
       if(!cycleActive) startWritingCycle(); else goToCycleStage();
       return;
@@ -2995,7 +3062,7 @@
   // ---- TRACE MODE ----
   function startTraceRound(){
     if(!tracePad) tracePad = makePad(document.getElementById("traceGuideCanvas"), document.getElementById("traceInkCanvas"));
-    traceWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
+    traceWord = pipelineActive ? pipelineCurrentWord() : (cycleActive ? cycleWord : pickPracticeWord());
     if(!traceWord) return;
     tracePad.clearInk();
     tracePad.drawGuideText(traceWord.word, 0.35);
@@ -3004,6 +3071,7 @@
     document.getElementById("traceScoreRow").style.display = "none";
     document.getElementById("traceOcrDiff").innerHTML = "";
     document.getElementById("traceFeedback").textContent = "";
+    updateWordDetailBar(traceWord);
   }
   function updateTraceRepLabel(){
     const reps = traceWord ? ensureWriting(traceWord).traceReps : 0;
@@ -3053,6 +3121,7 @@
         ws.traceReps = 0;
         save();
         if(pipelineActive) setTimeout(pipelineWordDone, 1400);
+        else if(cycleActive) setTimeout(cycleAdvanceFromWriting, 1400);
         else setTimeout(startTraceRound, 1400);
         return;
       } else {
@@ -3069,7 +3138,7 @@
   // ---- RECALL MODE (freehand from memory) ----
   function startRecallRound(){
     if(!recallPad) recallPad = makePad(document.getElementById("recallGuideCanvas"), document.getElementById("recallInkCanvas"));
-    recallWord = cycleActive ? cycleWord : pickPracticeWord();
+    recallWord = pipelineActive ? pipelineCurrentWord() : (cycleActive ? cycleWord : pickPracticeWord());
     if(!recallWord) return;
     recallPad.clearInk();
     recallPad.clearGuide();
@@ -3078,6 +3147,7 @@
     document.getElementById("recallScoreRow").style.display = "none";
     document.getElementById("recallOcrDiff").innerHTML = "";
     document.getElementById("recallReveal").style.display = "inline-block";
+    updateWordDetailBar(recallWord);
   }
   document.getElementById("recallClear").addEventListener("click", ()=> recallPad && recallPad.clearInk());
   document.getElementById("recallReveal").addEventListener("click", async ()=>{
@@ -3126,7 +3196,8 @@
       }
       applyRating(recallWord, good ? "easy" : "hard", "استرجاع حر (تقييم ذاتي)");
       save();
-      if(completed && cycleActive) setTimeout(cycleAdvanceFromWriting, 400);
+      if(completed && pipelineActive) setTimeout(pipelineWordDone, 400);
+      else if(completed && cycleActive) setTimeout(cycleAdvanceFromWriting, 400);
       else startRecallRound();
     });
   });
@@ -3174,6 +3245,7 @@
     document.getElementById("typedTypoNote").textContent = "";
     document.getElementById("typedLive").innerHTML = "";
     document.getElementById("typedInput").focus();
+    updateWordDetailBar(typedWord);
   }
   function updateTypedProgress(){
     document.getElementById("typedStreakLabel").textContent = typedStreak + " / " + TYPED_TARGET_REPS;
@@ -3321,7 +3393,7 @@
     return ("SpeechRecognition" in window) || ("webkitSpeechRecognition" in window);
   }
   function startPronounceRound(){
-    pronounceWord = pipelineActive ? pipelineCurrentWord() : pickPracticeWord();
+    pronounceWord = pipelineActive ? pipelineCurrentWord() : (cycleActive ? cycleWord : pickPracticeWord());
     if(!pronounceWord) return;
     pronounceStreak = ensureWriting(pronounceWord).pronounceStreak || 0;
     document.getElementById("pronounceMeaning").textContent = pronounceWord.meaning;
@@ -3332,6 +3404,7 @@
     document.getElementById("pronounceNote").textContent = supportsMicRecognition()
       ? "" : "المتصفح أو الجهاز ده مش بيدعم التعرف على الصوت — جرّب من كروم على أندرويد أو ديسكتوب.";
     document.getElementById("pronounceMicBtn").disabled = !supportsMicRecognition();
+    updateWordDetailBar(pronounceWord);
   }
   function updatePronounceProgress(){
     document.getElementById("pronounceStreakLabel").textContent = pronounceStreak + " / " + PRONOUNCE_TARGET_REPS;
@@ -3408,6 +3481,7 @@
         save();
         fb.textContent = "أتممت " + PRONOUNCE_TARGET_REPS + " مرات نطق صحيحة متتالية! ✔";
         if(pipelineActive) setTimeout(pipelineWordDone, 1200);
+        else if(cycleActive) setTimeout(cycleAdvanceFromWriting, 1200);
         else setTimeout(startPronounceRound, 1200);
       } else {
         fb.textContent = "صح! 🎉 استمر.";
@@ -3453,6 +3527,7 @@
     document.getElementById("scrambleFeedback").textContent = "";
     document.getElementById("scrambleFeedback").className = "feedback";
     renderScrambleUI();
+    updateWordDetailBar(scrambleWord);
   }
   // زي startScrambleRound بالظبط لكن من غير ما يلقّط كلمة جديدة — بيفضل على نفس
   // الكلمة الحالية ويعمل بس تشكيل حروف جديد، عشان الدورة تفضل متتالية عليها.
@@ -3465,6 +3540,7 @@
     document.getElementById("scrambleFeedback").textContent = "";
     document.getElementById("scrambleFeedback").className = "feedback";
     renderScrambleUI();
+    updateWordDetailBar(scrambleWord);
   }
   function updateScrambleProgress(){
     document.getElementById("scrambleStreakLabel").textContent = scrambleStreak + " / " + SCRAMBLE_TARGET_REPS;
@@ -3588,6 +3664,7 @@
     document.getElementById("blankFeedback").textContent = "";
     document.getElementById("blankFeedback").className = "feedback";
     document.getElementById("blankHintNote").textContent = "";
+    updateWordDetailBar(blankWord);
   }
   // نفس startBlankRound بس من غير ما يغيّر الكلمة — بيفضل على نفس الكلمة الحالية.
   function continueBlankRound(){
@@ -3602,6 +3679,7 @@
     document.getElementById("blankFeedback").textContent = "";
     document.getElementById("blankFeedback").className = "feedback";
     document.getElementById("blankHintNote").textContent = "";
+    updateWordDetailBar(blankWord);
   }
   function checkBlankAnswer(){
     if(!blankWord) return;
@@ -3667,10 +3745,11 @@
   let pipelineWords = [];
   let pipelineWordIdx = 0;
   let pipelinePhaseIdx = 0;
-  const PIPELINE_PHASES = ["typed","trace","pronounce","scramble","blank"];
+  const PIPELINE_PHASES = ["trace","recall","typed","pronounce","scramble","blank"];
   const PIPELINE_PHASE_META = {
-    typed:     {icon:"✍️", label:"كتابة عادية"},
     trace:     {icon:"🖊️", label:"كتابة بالرسم"},
+    recall:    {icon:"🧠", label:"استرجاع حر"},
+    typed:     {icon:"✍️", label:"كتابة عادية"},
     pronounce: {icon:"🗣️", label:"نطق"},
     scramble:  {icon:"🔠", label:"حروف متفرقة"},
     blank:     {icon:"📝", label:"املأ الفراغ"}
@@ -3697,14 +3776,15 @@
     writingMode = phase;
     document.querySelectorAll("[data-wmode]").forEach(c=> c.classList.toggle("active", c.dataset.wmode===phase));
     document.getElementById("wTrace").style.display = phase==="trace" ? "block":"none";
-    document.getElementById("wRecall").style.display = "none";
+    document.getElementById("wRecall").style.display = phase==="recall" ? "block":"none";
     document.getElementById("wTyped").style.display = phase==="typed" ? "block":"none";
     document.getElementById("wPronounce").style.display = phase==="pronounce" ? "block":"none";
     document.getElementById("wScramble").style.display = phase==="scramble" ? "block":"none";
     document.getElementById("wBlank").style.display = phase==="blank" ? "block":"none";
     renderPipelineBanner();
-    if(phase==="typed") startTypedRound();
-    else if(phase==="trace") startTraceRound();
+    if(phase==="trace") startTraceRound();
+    else if(phase==="recall") startRecallRound();
+    else if(phase==="typed") startTypedRound();
     else if(phase==="pronounce") startPronounceRound();
     else if(phase==="scramble") startScrambleRound();
     else if(phase==="blank") startBlankRound();
