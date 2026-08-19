@@ -1634,7 +1634,7 @@ function openDetail(langKey, row){
   const meta = LANG_META[langKey];
   const example = buildExample(langKey, row);
   const hasCustomExplain = typeof row.customExplain === 'string' && row.customExplain.trim() !== '';
-  const explainAr = hasCustomExplain ? escapeHtml(row.customExplain) : `هذه التعليمة/الخاصية باسم <b style="color:var(--accent);direction:ltr;display:inline-block;">${escapeHtml(row.name)}</b> تنتمي إلى مجموعة <b>${typeAr(row.type)}</b> ضمن مرجع <b>${DATA[langKey].label}</b>.<br><br>
+  const explainAr = hasCustomExplain ? escapeHtml(row.customExplain).replace(/\n/g,'<br>') : `هذه التعليمة/الخاصية باسم <b style="color:var(--accent);direction:ltr;display:inline-block;">${escapeHtml(row.name)}</b> تنتمي إلى مجموعة <b>${typeAr(row.type)}</b> ضمن مرجع <b>${DATA[langKey].label}</b>.<br><br>
   الصيغة البرمجية المستخدمة لها هي: <span class="ltr" style="display:inline-block;background:var(--elevated2);padding:2px 8px;border-radius:5px;">${escapeHtml(row.syntax)}</span><br><br>
   ${row.desc ? `وتتلخص وظيفتها في: <b>${escapeHtml(row.desc)}</b> — بمعنى أنها تُستخدم في الكود عندما نحتاج إلى تنفيذ عملية من نوع "${typeAr(row.type)}" بهذا الشكل تحديدًا.` : `وهي تُستخدم كعنصر من نوع "${typeAr(row.type)}" بالصيغة الموضحة أعلاه.`}`;
 
@@ -1729,7 +1729,12 @@ function openDetail(langKey, row){
 
   const explainBox = document.getElementById('dExplainInput');
   explainBox.addEventListener('input', ()=>{
-    saveEditedField(langKey, row.id, 'customExplain', explainBox.innerHTML);
+    saveEditedField(langKey, row.id, 'customExplain', explainBox.innerText);
+  });
+  explainBox.addEventListener('blur', ()=>{
+    // normalize the box after leaving it, so re-editing later is always clean plain text
+    row.customExplain = explainBox.innerText;
+    explainBox.innerHTML = escapeHtml(explainBox.innerText).replace(/\n/g,'<br>');
   });
 
   // when leaving the type/name/syntax/desc fields, refresh the list + header so changes reflect everywhere
