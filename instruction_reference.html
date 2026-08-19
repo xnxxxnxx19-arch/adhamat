@@ -188,6 +188,36 @@ td.col-note input{
   border-radius:7px;padding:6px 9px;font-size:.85em;font-family:var(--font-ui);outline:none;
 }
 td.col-note input:focus{border-color:var(--accent);}
+.field-input{
+  width:100%;background:transparent;border:1px solid transparent;color:inherit;
+  font:inherit;padding:4px 6px;border-radius:6px;outline:none;transition:border-color .15s, background .15s;
+}
+.field-input:hover{background:var(--elevated2);}
+.field-input:focus{background:var(--elevated2);border-color:var(--accent);}
+td.col-type .field-input{text-align:center;font-family:var(--font-mono);font-size:.85em;}
+td.col-name .field-input{font-family:var(--font-mono);font-weight:700;direction:ltr;text-align:left;}
+td.col-syntax .field-input{font-family:var(--font-mono);direction:ltr;text-align:left;font-size:.92em;}
+td.col-desc .field-input{direction:ltr;text-align:left;font-size:.92em;}
+
+/* click-to-edit fields inside the detail panel */
+.editable-field{
+  background:transparent;border:1px dashed transparent;border-radius:6px;
+  transition:border-color .15s, background .15s; outline:none; cursor:text;
+}
+.editable-field:hover{border-color:var(--elevated2);background:var(--elevated2);}
+.editable-field:focus{border-color:var(--accent);background:var(--elevated2);}
+input.editable-field.type-field{
+  font-family:var(--font-mono);font-weight:700;font-size:11px;letter-spacing:.3px;
+  color:var(--accent2);background:var(--elevated2);padding:4px 10px;border-radius:20px;
+  width:auto;min-width:60px;display:inline-block;
+}
+input.editable-field.name-field{
+  font-family:var(--font-mono);font-weight:800;font-size:22px;direction:ltr;text-align:left;
+  color:var(--text);width:100%;padding:4px 8px;margin-top:4px;
+}
+.editable-box{padding:6px 8px;min-height:1.4em;white-space:pre-wrap;word-break:break-word;}
+.codebox .editable-box{padding:0;background:none;border:1px dashed transparent;}
+.codebox .editable-box:hover, .codebox .editable-box:focus{border-color:var(--accent);background:rgba(73,216,196,.06);}
 td.col-actions{width:1%;text-align:center;padding:6px 10px;}
 .del-row-btn{
   background:transparent;border:1px solid var(--border);color:var(--danger);width:26px;height:26px;border-radius:6px;
@@ -833,6 +863,57 @@ const TYPE_AR = {
 
 function typeAr(t){ return TYPE_AR[t] || t; }
 
+/* ---------- editable fields: allow the user to edit type/name/syntax/desc of ANY instruction ---------- */
+const EDIT_STORE_KEY = 'instrRef_editedFields_v1';
+let editedFields = {};
+try{ editedFields = JSON.parse(localStorage.getItem(EDIT_STORE_KEY) || '{}'); }catch(e){ editedFields = {}; }
+
+const ORIGINAL_ROWS = {};
+Object.keys(DATA).forEach(lang=>{
+  ORIGINAL_ROWS[lang] = {};
+  (DATA[lang].rows||[]).forEach(r=>{
+    ORIGINAL_ROWS[lang][r.id] = {type:r.type, name:r.name, syntax:r.syntax, desc:r.desc, customExplain:''};
+  });
+});
+
+function applyEditedFields(){
+  Object.keys(editedFields).forEach(lang=>{
+    const bucket = editedFields[lang];
+    if(!DATA[lang]) return;
+    (DATA[lang].rows||[]).forEach(r=>{
+      const patch = bucket[r.id];
+      if(patch){
+        if(typeof patch.type === 'string') r.type = patch.type;
+        if(typeof patch.name === 'string') r.name = patch.name;
+        if(typeof patch.syntax === 'string') r.syntax = patch.syntax;
+        if(typeof patch.desc === 'string') r.desc = patch.desc;
+        if(typeof patch.customExplain === 'string') r.customExplain = patch.customExplain;
+      }
+    });
+  });
+}
+applyEditedFields();
+
+function saveEditedField(langKey, id, field, value){
+  const row = findRow(langKey, id);
+  if(!row) return;
+  row[field] = value;
+  if(!editedFields[langKey]) editedFields[langKey] = {};
+  if(!editedFields[langKey][id]) editedFields[langKey][id] = {};
+  editedFields[langKey][id][field] = value;
+  try{ localStorage.setItem(EDIT_STORE_KEY, JSON.stringify(editedFields)); }catch(e){}
+}
+
+function resetEditedField(langKey, id){
+  if(editedFields[langKey]) delete editedFields[langKey][id];
+  try{ localStorage.setItem(EDIT_STORE_KEY, JSON.stringify(editedFields)); }catch(e){}
+  const orig = ORIGINAL_ROWS[langKey] && ORIGINAL_ROWS[langKey][id];
+  const row = findRow(langKey, id);
+  if(orig && row){
+    row.type = orig.type; row.name = orig.name; row.syntax = orig.syntax; row.desc = orig.desc; row.customExplain = orig.customExplain;
+  }
+}
+
 /* ---------- comment style + example builder per language ---------- */
 const LANG_META = {
   avr:{title:"AVR Assembly", cm:";", tag:"asm"},
@@ -1160,10 +1241,10 @@ function render(){
       return `<tr data-id="${r.id}" data-lang="${r.__lang}"${trStyle}>
         <td class="col-check"><input type="checkbox" class="row-check" data-id="${r.id}" ${checked}></td>
         <td class="col-num">${hexNum}</td>
-        <td class="col-type"><span class="badge">${r.type}</span></td>
-        <td class="col-name">${r.__custom ? '<span class="custom-tag">مخصص</span>' : ''}${escapeHtml(r.name)}</td>
-        <td class="col-syntax"><code>${escapeHtml(r.syntax)}</code></td>
-        <td class="col-desc">${escapeHtml(r.desc||'—')}</td>
+        <td class="col-type"><input type="text" class="field-input type-input" data-id="${r.id}" data-lang="${r.__lang}" data-field="type" value="${escapeHtml(r.type)}" title="اضغط لتعديل النوع"></td>
+        <td class="col-name">${r.__custom ? '<span class="custom-tag">مخصص</span>' : ''}<input type="text" class="field-input name-input" data-id="${r.id}" data-lang="${r.__lang}" data-field="name" value="${escapeHtml(r.name)}" title="اضغط لتعديل الاسم"></td>
+        <td class="col-syntax"><input type="text" class="field-input syntax-input" data-id="${r.id}" data-lang="${r.__lang}" data-field="syntax" value="${escapeHtml(r.syntax)}" title="اضغط لتعديل الصيغة"></td>
+        <td class="col-desc"><input type="text" class="field-input desc-input" data-id="${r.id}" data-lang="${r.__lang}" data-field="desc" value="${escapeHtml(r.desc||'')}" placeholder="—" title="اضغط لتعديل الوصف"></td>
         ${isAll ? `<td class="col-lang">${DATA[r.__lang].label.split(' ')[0]}</td>` : ''}
         <td class="col-color"><input type="color" class="color-input" data-id="${r.id}" value="${color||'#1a2432'}"></td>
         <td class="col-note"><input type="text" class="note-input" data-id="${r.id}" placeholder="اكتب ملاحظتك هنا..." value="${escapeHtml(note)}"></td>
@@ -1174,10 +1255,23 @@ function render(){
 
     tbody.querySelectorAll('tr').forEach(tr=>{
       tr.addEventListener('click', (e)=>{
-        if(e.target.closest('.color-input,.note-input,.del-row-btn,.speak-btn,.row-check')) return;
+        if(e.target.closest('.color-input,.note-input,.del-row-btn,.speak-btn,.row-check,.field-input')) return;
         const lk = tr.dataset.lang;
         const row = findRow(lk, tr.dataset.id);
         if(row) openDetail(lk, row);
+      });
+    });
+    tbody.querySelectorAll('.field-input').forEach(inp=>{
+      inp.addEventListener('click', e=>e.stopPropagation());
+      inp.addEventListener('input', e=>{
+        saveEditedField(inp.dataset.lang, inp.dataset.id, inp.dataset.field, e.target.value);
+        if(inp.dataset.field === 'type'){
+          // keep search/filter state consistent with new type
+        }
+      });
+      inp.addEventListener('blur', ()=>{ render(); });
+      inp.addEventListener('keydown', e=>{
+        if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
       });
     });
     tbody.querySelectorAll('.row-check').forEach(chk=>{
@@ -1539,18 +1633,19 @@ const detailPanel = document.getElementById('detailPanel');
 function openDetail(langKey, row){
   const meta = LANG_META[langKey];
   const example = buildExample(langKey, row);
-  const explainAr = `هذه التعليمة/الخاصية باسم <b style="color:var(--accent);direction:ltr;display:inline-block;">${escapeHtml(row.name)}</b> تنتمي إلى مجموعة <b>${typeAr(row.type)}</b> ضمن مرجع <b>${DATA[langKey].label}</b>.<br><br>
+  const hasCustomExplain = typeof row.customExplain === 'string' && row.customExplain.trim() !== '';
+  const explainAr = hasCustomExplain ? escapeHtml(row.customExplain) : `هذه التعليمة/الخاصية باسم <b style="color:var(--accent);direction:ltr;display:inline-block;">${escapeHtml(row.name)}</b> تنتمي إلى مجموعة <b>${typeAr(row.type)}</b> ضمن مرجع <b>${DATA[langKey].label}</b>.<br><br>
   الصيغة البرمجية المستخدمة لها هي: <span class="ltr" style="display:inline-block;background:var(--elevated2);padding:2px 8px;border-radius:5px;">${escapeHtml(row.syntax)}</span><br><br>
   ${row.desc ? `وتتلخص وظيفتها في: <b>${escapeHtml(row.desc)}</b> — بمعنى أنها تُستخدم في الكود عندما نحتاج إلى تنفيذ عملية من نوع "${typeAr(row.type)}" بهذا الشكل تحديدًا.` : `وهي تُستخدم كعنصر من نوع "${typeAr(row.type)}" بالصيغة الموضحة أعلاه.`}`;
 
   detailPanel.innerHTML = `
     <div class="panel-head">
-      <div>
+      <div style="flex:1;min-width:0;">
         <div class="panel-title-row">
-          <span class="badge">${row.type}</span>
+          <input type="text" id="dTypeInput" class="editable-field type-field" value="${escapeHtml(row.type)}" title="اضغط وعدّل النوع">
           <span class="sub">${DATA[langKey].label}</span>
         </div>
-        <h2>${escapeHtml(row.name)}</h2>
+        <input type="text" id="dNameInput" class="editable-field name-field" value="${escapeHtml(row.name)}" title="اضغط وعدّل الاسم">
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;">
         <button class="close" id="speakDetailBtn" title="استمع للشرح" style="color:var(--accent);">🔊</button>
@@ -1560,23 +1655,25 @@ function openDetail(langKey, row){
     <div class="panel-body">
 
       <div class="section">
-        <h3>البيانات الأساسية</h3>
-        <div class="kv">
-          <div class="item"><div class="l">النوع</div><div class="v">${typeAr(row.type)}</div></div>
-          <div class="item"><div class="l">المرجع</div><div class="v" style="direction:rtl;text-align:right;">${DATA[langKey].label}</div></div>
+        <h3>الصيغة (Syntax) — اضغط لتعديلها</h3>
+        <div class="codebox" style="position:relative;">
+          <button class="copybtn" data-copy="${escapeHtml(row.syntax)}">نسخ</button>
+          <div id="dSyntaxInput" class="editable-field editable-box ltr" contenteditable="true" title="اضغط وعدّل الصيغة">${escapeHtml(row.syntax)}</div>
         </div>
       </div>
 
       <div class="section">
-        <h3>الشرح</h3>
-        <div class="explain">${explainAr}</div>
+        <h3>الوصف الأصلي — اضغط لتعديله</h3>
+        <div class="eng-desc" style="position:relative;">
+          <div id="dDescInput" class="editable-field editable-box ltr" contenteditable="true" title="اضغط وعدّل الوصف">${escapeHtml(row.desc||'')}</div>
+        </div>
       </div>
 
-      ${row.desc ? `
       <div class="section">
-        <h3>الوصف الأصلي (بالإنجليزية)</h3>
-        <div class="eng-desc">${escapeHtml(row.desc)}</div>
-      </div>` : ''}
+        <h3>الشرح ${hasCustomExplain ? '<span style="color:var(--accent2);font-size:.75em;font-weight:400;">(مُعدَّل بواسطتك)</span>' : ''} — اضغط لتعديله بالكامل</h3>
+        <div id="dExplainInput" class="editable-field editable-box explain" contenteditable="true" title="اضغط واكتب شرحك الخاص">${explainAr}</div>
+        ${hasCustomExplain ? `<button class="btn" id="resetExplainBtn" style="margin-top:8px;color:var(--danger);border-color:var(--danger);">استرجاع الشرح التلقائي</button>` : ''}
+      </div>
 
       ${userNotes.get(row.id) ? `
       <div class="section">
@@ -1585,19 +1682,15 @@ function openDetail(langKey, row){
       </div>` : ''}
 
       <div class="section">
-        <h3>الصيغة (Syntax)</h3>
-        <div class="codebox" style="position:relative;">
-          <button class="copybtn" data-copy="${escapeHtml(row.syntax)}">نسخ</button>
-          ${escapeHtml(row.syntax)}
-        </div>
-      </div>
-
-      <div class="section">
         <h3>مثال بالكود</h3>
         <div class="codebox" style="position:relative;">
           <button class="copybtn" data-copy="${escapeHtml(example)}">نسخ</button>
           ${escapeHtml(example)}
         </div>
+      </div>
+
+      <div class="section">
+        <button class="btn" id="resetAllBtn" style="color:var(--danger);border-color:var(--danger);">استرجاع كل شيء للأصل</button>
       </div>
 
     </div>
@@ -1612,6 +1705,56 @@ function openDetail(langKey, row){
   });
   document.getElementById('closeDetail').addEventListener('click', closeDetail);
   document.getElementById('speakDetailBtn').addEventListener('click', ()=> speakRow(row, langKey));
+
+  // click-to-edit, auto-save: every field saves as you type, no separate save button
+  const typeInput = document.getElementById('dTypeInput');
+  typeInput.addEventListener('input', ()=>{
+    saveEditedField(langKey, row.id, 'type', typeInput.value);
+  });
+
+  const nameInput = document.getElementById('dNameInput');
+  nameInput.addEventListener('input', ()=>{
+    saveEditedField(langKey, row.id, 'name', nameInput.value);
+  });
+
+  const syntaxBox = document.getElementById('dSyntaxInput');
+  syntaxBox.addEventListener('input', ()=>{
+    saveEditedField(langKey, row.id, 'syntax', syntaxBox.textContent);
+  });
+
+  const descBox = document.getElementById('dDescInput');
+  descBox.addEventListener('input', ()=>{
+    saveEditedField(langKey, row.id, 'desc', descBox.textContent);
+  });
+
+  const explainBox = document.getElementById('dExplainInput');
+  explainBox.addEventListener('input', ()=>{
+    saveEditedField(langKey, row.id, 'customExplain', explainBox.innerHTML);
+  });
+
+  // when leaving the type/name/syntax/desc fields, refresh the list + header so changes reflect everywhere
+  [typeInput, nameInput].forEach(el=>{
+    el.addEventListener('blur', ()=>{ render(); });
+  });
+  [syntaxBox, descBox].forEach(el=>{
+    el.addEventListener('blur', ()=>{ render(); });
+  });
+
+  const resetExplainBtn = document.getElementById('resetExplainBtn');
+  if(resetExplainBtn){
+    resetExplainBtn.addEventListener('click', ()=>{
+      saveEditedField(langKey, row.id, 'customExplain', '');
+      row.customExplain = '';
+      openDetail(langKey, row);
+    });
+  }
+
+  document.getElementById('resetAllBtn').addEventListener('click', ()=>{
+    resetEditedField(langKey, row.id);
+    render();
+    openDetail(langKey, findRow(langKey, row.id));
+  });
+
   detailOverlay.classList.add('show');
 }
 function closeDetail(){ detailOverlay.classList.remove('show'); }
