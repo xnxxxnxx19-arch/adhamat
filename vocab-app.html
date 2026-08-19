@@ -622,6 +622,10 @@
   .cycle-step.current{opacity:1; background:var(--ink); color:var(--card);}
   .cycle-step.done{opacity:.8; text-decoration:line-through; background:var(--teal); color:#fff; border-color:var(--teal);}
   .cycle-arrow{opacity:.6; font-size:12px;}
+  #writingModeChips.chips-locked .chip{opacity:.45; cursor:not-allowed;}
+  #writingModeChips.chips-locked .chip.active{opacity:1; box-shadow:var(--glow);}
+  #quizModeChips.chips-locked .chip{opacity:.45; cursor:not-allowed;}
+  #quizModeChips.chips-locked .chip.active{opacity:1; box-shadow:var(--glow);}
 
   /* ---- Word detail bar (writing page — consistent across every stage) ---- */
   .word-detail-bar{
@@ -919,7 +923,7 @@
   <section class="view" id="view-quiz">
     <div id="quizSelectionBanner" style="display:none;"></div>
     <div id="quizCycleBanner" class="cycle-banner" style="display:none;"></div>
-    <div class="catalog-tabs">
+    <div class="catalog-tabs" id="quizModeChips">
       <span class="chip" id="quizModeChoice-mc" data-mode="mc">اختيار من متعدد</span>
       <span class="chip" id="quizModeChoice-type" data-mode="type">اكتب الترجمة</span>
       <span class="chip" id="quizModeChoice-en" data-mode="en">اكتب الكلمة الإنجليزية</span>
@@ -934,7 +938,7 @@
     <div id="pipelineBanner"></div>
     <div id="writingCycleBanner" class="cycle-banner" style="display:none;"></div>
     <div id="writingSelectionBanner" style="display:none;"></div>
-    <div class="catalog-tabs">
+    <div class="catalog-tabs" id="writingModeChips">
       <span class="chip" data-wmode="trace">تتبّع بخط اليد</span>
       <span class="chip" data-wmode="recall">استرجاع حر (ارسم)</span>
       <span class="chip" data-wmode="typed">تكرار كتابي</span>
@@ -2033,8 +2037,14 @@
   let quizCycleStreak = 0;
   function renderQuizCycleBanner(){
     const el = document.getElementById("quizCycleBanner");
+    const chipsRow = document.getElementById("quizModeChips");
     if(!el) return;
-    if(!quizCycleActive || !quizCycleWord){ el.style.display = "none"; el.innerHTML = ""; return; }
+    if(!quizCycleActive || !quizCycleWord){
+      el.style.display = "none"; el.innerHTML = "";
+      if(chipsRow) chipsRow.classList.remove("chips-locked");
+      return;
+    }
+    if(chipsRow) chipsRow.classList.add("chips-locked");
     el.style.display = "flex";
     const stepsHtml = QUIZ_CYCLE_STAGES.map((s,i)=>{
       const cls = i < quizCycleStageIdx ? "done" : (i === quizCycleStageIdx ? "current" : "");
@@ -2044,11 +2054,26 @@
     el.innerHTML = `
       <span>🔁 دورة تلقائية على كلمة: <b style="direction:ltr; display:inline-block;">${escapeHtml(quizCycleWord.word)}</b></span>
       <span class="cycle-steps">${stepsHtml}</span>
-      <button type="button" class="btn ghost small" id="stopQuizCycleBtn">إيقاف الدورة</button>
+      <span style="display:flex; gap:6px;">
+        <button type="button" class="btn ghost small" id="skipQuizStageBtn">⏭️ تخطي هذه المرحلة</button>
+        <button type="button" class="btn ghost small" id="stopQuizCycleBtn">إيقاف الدورة</button>
+      </span>
     `;
+    document.getElementById("skipQuizStageBtn").addEventListener("click", ()=>{
+      quizCycleStreak = 0;
+      quizCycleStageIdx++;
+      if(quizCycleStageIdx >= QUIZ_CYCLE_STAGES.length){
+        quizCycleStageIdx = 0;
+        quizCycleWord = pickQuizWord();
+      }
+      renderQuiz();
+    });
     document.getElementById("stopQuizCycleBtn").addEventListener("click", ()=>{
+      state.settings.cycleQuiz = false;
+      save();
       quizCycleActive = false; quizCycleWord = null;
       renderQuiz();
+      toast("⏸️ تم إيقاف الدورة التلقائية. تقدر تفعّلها تاني من زرار 🔁.", "ok");
     });
   }
   function startQuizCycle(){
@@ -2078,7 +2103,10 @@
 
   document.querySelectorAll("[id^='quizModeChoice']").forEach(el=>{
     el.addEventListener("click", ()=>{
-      if(quizCycleActive){ quizCycleActive = false; quizCycleWord = null; }
+      if(state.settings.cycleQuiz && quizCycleActive){
+        toast("🔁 الدورة التلقائية شغالة دلوقتي — دوس \"إيقاف الدورة\" في الشريط اللي فوق لو عاوز تختار وضع يدوي.", "warn");
+        return;
+      }
       document.querySelectorAll("[id^='quizModeChoice']").forEach(e=>e.classList.remove("active"));
       el.classList.add("active");
       if(speedTimerHandle){ clearInterval(speedTimerHandle); speedTimerHandle=null; speedActive=false; }
@@ -2132,7 +2160,11 @@
 
     // ---- وضع الدورة التلقائية: نفس الكلمة تتنقل تلقائيًا بين المراحل الثلاث ----
     if(state.settings.cycleQuiz){
-      if(!quizCycleActive || !quizCycleWord) startQuizCycle();
+      // لو الكلمة الحالية بقت خارج نطاق التحديد/المجموعة الحالي (تغيّر من
+      // تبويب «الكلمات»)، نبدأ دورة جديدة فورًا بكلمة من النطاق الجديد.
+      const scope = quizPool();
+      const stillInScope = quizCycleActive && quizCycleWord && scope.some(w=> w.id === quizCycleWord.id);
+      if(!stillInScope) startQuizCycle();
       quizMode = QUIZ_CYCLE_STAGES[quizCycleStageIdx];
       document.querySelector("[id^='quizModeChoice-"+quizMode+"']")?.classList.add("active");
       renderQuizCycleBanner();
@@ -2551,8 +2583,14 @@
   function cycleCurrentStage(){ return WRITING_CYCLE_STAGES[cycleStageIdx]; }
   function renderCycleBanner(){
     const el = document.getElementById("writingCycleBanner");
+    const chipsRow = document.getElementById("writingModeChips");
     if(!el) return;
-    if(!cycleActive || !cycleWord){ el.style.display = "none"; el.innerHTML = ""; return; }
+    if(!cycleActive || !cycleWord){
+      el.style.display = "none"; el.innerHTML = "";
+      if(chipsRow) chipsRow.classList.remove("chips-locked");
+      return;
+    }
+    if(chipsRow) chipsRow.classList.add("chips-locked");
     el.style.display = "flex";
     const stepsHtml = WRITING_CYCLE_STAGES.map((s,i)=>{
       const cls = i < cycleStageIdx ? "done" : (i === cycleStageIdx ? "current" : "");
@@ -2561,9 +2599,24 @@
     el.innerHTML = `
       <span>🔁 دورة تلقائية على كلمة: <b style="direction:ltr; display:inline-block;">${escapeHtml(cycleWord.word)}</b></span>
       <span class="cycle-steps">${stepsHtml}</span>
-      <button type="button" class="btn ghost small" id="stopCycleBtn">إيقاف الدورة</button>
+      <span style="display:flex; gap:6px;">
+        <button type="button" class="btn ghost small" id="skipStageBtn">⏭️ تخطي هذه المرحلة</button>
+        <button type="button" class="btn ghost small" id="stopCycleBtn">إيقاف الدورة</button>
+      </span>
     `;
-    document.getElementById("stopCycleBtn").addEventListener("click", stopWritingCycle);
+    document.getElementById("skipStageBtn").addEventListener("click", ()=>{
+      // مفيد لو مرحلة معينة (زي التتبع بخط اليد اللي محتاج تعرّف ضوئي دقيق)
+      // صعبة أو مش شغالة كويس عندك — تقدر تتخطاها من غير ما توقف الدورة كلها.
+      cycleAdvanceFromWriting();
+    });
+    document.getElementById("stopCycleBtn").addEventListener("click", ()=>{
+      // إيقاف حقيقي ودائم: بنطفي الإعداد نفسه، مش بس الحالة اللحظية، عشان
+      // الدورة مترجعش تشتغل تلقائي تاني أول ما تدخل الصفحة أو تغيّر تاب.
+      state.settings.cycleWriting = false;
+      save();
+      stopWritingCycle();
+      toast("⏸️ تم إيقاف الدورة التلقائية. تقدر تفعّلها تاني من زرار 🔁.", "ok");
+    });
   }
   function startWritingCycle(){
     cycleActive = true;
@@ -2610,7 +2663,13 @@
   document.querySelectorAll("[data-wmode]").forEach(chip=>{
     chip.addEventListener("click", ()=>{
       if(pipelineActive) stopPipelineSession();
-      if(cycleActive) stopWritingCycle();
+      // لو الدورة التلقائية شغالة، منسمحش لدوسة على شريحة إنها توقفها من غير
+      // ما المستخدم ياخد باله — لازم يوقفها بوضوح من زرار "إيقاف الدورة" فى
+      // البانر (أو من إعدادات 🔁) عشان محدش يتفاجئ إنها بطّلت تتحرك تلقائيًا.
+      if(cycleActive){
+        toast("🔁 الدورة التلقائية شغالة دلوقتي — دوس \"إيقاف الدورة\" في الشريط اللي فوق لو عاوز تختار وضع يدوي.", "warn");
+        return;
+      }
       document.querySelectorAll("[data-wmode]").forEach(c=>c.classList.remove("active"));
       chip.classList.add("active");
       writingMode = chip.dataset.wmode;
@@ -2641,7 +2700,13 @@
     renderWritingSettingsPanel();
     if(!has){ stopWritingCycle(); updateWordDetailBar(null); return; }
     if(state.settings.cycleWriting){
-      if(!cycleActive) startWritingCycle(); else goToCycleStage();
+      // لو الكلمة الحالية فى الدورة بقت خارج نطاق التحديد/المجموعة الحالي
+      // (يعني المستخدم غيّر تحديده من تبويب «الكلمات»)، نبدأ الدورة من جديد
+      // فورًا بكلمة من النطاق الجديد، بدل ما نكمل على كلمة بايظة.
+      const scope = filteredWords();
+      const stillInScope = cycleActive && cycleWord && scope.some(w=> w.id === cycleWord.id);
+      if(!stillInScope) startWritingCycle();
+      else goToCycleStage();
       return;
     }
     if(cycleActive) stopWritingCycle();
