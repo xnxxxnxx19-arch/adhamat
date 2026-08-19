@@ -812,8 +812,15 @@ footer{max-width:1400px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);
       </div>
 
       <div class="setting-group">
-        <label>النسخ الاحتياطي للتعديلات</label>
-        <div class="form-hint">التعليمات المضافة، الألوان، والملاحظات مؤقتة وتُفقد عند إغلاق الصفحة. صدّرها كملف JSON واستوردها لاحقًا لاسترجاعها.</div>
+        <label>الحفظ التلقائي</label>
+        <div class="form-hint" id="autoSaveStatusText">كل تعديلاتك بتتحفظ أوتوماتيك في هذا المتصفح. لو بتفتح الملف من مكان بيتغيّر (مثل تنزيل جديد من GitHub)، اربط ملف نسخة احتياطية عشان الحفظ يبقى تلقائي فعليًا حتى بعد إعادة التنزيل.</div>
+        <button class="btn" style="width:100%;justify-content:center;margin-bottom:8px;" id="linkFileBtn">🔗 ربط ملف حفظ تلقائي</button>
+        <button class="btn" style="width:100%;justify-content:center;margin-bottom:8px;display:none;" id="reconnectFileBtn">🔄 إعادة تفعيل الحفظ التلقائي</button>
+      </div>
+
+      <div class="setting-group">
+        <label>النسخ الاحتياطي اليدوي</label>
+        <div class="form-hint">بديل يدوي: صدّر كل تعديلاتك كملف JSON واستوردها لاحقًا لاسترجاعها.</div>
         <button class="btn" style="width:100%;justify-content:center;margin-bottom:8px;" id="exportBtn">⬇ تصدير التعديلات (JSON)</button>
         <button class="btn" style="width:100%;justify-content:center;" id="importBtn">⬆ استيراد التعديلات</button>
         <input type="file" id="importFile" accept="application/json" style="display:none;">
@@ -2389,6 +2396,9 @@ function buildPayload(){
     swipeFrameColor: Object.fromEntries(swipeFrameColor),
     cstdCellColors: cstdCellColors,
     quizBank: quizBank,
+    editedFields: editedFields,
+    cstdNotes: cstdNotes,
+    allLangNotes: allLangNotes,
   };
 }
 
@@ -2416,6 +2426,13 @@ function applyPayload(payload){
   cstdSaveCellColors();
   quizBank = payload.quizBank || {};
   saveQuizBank();
+  editedFields = payload.editedFields || {};
+  try{ localStorage.setItem(EDIT_STORE_KEY, JSON.stringify(editedFields)); }catch(e){}
+  applyEditedFields();
+  cstdNotes = payload.cstdNotes || {};
+  cstdSaveNotes();
+  allLangNotes = payload.allLangNotes || {};
+  allLangSaveNotes();
   if(payload.settings){
     cfg = Object.assign({}, DEFAULTS, payload.settings);
     applyVars(cfg);
@@ -2839,6 +2856,186 @@ document.getElementById('cstdBackBtn').addEventListener('click', ()=>{
   cstdSetMainVisible(true);
   render();
 });
+
+/* ---------- auto-save: unified state (covers notes/colors/custom rows/settings that were memory-only) ---------- */
+const APP_STATE_KEY = 'instrRef_fullState_v1';
+
+(function loadUnifiedStateOnStartup(){
+  try{
+    const raw = localStorage.getItem(APP_STATE_KEY);
+    if(raw){
+      const payload = JSON.parse(raw);
+      applyPayload(payload); // applyPayload() also calls render()
+    }
+  }catch(e){ /* ignore corrupt state, fall back to defaults */ }
+})();
+
+function saveUnifiedStateNow(){
+  try{ localStorage.setItem(APP_STATE_KEY, JSON.stringify(buildPayload())); }catch(e){}
+  scheduleFileWrite();
+}
+let unifiedSaveTimer = null;
+function scheduleUnifiedSave(){
+  clearTimeout(unifiedSaveTimer);
+  unifiedSaveTimer = setTimeout(saveUnifiedStateNow, 800);
+}
+// periodic safety-net: catches edits to in-memory Maps (userNotes, colors, customRows, swipe data, settings)
+// that don't go through one of the named save*() functions above.
+setInterval(saveUnifiedStateNow, 4000);
+window.addEventListener('beforeunload', saveUnifiedStateNow);
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) saveUnifiedStateNow(); });
+
+/* ---------- auto-save: linked backup file (File System Access API — survives re-downloading the HTML) ---------- */
+const FS_SUPPORTED = typeof window.showSaveFilePicker === 'function';
+let linkedFileHandle = null;
+
+function idbOpen(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open('instrRefFileLinkDB', 1);
+    req.onupgradeneeded = ()=> req.result.createObjectStore('handles');
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function idbGetHandle(){
+  try{
+    const db = await idbOpen();
+    return await new Promise((resolve)=>{
+      const tx = db.transaction('handles','readonly');
+      const rq = tx.objectStore('handles').get('backup');
+      rq.onsuccess = ()=> resolve(rq.result || null);
+      rq.onerror = ()=> resolve(null);
+    });
+  }catch(e){ return null; }
+}
+async function idbSetHandle(handle){
+  try{
+    const db = await idbOpen();
+    await new Promise((resolve)=>{
+      const tx = db.transaction('handles','readwrite');
+      tx.objectStore('handles').put(handle, 'backup');
+      tx.oncomplete = resolve;
+      tx.onerror = resolve;
+    });
+  }catch(e){}
+}
+
+function setAutoSaveStatus(text){
+  const el = document.getElementById('autoSaveStatusText');
+  if(el) el.textContent = text;
+}
+
+let fileWriteTimer = null;
+function scheduleFileWrite(){
+  if(!linkedFileHandle) return;
+  clearTimeout(fileWriteTimer);
+  fileWriteTimer = setTimeout(writeLinkedFileNow, 800);
+}
+async function writeLinkedFileNow(){
+  if(!linkedFileHandle) return;
+  try{
+    const perm = await linkedFileHandle.queryPermission({mode:'readwrite'});
+    if(perm !== 'granted') return; // needs a click to re-grant; handled by reconnect button
+    const writable = await linkedFileHandle.createWritable();
+    await writable.write(JSON.stringify(buildPayload(), null, 2));
+    await writable.close();
+  }catch(e){ /* ignore transient write errors */ }
+}
+
+async function loadLinkedFile(){
+  try{
+    const file = await linkedFileHandle.getFile();
+    const text = await file.text();
+    if(text.trim()){
+      applyPayload(JSON.parse(text));
+    }
+  }catch(e){ /* empty or invalid file — keep current state, will overwrite on next save */ }
+}
+
+async function tryReconnectSilently(){
+  if(!FS_SUPPORTED) { setAutoSaveStatus('الحفظ التلقائي لملف خارجي غير مدعوم في هذا المتصفح — استخدم كروم أو إيدج لهذه الميزة. تعديلاتك محفوظة تلقائيًا في هذا المتصفح فقط.'); return; }
+  const handle = await idbGetHandle();
+  if(!handle){ return; }
+  try{
+    const perm = await handle.queryPermission({mode:'readwrite'});
+    if(perm === 'granted'){
+      linkedFileHandle = handle;
+      await loadLinkedFile();
+      setAutoSaveStatus('✓ الحفظ التلقائي مفعّل على ملف: ' + handle.name);
+      document.getElementById('linkFileBtn').style.display = 'none';
+      document.getElementById('reconnectFileBtn').style.display = 'none';
+    }else{
+      linkedFileHandle = handle;
+      setAutoSaveStatus('كان الحفظ التلقائي مفعّلاً على ملف "' + handle.name + '" — اضغط لإعادة التفعيل (المتصفح بيطلب تأكيد الإذن أحيانًا).');
+      document.getElementById('linkFileBtn').style.display = 'none';
+      document.getElementById('reconnectFileBtn').style.display = '';
+    }
+  }catch(e){}
+}
+
+async function linkNewBackupFile(){
+  if(!FS_SUPPORTED){
+    alert('هذه الميزة تحتاج متصفح كروم أو إيدج على الكمبيوتر. تعديلاتك بتتحفظ أوتوماتيك في هذا المتصفح، لكن للحفظ في ملف خارجي يفضل يفضل مفتوح حتى لو نزّلت نسخة جديدة من الملف، استخدم كروم/إيدج.');
+    return;
+  }
+  try{
+    let handle;
+    try{
+      // let the user pick an existing backup file (e.g. from a previous session) to resume from
+      handle = await window.showOpenFilePicker({
+        types: [{description:'ملف نسخة احتياطية', accept:{'application/json':['.json']}}],
+        excludeAcceptAllOption:false,
+        multiple:false,
+      }).then(list=> list[0]);
+    }catch(cancelErr){
+      return; // user closed the picker
+    }
+    const perm = await handle.requestPermission({mode:'readwrite'});
+    if(perm !== 'granted'){ alert('محتاج إذن الكتابة عشان الحفظ التلقائي يشتغل.'); return; }
+    linkedFileHandle = handle;
+    await idbSetHandle(handle);
+    await loadLinkedFile();
+    await writeLinkedFileNow();
+    setAutoSaveStatus('✓ الحفظ التلقائي مفعّل على ملف: ' + handle.name);
+    document.getElementById('linkFileBtn').style.display = 'none';
+    document.getElementById('reconnectFileBtn').style.display = 'none';
+  }catch(e){}
+}
+
+async function createNewBackupFile(){
+  if(!FS_SUPPORTED) return;
+  try{
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'instruction-backup.json',
+      types: [{description:'ملف نسخة احتياطية', accept:{'application/json':['.json']}}],
+    });
+    linkedFileHandle = handle;
+    await idbSetHandle(handle);
+    await writeLinkedFileNow();
+    setAutoSaveStatus('✓ الحفظ التلقائي مفعّل على ملف: ' + handle.name);
+    document.getElementById('linkFileBtn').style.display = 'none';
+    document.getElementById('reconnectFileBtn').style.display = 'none';
+  }catch(e){ /* user cancelled */ }
+}
+
+document.getElementById('linkFileBtn').addEventListener('click', async ()=>{
+  const choice = confirm('اضغط "موافق" لاختيار ملف نسخة احتياطية موجود بالفعل (لو عندك واحد من قبل)، أو "إلغاء" لإنشاء ملف جديد.');
+  if(choice) await linkNewBackupFile();
+  else await createNewBackupFile();
+});
+document.getElementById('reconnectFileBtn').addEventListener('click', async ()=>{
+  if(!linkedFileHandle) return;
+  try{
+    const perm = await linkedFileHandle.requestPermission({mode:'readwrite'});
+    if(perm === 'granted'){
+      await loadLinkedFile();
+      setAutoSaveStatus('✓ الحفظ التلقائي مفعّل على ملف: ' + linkedFileHandle.name);
+      document.getElementById('reconnectFileBtn').style.display = 'none';
+    }
+  }catch(e){}
+});
+
+tryReconnectSilently();
 
 /* ---------- init ---------- */
 render();
