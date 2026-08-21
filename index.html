@@ -11,12 +11,17 @@
     padding:0 8px; background:#1c2128; border-bottom:1px solid #30363d; overflow-x:auto;
   }
   #switchBar button{
-    flex:1; min-width:110px; height:38px; border:none; border-radius:8px; cursor:pointer;
-    font-size:.85rem; font-weight:bold; font-family:inherit; white-space:nowrap;
+    flex:1; min-width:90px; height:38px; border:none; border-radius:8px; cursor:pointer;
+    font-size:.72rem; font-weight:bold; font-family:inherit; white-space:nowrap;
     background:#2a303a; color:#c9c2a8; transition:background .15s, color .15s;
+    overflow:hidden; text-overflow:ellipsis; padding:0 6px;
   }
   #switchBar button.active{ background:#1f8a4c; color:#fff; }
   #switchBar button:not(.active):hover{ background:#333a46; }
+  #switchBar button.appBtn{ cursor:grab; }
+  #switchBar button.appBtn:active{ cursor:grabbing; }
+  #switchBar button.dragging{ opacity:.4; }
+  #switchBar button.dragOver{ box-shadow: inset 3px 0 0 #1f8a4c; }
   #frameWrap{ position:absolute; top:52px; left:0; right:0; bottom:0; }
   #frameWrap iframe{
     position:absolute; top:0; left:0; width:100%; height:100%; border:none; background:#fff;
@@ -46,15 +51,16 @@
 <body>
 
 <div id="switchBar">
-  <button type="button" id="btnShowEnglish">🔤 تطبيق الإنجليزي</button>
-  <button type="button" id="btnShowEditor">📘 المحرر البرمجي</button>
-  <button type="button" id="btnShowMeals">🍽️ متتبع الوجبات</button>
-  <button type="button" id="btnShowVocab">🃏 بطاقاتي</button>
-  <button type="button" id="btnShowCodeLib">🗒️ مذكرة الأكواد</button>
-  <button type="button" id="btnShowInstructions">📚 مرجع التعليمات</button>
-  <button type="button" id="btnShowCenter" class="active">📊 مركز القيادة</button>
-  <button type="button" id="btnShowMindmap">🧠 الخرائط الأصلية</button>
-  <button type="button" id="btnShowDrawing">✏️ نظام الرسم</button>
+  <button type="button" class="appBtn" id="btnShowEnglish" data-key="english" draggable="true">🔤 English App</button>
+  <button type="button" class="appBtn" id="btnShowEditor" data-key="editor" draggable="true">📘 Code Editor</button>
+  <button type="button" class="appBtn" id="btnShowMeals" data-key="meals" draggable="true">🍽️ Meal Tracker</button>
+  <button type="button" class="appBtn" id="btnShowVocab" data-key="vocab" draggable="true">🃏 Flashcards</button>
+  <button type="button" class="appBtn" id="btnShowCodeLib" data-key="codelib" draggable="true">🗒️ Code Notes</button>
+  <button type="button" class="appBtn" id="btnShowInstructions" data-key="instructions" draggable="true">📚 Instructions</button>
+  <button type="button" class="appBtn active" id="btnShowCenter" data-key="center" draggable="true">📊 Command Center</button>
+  <button type="button" class="appBtn" id="btnShowMindmap" data-key="mindmap" draggable="true">🧠 Mind Maps</button>
+  <button type="button" class="appBtn" id="btnShowDrawing" data-key="drawing" draggable="true">✏️ Drawing</button>
+  <button type="button" class="appBtn" id="btnShowWorkshop" data-key="workshop" draggable="true">🧰 Workshop Inventory</button>
   <div class="divider"></div>
   <button type="button" class="backupBtn" id="btnExportAll" title="تصدير نسخة احتياطية كاملة (كل التطبيقات + الصور)">⬇️</button>
   <button type="button" class="backupBtn" id="btnImportAll" title="استيراد نسخة احتياطية كاملة">⬆️</button>
@@ -77,6 +83,7 @@
   <iframe id="frameCenter" src="command-center.html" style="display:block;"></iframe>
   <iframe id="frameMindmap" src="mindmap-standalone.html" data-fallback="mindmap-standalone_1787255479904.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameDrawing" src="drawing-standalone.html" data-fallback="drawing-standalone_1787255479867.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
+  <iframe id="frameWorkshop" src="workshop_inventory.html" style="display:none;"></iframe>
 </div>
 
 <script>
@@ -90,6 +97,7 @@
     center: document.getElementById('btnShowCenter'),
     mindmap: document.getElementById('btnShowMindmap'),
     drawing: document.getElementById('btnShowDrawing'),
+    workshop: document.getElementById('btnShowWorkshop'),
   };
   const frames = {
     english: document.getElementById('frameEnglish'),
@@ -101,6 +109,7 @@
     center: document.getElementById('frameCenter'),
     mindmap: document.getElementById('frameMindmap'),
     drawing: document.getElementById('frameDrawing'),
+    workshop: document.getElementById('frameWorkshop'),
   };
 
   function showApp(key){
@@ -166,6 +175,79 @@
   buttons.center.addEventListener('click', () => showApp('center'));
   buttons.mindmap.addEventListener('click', () => showApp('mindmap'));
   buttons.drawing.addEventListener('click', () => showApp('drawing'));
+  buttons.workshop.addEventListener('click', () => showApp('workshop'));
+
+  /* ============================================================
+     ترتيب الأزرار بالسحب والإفلات (Drag & Drop) — الترتيب بيتحفظ
+     في localStorage وبيتطبق تلقائيًا في كل مرة تفتح فيها الصفحة.
+  ============================================================ */
+  const ORDER_KEY = 'command_center_button_order_v1';
+  const switchBar = document.getElementById('switchBar');
+
+  function applyStoredOrder(){
+    let order;
+    try{ order = JSON.parse(localStorage.getItem(ORDER_KEY) || 'null'); }catch(e){ order = null; }
+    if(!Array.isArray(order)) return;
+    const divider = switchBar.querySelector('.divider');
+    order.forEach(key => {
+      const btn = buttons[key];
+      if(btn) switchBar.insertBefore(btn, divider);
+    });
+  }
+
+  function saveCurrentOrder(){
+    const order = Array.from(switchBar.querySelectorAll('.appBtn')).map(b => b.dataset.key);
+    localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+  }
+
+  applyStoredOrder();
+
+  /* بتصغّر حجم خط أي زرار لحد ما نصه يبقى داخل حدوده تمامًا، من غير ما
+     يخرج برا الإطار. بتشتغل عند التحميل وعند تغيير حجم الشاشة. */
+  function fitButtonText(btn){
+    const maxSize = 11.5;
+    const minSize = 7;
+    let size = maxSize;
+    btn.style.fontSize = size + 'px';
+    while(btn.scrollWidth > btn.clientWidth && size > minSize){
+      size -= 0.5;
+      btn.style.fontSize = size + 'px';
+    }
+  }
+  function fitAllButtons(){
+    document.querySelectorAll('#switchBar .appBtn').forEach(fitButtonText);
+  }
+  fitAllButtons();
+  window.addEventListener('resize', fitAllButtons);
+
+  let draggedBtn = null;
+  document.querySelectorAll('.appBtn').forEach(btn => {
+    btn.addEventListener('dragstart', (e) => {
+      draggedBtn = btn;
+      btn.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    btn.addEventListener('dragend', () => {
+      btn.classList.remove('dragging');
+      draggedBtn = null;
+      document.querySelectorAll('.appBtn.dragOver').forEach(b => b.classList.remove('dragOver'));
+      saveCurrentOrder();
+      fitAllButtons();
+    });
+    btn.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if(!draggedBtn || draggedBtn === btn) return;
+      btn.classList.add('dragOver');
+      const rect = btn.getBoundingClientRect();
+      const before = (e.clientX - rect.left) < rect.width / 2;
+      switchBar.insertBefore(draggedBtn, before ? btn : btn.nextSibling);
+    });
+    btn.addEventListener('dragleave', () => btn.classList.remove('dragOver'));
+    btn.addEventListener('drop', (e) => {
+      e.preventDefault();
+      btn.classList.remove('dragOver');
+    });
+  });
 
   /* ============================================================
      نسخة احتياطية موحّدة لكل التطبيقات (تصدير/استيراد ملف واحد)
