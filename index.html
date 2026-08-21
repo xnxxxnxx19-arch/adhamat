@@ -135,16 +135,26 @@
       const doc = frames[key].contentWindow.document;
       if(doc.__hubTrackingAttached) return;
       doc.__hubTrackingAttached = true;
-      doc.addEventListener('click', () => recordActivity(key, 'تم الضغط داخل التطبيق'), true);
-      doc.addEventListener('input', () => recordActivity(key, 'تم إدخال أو تعديل بيانات'), true);
+      const track = type => recordActivity(key, type === 'input' ? 'تم إدخال أو تعديل بيانات' : 'تم استخدام التطبيق');
+      doc.addEventListener('click', () => track('click'), true);
+      doc.addEventListener('pointerdown', () => track('pointerdown'), true);
+      doc.addEventListener('input', () => track('input'), true);
+      doc.addEventListener('change', () => track('change'), true);
+      doc.addEventListener('submit', () => track('submit'), true);
+      doc.addEventListener('keydown', () => track('keydown'), true);
     }catch(e){}
   }
   Object.keys(frames).forEach(key => {
     frames[key].addEventListener('load', () => attachInteractionTracking(key));
   });
+  setInterval(() => Object.keys(frames).forEach(attachInteractionTracking), 900);
   window.addEventListener('message', (ev) => {
     const msg = ev.data || {};
-    if(msg.type === 'HUB_OPEN_APP' && frames[msg.app]) showApp(msg.app);
+    if(msg.type === 'HUB_OPEN_APP' && frames[msg.app]){
+      showApp(msg.app);
+      if(ev.source) ev.source.postMessage({type:'HUB_OPEN_APP_ACK', requestId:msg.requestId}, '*');
+      if(msg.app !== 'center') recordActivity(msg.app, 'تم فتح التطبيق من مركز القيادة');
+    }
   });
 
   buttons.english.addEventListener('click', () => showApp('english'));
