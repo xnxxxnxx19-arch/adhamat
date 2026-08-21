@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خريطة ذهنية — نظام مستقل</title>
+<style>
+  * { box-sizing: border-box; }
+  :root, [data-theme="classic"]{
+    --paper:#f2e9d8; --paper-card:#f9f3e6; --paper-shadow:#d8c9a8;
+    --ink:#2e2a22; --ink-soft:#6c6250; --rule:#c9b896;
+    --accent:#5c7a52; --accent-rgb:92,122,82; --accent-dark:#41592e;
+    --marker:#f2c94c; --danger:#a63a3a; --surface:#ffffff; --surface-soft:#fffdf7;
+    --tint:#eef3ea; --on-accent:#ffffff;
+  }
+  body{
+    margin:0; padding:24px; font-family:"Cairo","Amiri",serif;
+    background:var(--paper); color:var(--ink);
+  }
+  h1{font-size:18px; color:var(--accent-dark);}
+  .wrap-outer{max-width:980px; margin:0 auto;}
+  button{
+    background:var(--surface); color:var(--ink); border:1.5px solid var(--rule);
+    padding:7px 12px; border-radius:8px; cursor:pointer; font-size:13px; font-family:inherit;
+    transition:border-color .15s, transform .1s, background .15s;
+  }
+  button:hover{border-color:var(--accent);}
+  button:active{transform:scale(.97);}
+  button.primary{background:var(--accent); color:var(--on-accent); border-color:var(--accent-dark); font-weight:700;}
+  button.primary:hover{background:var(--accent-dark);}
+  button.ghost{background:transparent;}
+  button.danger{color:var(--danger); border-color:#e0bcbc;}
+  button.small{padding:3px 9px; font-size:11px;}
+  input[type=text], input[type=search]{
+    background:var(--surface); border:1.5px solid var(--rule); color:var(--ink);
+    padding:7px 10px; border-radius:8px; font-size:13px; font-family:inherit;
+  }
+  textarea.rawinput{
+    width:100%; min-height:160px; background:var(--surface-soft); border:1.5px solid var(--rule);
+    color:var(--ink); border-radius:8px; padding:10px; font-size:13px; direction:rtl; font-family:inherit;
+  }
+  .addbox-actions{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .fs-overlay{
+    position:fixed; inset:0; background:var(--paper-card); z-index:200;
+    display:flex;
+  }
+  .fs-box{
+    background:var(--paper-card); width:100%; height:100%;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .fs-head{display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1.5px solid var(--rule); flex-shrink:0;}
+  .fs-head strong{font-size:15px;}
+  .fs-body{flex:1; overflow:auto; padding:18px;}
+  #toastWrap{position:fixed; bottom:18px; inset-inline:0; display:flex; flex-direction:column; align-items:center; gap:8px; z-index:300; pointer-events:none; padding:0 14px;}
+  .toast{
+    background:var(--ink); color:#fdf8ec; padding:10px 16px; border-radius:10px; font-size:13px;
+    box-shadow:0 4px 14px rgba(0,0,0,.25); max-width:520px; text-align:center; opacity:0; transform:translateY(8px);
+    transition:opacity .25s, transform .25s;
+  }
+  .toast.err{background:var(--danger);}
+  .toast.show{opacity:1; transform:translateY(0);}
+  /* ============================== خريطة ذهنية (mind map panel) ============================== */
+  .mindmap-panel{
+    border:1px solid var(--rule); border-radius:8px; overflow:hidden; background:var(--surface);
+    --mm-bg:#fbf9f2; --mm-node:#ffffff; --mm-node-border:#c9bd9a; --mm-text:#241f1a; --mm-line:#a99b74;
+  }
+  .mindmap-panel:focus{outline:none; box-shadow:inset 0 0 0 2px rgba(122,92,45,.25);}
+  .mindmap-panel.mm-dark{ --mm-bg:#1c1a16; --mm-node:#2a2620; --mm-node-border:#4a4436; --mm-text:#efe9da; --mm-line:#8a7f60; }
+  .mm-toolbar{
+    display:flex; gap:5px; flex-wrap:wrap; align-items:center; padding:7px 9px;
+    background:var(--paper); border-bottom:1px solid var(--rule);
+  }
+  .mm-toolbar button{font-size:11.5px; padding:4px 8px;}
+  .mm-toolbar select, .mm-toolbar input[type="text"]{font-size:11.5px; padding:3px 6px; border:1px solid var(--rule); border-radius:5px;}
+  .mm-toolbar input[type="text"].mm-search{width:110px;}
+  .mm-toolbar .mm-sep{width:1px; align-self:stretch; background:var(--rule); margin:0 2px;}
+  .mm-toolbar input[type="color"]{width:26px; height:24px; padding:1px; border:1px solid var(--rule); border-radius:4px; cursor:pointer;}
+  .mm-stage-wrap{position:relative; height:380px; background:var(--mm-bg); overflow:hidden; touch-action:none;}
+  .mm-stage-wrap svg{width:100%; height:100%; display:block; cursor:grab;}
+  .mm-stage-wrap svg.panning{cursor:grabbing;}
+  .mm-node-box{
+    width:100%; height:100%; box-sizing:border-box; display:flex; align-items:center; justify-content:center;
+    background:var(--mm-node); border:2px solid var(--mm-node-border); color:var(--mm-text);
+    border-radius:10px; font-size:13px; padding:4px 8px; text-align:center; outline:none;
+    cursor:default; overflow:hidden; word-break:break-word; user-select:text;
+  }
+  .mm-node-box.shape-ellipse{border-radius:999px;}
+  .mm-node-box.shape-rect{border-radius:2px;}
+  .mm-node-box.shape-none{border-color:transparent; background:transparent;}
+  .mm-node-box.shape-circle{border-radius:50%; padding:8px;}
+  .mm-node-box.shape-diamond{
+    border-radius:0; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    padding:16px 26px;
+  }
+  .mm-node-box.shape-triangle{
+    border-radius:0; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    padding:32px 20px 6px;
+  }
+  .mm-node-box.shape-hexagon{
+    border-radius:0; clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+    padding:6px 20px;
+  }
+  .mm-node-box.shape-octagon{
+    border-radius:0;
+    clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+    padding:6px 18px;
+  }
+  .mm-node-box.shape-parallelogram{
+    border-radius:0; clip-path: polygon(15% 0%, 100% 0%, 85% 100%, 0% 100%);
+    padding:6px 22px;
+  }
+  .mm-node-box.shape-arrow-right{
+    border-radius:0;
+    clip-path: polygon(0% 22%, 62% 22%, 62% 0%, 100% 50%, 62% 100%, 62% 78%, 0% 78%);
+    padding:6px 34px 6px 8px;
+  }
+  .mm-node-box.shape-arrow-left{
+    border-radius:0;
+    clip-path: polygon(100% 22%, 38% 22%, 38% 0%, 0% 50%, 38% 100%, 38% 78%, 100% 78%);
+    padding:6px 8px 6px 34px;
+  }
+  .mm-node-box.shape-star{
+    border-radius:0;
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    padding:28px 22px 20px;
+  }
+  .mm-node-box.shape-cloud{
+    border-radius: 42% 58% 55% 45% / 55% 45% 55% 45%;
+    padding:6px 14px;
+  }
+  .mm-node-box.mm-selected{box-shadow:0 0 0 3px rgba(122,92,45,.35);}
+  .mm-node-box.mm-match{box-shadow:0 0 0 3px #e0a92b;}
+  .mm-note-badge{
+    width:18px; height:18px; border-radius:50%; background:var(--marker); color:#5c4a00;
+    font-size:11px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 1px 3px rgba(0,0,0,.25); user-select:none;
+  }
+  .mm-collapse-btn{
+    position:absolute; width:16px; height:16px; border-radius:50%; background:var(--accent-dark); color:#fff;
+    font-size:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:2px solid var(--mm-bg);
+  }
+  .mm-float-toolbar{
+    position:absolute; z-index:6; background:var(--paper-card); border:1px solid var(--rule); border-radius:8px;
+    padding:5px 6px; display:flex; gap:4px; align-items:center; box-shadow:0 3px 10px rgba(0,0,0,.15); font-size:11px;
+  }
+  .mm-float-toolbar button{font-size:11px; padding:3px 6px;}
+  .mm-status{font-size:10.5px; color:var(--ink-soft); padding:2px 10px;}
+</style>
+</head>
+<body>
+<div class="wrap-outer">
+  <h1>🧠 خريطة ذهنية (مستقلة)</h1>
+  <div id="mindmapHolder"></div>
+</div>
+<div id="toastWrap"></div>
+<script>
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+  const toastWrap = document.getElementById("toastWrap");
+  function showToast(msg, kind, ms){
+    const t = document.createElement("div");
+    t.className = "toast" + (kind ? " "+kind : "");
+    t.textContent = msg;
+    toastWrap.appendChild(t);
+    requestAnimationFrame(()=> t.classList.add("show"));
+    setTimeout(()=>{
+      t.classList.remove("show");
+      setTimeout(()=> t.remove(), 300);
+    }, ms || 3200);
+  }
+  // حفظ تلقائي مبسّط (مستقل) — بيحفظ الخريطة في localStorage بدل نظام الحفظ الكامل للتطبيق الأصلي
+  let _saveTimer = null;
+  function scheduleAutoSave(){
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(()=>{
+      try{ localStorage.setItem("standalone_mindmap", JSON.stringify(section.mindmap)); }catch(e){}
+    }, 400);
+  }
+
+  /* ============================== MIND MAP PANEL (per card) ============================== */
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs){
+    const el = document.createElementNS(SVGNS, tag);
+    if(attrs) for(const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  const MM_COLORS = ["#7a5c2d","#0f5c56","#b23b34","#3a5a8c","#8c5a9c","#6b6255"];
+  const MM_BASE_W = 132, MM_BASE_H = 46;
+
+  function buildMindMapPanel(section){
+    if(!section.mindmap || !section.mindmap.nodes || !Object.keys(section.mindmap.nodes).length){
+      const rootId = "m_root";
+      section.mindmap = {
+        nodes: { [rootId]: { id:rootId, text:"الفكرة الرئيسية", parentId:null, x:0, y:0, color:MM_COLORS[0], shape:"rounded", scale:1, collapsed:false, orderIndex:0, note:"" } },
+        rootId, dir:"rtl", dark:false
+      };
+    }
+    const mm = section.mindmap;
+
+    const wrap = document.createElement("div");
+    wrap.className = "mindmap-panel" + (mm.dark ? " mm-dark" : "");
+    wrap.innerHTML = `
+      <div class="mm-toolbar">
+        <button data-act="add-child" title="إضافة تابع (Tab)">➕ تابع</button>
+        <button data-act="add-sibling" title="إضافة شقيق (Enter)">➕ شقيق</button>
+        <button data-act="add-parent" title="إضافة أب">➕ أب</button>
+        <span class="mm-sep"></span>
+        <button data-act="dup" title="تكرار العقدة">⧉ تكرار</button>
+        <button data-act="del" title="حذف (Delete)">🗑 حذف</button>
+        <span class="mm-sep"></span>
+        <button data-act="undo" title="تراجع (Ctrl+Z)">↩️</button>
+        <button data-act="redo" title="إعادة (Ctrl+Y)">↪️</button>
+        <span class="mm-sep"></span>
+        <button data-act="collapse-toggle" title="طيّ/فرد الفرع المحدد">⊟ طيّ الفرع</button>
+        <button data-act="layout" title="ترتيب تلقائي">🧩 ترتيب تلقائي</button>
+        <span class="mm-sep"></span>
+        <button data-act="zoom-in">🔍+</button>
+        <button data-act="zoom-out">🔍−</button>
+        <button data-act="zoom-reset" title="ملائمة الكل">⤢ ملائمة</button>
+        <span class="mm-sep"></span>
+        <input type="text" class="mm-search" placeholder="🔎 بحث في الخريطة… (Ctrl+F)">
+        <span class="mm-sep"></span>
+        <button data-act="dir" title="تبديل اتجاه الخريطة">${mm.dir === "rtl" ? "⇦ RTL" : "⇨ LTR"}</button>
+        <button data-act="theme" title="تبديل الوضع الداكن/الفاتح">${mm.dark ? "☀️" : "🌙"}</button>
+        <span class="mm-sep"></span>
+        <button data-act="export-json" title="تصدير JSON">💾 JSON</button>
+        <button data-act="import-json" title="استيراد JSON">📂 JSON</button>
+        <input type="file" class="mm-import-input" accept=".json" style="display:none;">
+        <button data-act="export-png" title="تصدير صورة PNG">🖼 PNG</button>
+        <button data-act="export-svg" title="تصدير SVG">🎯 SVG</button>
+      </div>
+      <div class="mm-toolbar mm-props" style="display:none;"></div>
+      <div class="mm-stage-wrap">
+        <svg></svg>
+      </div>
+      <div class="mm-status"></div>
+    `;
+
+    const propsBar = wrap.querySelector(".mm-props");
+
+    const stageWrap = wrap.querySelector(".mm-stage-wrap");
+    const svg = wrap.querySelector("svg");
+    const searchInput = wrap.querySelector(".mm-search");
+    const statusEl = wrap.querySelector(".mm-status");
+    const importInput = wrap.querySelector(".mm-import-input");
+
+    const state = {
+      scale: 1, tx: 0, ty: 0,
+      selectedIds: new Set([mm.rootId]),
+      history: [], future: [],
+      searchIdx: 0, matches: [],
+      onResize: null,
+    };
+    wrap._mmState = state;
+
+    /* ---------- أدوات بيانات ---------- */
+    function childrenOf(id){
+      return Object.values(mm.nodes).filter(n=>n.parentId===id).sort((a,b)=>a.orderIndex-b.orderIndex);
+    }
+    function descendantsOf(id){
+      const out = [];
+      childrenOf(id).forEach(c=>{ out.push(c.id); out.push(...descendantsOf(c.id)); });
+      return out;
+    }
+    function isCollapsedAncestor(id){
+      let n = mm.nodes[id];
+      while(n && n.parentId){
+        n = mm.nodes[n.parentId];
+        if(n && n.collapsed) return true;
+      }
+      return false;
+    }
+    function snapshot(){ return JSON.stringify(mm); }
+    function pushHistory(){
+      state.history.push(snapshot());
+      if(state.history.length > 60) state.history.shift();
+      state.future = [];
+    }
+    function undo(){
+      if(!state.history.length){ showToast("مفيش خطوات للتراجع.", "err", 1600); return; }
+      state.future.push(snapshot());
+      const prev = state.history.pop();
+      Object.assign(mm, JSON.parse(prev));
+      normalizeSelection();
+      scheduleAutoSave();
+      render();
+    }
+    function redo(){
+      if(!state.future.length){ showToast("مفيش خطوات لإعادتها.", "err", 1600); return; }
+      state.history.push(snapshot());
+      const next = state.future.pop();
+      Object.assign(mm, JSON.parse(next));
+      normalizeSelection();
+      scheduleAutoSave();
+      render();
+    }
+    function normalizeSelection(){
+      state.selectedIds.forEach(id=>{ if(!mm.nodes[id]) state.selectedIds.delete(id); });
+      if(!state.selectedIds.size) state.selectedIds.add(mm.rootId);
+    }
+
+    function makeNode(text, parentId){
+      const id = "m" + Math.random().toString(36).slice(2,9);
+      const sibs = parentId ? childrenOf(parentId) : [];
+      const orderIndex = sibs.length ? Math.max(...sibs.map(s=>s.orderIndex)) + 1 : 0;
+      const parent = parentId ? mm.nodes[parentId] : null;
+      return {
+        id, text, parentId,
+        x: parent ? parent.x + (mm.dir === "rtl" ? -190 : 190) : 0,
+        y: parent ? parent.y + sibs.length * 60 : 0,
+        color: MM_COLORS[Object.keys(mm.nodes).length % MM_COLORS.length],
+        shape: "rounded", scale: 1, collapsed: false, orderIndex, note: ""
+      };
+    }
+
+    function selectedSingle(){
+      const ids = [...state.selectedIds];
+      return ids.length ? mm.nodes[ids[ids.length-1]] : mm.nodes[mm.rootId];
+    }
+
+    function addChild(){
+      pushHistory();
+      const parent = selectedSingle();
+      const node = makeNode("فكرة جديدة", parent.id);
+      mm.nodes[node.id] = node;
+      state.selectedIds = new Set([node.id]);
+      scheduleAutoSave(); render(); startEdit(node.id);
+    }
+    function addSibling(){
+      const cur = selectedSingle();
+      if(cur.id === mm.rootId){ addChild(); return; }
+      pushHistory();
+      const node = makeNode("فكرة جديدة", cur.parentId);
+      mm.nodes[node.id] = node;
+      state.selectedIds = new Set([node.id]);
+      scheduleAutoSave(); render(); startEdit(node.id);
+    }
+    function addParent(){
+      pushHistory();
+      const cur = selectedSingle();
+      const oldParentId = cur.parentId;
+      const node = makeNode("فكرة جديدة", oldParentId);
+      node.x = cur.x + (mm.dir === "rtl" ? 190 : -190);
+      node.y = cur.y;
+      mm.nodes[node.id] = node;
+      cur.parentId = node.id;
+      if(cur.id === mm.rootId) mm.rootId = node.id;
+      state.selectedIds = new Set([node.id]);
+      scheduleAutoSave(); render(); startEdit(node.id);
+    }
+    function duplicateSelected(){
+      pushHistory();
+      const cur = selectedSingle();
+      const idMap = {};
+      function cloneSub(id, newParentId){
+        const src = mm.nodes[id];
+        const nid = "m" + Math.random().toString(36).slice(2,9);
+        idMap[id] = nid;
+        const clone = Object.assign({}, src, { id:nid, parentId:newParentId });
+        mm.nodes[nid] = clone;
+        childrenOf(id).forEach(c=> cloneSub(c.id, nid));
+        return nid;
+      }
+      const sibs = childrenOf(cur.parentId || null);
+      const newId = cloneSub(cur.id, cur.parentId);
+      mm.nodes[newId].orderIndex = (sibs.length ? Math.max(...sibs.map(s=>s.orderIndex)) : 0) + 1;
+      mm.nodes[newId].x += 24; mm.nodes[newId].y += 24;
+      state.selectedIds = new Set([newId]);
+      scheduleAutoSave(); render();
+      showToast("تم تكرار العقدة وفروعها.", "ok", 1600);
+    }
+    function deleteSelected(){
+      const ids = [...state.selectedIds].filter(id=>id !== mm.rootId);
+      if(!ids.length){ showToast("مينفعش تحذف العقدة الجذر.", "err"); return; }
+      pushHistory();
+      ids.forEach(id=>{
+        descendantsOf(id).forEach(d=> delete mm.nodes[d]);
+        delete mm.nodes[id];
+      });
+      state.selectedIds = new Set([mm.rootId]);
+      scheduleAutoSave(); render();
+    }
+    function toggleCollapse(id){
+      pushHistory();
+      mm.nodes[id].collapsed = !mm.nodes[id].collapsed;
+      scheduleAutoSave(); render();
+    }
+
+    function autoLayout(){
+      pushHistory();
+      const dir = mm.dir === "rtl" ? -1 : 1;
+      const levelGapX = 185, sibGapY = 58;
+      let cursorY = 0;
+      function measure(id, depth){
+        const node = mm.nodes[id];
+        const kids = node.collapsed ? [] : childrenOf(id);
+        if(!kids.length){
+          node.x = depth * levelGapX * dir;
+          node.y = cursorY;
+          cursorY += sibGapY;
+          return;
+        }
+        kids.forEach(k=> measure(k.id, depth+1));
+        const ys = kids.map(k=> mm.nodes[k.id].y);
+        node.x = depth * levelGapX * dir;
+        node.y = (Math.min(...ys) + Math.max(...ys)) / 2;
+      }
+      measure(mm.rootId, 0);
+      scheduleAutoSave(); fitToScreen(); render();
+      showToast("تم إعادة الترتيب التلقائي.", "ok", 1600);
+    }
+
+    /* ---------- pan / zoom ---------- */
+    function applyTransform(){
+      gLines.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.scale})`);
+      gNodes.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.scale})`);
+    }
+    function zoomAt(sx, sy, newScale){
+      newScale = Math.max(0.25, Math.min(3, newScale));
+      const wx = (sx - state.tx) / state.scale, wy = (sy - state.ty) / state.scale;
+      state.scale = newScale;
+      state.tx = sx - wx * newScale;
+      state.ty = sy - wy * newScale;
+      applyTransform();
+    }
+    function fitToScreen(){
+      const nodes = Object.values(mm.nodes);
+      if(!nodes.length) return;
+      const xs = nodes.map(n=>n.x), ys = nodes.map(n=>n.y);
+      const minX = Math.min(...xs)-MM_BASE_W, maxX = Math.max(...xs)+MM_BASE_W;
+      const minY = Math.min(...ys)-MM_BASE_H, maxY = Math.max(...ys)+MM_BASE_H;
+      const rect = stageWrap.getBoundingClientRect();
+      const w = Math.max(1, rect.width), h = Math.max(1, rect.height);
+      const scale = Math.max(0.3, Math.min(1.6, Math.min(w/(maxX-minX||1), h/(maxY-minY||1)) * 0.92));
+      state.scale = scale;
+      state.tx = w/2 - (minX+maxX)/2*scale;
+      state.ty = h/2 - (minY+maxY)/2*scale;
+      applyTransform();
+    }
+    function centerOn(id){
+      const n = mm.nodes[id];
+      const rect = stageWrap.getBoundingClientRect();
+      state.tx = rect.width/2 - n.x*state.scale;
+      state.ty = rect.height/2 - n.y*state.scale;
+      applyTransform();
+    }
+
+    /* ---------- بناء طبقات SVG ---------- */
+    svg.innerHTML = "";
+    const gLines = svgEl("g");
+    const gNodes = svgEl("g");
+    svg.appendChild(gLines);
+    svg.appendChild(gNodes);
+
+    function nodeSize(n){
+      const s = n.scale || 1;
+      switch(n.shape){
+        case "circle": { const d = 78*s; return { w:d, h:d }; }
+        case "star": { const d = 94*s; return { w:d, h:d }; }
+        case "diamond": return { w: MM_BASE_W*s, h: MM_BASE_H*1.6*s };
+        case "triangle": return { w: MM_BASE_W*s, h: MM_BASE_H*1.6*s };
+        case "arrow-right":
+        case "arrow-left": return { w: MM_BASE_W*1.2*s, h: MM_BASE_H*s };
+        default: return { w: MM_BASE_W*s, h: MM_BASE_H*s };
+      }
+    }
+
+    function renderStage(){
+      gLines.innerHTML = "";
+      gNodes.innerHTML = "";
+      const visible = Object.values(mm.nodes).filter(n=> !isCollapsedAncestor(n.id));
+
+      // خطوط الربط (منحنية)
+      visible.forEach(n=>{
+        if(!n.parentId) return;
+        const p = mm.nodes[n.parentId];
+        if(!p || isCollapsedAncestor(p.id)) return;
+        const mx = (p.x+n.x)/2;
+        const path = svgEl("path", {
+          d: `M ${p.x} ${p.y} C ${mx} ${p.y}, ${mx} ${n.y}, ${n.x} ${n.y}`,
+          stroke: "var(--mm-line)", "stroke-width": 2, fill: "none"
+        });
+        gLines.appendChild(path);
+      });
+
+      // العقد
+      visible.forEach(n=>{
+        const {w,h} = nodeSize(n);
+        const fo = svgEl("foreignObject", { x:n.x-w/2, y:n.y-h/2, width:w, height:h, style:"overflow:visible;" });
+        const div = document.createElement("div");
+        div.className = "mm-node-box shape-" + n.shape + (state.selectedIds.has(n.id) ? " mm-selected" : "") + (state.matches.includes(n.id) ? " mm-match" : "");
+        div.style.borderColor = n.color; div.style.color = n.color;
+        div.textContent = n.text;
+        div.dataset.id = n.id;
+        div.setAttribute("spellcheck", "false");
+        fo.appendChild(div);
+        gNodes.appendChild(fo);
+
+        div.addEventListener("mousedown", (e)=> onNodeDown(e, n.id));
+        div.addEventListener("touchstart", (e)=> onNodeDown(e, n.id), {passive:false});
+        div.addEventListener("dblclick", (e)=>{ e.stopPropagation(); startEdit(n.id); });
+        div.addEventListener("blur", ()=> commitEdit(n.id, div));
+        div.addEventListener("keydown", (e)=>{
+          if(e.key === "Enter" && div.isContentEditable){ e.preventDefault(); div.blur(); }
+          e.stopPropagation();
+        });
+
+        if(n.note && n.note.trim()){
+          const noteBtn = svgEl("foreignObject", { x:n.x + (mm.dir==="rtl" ? w/2-16 : -w/2-2), y:n.y-h/2-2, width:18, height:18, style:"overflow:visible;" });
+          const nb = document.createElement("div");
+          nb.className = "mm-note-badge";
+          nb.textContent = "🗒";
+          nb.title = n.note;
+          nb.addEventListener("mousedown", (e)=> e.stopPropagation());
+          nb.addEventListener("click", (e)=>{ e.stopPropagation(); openNoteEditor(n); });
+          noteBtn.appendChild(nb);
+          gNodes.appendChild(noteBtn);
+        }
+
+        const kids = childrenOf(n.id);
+        if(kids.length){
+          const btn = svgEl("foreignObject", { x:n.x + (mm.dir==="rtl" ? -w/2-18 : w/2+2), y:n.y-9, width:18, height:18 });
+          const b = document.createElement("div");
+          b.className = "mm-collapse-btn"; b.textContent = n.collapsed ? "+" : "−";
+          b.style.position = "static";
+          b.addEventListener("mousedown", (e)=> e.stopPropagation());
+          b.addEventListener("click", (e)=>{ e.stopPropagation(); toggleCollapse(n.id); });
+          btn.appendChild(b);
+          gNodes.appendChild(btn);
+        }
+      });
+
+      applyTransform();
+      statusEl.textContent = Object.keys(mm.nodes).length + " عقدة" + (state.selectedIds.size>1 ? " — محدد: " + state.selectedIds.size : "");
+    }
+    function render(){ renderStage(); renderProps(); }
+
+    function renderProps(){
+      if(state.selectedIds.size !== 1){ propsBar.style.display = "none"; return; }
+      const n = mm.nodes[[...state.selectedIds][0]];
+      if(!n){ propsBar.style.display = "none"; return; }
+      propsBar.style.display = "flex";
+      propsBar.innerHTML = `
+        <span style="font-size:11px; color:var(--ink-soft);">خصائص العقدة:</span>
+        ${MM_COLORS.map(c=>`<button data-color="${c}" style="width:20px;height:20px;border-radius:50%;background:${c};border:2px solid ${n.color===c?'#000':'transparent'};padding:0;"></button>`).join("")}
+        <input type="color" class="mm-custom-color" value="${n.color}" title="لون مخصص">
+        <span class="mm-sep"></span>
+        <select class="mm-shape-sel" title="الشكل">
+          <option value="rounded" ${n.shape==="rounded"?"selected":""}>مستطيل مدوّر</option>
+          <option value="rect" ${n.shape==="rect"?"selected":""}>مستطيل حاد</option>
+          <option value="ellipse" ${n.shape==="ellipse"?"selected":""}>بيضاوي</option>
+          <option value="circle" ${n.shape==="circle"?"selected":""}>دائرة</option>
+          <option value="diamond" ${n.shape==="diamond"?"selected":""}>معين (قرار)</option>
+          <option value="triangle" ${n.shape==="triangle"?"selected":""}>مثلث</option>
+          <option value="hexagon" ${n.shape==="hexagon"?"selected":""}>سداسي الأضلاع</option>
+          <option value="octagon" ${n.shape==="octagon"?"selected":""}>ثماني الأضلاع</option>
+          <option value="parallelogram" ${n.shape==="parallelogram"?"selected":""}>متوازي أضلاع</option>
+          <option value="arrow-right" ${n.shape==="arrow-right"?"selected":""}>سهم لليمين</option>
+          <option value="arrow-left" ${n.shape==="arrow-left"?"selected":""}>سهم للشمال</option>
+          <option value="star" ${n.shape==="star"?"selected":""}>نجمة</option>
+          <option value="cloud" ${n.shape==="cloud"?"selected":""}>سحابة</option>
+          <option value="none" ${n.shape==="none"?"selected":""}>بدون إطار</option>
+        </select>
+        <span class="mm-sep"></span>
+        <span style="font-size:11px;">الحجم</span>
+        <input type="range" class="mm-size-range" min="0.7" max="1.8" step="0.1" value="${n.scale||1}">
+        <span class="mm-sep"></span>
+        <button class="small mm-note-btn" type="button" title="إضافة/تعديل ملاحظة على العقدة">🗒️ ${n.note && n.note.trim() ? "تعديل الملاحظة" : "إضافة ملاحظة"}</button>
+      `;
+      propsBar.querySelector(".mm-note-btn").addEventListener("click", ()=> openNoteEditor(n));
+      propsBar.querySelectorAll("[data-color]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{ pushHistory(); n.color = btn.dataset.color; scheduleAutoSave(); render(); });
+      });
+      propsBar.querySelector(".mm-custom-color").addEventListener("input", (e)=>{
+        n.color = e.target.value; scheduleAutoSave(); renderStage();
+      });
+      propsBar.querySelector(".mm-shape-sel").addEventListener("change", (e)=>{
+        pushHistory(); n.shape = e.target.value; scheduleAutoSave(); render();
+      });
+      propsBar.querySelector(".mm-size-range").addEventListener("input", (e)=>{
+        n.scale = parseFloat(e.target.value); scheduleAutoSave(); renderStage();
+      });
+    }
+
+    function startEdit(id){
+      render();
+      requestAnimationFrame(()=>{
+        const div = gNodes.querySelector(`[data-id="${id}"]`);
+        if(!div) return;
+        pushHistory();
+        div.contentEditable = "true";
+        div.focus();
+        document.execCommand && document.execCommand("selectAll", false, null);
+      });
+    }
+    function commitEdit(id, div){
+      if(div.isContentEditable){
+        div.contentEditable = "false";
+        const val = div.textContent.trim() || "بدون عنوان";
+        if(mm.nodes[id]) mm.nodes[id].text = val;
+        scheduleAutoSave();
+      }
+    }
+
+    function openNoteEditor(n){
+      pushHistory();
+      const overlay = document.createElement("div");
+      overlay.className = "fs-overlay";
+      overlay.innerHTML = `
+        <div class="fs-box" style="max-width:420px;">
+          <div class="fs-head">
+            <strong>🗒️ ملاحظة على: ${escapeHtml(n.text)}</strong>
+            <button class="ghost" data-act="note-close">✕ إغلاق</button>
+          </div>
+          <div class="fs-body">
+            <textarea class="rawinput" style="min-height:120px;" placeholder="اكتب ملاحظتك هنا…">${escapeHtml(n.note||"")}</textarea>
+            <div class="addbox-actions">
+              <button class="primary" data-act="note-save">حفظ الملاحظة</button>
+              <button class="ghost danger" data-act="note-delete">حذف الملاحظة</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      const ta = overlay.querySelector("textarea");
+      setTimeout(()=> ta.focus(), 30);
+      function close(){ overlay.remove(); document.removeEventListener("keydown", onKey); }
+      function onKey(e){ if(e.key === "Escape") close(); }
+      document.addEventListener("keydown", onKey);
+      overlay.addEventListener("click", (e)=>{ if(e.target === overlay) close(); });
+      overlay.querySelector('[data-act="note-close"]').addEventListener("click", close);
+      overlay.querySelector('[data-act="note-save"]').addEventListener("click", ()=>{
+        n.note = ta.value.trim();
+        scheduleAutoSave(); render();
+        showToast("تم حفظ الملاحظة.", "ok", 1600);
+        close();
+      });
+      overlay.querySelector('[data-act="note-delete"]').addEventListener("click", ()=>{
+        n.note = "";
+        scheduleAutoSave(); render();
+        showToast("تم حذف الملاحظة.", "ok", 1600);
+        close();
+      });
+    }
+
+    /* ---------- تفاعل السحب والتحديد والتحريك ---------- */
+    let dragMode = null; // "node" | "pan"
+    let dragStart = null;
+    let dragOrigins = null;
+    let dragDistance = 0;
+    let clickToEditId = null; // لو الضغطة دي على عقدة كانت أصلًا محددة لوحدها، وما حصلش سحب فعلي، نفتح وضع التعديل
+
+    function onNodeDown(e, id){
+      const div = e.currentTarget;
+      if(div.isContentEditable){ e.stopPropagation(); return; }
+      e.stopPropagation();
+      e.preventDefault();
+      wrap.focus();
+      const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+      const wasSoleSelected = !additive && state.selectedIds.size === 1 && state.selectedIds.has(id);
+      let selectionChanged = false;
+      if(additive){
+        if(state.selectedIds.has(id)) state.selectedIds.delete(id); else state.selectedIds.add(id);
+        selectionChanged = true;
+      } else if(!state.selectedIds.has(id)){
+        state.selectedIds = new Set([id]);
+        selectionChanged = true;
+      }
+      pushHistory();
+      // مهم: نعمل render() الكامل بس لو التحديد اتغيّر فعلًا. إعادة بناء العقدة نفسها
+      // مع كل mousedown (حتى لو التحديد ما اتغيرش) كانت بتهدم عنصر الـ DOM قبل ما
+      // يوصل الضغط التاني من الدبل كليك، فالمتصفح ما كانش بيولّد حدث dblclick أصلًا،
+      // وده اللي كان مانع تعديل اسم العقدة (والدخول في وضع الكتابة بشكل عام).
+      if(selectionChanged) render(); else renderProps();
+      dragMode = "node";
+      dragDistance = 0;
+      clickToEditId = wasSoleSelected ? id : null;
+      const t = e.touches ? e.touches[0] : e;
+      dragStart = { x:t.clientX, y:t.clientY };
+      dragOrigins = {};
+      state.selectedIds.forEach(sid=>{ const n = mm.nodes[sid]; dragOrigins[sid] = {x:n.x, y:n.y}; });
+      window.addEventListener("mousemove", onDragMove);
+      window.addEventListener("mouseup", onDragEnd);
+      window.addEventListener("touchmove", onDragMove, {passive:false});
+      window.addEventListener("touchend", onDragEnd);
+    }
+    function onStageDown(e){
+      wrap.focus();
+      dragMode = "pan";
+      svg.classList.add("panning");
+      const t = e.touches ? e.touches[0] : e;
+      dragStart = { x:t.clientX, y:t.clientY, tx:state.tx, ty:state.ty };
+      window.addEventListener("mousemove", onDragMove);
+      window.addEventListener("mouseup", onDragEnd);
+      window.addEventListener("touchmove", onDragMove, {passive:false});
+      window.addEventListener("touchend", onDragEnd);
+    }
+    function onDragMove(e){
+      if(!dragMode) return;
+      if(e.cancelable) e.preventDefault();
+      const t = e.touches ? e.touches[0] : e;
+      const dx = t.clientX - dragStart.x, dy = t.clientY - dragStart.y;
+      dragDistance = Math.max(dragDistance, Math.hypot(dx, dy));
+      if(dragMode === "pan"){
+        state.tx = dragStart.tx + dx; state.ty = dragStart.ty + dy;
+        applyTransform();
+      } else if(dragMode === "node"){
+        const wdx = dx/state.scale, wdy = dy/state.scale;
+        state.selectedIds.forEach(id=>{
+          const n = mm.nodes[id]; const o = dragOrigins[id];
+          if(n && o){ n.x = o.x + wdx; n.y = o.y + wdy; }
+        });
+        render();
+      }
+    }
+    function onDragEnd(){
+      const wasNodeDrag = dragMode === "node";
+      const editId = clickToEditId;
+      const moved = dragDistance;
+      if(wasNodeDrag) scheduleAutoSave();
+      dragMode = null; svg.classList.remove("panning");
+      clickToEditId = null;
+      window.removeEventListener("mousemove", onDragMove);
+      window.removeEventListener("mouseup", onDragEnd);
+      window.removeEventListener("touchmove", onDragMove);
+      window.removeEventListener("touchend", onDragEnd);
+      // ضغطة عادية (من غير سحب) على عقدة كانت أصلًا محددة لوحدها = ادخل وضع التعديل مباشرة
+      if(wasNodeDrag && editId && moved < 4){
+        startEdit(editId);
+      }
+    }
+    svg.addEventListener("mousedown", onStageDown);
+    svg.addEventListener("touchstart", onStageDown, {passive:false});
+    svg.addEventListener("wheel", (e)=>{
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      zoomAt(e.clientX-rect.left, e.clientY-rect.top, state.scale * (e.deltaY<0 ? 1.12 : 0.89));
+    }, {passive:false});
+
+    /* ---------- بحث ---------- */
+    function runSearch(){
+      const q = searchInput.value.trim().toLowerCase();
+      state.matches = q ? Object.values(mm.nodes).filter(n=> n.text.toLowerCase().includes(q)).map(n=>n.id) : [];
+      state.searchIdx = 0;
+      render();
+      if(state.matches.length){ centerOn(state.matches[0]); }
+    }
+    searchInput.addEventListener("input", runSearch);
+    searchInput.addEventListener("keydown",(e)=>{
+      e.stopPropagation();
+      if(e.key === "Enter" && state.matches.length){
+        state.searchIdx = (state.searchIdx + 1) % state.matches.length;
+        centerOn(state.matches[state.searchIdx]);
+      }
+    });
+
+    /* ---------- تصدير/استيراد ---------- */
+    function downloadBlob(content, type, filename){
+      const blob = new Blob([content], {type});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+    function exportJSON(){
+      downloadBlob(JSON.stringify(mm, null, 2), "application/json", (section.title||"mindmap") + "-mindmap.json");
+    }
+    function exportSVG(){
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", SVGNS);
+      clone.querySelectorAll(".mm-node-box").forEach(d=> d.removeAttribute("contenteditable"));
+      const src = new XMLSerializer().serializeToString(clone);
+      downloadBlob(src, "image/svg+xml", (section.title||"mindmap") + "-mindmap.svg");
+    }
+    function exportPNG(){
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", SVGNS);
+      const rect = stageWrap.getBoundingClientRect();
+      clone.setAttribute("width", rect.width); clone.setAttribute("height", rect.height);
+      const src = new XMLSerializer().serializeToString(clone);
+      const img = new Image();
+      const svgBlob = new Blob([src], {type:"image/svg+xml;charset=utf-8"});
+      const url = URL.createObjectURL(svgBlob);
+      img.onload = ()=>{
+        const canvas = document.createElement("canvas");
+        const dpr = Math.min(window.devicePixelRatio||1, 3);
+        canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+        const cctx = canvas.getContext("2d");
+        cctx.scale(dpr,dpr);
+        cctx.fillStyle = mm.dark ? "#1c1a16" : "#fbf9f2";
+        cctx.fillRect(0,0,rect.width,rect.height);
+        cctx.drawImage(img, 0, 0, rect.width, rect.height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(blob=>{
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = (section.title||"mindmap") + "-mindmap.png";
+          document.body.appendChild(a); a.click(); a.remove();
+        });
+      };
+      img.onerror = ()=>{ showToast("تعذّر تصدير PNG في هذا المتصفح — جرّب SVG بدلًا منه.", "err"); URL.revokeObjectURL(url); };
+      img.src = url;
+    }
+
+    /* ---------- اختصارات لوحة المفاتيح (تعمل فقط أثناء التركيز داخل هذه اللوحة) ---------- */
+    wrap.tabIndex = 0;
+    wrap.addEventListener("keydown",(e)=>{
+      const editing = document.activeElement && document.activeElement.isContentEditable;
+      if(e.key === "Tab" && !editing){ e.preventDefault(); addChild(); }
+      else if(e.key === "Enter" && !editing && document.activeElement !== searchInput){ e.preventDefault(); addSibling(); }
+      else if(e.key === "F2"){ e.preventDefault(); startEdit(selectedSingle().id); }
+      else if(e.key === "Delete" && !editing){ e.preventDefault(); deleteSelected(); }
+      else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); undo(); }
+      else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); }
+      else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="s"){ e.preventDefault(); scheduleAutoSave(); showToast("تم الحفظ ✅", "ok", 1200); }
+      else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="f"){ e.preventDefault(); searchInput.focus(); }
+    });
+
+    /* ---------- ربط أزرار الشريط ---------- */
+    wrap.querySelector('[data-act="add-child"]').addEventListener("click", addChild);
+    wrap.querySelector('[data-act="add-sibling"]').addEventListener("click", addSibling);
+    wrap.querySelector('[data-act="add-parent"]').addEventListener("click", addParent);
+    wrap.querySelector('[data-act="dup"]').addEventListener("click", duplicateSelected);
+    wrap.querySelector('[data-act="del"]').addEventListener("click", deleteSelected);
+    wrap.querySelector('[data-act="undo"]').addEventListener("click", undo);
+    wrap.querySelector('[data-act="redo"]').addEventListener("click", redo);
+    wrap.querySelector('[data-act="collapse-toggle"]').addEventListener("click", ()=> toggleCollapse(selectedSingle().id));
+    wrap.querySelector('[data-act="layout"]').addEventListener("click", autoLayout);
+    wrap.querySelector('[data-act="zoom-in"]').addEventListener("click", ()=>{ const r=stageWrap.getBoundingClientRect(); zoomAt(r.width/2, r.height/2, state.scale*1.2); });
+    wrap.querySelector('[data-act="zoom-out"]').addEventListener("click", ()=>{ const r=stageWrap.getBoundingClientRect(); zoomAt(r.width/2, r.height/2, state.scale/1.2); });
+    wrap.querySelector('[data-act="zoom-reset"]').addEventListener("click", fitToScreen);
+    wrap.querySelector('[data-act="dir"]').addEventListener("click", (e)=>{
+      mm.dir = mm.dir === "rtl" ? "ltr" : "rtl";
+      wrap.dir = mm.dir;
+      e.currentTarget.textContent = mm.dir === "rtl" ? "⇦ RTL" : "⇨ LTR";
+      scheduleAutoSave();
+    });
+    wrap.querySelector('[data-act="theme"]').addEventListener("click", (e)=>{
+      mm.dark = !mm.dark;
+      wrap.classList.toggle("mm-dark", mm.dark);
+      e.currentTarget.textContent = mm.dark ? "☀️" : "🌙";
+      scheduleAutoSave();
+    });
+    wrap.querySelector('[data-act="export-json"]').addEventListener("click", exportJSON);
+    wrap.querySelector('[data-act="export-png"]').addEventListener("click", exportPNG);
+    wrap.querySelector('[data-act="export-svg"]').addEventListener("click", exportSVG);
+    wrap.querySelector('[data-act="import-json"]').addEventListener("click", ()=> importInput.click());
+    importInput.addEventListener("change",(e)=>{
+      const f = e.target.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const data = JSON.parse(reader.result);
+          if(data.nodes && data.rootId){
+            pushHistory();
+            Object.assign(mm, data);
+            normalizeSelection();
+            scheduleAutoSave(); fitToScreen(); render();
+            showToast("تم استيراد الخريطة ✅", "ok");
+          } else showToast("ملف غير صالح لخريطة ذهنية.", "err");
+        }catch(err){ showToast("تعذّر قراءة الملف: " + err.message, "err"); }
+      };
+      reader.readAsText(f, "utf-8");
+      e.target.value = "";
+    });
+
+    wrap.dir = mm.dir;
+    if(window.ResizeObserver) new ResizeObserver(()=> applyTransform()).observe(stageWrap);
+    state.onResize = ()=> requestAnimationFrame(fitToScreen);
+    requestAnimationFrame(fitToScreen);
+    render();
+
+    return wrap;
+  }
+
+// ---- تشغيل مستقل: بناء قسم وهمي وتركيب الخريطة الذهنية بداخله ----
+const section = { title: "خريطة ذهنية", mindmap: null };
+try{
+  const saved = localStorage.getItem("standalone_mindmap");
+  if(saved) section.mindmap = JSON.parse(saved);
+}catch(e){}
+document.getElementById("mindmapHolder").appendChild(buildMindMapPanel(section));
+</script>
+</body>
+</html>
