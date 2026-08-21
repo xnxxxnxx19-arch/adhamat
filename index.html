@@ -46,13 +46,13 @@
 <body>
 
 <div id="switchBar">
-  <button type="button" id="btnShowEnglish" class="active">🔤 تطبيق الإنجليزي</button>
+  <button type="button" id="btnShowEnglish">🔤 تطبيق الإنجليزي</button>
   <button type="button" id="btnShowEditor">📘 المحرر البرمجي</button>
   <button type="button" id="btnShowMeals">🍽️ متتبع الوجبات</button>
   <button type="button" id="btnShowVocab">🃏 بطاقاتي</button>
   <button type="button" id="btnShowCodeLib">🗒️ مذكرة الأكواد</button>
   <button type="button" id="btnShowInstructions">📚 مرجع التعليمات</button>
-  <button type="button" id="btnShowCenter">📊 مركز القيادة</button>
+  <button type="button" id="btnShowCenter" class="active">📊 مركز القيادة</button>
   <button type="button" id="btnShowMindmap">🧠 الخرائط الأصلية</button>
   <button type="button" id="btnShowDrawing">✏️ نظام الرسم</button>
   <div class="divider"></div>
@@ -68,13 +68,13 @@
        بتاعته بس، ومفيش أي مشاركة أو تعارض بين التطبيقات خالص. كل تطبيق بيحفظ بياناته
        بطريقته الخاصة (أغلبهم أوتوماتيك، ومذكرة الأكواد ليها زرار ربط حفظ تلقائي لملف
        حقيقي على جهازك بالإضافة لزرار تنزيل نسخة يدوي) -->
-  <iframe id="frameEnglish" src="english.html" data-fallback="english_1787254603569.html" onerror="this.src=this.dataset.fallback" style="display:block;"></iframe>
+  <iframe id="frameEnglish" src="english.html" data-fallback="english_1787254603569.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameEditor" src="editor.html" data-fallback="editor_1787254603551.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameMeals" src="meal-tracker.html" data-fallback="meal-tracker_1787254603630.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameVocab" src="vocab-app.html" data-fallback="vocab-app_1787254603650.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameCodeLib" src="code_library.html" data-fallback="code_library_1787254603451.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameInstructions" src="instruction_reference.html" data-fallback="instruction_reference_1787254603609.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
-  <iframe id="frameCenter" src="command-center.html" style="display:none;"></iframe>
+  <iframe id="frameCenter" src="command-center.html" style="display:block;"></iframe>
   <iframe id="frameMindmap" src="mindmap-standalone.html" data-fallback="mindmap-standalone_1787255479904.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameDrawing" src="drawing-standalone.html" data-fallback="drawing-standalone_1787255479867.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
 </div>
@@ -109,6 +109,43 @@
       buttons[k].classList.toggle('active', k === key);
     });
   }
+
+  /* يسجل تفاعل المستخدم مع أي تطبيق داخل الإطار، بدون تعديل ملفات التطبيقات نفسها. */
+  const ACTIVITY_KEY = 'command_center_activity_v1';
+  const activityLabels = {
+    english:'تفاعل مع تطبيق الإنجليزي', editor:'تفاعل مع المحرر البرمجي',
+    meals:'تفاعل مع متتبع الوجبات', vocab:'تفاعل مع البطاقات',
+    codelib:'تفاعل مع مذكرة الأكواد', instructions:'تفاعل مع مرجع التعليمات'
+  };
+  const lastActivity = {};
+  function recordActivity(app, detail){
+    const now = Date.now();
+    if(lastActivity[app] && now-lastActivity[app] < 45000) return;
+    lastActivity[app] = now;
+    let list = [];
+    try{ list = JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '[]'); }catch(e){}
+    list.unshift({ app, title: activityLabels[app] || 'نشاط جديد', text: detail || 'تم استخدام التطبيق', date: new Date().toLocaleString('ar-EG'), icon:'↗', at: now });
+    localStorage.setItem(ACTIVITY_KEY, JSON.stringify(list.slice(0, 100)));
+    const center = frames.center && frames.center.contentWindow;
+    if(center) center.postMessage({ type:'HUB_ACTIVITY', activity:list[0] }, '*');
+  }
+  function attachInteractionTracking(key){
+    if(key === 'center' || !frames[key]) return;
+    try{
+      const doc = frames[key].contentWindow.document;
+      if(doc.__hubTrackingAttached) return;
+      doc.__hubTrackingAttached = true;
+      doc.addEventListener('click', () => recordActivity(key, 'تم الضغط داخل التطبيق'), true);
+      doc.addEventListener('input', () => recordActivity(key, 'تم إدخال أو تعديل بيانات'), true);
+    }catch(e){}
+  }
+  Object.keys(frames).forEach(key => {
+    frames[key].addEventListener('load', () => attachInteractionTracking(key));
+  });
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data || {};
+    if(msg.type === 'HUB_OPEN_APP' && frames[msg.app]) showApp(msg.app);
+  });
 
   buttons.english.addEventListener('click', () => showApp('english'));
   buttons.editor.addEventListener('click', () => showApp('editor'));
