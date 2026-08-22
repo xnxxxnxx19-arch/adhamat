@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>لوحة التطبيقات</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   html, body{ margin:0; padding:0; height:100%; overflow:hidden; font-family:"Tahoma","Segoe UI",Arial,sans-serif; }
   #switchBar{
@@ -61,10 +62,11 @@
   <button type="button" class="appBtn" id="btnShowMindmap" data-key="mindmap" draggable="true">🧠 Mind Maps</button>
   <button type="button" class="appBtn" id="btnShowDrawing" data-key="drawing" draggable="true">✏️ Drawing</button>
   <button type="button" class="appBtn" id="btnShowWorkshop" data-key="workshop" draggable="true">🧰 Workshop Inventory</button>
+  <button type="button" class="appBtn" id="btnShowEquipment" data-key="equipment" draggable="true">🖥️ Equipment</button>
   <div class="divider"></div>
-  <button type="button" class="backupBtn" id="btnExportAll" title="تصدير نسخة احتياطية كاملة (كل التطبيقات + الصور)">⬇️</button>
-  <button type="button" class="backupBtn" id="btnImportAll" title="استيراد نسخة احتياطية كاملة">⬆️</button>
-  <input type="file" id="importFileInput" accept="application/json,.json" style="display:none;">
+  <button type="button" class="backupBtn" id="btnExportAll" title="تصدير نسخة احتياطية كاملة ZIP (كل التطبيقات + الصور والملفات)">⬇️</button>
+  <button type="button" class="backupBtn" id="btnImportAll" title="استيراد نسخة احتياطية كاملة (ZIP)">⬆️</button>
+  <input type="file" id="importFileInput" accept="application/zip,.zip" style="display:none;">
 </div>
 
 <div id="backupOverlay"><div id="backupBox"><div class="spinner"></div><div id="backupBoxText">جارٍ التجهيز…</div></div></div>
@@ -84,6 +86,7 @@
   <iframe id="frameMindmap" src="mindmap-standalone.html" data-fallback="mindmap-standalone_1787255479904.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameDrawing" src="drawing-standalone.html" data-fallback="drawing-standalone_1787255479867.html" onerror="this.src=this.dataset.fallback" style="display:none;"></iframe>
   <iframe id="frameWorkshop" src="workshop_inventory.html" style="display:none;"></iframe>
+  <iframe id="frameEquipment" src="equipment-db-gallery-pdf.html" style="display:none;"></iframe>
 </div>
 
 <script>
@@ -98,6 +101,7 @@
     mindmap: document.getElementById('btnShowMindmap'),
     drawing: document.getElementById('btnShowDrawing'),
     workshop: document.getElementById('btnShowWorkshop'),
+    equipment: document.getElementById('btnShowEquipment'),
   };
   const frames = {
     english: document.getElementById('frameEnglish'),
@@ -110,6 +114,7 @@
     mindmap: document.getElementById('frameMindmap'),
     drawing: document.getElementById('frameDrawing'),
     workshop: document.getElementById('frameWorkshop'),
+    equipment: document.getElementById('frameEquipment'),
   };
 
   function showApp(key){
@@ -176,6 +181,7 @@
   buttons.mindmap.addEventListener('click', () => showApp('mindmap'));
   buttons.drawing.addEventListener('click', () => showApp('drawing'));
   buttons.workshop.addEventListener('click', () => showApp('workshop'));
+  buttons.equipment.addEventListener('click', () => showApp('equipment'));
 
   /* ============================================================
      ترتيب الأزرار بالسحب والإفلات (Drag & Drop) — الترتيب بيتحفظ
@@ -250,15 +256,20 @@
   });
 
   /* ============================================================
-     نسخة احتياطية موحّدة لكل التطبيقات (تصدير/استيراد ملف واحد)
-     كل تطبيق شغال في iframe منفصل، فبنستخدم postMessage عشان نطلب
-     من كل تطبيق يجيب بياناته الحقيقية (نفس اللي محفوظة عنده فعليًا،
-     بما فيها أي صور متحوّلة base64 جوه بيانات مذكرة الأكواد) وبعدين
-     نجمعهم في ملف JSON واحد. الاستيراد بيرجّع كل قيمة لمكانها في كل
-     تطبيق وبعدين يعمل reload للـ iframe عشان يقرأ البيانات الجديدة
-     بنفس منطق التحميل العادي بتاعه (فمفيش تكرار أو تعارض منطق).
+     نسخة احتياطية شاملة حقيقية — بصيغة ZIP، تشتغل على مستوى المصدر
+     (origin) مش على مستوى كل تطبيق لوحده. بما إن الموقع شغال على
+     GitHub Pages، كل الصفحات (الأب وكل الـ iframes) على نفس الدومين،
+     فالـ localStorage والـ IndexedDB مشتركين فعليًا بين الكل. فبنقرأ
+     التخزين كله زي ما هو: كل مفاتيح localStorage في ملف JSON، وكل
+     قواعد IndexedDB بكل الـ object stores بتاعتها (فيها الصور
+     والملفات) بحيث كل Blob/File بيتحفظ كملف binary حقيقي جوه الـ
+     ZIP نفسه (مش base64 مكبّر الحجم) — ده أصغر حجمًا وأسرع وأقوى.
+     الاستيراد بيمسح كل حاجة موجودة ويحط مكانها بيانات الملف بالظبط،
+     بعدين يعمل reload لكل التطبيقات.
+     ملحوظة: زرار "ربط ملف حقيقي على الجهاز" (File System Access)
+     في مذكرة الأكواد ده لينك بجهاز معيّن ومش قابل للنقل بين الأجهزة،
+     فمش هيتحفظ — لكن كل محتواه الفعلي (النصوص/الصور) بيتحفظ عادي.
   ============================================================ */
-  const APP_KEYS = ['english', 'editor', 'meals', 'vocab', 'codelib', 'instructions'];
   const overlay = document.getElementById('backupOverlay');
   const overlayText = document.getElementById('backupBoxText');
   const btnExportAll = document.getElementById('btnExportAll');
@@ -268,90 +279,181 @@
   function showOverlay(text){ overlayText.textContent = text; overlay.classList.add('show'); }
   function hideOverlay(){ overlay.classList.remove('show'); }
 
-  function requestExportFromApp(key, reqId, timeoutMs){
-    return new Promise((resolve) => {
-      let done = false;
-      const handler = (ev) => {
-        const msg = ev.data;
-        if(msg && msg.type === 'HUB_EXPORT_RESPONSE' && msg.reqId === reqId && msg.app === key){
-          if(done) return;
-          done = true;
-          window.removeEventListener('message', handler);
-          resolve(msg.data || null);
-        }
-      };
-      window.addEventListener('message', handler);
-      try{
-        frames[key].contentWindow.postMessage({ type: 'HUB_EXPORT_REQUEST', reqId }, '*');
-      }catch(e){ /* frame not ready */ }
-      setTimeout(() => {
-        if(done) return;
-        done = true;
-        window.removeEventListener('message', handler);
-        resolve(null);
-      }, timeoutMs || 6000);
+  function idbReq(req){
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
     });
   }
 
-  function requestImportToApp(key, reqId, data, timeoutMs){
-    return new Promise((resolve) => {
-      let done = false;
-      const handler = (ev) => {
-        const msg = ev.data;
-        if(msg && msg.type === 'HUB_IMPORT_DONE' && msg.reqId === reqId && msg.app === key){
-          if(done) return;
-          done = true;
-          window.removeEventListener('message', handler);
-          resolve(!!msg.ok);
-        }
-      };
-      window.addEventListener('message', handler);
+  /* يحوّل أي قيمة (حتى المعقدة زي Blob/File/Date/ArrayBuffer وأي
+     تعشيش جواها) لصيغة JSON-safe، وأي ملف/صورة بيتكتب كملف binary
+     حقيقي مباشرة جوه الـ ZIP بدل تحويله لنص base64. */
+  function walkValueIntoZip(val, zip, pathBase, counter){
+    if(val === null || val === undefined) return val;
+    if(typeof File !== 'undefined' && val instanceof File){
+      const path = `${pathBase}/${counter.n++}.bin`;
+      zip.file(path, val);
+      return { __t:'file', ref: path, name: val.name, mime: val.type, lastModified: val.lastModified };
+    }
+    if(typeof Blob !== 'undefined' && val instanceof Blob){
+      const path = `${pathBase}/${counter.n++}.bin`;
+      zip.file(path, val);
+      return { __t:'blob', ref: path, mime: val.type };
+    }
+    if(val instanceof Date){
+      return { __t:'date', v: val.toISOString() };
+    }
+    if(val instanceof ArrayBuffer){
+      const path = `${pathBase}/${counter.n++}.bin`;
+      zip.file(path, val);
+      return { __t:'buf', ref: path };
+    }
+    if(ArrayBuffer.isView(val)){
+      const path = `${pathBase}/${counter.n++}.bin`;
+      zip.file(path, val.buffer);
+      return { __t:'view', ref: path, ctor: val.constructor.name };
+    }
+    if(typeof FileSystemFileHandle !== 'undefined' && val instanceof FileSystemFileHandle){
+      return { __t:'unsupported', note:'file-system-handle' };
+    }
+    if(Array.isArray(val)) return val.map(item => walkValueIntoZip(item, zip, pathBase, counter));
+    if(typeof val === 'object'){
+      const out = {};
+      for(const k of Object.keys(val)) out[k] = walkValueIntoZip(val[k], zip, pathBase, counter);
+      return out;
+    }
+    return val;
+  }
+
+  async function unwalkValueFromZip(val, zip){
+    if(val === null || val === undefined) return val;
+    if(typeof val === 'object' && !Array.isArray(val) && val.__t){
+      if(val.__t === 'file'){
+        const raw = await zip.file(val.ref).async('blob');
+        return new File([raw], val.name, { type: val.mime, lastModified: val.lastModified });
+      }
+      if(val.__t === 'blob'){
+        const raw = await zip.file(val.ref).async('blob');
+        return val.mime ? new Blob([raw], { type: val.mime }) : raw;
+      }
+      if(val.__t === 'date') return new Date(val.v);
+      if(val.__t === 'buf') return await zip.file(val.ref).async('arraybuffer');
+      if(val.__t === 'view'){
+        const buf = await zip.file(val.ref).async('arraybuffer');
+        const Ctor = window[val.ctor] || Uint8Array;
+        return new Ctor(buf);
+      }
+      if(val.__t === 'unsupported') return undefined; // زي مقابض الملفات المرتبطة بجهاز معيّن
+      return val;
+    }
+    if(Array.isArray(val)){
+      const out = [];
+      for(const item of val) out.push(await unwalkValueFromZip(item, zip));
+      return out;
+    }
+    if(typeof val === 'object'){
+      const out = {};
+      for(const k of Object.keys(val)) out[k] = await unwalkValueFromZip(val[k], zip);
+      return out;
+    }
+    return val;
+  }
+
+  async function exportIndexedDBIntoZip(zip){
+    const manifest = {};
+    if(!('indexedDB' in window) || typeof indexedDB.databases !== 'function') return manifest;
+    let dbList = [];
+    try{ dbList = await indexedDB.databases(); }catch(e){ return manifest; }
+    for(const info of dbList){
+      if(!info.name) continue;
       try{
-        frames[key].contentWindow.postMessage({ type: 'HUB_IMPORT_REQUEST', reqId, app: key, data }, '*');
-      }catch(e){ /* frame not ready */ }
-      setTimeout(() => {
-        if(done) return;
-        done = true;
-        window.removeEventListener('message', handler);
-        resolve(false);
-      }, timeoutMs || 6000);
-    });
+        const db = await idbReq(indexedDB.open(info.name));
+        const stores = {};
+        const storeNames = Array.from(db.objectStoreNames);
+        for(const storeName of storeNames){
+          const tx = db.transaction(storeName, 'readonly');
+          const store = tx.objectStore(storeName);
+          const keys = await idbReq(store.getAllKeys());
+          const values = await idbReq(store.getAll());
+          const counter = { n: 0 };
+          const pathBase = `indexeddb/${info.name}/${storeName}`;
+          const records = [];
+          for(let i = 0; i < values.length; i++){
+            records.push({
+              key: store.keyPath ? undefined : keys[i],
+              value: walkValueIntoZip(values[i], zip, pathBase, counter)
+            });
+          }
+          stores[storeName] = { keyPath: store.keyPath, autoIncrement: store.autoIncrement, records };
+        }
+        manifest[info.name] = { version: db.version, stores };
+        db.close();
+      }catch(e){ /* تجاهل القاعدة دي واستمر في الباقي */ }
+    }
+    return manifest;
+  }
+
+  async function importIndexedDBFromZip(manifest, zip, warnings){
+    if(!manifest) return;
+    for(const dbName of Object.keys(manifest)){
+      try{
+        const db = await idbReq(indexedDB.open(dbName));
+        const dbStores = manifest[dbName].stores || {};
+        for(const storeName of Object.keys(dbStores)){
+          if(!db.objectStoreNames.contains(storeName)){
+            warnings.push(`${dbName}/${storeName} (لازم تفتح التطبيق ده مرة الأول عشان ينشئ مخزنه الداخلي، وبعدين استورد تاني)`);
+            continue;
+          }
+          const tx = db.transaction(storeName, 'readwrite');
+          const store = tx.objectStore(storeName);
+          await idbReq(store.clear());
+          for(const rec of dbStores[storeName].records){
+            const value = await unwalkValueFromZip(rec.value, zip);
+            if(store.keyPath){ store.put(value); }
+            else{ store.put(value, rec.key); }
+          }
+          await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+        }
+        db.close();
+      }catch(e){ warnings.push(dbName + ': ' + (e && e.message ? e.message : e)); }
+    }
   }
 
   async function exportAll(){
+    if(typeof JSZip === 'undefined'){ alert('مكتبة الضغط (JSZip) ما اتحمّلتش — تأكد إن فيه اتصال إنترنت وجرب تاني.'); return; }
     btnExportAll.disabled = true; btnImportAll.disabled = true;
-    showOverlay('جارٍ تجميع بيانات كل التطبيقات…');
+    showOverlay('جارٍ قراءة كل بيانات كل التطبيقات (localStorage + IndexedDB)…');
     try{
-      const reqId = 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-      const results = {};
-      const failed = [];
-      await Promise.all(APP_KEYS.map(async (key) => {
-        const data = await requestExportFromApp(key, reqId);
-        if(data === null){ failed.push(key); }
-        else{ results[key] = data; }
+      const zip = new JSZip();
+
+      const localStorageDump = {};
+      for(let i = 0; i < localStorage.length; i++){
+        const k = localStorage.key(i);
+        localStorageDump[k] = localStorage.getItem(k);
+      }
+      zip.file('localStorage.json', JSON.stringify(localStorageDump));
+
+      showOverlay('جارٍ تجميع الصور والملفات من قواعد IndexedDB…');
+      const indexedDBManifest = await exportIndexedDBIntoZip(zip);
+      zip.file('indexeddb/manifest.json', JSON.stringify({
+        type: 'unified-origin-backup',
+        version: 3,
+        exportedAt: new Date().toISOString(),
+        databases: indexedDBManifest
       }));
 
-      const bundle = {
-        type: 'unified-app-backup',
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        apps: results
-      };
-      const json = JSON.stringify(bundle);
-      const blob = new Blob([json], { type: 'application/json' });
+      showOverlay('جارٍ ضغط وتجهيز ملف الـ ZIP للتنزيل…');
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       a.href = url;
-      a.download = `نسخة-احتياطية-كاملة-${stamp}.json`;
+      a.download = `نسخة-احتياطية-شاملة-${stamp}.zip`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-
-      if(failed.length){
-        alert('تم التصدير، لكن التطبيقات دي مارجعتش رد (ممكن تكون لسه بتحمّل، جرب تاني بعد شوية):\n' + failed.join('، '));
-      }
     }catch(e){
       alert('حصل خطأ أثناء التصدير: ' + (e && e.message ? e.message : e));
     }finally{
@@ -361,36 +463,51 @@
   }
 
   async function importAll(file){
+    if(typeof JSZip === 'undefined'){ alert('مكتبة الضغط (JSZip) ما اتحمّلتش — تأكد إن فيه اتصال إنترنت وجرب تاني.'); return; }
     btnExportAll.disabled = true; btnImportAll.disabled = true;
-    showOverlay('جارٍ قراءة الملف…');
+    showOverlay('جارٍ قراءة ملف الـ ZIP…');
     try{
-      const text = await file.text();
-      let bundle;
-      try{ bundle = JSON.parse(text); }
-      catch(e){ alert('الملف ده مش JSON صالح.'); return; }
+      let zip;
+      try{ zip = await JSZip.loadAsync(file); }
+      catch(e){ alert('الملف ده مش ZIP صالح.'); return; }
 
-      if(!bundle || typeof bundle !== 'object' || !bundle.apps){
+      const lsEntry = zip.file('localStorage.json');
+      const manifestEntry = zip.file('indexeddb/manifest.json');
+      if(!lsEntry && !manifestEntry){
         alert('صيغة الملف مش معروفة — لازم يكون ملف نسخة احتياطية اتعمل تصديره من نفس البرنامج.');
         return;
       }
 
-      if(!confirm('هيتم استبدال كل بيانات التطبيقات الحالية ببيانات الملف ده. متأكد عاوز تكمل؟')) return;
+      if(!confirm('هيتم مسح كل بيانات كل التطبيقات الحالية واستبدالها ببيانات الملف ده بالكامل (بما فيها الصور والملفات). متأكد عاوز تكمل؟')) return;
 
-      showOverlay('جارٍ استعادة بيانات كل التطبيقات…');
-      const reqId = 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-      const failed = [];
-      await Promise.all(APP_KEYS.map(async (key) => {
-        const data = bundle.apps[key];
-        if(data == null) return; // مفيش بيانات لهذا التطبيق في الملف
-        const ok = await requestImportToApp(key, reqId, data);
-        if(!ok) failed.push(key);
-      }));
+      showOverlay('جارٍ استعادة كل البيانات…');
+      const warnings = [];
 
-      if(failed.length){
-        alert('تم الاستيراد، لكن التطبيقات دي مأكدتش نجاح العملية (اتعمللها ريفريش على أي حال، تأكد من محتواها):\n' + failed.join('، '));
+      if(lsEntry){
+        const localStorageDump = JSON.parse(await lsEntry.async('string'));
+        localStorage.clear();
+        for(const k of Object.keys(localStorageDump)){
+          try{ localStorage.setItem(k, localStorageDump[k]); }
+          catch(e){ warnings.push('localStorage/' + k + ': ' + (e && e.message ? e.message : e)); }
+        }
+      }
+      if(manifestEntry){
+        showOverlay('جارٍ استعادة الصور والملفات في IndexedDB…');
+        const manifest = JSON.parse(await manifestEntry.async('string'));
+        await importIndexedDBFromZip(manifest.databases, zip, warnings);
+      }
+
+      if(warnings.length){
+        alert('تم الاستيراد، لكن فيه ملاحظات على بعض الأجزاء:\n' + warnings.join('\n'));
       } else {
         alert('تم استيراد كل البيانات بنجاح ✅ — التطبيقات هتتحدث دلوقتي.');
       }
+
+      showOverlay('جارٍ تحديث كل التطبيقات…');
+      Object.keys(frames).forEach(key => {
+        try{ frames[key].contentWindow.location.reload(); }
+        catch(e){ frames[key].src = frames[key].src; }
+      });
     }catch(e){
       alert('حصل خطأ أثناء الاستيراد: ' + (e && e.message ? e.message : e));
     }finally{
