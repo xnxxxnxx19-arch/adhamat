@@ -6000,7 +6000,8 @@
           <button class="primary" id="dashAddBtn">➕ سكشن جديد</button>
           <button class="ghost" id="dashThemeBtn">🎨 غيّر الشكل</button>
           <button class="ghost" id="dashSearchBtn">🔎 بحث سريع (Ctrl+K)</button>
-          <button class="ghost" id="dashExportBtn">💾 تنزيل نسخة</button>
+          <button class="ghost" id="dashExportBtn">⬇️ تصدير ZIP</button>
+          <button class="ghost" id="dashImportBtn">⬆️ استيراد</button>
         </div>
       </div>
     `;
@@ -6055,6 +6056,7 @@
     wrap.querySelector("#dashThemeBtn").addEventListener("click", openThemePicker);
     wrap.querySelector("#dashSearchBtn").addEventListener("click", ()=>{ closeOverlay(); openCommandPalette(); });
     wrap.querySelector("#dashExportBtn").addEventListener("click", ()=> document.getElementById("exportBtn").click());
+    wrap.querySelector("#dashImportBtn").addEventListener("click", ()=> document.getElementById("importBtn").click());
   }
 
   function openDashboard(){
