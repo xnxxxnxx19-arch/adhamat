@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مذكرة الأكواد | AVR Concepts</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233f6847'/%3E%3Cpath d='M18 17h28v8H26v7h16v8H26v14h-8z' fill='%23fff8ea'/%3E%3C/svg%3E">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
   // تطبيق الثيم المحفوظ فورًا (قبل رسم الصفحة) عشان مفيش وميض للثيم الافتراضي
   try{
@@ -1105,9 +1106,9 @@
     <button id="dashboardBtn" title="لوحة التحكم — نظرة شاملة وإحصائيات">📊 لوحة التحكم</button>
     <button id="themeBtn" title="غيّر شكل التطبيق">🎨 الثيمات</button>
     <button id="linkAutosaveBtn" title="اختياري: اربط كمان ملفًا حقيقيًا على جهازك كنسخة احتياطية إضافية">🔗 اربط ملف احتياطي (اختياري)</button>
-    <button id="exportBtn" title="تنزيل نسخة كاملة الآن">💾 تنزيل نسخة</button>
-    <button id="importBtn" title="استرجاع نسخة محفوظة">📂 استيراد نسخة</button>
-    <input type="file" id="importFileInput" accept=".json" style="display:none;">
+    <button id="exportBtn" title="تصدير نسخة ZIP كاملة (نصوص + تنسيق + كود + صور وملفات بجودتها الأصلية)">⬇️ تصدير ZIP</button>
+    <button id="importBtn" title="استيراد نسخة ZIP (أو ملف JSON قديم)">⬆️ استيراد</button>
+    <input type="file" id="importFileInput" accept=".zip,application/zip,.json,application/json" style="display:none;">
     <button id="headerToggleBtn" title="طيّ/إظهار الشريط">▲</button>
   </div>
 </header>
@@ -1433,6 +1434,119 @@
     }
     return indexesClone;
   }
+  /* ============================== تصدير/استيراد بصيغة ZIP (بديل base64) ==============================
+     الفرق عن embedAllImagesAsBase64: هنا كل صورة/ملف بيتخزن كملف binary حقيقي جوه الـ ZIP
+     نفسه (بجودته/بايتاته الأصلية تمامًا زي ما هي في IndexedDB، من غير أي تحويل أو ضغط للمحتوى
+     نفسه)، بدل تحويله لنص base64 اللي بيكبّر الحجم حوالي 33%. الملف JSON بيفضل فيه بس مرجع
+     خفيف (اسم الملف جوه الـ ZIP) بدل الصورة/الملف الفعلي. */
+  async function exportIndexesToZip(indexesClone, zip){
+    let counter = 0;
+    for(const ix of (indexesClone||[])){
+      for(const sec of (ix.sections||[])){
+        for(const tbl of (sec.tables||[])){
+          for(const row of (tbl.rows||[])){
+            if(Array.isArray(row.images) && row.images.length){
+              const out = [];
+              for(const ref of row.images){
+                let blob = null, mime = "";
+                if(typeof ref === "string" && ref.indexOf("data:") === 0){
+                  blob = base64ToBlob(ref); mime = blob.type;
+                } else if(isIdbImageRef(ref)){
+                  blob = await idbGetImage(ref); mime = blob ? blob.type : "";
+                }
+                if(blob){
+                  const path = "assets/img_" + (counter++) + ".bin";
+                  zip.file(path, blob);
+                  out.push({ __zipimg:true, ref: path, mime: mime });
+                } else {
+                  out.push(ref); // احتياط: سيبها زي ما هي لو مقدرناش نجيب الصورة
+                }
+              }
+              row.images = out;
+            }
+            if(Array.isArray(row.files) && row.files.length){
+              const out = [];
+              for(const entry of row.files){
+                if(entry && typeof entry === "object" && entry.id){
+                  const blob = await idbGetImage(entry.id);
+                  if(blob){
+                    const path = "assets/file_" + (counter++) + ".bin";
+                    zip.file(path, blob);
+                    out.push({ name: entry.name, mime: entry.mime, size: entry.size, zipRef: path });
+                  } else { out.push(entry); }
+                } else if(entry && entry.data){
+                  const blob = base64ToBlob(entry.data);
+                  const path = "assets/file_" + (counter++) + ".bin";
+                  zip.file(path, blob);
+                  out.push({ name: entry.name, mime: entry.mime, size: entry.size, zipRef: path });
+                } else { out.push(entry); }
+              }
+              row.files = out;
+            }
+          }
+        }
+      }
+    }
+    return indexesClone;
+  }
+  /** عكس العملية: بيدور على أي مرجع ZIP (أو base64 قديم لو موجود) جوه بنية مستوردة،
+   *  يخزنه في IndexedDB بجودته الكاملة، ويستبدله بمرجع خفيف — مستخدمة وقت استيراد ZIP. */
+  async function importIndexesFromZip(indexesArr, zip){
+    for(const ix of (indexesArr||[])){
+      for(const sec of (ix.sections||[])){
+        for(const tbl of (sec.tables||[])){
+          for(const row of (tbl.rows||[])){
+            if(Array.isArray(row.images) && row.images.length){
+              const migrated = [];
+              for(const ref of row.images){
+                if(ref && typeof ref === "object" && ref.__zipimg && ref.ref){
+                  try{
+                    const raw = await zip.file(ref.ref).async("blob");
+                    const typedBlob = ref.mime ? new Blob([raw], {type: ref.mime}) : raw;
+                    const id = genImageId();
+                    await idbPutImage(id, typedBlob);
+                    migrated.push(id);
+                  }catch(e){ /* تجاهل الصورة دي لو فشلت */ }
+                } else if(typeof ref === "string" && ref.indexOf("data:") === 0){
+                  try{
+                    const id = genImageId();
+                    await idbPutImage(id, base64ToBlob(ref));
+                    migrated.push(id);
+                  }catch(e){ migrated.push(ref); }
+                } else { migrated.push(ref); }
+              }
+              row.images = migrated;
+            }
+            if(Array.isArray(row.files) && row.files.length){
+              const migratedFiles = [];
+              for(const entry of row.files){
+                if(entry && entry.zipRef){
+                  try{
+                    const raw = await zip.file(entry.zipRef).async("blob");
+                    const typedBlob = entry.mime ? new Blob([raw], {type: entry.mime}) : raw;
+                    const id = genImageId();
+                    await idbPutImage(id, typedBlob);
+                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size });
+                  }catch(e){ /* تجاهل الملف ده لو فشل */ }
+                } else if(entry && typeof entry === "object" && entry.id){
+                  migratedFiles.push(entry);
+                } else if(entry && entry.data){
+                  try{
+                    const id = genImageId();
+                    await idbPutImage(id, base64ToBlob(entry.data));
+                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size });
+                  }catch(e){ /* تجاهل الملف ده لو فشل */ }
+                }
+              }
+              row.files = migratedFiles;
+            }
+          }
+        }
+      }
+    }
+    return indexesArr;
+  }
+
   /** عكس العملية: بيدور على أي صورة/ملف base64 جوه بنية مستوردة، يخزنه في IndexedDB،
    *  ويستبدله بمرجع خفيف — مستخدمة وقت الاستيراد. */
   async function migrateAllImagesToIndexedDB(indexesArr){
@@ -5228,19 +5342,24 @@
     return { folders, indexes, activeIndexIdx, activeFolderId, langRules, customFormatRules, exportedAt: new Date().toISOString() };
   }
   document.getElementById("exportBtn").addEventListener("click", async ()=>{
-    showToast("جارٍ تجهيز النسخة (بما فيها الصور بجودتها الكاملة)…");
+    if(typeof JSZip === "undefined"){ showToast("مكتبة الضغط (JSZip) ما اتحمّلتش — تأكد من اتصال الإنترنت وجرّب تاني.", "err"); return; }
+    showToast("جارٍ تجهيز نسخة ZIP كاملة (نصوص + تنسيق + كود + صور وملفات بجودتها الأصلية)…");
     try{
       const payload = currentPayload();
       // بنعمل نسخة عميقة عشان نضمّن الصور من غير ما نلمس بيانات التطبيق الشغالة دلوقتي
       const payloadClone = JSON.parse(JSON.stringify(payload));
-      payloadClone.indexes = await embedAllImagesAsBase64(payloadClone.indexes);
-      const blob = new Blob([JSON.stringify(payloadClone)], {type:"application/json"});
+      const zip = new JSZip();
+      payloadClone.indexes = await exportIndexesToZip(payloadClone.indexes, zip);
+      payloadClone.format = "code-library-zip-v1";
+      zip.file("data.json", JSON.stringify(payloadClone));
+      const blob = await zip.generateAsync({ type:"blob", compression:"DEFLATE", compressionOptions:{ level:6 } });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = "code-library-backup.json";
+      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+      a.href = url; a.download = "code-library-backup-" + stamp + ".zip";
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
-      showToast("تم تنزيل النسخة بنجاح ✅", "ok");
+      showToast("تم تنزيل نسخة ZIP بنجاح ✅", "ok");
     }catch(err){
       console.error("فشل تصدير النسخة:", err);
       showToast("حصل خطأ أثناء التصدير: " + (err && err.message ? err.message : err), "err");
@@ -5250,50 +5369,65 @@
   document.getElementById("importBtn").addEventListener("click", ()=>{
     document.getElementById("importFileInput").click();
   });
-  document.getElementById("importFileInput").addEventListener("change",(e)=>{
+  document.getElementById("importFileInput").addEventListener("change", async (e)=>{
     const f = e.target.files[0];
+    e.target.value = "";
     if(!f) return;
     showToast("جارٍ قراءة " + f.name + "…");
-    const reader = new FileReader();
-    reader.onload = async ()=>{
-      try{
-        const data = JSON.parse(reader.result);
-        if(Array.isArray(data.indexes) && data.indexes.length){
-          indexes = data.indexes.map(ix=>({
-            id: (ix && ix.id) || idxUid(),
-            title: (ix && typeof ix.title === "string" && ix.title.trim()) ? ix.title : "فهرس",
-            sections: (ix && Array.isArray(ix.sections)) ? ix.sections : [],
-            folderId: ix && ix.folderId
-          }));
-          folders = Array.isArray(data.folders) ? data.folders.map(f=>({id:f.id||folderUid(),title:f.title||"مجلد"})) : [];
-          activeFolderId = data.activeFolderId || "";
-          activeIndexIdx = Number.isInteger(data.activeIndexIdx) ? data.activeIndexIdx : 0;
-          ensureIndexes();
-        } else if(Array.isArray(data.sections)){
-          // نسخة قديمة بفهرس واحد فقط — بتستبدل سكشنات الفهرس النشط حاليًا
-          sections = data.sections;
-          indexes[activeIndexIdx].sections = sections;
+    try{
+      let data = null;
+      let zip = null;
+      const looksLikeZip = /\.zip$/i.test(f.name) || f.type === "application/zip";
+      if(looksLikeZip && typeof JSZip !== "undefined"){
+        try{
+          zip = await JSZip.loadAsync(f);
+          const dataEntry = zip.file("data.json");
+          if(!dataEntry) throw new Error("data.json مفقود جوه الـ ZIP");
+          data = JSON.parse(await dataEntry.async("string"));
+        }catch(zipErr){
+          console.warn("فشل فتح الملف كـ ZIP، هنجرب كـ JSON قديم:", zipErr);
+          zip = null;
         }
-        if(data.langRules) langRules = Object.assign(langRules, data.langRules);
-        if(Array.isArray(data.customFormatRules)) mergeFormatRules(data.customFormatRules);
-        selected = new Set();
-        showToast("جارٍ نقل الصور لمساحة التخزين الكاملة الجودة…");
-        indexes = await migrateAllImagesToIndexedDB(indexes); // يحوّل صور base64 القادمة من الملف لمراجع IndexedDB
-        setStatus("تم استرجاع النسخة بنجاح ✅", "ok");
-        showToast("تم استرجاع النسخة بنجاح ✅ (" + sections.length + " سكشن)", "ok");
-        scheduleAutoSave();
-        renderAll();
-      }catch(err){
-        console.error("فشل تحليل ملف النسخة:", err);
-        showToast("ملف النسخة غير صالح: " + err.message, "err");
       }
-    };
-    reader.onerror = ()=>{
-      console.error("تعذّرت قراءة ملف النسخة:", reader.error);
-      showToast("تعذّرت قراءة الملف. جرّب تاني.", "err");
-    };
-    reader.readAsText(f, "utf-8");
-    e.target.value = "";
+      if(!zip){
+        const text = await f.text();
+        data = JSON.parse(text);
+      }
+
+      if(Array.isArray(data.indexes) && data.indexes.length){
+        indexes = data.indexes.map(ix=>({
+          id: (ix && ix.id) || idxUid(),
+          title: (ix && typeof ix.title === "string" && ix.title.trim()) ? ix.title : "فهرس",
+          sections: (ix && Array.isArray(ix.sections)) ? ix.sections : [],
+          folderId: ix && ix.folderId
+        }));
+        folders = Array.isArray(data.folders) ? data.folders.map(ff=>({id:ff.id||folderUid(),title:ff.title||"مجلد"})) : [];
+        activeFolderId = data.activeFolderId || "";
+        activeIndexIdx = Number.isInteger(data.activeIndexIdx) ? data.activeIndexIdx : 0;
+        ensureIndexes();
+      } else if(Array.isArray(data.sections)){
+        // نسخة قديمة بفهرس واحد فقط — بتستبدل سكشنات الفهرس النشط حاليًا
+        sections = data.sections;
+        indexes[activeIndexIdx].sections = sections;
+      }
+      if(data.langRules) langRules = Object.assign(langRules, data.langRules);
+      if(Array.isArray(data.customFormatRules)) mergeFormatRules(data.customFormatRules);
+      selected = new Set();
+
+      showToast("جارٍ نقل الصور والملفات لمساحة التخزين الكاملة الجودة…");
+      if(zip){
+        indexes = await importIndexesFromZip(indexes, zip); // ZIP: بيرجّع الصور/الملفات من ملفاتها الـ binary الأصلية
+      } else {
+        indexes = await migrateAllImagesToIndexedDB(indexes); // JSON قديم: يحوّل صور base64 لمراجع IndexedDB
+      }
+      setStatus("تم استرجاع النسخة بنجاح ✅", "ok");
+      showToast("تم استرجاع النسخة بنجاح ✅ (" + sections.length + " سكشن)", "ok");
+      scheduleAutoSave();
+      renderAll();
+    }catch(err){
+      console.error("فشل تحليل ملف النسخة:", err);
+      showToast("ملف النسخة غير صالح: " + (err && err.message ? err.message : err), "err");
+    }
   });
 
   /* ============================== AUTO-SAVE ============================== */
