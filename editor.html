@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="hub.js"></script>
+<script>/* HUB_THEME_ADOPT_editor */try{ if(window.HUB){ window.HUB.applyTheme(window.HUB.getTheme(), "editor"); window.HUB.onThemeChange(function(name){ window.HUB.applyTheme(name, "editor"); }); }}catch(e){}</script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
   <title>Custom Code Editor</title>
@@ -3802,6 +3804,22 @@ function syncMarkedInstructionsToEnglishApp(){
     });
     localStorage.setItem('bridge-editor-instructions', JSON.stringify(bridge));
   }catch(e){ /* storage unavailable (e.g. private browsing) — fail silently */ }
+
+  // إرسال بيانات المحرر لمخزن الـ HUB المشترك: كل لغة مسجّلة هنا تظهر لباقي
+  // التطبيقات (زي مذكرة الأكواد)، وكل لغة بيها تعليمات تتحسب كـ "مشروع/مذكرة".
+  try{
+    if(window.HUB){
+      state.languages.forEach(lang => {
+        if(lang && lang.name) window.HUB.addLanguage(lang.name, 'editor');
+      });
+      const projects = state.languages.map(lang => ({
+        id: lang.id,
+        name: lang.name,
+        note: (lang.instructions ? lang.instructions.length : 0) + ' تعليمة'
+      }));
+      window.HUB.syncProjects(projects, 'editor');
+    }
+  }catch(e){}
 }
 
 function setSaveStatus(status) {

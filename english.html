@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="hub.js"></script>
+<script>/* HUB_THEME_ADOPT_english */try{ if(window.HUB){ window.HUB.applyTheme(window.HUB.getTheme(), "english"); window.HUB.onThemeChange(function(name){ window.HUB.applyTheme(name, "english"); }); }}catch(e){}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>English Grammar Basics — تمرين تفاعلي</title>
@@ -1814,6 +1816,25 @@ function sendSelectedToVocab(){
   });
 
   localStorage.setItem(VOCAB_BRIDGE_KEY, JSON.stringify(raw));
+
+  // إرسال نفس الكلمات لمخزن الربط المشترك (HUB) عشان أي تطبيق تاني في البرنامج
+  // يقدر يشوفها فورًا (تطبيق البطاقات، مركز القيادة، ...) من غير ما تنتظر استيراد يدوي.
+  try{
+    if(window.HUB){
+      const sentNow = [];
+      sections.forEach(section => {
+        const rows = getRowsInOrder(section);
+        rows.forEach(row => {
+          const key = section.id + '::' + row.id;
+          if(!selectedRows.has(key)) return;
+          const entry = buildVocabEntryFromRow(section, row);
+          if(entry.term) sentNow.push(entry);
+        });
+      });
+      window.HUB.addWords(sentNow, 'english');
+    }
+  }catch(e){}
+
   document.getElementById('scoreboard').textContent = added > 0
     ? `تم إرسال ${added} كلمة جديدة لبرنامج المفردات ✅ — افتح "بطاقاتي" وادخل "إدارة الكلمات" واستوردها من هناك.`
     : "الكلمات المحددة كلها متبعتة قبل كده لبرنامج المفردات.";

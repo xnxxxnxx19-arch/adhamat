@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="hub.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>لوحة التطبيقات</title>
@@ -129,7 +130,9 @@
   const activityLabels = {
     english:'تفاعل مع تطبيق الإنجليزي', editor:'تفاعل مع المحرر البرمجي',
     meals:'تفاعل مع متتبع الوجبات', vocab:'تفاعل مع البطاقات',
-    codelib:'تفاعل مع مذكرة الأكواد', instructions:'تفاعل مع مرجع التعليمات'
+    codelib:'تفاعل مع مذكرة الأكواد', instructions:'تفاعل مع مرجع التعليمات',
+    mindmap:'تفاعل مع الخرائط الذهنية', drawing:'تفاعل مع نظام الرسم',
+    workshop:'تفاعل مع مخزون الورشة', equipment:'تفاعل مع قاعدة المعدات'
   };
   const lastActivity = {};
   function recordActivity(app, detail){

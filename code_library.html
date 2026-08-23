@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="hub.js"></script>
+<script>/* HUB_THEME_ADOPT_code_library */try{ if(window.HUB){ window.HUB.applyTheme(window.HUB.getTheme(), "code_library"); window.HUB.onThemeChange(function(name){ window.HUB.applyTheme(name, "code_library"); }); }}catch(e){}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مذكرة الأكواد | AVR Concepts</title>
@@ -5255,6 +5257,9 @@
                 displayName: item.displayName || item.language,
                 rules: item.rules
               };
+              // إرسال اللغة الجديدة لمخزن الـ HUB المشترك عشان تظهر تلقائيًا في باقي
+              // تطبيقات البرنامج (زي المحرر البرمجي) من غير أي خطوة يدوية إضافية.
+              try{ if(window.HUB) window.HUB.addLanguage(item.displayName || item.language, 'codelib'); }catch(e){}
             }
           });
           showToast("تمت إضافة قواعد " + f.name + " ✅", "ok");
@@ -5628,8 +5633,22 @@
     }
   }
 
+  // يبني ملخّص لكل الأقسام/الأكواد الحالية ويبعته لمخزن الـ HUB المشترك، عشان مركز
+  // القيادة وأي تطبيق تاني يشوف فورًا أي مذكرة كود جديدة اتضافت هنا.
+  function syncSectionsToHub(){
+    try{
+      if(!window.HUB) return;
+      const list = (sections||[]).map(s => ({
+        id: s.id,
+        title: s.title || s.sub || 'بدون عنوان',
+        language: (s.codes && s.codes[0] && s.codes[0].lang) || ''
+      }));
+      window.HUB.syncCodes(list, 'codelib');
+    }catch(e){}
+  }
   function scheduleAutoSave(){
     if(indexes[activeIndexIdx]) indexes[activeIndexIdx].sections = sections;
+    syncSectionsToHub();
     // إشارة فورية إن فيه تعديل لسه ماتحفظش — تتحدث فورًا وقت الكتابة، قبل ما التأخير يخلص
     setSaveStatus("pending", "🟡 جارِ الحفظ…");
     clearTimeout(autoSaveTimer);

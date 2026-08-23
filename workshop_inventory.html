@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="hub.js"></script>
+<script>/* HUB_THEME_ADOPT_workshop */try{ if(window.HUB){ window.HUB.applyTheme(window.HUB.getTheme(), "workshop"); window.HUB.onThemeChange(function(name){ window.HUB.applyTheme(name, "workshop"); }); }}catch(e){}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مخزن المكونات · التوأم الرقمي للورشة</title>
@@ -3951,10 +3953,29 @@ function setSaveBadge(status,extra){
     el.onclick=()=>alert('تشخيص الخطأ:\\n'+(extra||'خطأ غير معروف')+'\\n\\nتم استخدام التخزين الاحتياطي (localStorage) كإجراء وقائي.');
   }
 }
+// يبني قائمة تنبيهات نقص المخزون الحالية ويبعتها لمخزن الـ HUB المشترك، عشان مركز
+// القيادة (وأي تطبيق تاني) يشوف فورًا أي مكوّن وصل للتحذير أو الحرج، من غير ما
+// يفتح تطبيق الورشة أصلاً. بتتنفّذ في كل مرة الحالة بتتغيّر (جوه scheduleSave).
+function syncLowStockToHub(){
+  try{
+    if(!window.HUB) return;
+    const rows = state.components
+      .map(c => ({ c, total: totalQtyOfComponent(c.id) }))
+      .filter(x => x.total <= x.c.warningStock);
+    const alerts = rows.map(({c, total}) => ({
+      key: c.id,
+      level: total <= c.criticalStock ? 'critical' : 'warning',
+      title: (total <= c.criticalStock ? '🔴 نقص حرج: ' : '🟡 اقترب النفاد: ') + c.name,
+      message: `الكمية الحالية ${total} من أصل هدف ${c.targetStock} (حد التحذير ${c.warningStock}, الحد الحرج ${c.criticalStock}).`
+    }));
+    window.HUB.syncAlertsForSource('workshop', alerts);
+  }catch(e){}
+}
 function scheduleSave(){
   setSaveBadge('pending');
   clearTimeout(saveTimer);
   saveTimer=setTimeout(doSave,500);
+  syncLowStockToHub();
 }
 const MAX_EMERGENCY_LOCALSTORAGE_BYTES = 1800000;
 let saveRevision = 0;

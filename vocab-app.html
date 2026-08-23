@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="hub.js"></script>
+<script>/* HUB_THEME_ADOPT_vocab-app */try{ if(window.HUB){ window.HUB.applyTheme(window.HUB.getTheme(), "vocab-app"); window.HUB.onThemeChange(function(name){ window.HUB.applyTheme(name, "vocab-app"); }); }}catch(e){}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>بطاقاتي — دفتر مفردات إنجليزي</title>
@@ -1103,11 +1105,15 @@
       <button class="btn ghost" id="addGroupBtn">📦 إضافة مجموعة كلمات</button>
       <button class="btn ghost" id="importFromEditorBtn">🖥️ استيراد من المحرر أو مرجع التعليمات<span id="editorBridgeCount" class="count-pill" style="display:none;"></span></button>
       <button class="btn ghost" id="importFromEnglishBtn">📘 استيراد من برنامج تعلم الإنجليزي<span id="englishBridgeCount" class="count-pill" style="display:none;"></span></button>
+      <button class="btn ghost" id="importFromHubBtn">🗂️ استيراد من كل التطبيقات (HUB)<span id="hubBridgeCount" class="count-pill" style="display:none;"></span></button>
+      <button class="btn ghost" id="showProgramOverviewBtn">🌐 نظرة على البرنامج كله</button>
     </div>
     <div id="wordForm" style="display:none;"></div>
     <div id="groupForm" style="display:none;"></div>
     <div id="editorBridgePanel" style="display:none;"></div>
     <div id="englishBridgePanel" style="display:none;"></div>
+    <div id="hubBridgePanel" style="display:none;"></div>
+    <div id="programOverviewPanel" style="display:none;"></div>
     <div class="manage-toolbar">
       <div class="field"><input type="search" id="manageSearch" placeholder="🔎 ابحث عن كلمة أو معنى..."></div>
       <div class="field">
@@ -4180,6 +4186,112 @@
   }
   document.getElementById("importFromEnglishBtn").addEventListener("click", renderEnglishBridgePanel);
   window.addEventListener('storage', (e)=>{ if(e.key === 'bridge-english-to-vocab') refreshEnglishBridgeButton(); });
+
+  /* ============================================================
+     جسر مركز البيانات المشتركة (HUB): بيقرأ كل الكلمات اللي أي
+     تطبيق في البرنامج بعتها لمخزن الـ HUB المشترك (مش بس تطبيق
+     الإنجليزي)، عشان تطبيق البطاقات يكون نقطة تجميع دائمة لكل كلمة
+     جديدة في البرنامج كله. برضه قراءة فقط + مراجعة قبل الإضافة،
+     زي باقي الجسور، عشان تفضل ماسك في القرار.
+  ============================================================ */
+  function getHubWords(){
+    try{ return (window.HUB ? window.HUB.getAll().words : []) || []; }catch(e){ return []; }
+  }
+  function refreshHubBridgeButton(){
+    const badge = document.getElementById("hubBridgeCount");
+    if(!badge) return;
+    const existing = existingWordSet();
+    const items = getHubWords();
+    const newOnes = items.filter(it => it && it.term && !existing.has(String(it.term).trim().toLowerCase()));
+    if(newOnes.length){ badge.style.display = "inline-flex"; badge.textContent = newOnes.length; }
+    else{ badge.style.display = "none"; }
+  }
+  function renderHubBridgePanel(){
+    const panel = document.getElementById("hubBridgePanel");
+    const items = getHubWords();
+    if(!items.length){
+      panel.innerHTML = `<div class="empty"><h3>لا توجد كلمات جديدة في مخزن البرنامج المشترك</h3><p>أي كلمة يتم إرسالها من أي تطبيق في البرنامج (حاليًا تطبيق تعلم الإنجليزي) هتظهر هنا تلقائيًا.</p></div>`;
+      panel.style.display = "block";
+      return;
+    }
+    const existing = existingWordSet();
+    panel.innerHTML = `
+      <div class="bridge-list">
+        ${items.map((it,i)=>{
+          const already = it && it.term && existing.has(String(it.term).trim().toLowerCase());
+          return `
+          <label class="bridge-item ${already?'already':''}">
+            <input type="checkbox" data-hidx="${i}" ${already?'disabled':'checked'}>
+            <span class="bt">${escapeHtml(it && it.term || '')}</span>
+            <span class="bm">${escapeHtml(it && it.meaning || '')}</span>
+            <span class="bnote">من: ${escapeHtml(it && it.source || 'HUB')}${already?' — مضافة بالفعل':''}</span>
+          </label>`;
+        }).join('')}
+      </div>
+      <div class="form-actions">
+        <button class="btn ghost small" id="hubBridgeCancel">إغلاق</button>
+        <button class="btn small" id="hubBridgeAddSelected">+ إضافة المحدد</button>
+      </div>
+    `;
+    panel.style.display = "block";
+    document.getElementById("hubBridgeCancel").addEventListener("click", ()=>{ panel.style.display="none"; panel.innerHTML=""; });
+    document.getElementById("hubBridgeAddSelected").addEventListener("click", ()=>{
+      const checked = Array.from(panel.querySelectorAll('input[data-hidx]:checked'));
+      const existingNow = existingWordSet();
+      const batchInfo = { id: cryptoId(), label: "من مخزن البرنامج المشترك — " + formatDate(Date.now()), ts: Date.now() };
+      let added = 0;
+      checked.forEach(chk=>{
+        const it = items[+chk.dataset.hidx];
+        if(!it || !it.term) return;
+        const key = String(it.term).trim().toLowerCase();
+        if(existingNow.has(key)) return;
+        state.words.push(seedWord({
+          word: it.term,
+          meaning: it.meaning || "",
+          example: it.example || "",
+          pronunciation: "",
+          category: it.source ? ("من " + it.source) : "من البرنامج"
+        }, "أُضيفت من مخزن البرنامج المشترك (HUB)", batchInfo));
+        existingNow.add(key);
+        added++;
+      });
+      if(added){ save(); renderManage(); }
+      panel.style.display = "none"; panel.innerHTML = "";
+      toast(added ? ("تمت إضافة " + added + " كلمة جديدة ✅") : "لم يتم اختيار أي كلمة جديدة.", added ? "ok" : "warn");
+    });
+  }
+  document.getElementById("importFromHubBtn").addEventListener("click", renderHubBridgePanel);
+  try{ if(window.HUB) window.HUB.onChange(refreshHubBridgeButton); }catch(e){}
+  refreshHubBridgeButton();
+
+  /* ============================================================
+     نظرة على البرنامج كله: عرض سريع (قراءة فقط) لكل الأكواد واللغات
+     والمشاريع المسجّلة في مخزن الـ HUB من كل تطبيقات البرنامج، عشان
+     تطبيق البطاقات يبقى مكان واحد تقدر منه تشوف كل حاجة مذاكرتها
+     مطلوبة — كلمات وأكواد ومشاريع — من غير ما تفتح كل تطبيق لوحده.
+  ============================================================ */
+  function renderProgramOverview(){
+    const panel = document.getElementById("programOverviewPanel");
+    const data = (window.HUB ? window.HUB.getAll() : {words:[],codes:[],languages:[],projects:[]});
+    const section = (title, icon, items, renderItem) => `
+      <div style="margin-bottom:18px;">
+        <h4 style="margin:0 0 8px;">${icon} ${escapeHtml(title)} <span class="count-pill" style="display:inline-flex;">${items.length}</span></h4>
+        ${items.length ? `<div class="bridge-list">${items.slice(0,50).map(renderItem).join('')}</div>` : `<p style="color:var(--muted,#888); font-size:13px;">لا يوجد شيء مسجّل بعد.</p>`}
+      </div>`;
+    panel.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="margin:0;">🌐 كل بيانات البرنامج (كلمات + أكواد + مشاريع)</h3>
+        <button class="btn ghost small" id="programOverviewClose">إغلاق</button>
+      </div>
+      ${section("كل الكلمات في البرنامج", "🔤", data.words, w => `<div class="bridge-item"><span class="bt">${escapeHtml(w.term||'')}</span><span class="bm">${escapeHtml(w.meaning||'')}</span><span class="bnote">من: ${escapeHtml(w.source||'')}</span></div>`)}
+      ${section("كل الأكواد والمذكرات", "💻", data.codes, c => `<div class="bridge-item"><span class="bt">${escapeHtml(c.title||'')}</span><span class="bm">${escapeHtml(c.language||'')}</span><span class="bnote">من: ${escapeHtml(c.source||'')}</span></div>`)}
+      ${section("اللغات المسجّلة", "🏷️", data.languages, l => `<div class="bridge-item"><span class="bt">${escapeHtml(l.name||'')}</span><span class="bnote">من: ${escapeHtml(l.source||'')}</span></div>`)}
+      ${section("المشاريع", "📁", data.projects, p => `<div class="bridge-item"><span class="bt">${escapeHtml(p.name||'')}</span><span class="bm">${escapeHtml(p.note||'')}</span><span class="bnote">من: ${escapeHtml(p.source||'')}</span></div>`)}
+    `;
+    panel.style.display = "block";
+    document.getElementById("programOverviewClose").addEventListener("click", ()=>{ panel.style.display="none"; panel.innerHTML=""; });
+  }
+  document.getElementById("showProgramOverviewBtn").addEventListener("click", renderProgramOverview);
 
   function openForm(word){
     wordFormEl.style.display = "block";
