@@ -4853,13 +4853,14 @@ const state = {
 /* ---------- أدوات عامة ---------- */
 function uid(prefix){ return (prefix||"id") + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function toast(msg, type){
+function toast(msg, type, ms){
   const wrap = document.getElementById("toastWrap");
   const el = document.createElement("div");
   el.className = "toast" + (type?(" "+type):"");
+  el.style.whiteSpace = "pre-line";
   el.textContent = msg;
   wrap.appendChild(el);
-  setTimeout(()=>{ el.style.opacity="0"; el.style.transition=".3s"; setTimeout(()=>el.remove(),300); }, 2600);
+  setTimeout(()=>{ el.style.opacity="0"; el.style.transition=".3s"; setTimeout(()=>el.remove(),300); }, ms||2600);
 }
 function setSaveBadge(mode){
   const b = document.getElementById("saveBadge");
@@ -6065,6 +6066,9 @@ async function exportProject(){
     const itemsMeta = [];
     const allFiles = await idbGetAll("files");
     const fileMap = new Map(allFiles.map(f=>[f.id,f]));
+    // نسجّل أي صورة/مستند مرتبط بعنصر لكن ملفه الفعلي مش موجود في التخزين (مرجع يتيم) —
+    // عشان المستخدم يعرف إن نسخة التصدير مش هتحتوي هذا الملف، بدل ما يكتشف غيابه بعدين بصمت.
+    const missingFiles = [];
 
     for(const it of state.items){
       const clone = JSON.parse(JSON.stringify(it));
@@ -6072,7 +6076,7 @@ async function exportProject(){
       const imageNames = [];
       for(const fid of (it.imageIds||[])){
         const frec = fileMap.get(fid);
-        if(!frec) continue;
+        if(!frec){ missingFiles.push({item:it.name||it.id, type:"صورة", id:fid}); continue; }
         const ext = guessExt(frec.mime, frec.name);
         const fname = fid + ext;
         folder.folder("images").file(fname, frec.blob);
@@ -6081,7 +6085,7 @@ async function exportProject(){
       const docNames = [];
       for(const d of (it.docs||[])){
         const frec = fileMap.get(d.fileId);
-        if(!frec) continue;
+        if(!frec){ missingFiles.push({item:it.name||it.id, type:"مستند", id:d.fileId, name:d.name}); continue; }
         const fname = d.fileId + "_" + (d.name||"file");
         folder.folder("documents").file(fname, frec.blob);
         docNames.push({fileId: d.fileId, filename: "documents/"+fname, name: d.name});
@@ -6092,6 +6096,9 @@ async function exportProject(){
       itemsMeta.push({id: it.id, name: it.name, folderId: it.folderId});
     }
     zip.file("project/items_index.json", JSON.stringify(itemsMeta, null, 2));
+    if(missingFiles.length){
+      zip.file("project/export-warnings.json", JSON.stringify(missingFiles, null, 2));
+    }
 
     const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:6}});
     const a = document.createElement("a");
@@ -6100,7 +6107,12 @@ async function exportProject(){
     a.download = `equipment-db-${stamp}.zip`;
     a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-    toast("تم تصدير النسخة بنجاح", "ok");
+    if(missingFiles.length){
+      console.warn("ملفات مفقودة أثناء التصدير:", missingFiles);
+      toast(`تم التصدير مع تحذير: ${missingFiles.length} صورة/مستند لها مرجع بدون ملف فعلي، لم تُدرَج في الأرشيف.`, "err", 7000);
+    }else{
+      toast("تم تصدير النسخة بنجاح", "ok");
+    }
   }catch(err){
     console.error(err);
     toast("فشل التصدير: " + (err.message||err), "err");
@@ -6130,12 +6142,28 @@ document.addEventListener("DOMContentLoaded", ()=>{
 });
 async function importProject(file, mode){
   toast("جارٍ الاستيراد...");
+  // فلسفة الاستيراد: عنصر واحد تالف (JSON غير صالح، صورة مفقودة من الأرشيف) بيتسجّل
+  // كتحذير ويتخطى، ومايوقفش استيراد باقي العناصر. الاستبدال (mode=replace) بيتأخر لحد
+  // ما نتأكد إن الأرشيف فيه على الأقل folders.json و items_index.json صالحين، عشان
+  // بيانات المستخدم الحالية متتمسحش إلا لو فعلاً عندنا حاجة نستبدلها بيها.
+  const rep = {itemsRestored:0, itemsFailed:[], imagesRestored:0, imagesMissing:[], docsRestored:0, docsMissing:[]};
   try{
-    const zip = await JSZip.loadAsync(file);
-    const foldersJson = await zip.file("project/folders.json").async("string");
-    const importedFolders = JSON.parse(foldersJson);
-    const itemsIndexJson = await zip.file("project/items_index.json").async("string");
-    const itemsIndex = JSON.parse(itemsIndexJson);
+    let zip;
+    try{ zip = await JSZip.loadAsync(file); }
+    catch(e){ throw new Error("الملف ده مش أرشيف ZIP صالح."); }
+
+    const foldersEntry = zip.file("project/folders.json");
+    if(!foldersEntry) throw new Error("project/folders.json مفقود من الأرشيف — هل هذا فعلاً ملف نسخة احتياطية لنفس البرنامج؟");
+    const itemsIndexEntry = zip.file("project/items_index.json");
+    if(!itemsIndexEntry) throw new Error("project/items_index.json مفقود من الأرشيف — الحزمة غير مكتملة.");
+
+    let importedFolders, itemsIndex;
+    try{ importedFolders = JSON.parse(await foldersEntry.async("string")); }
+    catch(e){ throw new Error("project/folders.json تالف ولا يمكن تحليله."); }
+    try{ itemsIndex = JSON.parse(await itemsIndexEntry.async("string")); }
+    catch(e){ throw new Error("project/items_index.json تالف ولا يمكن تحليله."); }
+    if(!Array.isArray(importedFolders)) importedFolders = [];
+    if(!Array.isArray(itemsIndex)) itemsIndex = [];
 
     if(mode==="replace"){
       await idbClear("folders"); await idbClear("items"); await idbClear("files");
@@ -6148,53 +6176,74 @@ async function importProject(file, mode){
       folderIdMap[f.id] = newId;
     }
     for(const f of importedFolders){
-      const nf = Object.assign({}, f, {
-        id: folderIdMap[f.id],
-        parentId: f.parentId ? (folderIdMap[f.parentId]||null) : null
-      });
-      await idbPut("folders", nf);
-      state.folders.push(nf);
+      try{
+        const nf = Object.assign({}, f, {
+          id: folderIdMap[f.id],
+          parentId: f.parentId ? (folderIdMap[f.parentId]||null) : null
+        });
+        await idbPut("folders", nf);
+        state.folders.push(nf);
+      }catch(e){ rep.itemsFailed.push({item:"مجلد: "+(f.name||f.id), reason:String(e && e.message || e)}); }
     }
 
     for(const meta of itemsIndex){
-      const entryPath = "equipment/" + meta.id + "/data.json";
-      const entry = zip.file(entryPath);
-      if(!entry) continue;
-      const data = JSON.parse(await entry.async("string"));
-      const newItemId = mode==="merge" ? uid("itm") : data.id;
-      const newImageIds = [];
-      let newMainId = null;
-      for(const img of (data._images||[])){
-        const zf = zip.file("equipment/" + meta.id + "/" + img.filename);
-        if(!zf) continue;
-        const blob = await zf.async("blob");
-        const fid = await storeFile(blob, img.filename);
-        newImageIds.push(fid);
-        if(img.isMain) newMainId = fid;
-      }
-      const newDocs = [];
-      for(const d of (data._docs||[])){
-        const zf = zip.file("equipment/" + meta.id + "/" + d.filename);
-        if(!zf) continue;
-        const blob = await zf.async("blob");
-        const fid = await storeFile(blob, d.name);
-        newDocs.push({id: uid("doc"), name: d.name, fileId: fid});
-      }
-      const newItem = Object.assign({}, data, {
-        id: newItemId,
-        folderId: folderIdMap[data.folderId] || data.folderId,
-        imageIds: newImageIds,
-        mainImageId: newMainId || newImageIds[0] || null,
-        docs: newDocs
-      });
-      delete newItem._images; delete newItem._docs;
-      await idbPut("items", newItem);
-      state.items.push(newItem);
+      try{
+        const entryPath = "equipment/" + meta.id + "/data.json";
+        const entry = zip.file(entryPath);
+        if(!entry){ rep.itemsFailed.push({item:meta.name||meta.id, reason:"data.json مفقود من الأرشيف لهذا العنصر"}); continue; }
+        let data;
+        try{ data = JSON.parse(await entry.async("string")); }
+        catch(e){ rep.itemsFailed.push({item:meta.name||meta.id, reason:"data.json تالف لهذا العنصر"}); continue; }
+
+        const newItemId = mode==="merge" ? uid("itm") : data.id;
+        const newImageIds = [];
+        let newMainId = null;
+        for(const img of (data._images||[])){
+          try{
+            const zf = zip.file("equipment/" + meta.id + "/" + img.filename);
+            if(!zf){ rep.imagesMissing.push({item:meta.name||meta.id, filename:img.filename}); continue; }
+            const blob = await zf.async("blob");
+            const fid = await storeFile(blob, img.filename);
+            newImageIds.push(fid); rep.imagesRestored++;
+            if(img.isMain) newMainId = fid;
+          }catch(e){ rep.imagesMissing.push({item:meta.name||meta.id, filename:img.filename, reason:String(e && e.message || e)}); }
+        }
+        const newDocs = [];
+        for(const d of (data._docs||[])){
+          try{
+            const zf = zip.file("equipment/" + meta.id + "/" + d.filename);
+            if(!zf){ rep.docsMissing.push({item:meta.name||meta.id, name:d.name}); continue; }
+            const blob = await zf.async("blob");
+            const fid = await storeFile(blob, d.name);
+            newDocs.push({id: uid("doc"), name: d.name, fileId: fid}); rep.docsRestored++;
+          }catch(e){ rep.docsMissing.push({item:meta.name||meta.id, name:d.name, reason:String(e && e.message || e)}); }
+        }
+        const newItem = Object.assign({}, data, {
+          id: newItemId,
+          folderId: folderIdMap[data.folderId] || data.folderId,
+          imageIds: newImageIds,
+          mainImageId: newMainId || newImageIds[0] || null,
+          docs: newDocs
+        });
+        delete newItem._images; delete newItem._docs;
+        await idbPut("items", newItem);
+        state.items.push(newItem);
+        rep.itemsRestored++;
+      }catch(e){ rep.itemsFailed.push({item:meta.name||meta.id, reason:String(e && e.message || e)}); }
     }
 
     renderSidebarTree();
     navigateTo({type:"home"});
-    toast("تم الاستيراد بنجاح", "ok");
+    const summary = [`تم الاستيراد: ${rep.itemsRestored} عنصر، ${rep.imagesRestored} صورة، ${rep.docsRestored} مستند.`];
+    if(rep.itemsFailed.length) summary.push(`⚠️ ${rep.itemsFailed.length} عنصر فشل: `+rep.itemsFailed.slice(0,5).map(x=>x.item).join('، ')+(rep.itemsFailed.length>5?' …':''));
+    if(rep.imagesMissing.length) summary.push(`⚠️ ${rep.imagesMissing.length} صورة مفقودة من الأرشيف.`);
+    if(rep.docsMissing.length) summary.push(`⚠️ ${rep.docsMissing.length} مستند مفقود من الأرشيف.`);
+    if(rep.itemsFailed.length || rep.imagesMissing.length || rep.docsMissing.length){
+      console.warn("تفاصيل الاستيراد الناقصة:", rep);
+      toast(summary.join('\n'), "err", 9000);
+    }else{
+      toast(summary.join('\n'), "ok");
+    }
   }catch(err){
     console.error(err);
     toast("فشل الاستيراد: " + (err.message||err), "err");

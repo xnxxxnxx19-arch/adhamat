@@ -1316,6 +1316,19 @@
     }catch(e){ /* تجاهل لو فشل الحذف */ }
   }
   function genImageId(){ return "idbimg_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,9); }
+  /* يرجّع كل الـ IDs المخزَّنة فعليًا في IndexedDB — تُستخدم لفحص سلامة المراجع بعد الاستيراد،
+     عشان أي مرجع صورة/ملف جوه البيانات مالوش ملف فعلي يظهر بوضوح بدل ما يفضل مكسور بصمت. */
+  async function listStoredAssetIds(){
+    try{
+      const db = await openImageDB();
+      return await new Promise((resolve, reject)=>{
+        const tx = db.transaction(IMG_STORE, "readonly");
+        const req = tx.objectStore(IMG_STORE).getAllKeys();
+        req.onsuccess = () => resolve((req.result||[]).map(String));
+        req.onerror = () => reject(req.error);
+      });
+    }catch(e){ return []; }
+  }
 
   /* ============ تخزين بيانات التطبيق الرئيسية (نصوص/فهارس/سكشنات) في IndexedDB ============ */
   async function idbPutAppData(key, value){
@@ -1492,8 +1505,10 @@
     return indexesClone;
   }
   /** عكس العملية: بيدور على أي مرجع ZIP (أو base64 قديم لو موجود) جوه بنية مستوردة،
-   *  يخزنه في IndexedDB بجودته الكاملة، ويستبدله بمرجع خفيف — مستخدمة وقت استيراد ZIP. */
-  async function importIndexesFromZip(indexesArr, zip){
+   *  يخزنه في IndexedDB بجودته الكاملة، ويستبدله بمرجع خفيف — مستخدمة وقت استيراد ZIP.
+   *  rep (اختياري): كائن تقرير بيتجمّع فيه عدد الملفات المُستعادة والفاشلة بدل ما تُفقد بصمت. */
+  async function importIndexesFromZip(indexesArr, zip, rep){
+    rep = rep || {restored:0, failed:[]};
     for(const ix of (indexesArr||[])){
       for(const sec of (ix.sections||[])){
         for(const tbl of (sec.tables||[])){
@@ -1503,18 +1518,20 @@
               for(const ref of row.images){
                 if(ref && typeof ref === "object" && ref.__zipimg && ref.ref){
                   try{
-                    const raw = await zip.file(ref.ref).async("blob");
+                    const entry = zip.file(ref.ref);
+                    if(!entry) throw new Error("الملف "+ref.ref+" مفقود جوه الأرشيف");
+                    const raw = await entry.async("blob");
                     const typedBlob = ref.mime ? new Blob([raw], {type: ref.mime}) : raw;
                     const id = genImageId();
                     await idbPutImage(id, typedBlob);
-                    migrated.push(id);
-                  }catch(e){ /* تجاهل الصورة دي لو فشلت */ }
+                    migrated.push(id); rep.restored++;
+                  }catch(e){ rep.failed.push({type:"صورة", ref:ref.ref, reason:String(e && e.message || e)}); }
                 } else if(typeof ref === "string" && ref.indexOf("data:") === 0){
                   try{
                     const id = genImageId();
                     await idbPutImage(id, base64ToBlob(ref));
-                    migrated.push(id);
-                  }catch(e){ migrated.push(ref); }
+                    migrated.push(id); rep.restored++;
+                  }catch(e){ migrated.push(ref); rep.failed.push({type:"صورة (base64)", ref:"embedded", reason:String(e && e.message || e)}); }
                 } else { migrated.push(ref); }
               }
               row.images = migrated;
@@ -1524,20 +1541,22 @@
               for(const entry of row.files){
                 if(entry && entry.zipRef){
                   try{
-                    const raw = await zip.file(entry.zipRef).async("blob");
+                    const zentry = zip.file(entry.zipRef);
+                    if(!zentry) throw new Error("الملف "+entry.zipRef+" مفقود جوه الأرشيف");
+                    const raw = await zentry.async("blob");
                     const typedBlob = entry.mime ? new Blob([raw], {type: entry.mime}) : raw;
                     const id = genImageId();
                     await idbPutImage(id, typedBlob);
-                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size });
-                  }catch(e){ /* تجاهل الملف ده لو فشل */ }
+                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size }); rep.restored++;
+                  }catch(e){ rep.failed.push({type:"مرفق", ref:entry.name||entry.zipRef, reason:String(e && e.message || e)}); }
                 } else if(entry && typeof entry === "object" && entry.id){
                   migratedFiles.push(entry);
                 } else if(entry && entry.data){
                   try{
                     const id = genImageId();
                     await idbPutImage(id, base64ToBlob(entry.data));
-                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size });
-                  }catch(e){ /* تجاهل الملف ده لو فشل */ }
+                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size }); rep.restored++;
+                  }catch(e){ rep.failed.push({type:"مرفق (base64)", ref:entry.name||"embedded", reason:String(e && e.message || e)}); }
                 }
               }
               row.files = migratedFiles;
@@ -1549,9 +1568,29 @@
     return indexesArr;
   }
 
+  /** يبحث داخل بنية الفهارس عن أي مرجع صورة/ملف (idbimg_) بدون blob فعلي مطابق في IndexedDB —
+   *  يُستخدم بعد الاستيراد عشان أي مرجع مكسور يظهر بوضوح للمستخدم بدل ما يفشل بصمت لاحقًا
+   *  وقت العرض. */
+  async function scanForMissingAssetRefs(indexesArr){
+    const stored = new Set(await listStoredAssetIds());
+    const missing = [];
+    for(const ix of (indexesArr||[])){
+      for(const sec of (ix.sections||[])){
+        for(const tbl of (sec.tables||[])){
+          for(const row of (tbl.rows||[])){
+            (row.images||[]).forEach(ref=>{ if(isIdbImageRef(ref) && !stored.has(ref)) missing.push(ref); });
+            (row.files||[]).forEach(f=>{ if(f && f.id && !stored.has(String(f.id))) missing.push(f.id); });
+          }
+        }
+      }
+    }
+    return missing;
+  }
+
   /** عكس العملية: بيدور على أي صورة/ملف base64 جوه بنية مستوردة، يخزنه في IndexedDB،
-   *  ويستبدله بمرجع خفيف — مستخدمة وقت الاستيراد. */
-  async function migrateAllImagesToIndexedDB(indexesArr){
+   *  ويستبدله بمرجع خفيف — مستخدمة وقت الاستيراد. rep (اختياري): تقرير بالفاشل بدل تجاهله بصمت. */
+  async function migrateAllImagesToIndexedDB(indexesArr, rep){
+    rep = rep || {restored:0, failed:[]};
     for(const ix of (indexesArr||[])){
       for(const sec of (ix.sections||[])){
         for(const tbl of (sec.tables||[])){
@@ -1563,8 +1602,8 @@
                   try{
                     const id = genImageId();
                     await idbPutImage(id, base64ToBlob(ref));
-                    migrated.push(id);
-                  }catch(e){ /* لو فشل، سيب الصورة كـ base64 زي ما هي بدل ما تتفقد */ migrated.push(ref); }
+                    migrated.push(id); rep.restored++;
+                  }catch(e){ migrated.push(ref); rep.failed.push({type:"صورة", ref:"embedded", reason:String(e && e.message || e)}); }
                 } else {
                   migrated.push(ref); // مرجع idbimg_ خفيف موجود بالفعل
                 }
@@ -1580,8 +1619,8 @@
                   try{
                     const id = genImageId();
                     await idbPutImage(id, base64ToBlob(entry.data));
-                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size });
-                  }catch(e){ /* تجاهل الملف ده لو فشل الترحيل */ }
+                    migratedFiles.push({ id, name: entry.name, mime: entry.mime, size: entry.size }); rep.restored++;
+                  }catch(e){ rep.failed.push({type:"مرفق", ref:entry.name||"embedded", reason:String(e && e.message || e)}); }
                 }
               }
               row.files = migratedFiles;
@@ -1773,6 +1812,7 @@
   function showToast(msg, kind, ms){
     const t = document.createElement("div");
     t.className = "toast" + (kind ? " "+kind : "");
+    t.style.whiteSpace = "pre-line";
     t.textContent = msg;
     toastWrap.appendChild(t);
     requestAnimationFrame(()=> t.classList.add("show"));
@@ -5382,8 +5422,9 @@
     try{
       let data = null;
       let zip = null;
-      const looksLikeZip = /\.zip$/i.test(f.name) || f.type === "application/zip";
-      if(looksLikeZip && typeof JSZip !== "undefined"){
+      // الاستيراد يتعرّف على نوع الملف من محتواه الفعلي، مش بس من الاسم/الامتداد — بيحاول
+      // يفتحه كـ ZIP أولًا دايمًا (حتى لو اتسمّى .json غلط)، ولو فشل يرجع لقراءته كنص JSON خام.
+      if(typeof JSZip !== "undefined"){
         try{
           zip = await JSZip.loadAsync(f);
           const dataEntry = zip.file("data.json");
@@ -5396,8 +5437,10 @@
       }
       if(!zip){
         const text = await f.text();
-        data = JSON.parse(text);
+        try{ data = JSON.parse(text); }
+        catch(jsonErr){ throw new Error("الملف مش ZIP صالح ولا JSON صالح — تأكد إنه ملف نسخة احتياطية سليم."); }
       }
+      if(!data || typeof data !== "object") throw new Error("محتوى الملف غير معروف — لا يحتوي بيانات مكتبة صالحة.");
 
       if(Array.isArray(data.indexes) && data.indexes.length){
         indexes = data.indexes.map(ix=>({
@@ -5414,19 +5457,32 @@
         // نسخة قديمة بفهرس واحد فقط — بتستبدل سكشنات الفهرس النشط حاليًا
         sections = data.sections;
         indexes[activeIndexIdx].sections = sections;
+      } else {
+        throw new Error("الملف مايحتويش على فهارس أو سكشنات معروفة (بنية بيانات غير متوقعة).");
       }
       if(data.langRules) langRules = Object.assign(langRules, data.langRules);
       if(Array.isArray(data.customFormatRules)) mergeFormatRules(data.customFormatRules);
       selected = new Set();
 
       showToast("جارٍ نقل الصور والملفات لمساحة التخزين الكاملة الجودة…");
+      const rep = {restored:0, failed:[]};
       if(zip){
-        indexes = await importIndexesFromZip(indexes, zip); // ZIP: بيرجّع الصور/الملفات من ملفاتها الـ binary الأصلية
+        indexes = await importIndexesFromZip(indexes, zip, rep); // ZIP: بيرجّع الصور/الملفات من ملفاتها الـ binary الأصلية
       } else {
-        indexes = await migrateAllImagesToIndexedDB(indexes); // JSON قديم: يحوّل صور base64 لمراجع IndexedDB
+        indexes = await migrateAllImagesToIndexedDB(indexes, rep); // JSON قديم: يحوّل صور base64 لمراجع IndexedDB
       }
+      const missingRefs = await scanForMissingAssetRefs(indexes);
+
       setStatus("تم استرجاع النسخة بنجاح ✅", "ok");
-      showToast("تم استرجاع النسخة بنجاح ✅ (" + sections.length + " سكشن)", "ok");
+      const summary = ["تم استرجاع النسخة ✅ (" + sections.length + " سكشن، " + rep.restored + " ملف مُستعاد)"];
+      if(rep.failed.length) summary.push("⚠️ " + rep.failed.length + " ملف فشلت استعادته: " + rep.failed.slice(0,5).map(x=>x.ref).join("، ") + (rep.failed.length>5?" …":""));
+      if(missingRefs.length) summary.push("⚠️ " + missingRefs.length + " مرجع صورة/ملف بدون بيانات فعلية مطابقة — لن يظهر لحين إعادة رفعه يدويًا.");
+      if(rep.failed.length || missingRefs.length){
+        console.warn("تفاصيل الاستيراد الناقصة:", {failed:rep.failed, missingRefs});
+        showToast(summary.join(" — "), "err", 9000);
+      } else {
+        showToast(summary.join(" — "), "ok");
+      }
       scheduleAutoSave();
       renderAll();
     }catch(err){
