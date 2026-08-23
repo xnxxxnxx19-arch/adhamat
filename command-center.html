@@ -59,6 +59,7 @@
 
 <section id="goals" class="view">
   <div class="section-head"><h2>الأهداف والتتبع</h2><button class="btn primary" id="newGoalBtn">+ هدف جديد</button></div>
+  <div class="card" style="margin-bottom:17px"><h3>🚀 أهداف جاهزة <small>اضغط واحدة واملأ رقمك المستهدف فقط — بتتربط تلقائيًا بالتطبيق المعني</small></h3><div class="quick" id="goalTemplateGrid" style="grid-template-columns:repeat(3,1fr)"></div></div>
   <div class="card" style="margin-bottom:17px"><h3>⚡ تسجيل سريع <small>سجّل رقمًا أو نشاطًا في ثانية من أي جهاز</small></h3><div class="quick" id="quickLogGrid" style="grid-template-columns:repeat(4,1fr)"></div></div>
   <div class="grid">
     <div class="card"><h3>⚖️ منحنى الوزن <small>من سجلاتك</small></h3><div class="chart-wrap"><canvas id="weightChart"></canvas></div></div>
@@ -120,8 +121,60 @@ const KEY="command_center_v1", APPS=[
  {id:"equipment",name:"المعدات",icon:"🖥️",progress:0,time:"—",file:"equipment-db-gallery-pdf-1__1_.html",fallback:"equipment-db-gallery-pdf-1__1_.html",color:"#56dc9a"}];
  let state={events:[{app:"editor",title:"أنجزت تمرين الدوال",text:"أكملت مراجعة الدوال وسجلت ملاحظاتك.",date:"اليوم، 10:40",icon:"⌘"},{app:"english",title:"جلسة استماع مكتملة",text:"أنهيت 25 دقيقة من التدريب.",date:"أمس، 19:20",icon:"◉"},{app:"meals",title:"سجلت وجبات اليوم",text:"حافظت على متابعة الوجبات لليوم الثالث.",date:"أمس، 13:05",icon:"◒"},{app:"codelib",title:"أضفت 12 مرجعًا",text:"نظمت مجموعة جديدة داخل مذكرة الأكواد.",date:"الثلاثاء، 21:10",icon:"▤"}],rules:[{title:"إنجاز درس إنجليزي ← مراجعة بطاقات",detail:"عند إكمال جلسة في تطبيق الإنجليزي، ذكّرني بمراجعة المفردات بعد ساعتين.",on:true},{title:"يوم بدون تسجيل وجبات ← تنبيه صحة",detail:"إذا لم أسجل وجبة حتى 20:00، أرسل تنبيهًا داخل المركز.",on:true},{title:"حفظ كود جديد ← جلسة تطبيق",detail:"بعد إضافة مرجع في مذكرة الأكواد، اقترح عليّ فتح المحرر.",on:false}],tasks:[{title:"مراجعة 15 بطاقة بعد درس الإنجليزي",from:"english",to:"vocab",repeat:"كل يوم",next:"اليوم 20:00",done:false},{title:"جلسة تطبيق للكود المحفوظ",from:"codelib",to:"editor",repeat:"كل 3 أيام",next:"غدًا 18:00",done:false},{title:"تسجيل الوجبات",from:"meals",to:"meals",repeat:"يوميًا",next:"اليوم 21:00",done:false}],theme:"ocean",goals:{focus:90,streak:7,note:"خطوة واحدة اليوم أفضل من خطة مثالية مؤجلة."}};try{state={...state,...JSON.parse(localStorage.getItem(KEY)||"{}")}}catch(e){};try{const shared=JSON.parse(localStorage.getItem("command_center_activity_v1")||"[]");state.events=[...shared,...state.events.filter(e=>!shared.some(s=>s.at&&s.at===e.at))].slice(0,100)}catch(e){}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)], save=()=>localStorage.setItem(KEY,JSON.stringify(state)), toast=t=>{let x=$("#toast");x.textContent=t;x.classList.add("show");setTimeout(()=>x.classList.remove("show"),2300)};
-function app(id){return APPS.find(a=>a.id===id)||APPS[0]}function drawCanvas(id,type){let c=$(id),r=c.getBoundingClientRect(),d=devicePixelRatio||1,w=r.width,h=r.height;c.width=w*d;c.height=h*d;let x=c.getContext("2d");x.scale(d,d);x.clearRect(0,0,w,h);x.font="11px Tahoma";x.fillStyle="#8ea5c1";let pad=35;for(let i=0;i<5;i++){let y=20+i*(h-45)/4;x.strokeStyle="#ffffff10";x.beginPath();x.moveTo(pad,y);x.lineTo(w-10,y);x.stroke();x.fillText(String(100-i*25),5,y+4)}if(type==="donut"){let vals=[34,31,18,17],cols=["#52d8e8","#a987ff","#ffb45d","#56dc9a"],cx=w/2,cy=h/2,r1=Math.min(w,h)*.31,st=-Math.PI/2;vals.forEach((v,i)=>{let en=st+v/100*Math.PI*2;x.beginPath();x.arc(cx,cy,r1,st,en);x.lineWidth=28;x.strokeStyle=cols[i];x.stroke();st=en});x.fillStyle="#edf5ff";x.textAlign="center";x.font="bold 22px Tahoma";x.fillText("24س",cx,cy+5);x.font="11px Tahoma";x.fillStyle="#8ea5c1";x.fillText("هذا الأسبوع",cx,cy+23);return}let vals=type==="bar"?[36,54,48,72,61,84,68]:[42,58,51,73,64,88,76];let vals2=[28,39,31,50,44,57,47];x.strokeStyle="#52d8e8";x.lineWidth=3;x.beginPath();vals.forEach((v,i)=>{let px=pad+i*(w-pad-15)/6,py=h-25-v*(h-55)/100;i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke();x.fillStyle="#52d8e8";vals.forEach((v,i)=>{let px=pad+i*(w-pad-15)/6,py=h-25-v*(h-55)/100;x.beginPath();x.arc(px,py,4,0,7);x.fill()});if(type==="bar"){vals.forEach((v,i)=>{let bw=22,px=pad+i*(w-pad-15)/6-bw/2,py=h-25-v*(h-55)/100;x.fillStyle="#a987ff99";x.fillRect(px,py,bw,h-25-py)})}else{x.strokeStyle="#a987ff";x.beginPath();vals2.forEach((v,i)=>{let px=pad+i*(w-pad-15)/6,py=h-25-v*(h-55)/100;i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()}x.textAlign="center";x.fillStyle="#8ea5c1";["س","ح","ن","ث","ر","خ","ج"].forEach((v,i)=>x.fillText(v,pad+i*(w-pad-15)/6,h-5))}
-function renderApps(){let el=$("#appList");el.innerHTML=APPS.map(a=>`<div class="app-row"><div class="app-icon" style="color:${a.color}">${a.icon}</div><div><h4>${a.name}</h4><p>${a.time} تركيز • آخر نشاط اليوم</p><div class="bar"><span style="width:${a.progress}%;background:${a.color}"></span></div></div><div><div class="percent">${a.progress}%</div><button class="btn" style="padding:5px 8px;margin-top:7px;font-size:10px" onclick="openApp('${a.id}')">فتح</button></div></div>`).join("")}
+function app(id){return APPS.find(a=>a.id===id)||APPS[0]}
+/* يحسب مقياسًا حقيقيًا واحدًا لكل تطبيق من بيانات الـ HUB الفعلية (مش أرقام وهمية)، عشان تقدر تتابع كل تطبيق بصلاحية ورؤية حقيقية من مركز القيادة. */
+const APP_METRIC_MAP = {
+  english:      {label:'كلمة مضافة', target:200, calc:(stats,data)=> (stats.byApp.english||{}).words || 0, goal:{kind:'counter', metric:'words'}},
+  vocab:        {label:'مراجعة كلمة', target:300, calc:(stats,data)=> data.logs.filter(l=>l.type==='vocab_review').length, goal:{kind:'time', logType:'vocab_review'}},
+  editor:       {label:'لغة/مشروع', target:30, calc:(stats,data)=> ((stats.byApp.editor||{}).languages||0)+((stats.byApp.editor||{}).projects||0), goal:{kind:'counter', metric:'projects'}},
+  codelib:      {label:'كود محفوظ', target:80, calc:(stats,data)=> (stats.byApp.codelib||{}).codes || data.codes.length, goal:{kind:'counter', metric:'codes'}},
+  equipment:    {label:'جهاز مسجّل', target:50, calc:(stats,data)=> data.logs.filter(l=>l.type==='equipment_registered').length, goal:{kind:'time', logType:'equipment_registered'}},
+  workshop:     {label:'مكوّن مضاف', target:100, calc:(stats,data)=> data.logs.filter(l=>l.type==='component_added').length, goal:{kind:'time', logType:'component_added'}},
+  meals:        {label:'نشاط مسجّل', target:100, calc:(stats,data)=> (stats.byApp.meals||{}).activities || 0, goal:{kind:'counter', metric:'activities'}},
+  instructions: {label:'اختبار مرجع مكتمل', target:20, calc:(stats,data)=> data.logs.filter(l=>l.type==='reference_quiz').length, goal:{kind:'time', logType:'reference_quiz'}}
+};
+function appRealMetric(id){
+  if(!window.HUB || !APP_METRIC_MAP[id]) return null;
+  const data = window.HUB.getAll(), stats = window.HUB.getStats();
+  const m = APP_METRIC_MAP[id];
+  let count = 0; try{ count = m.calc(stats,data) || 0; }catch(e){ count = 0; }
+  const percent = m.target>0 ? Math.max(0,Math.min(100, Math.round(count/m.target*100))) : 0;
+  return {count, target:m.target, label:m.label, percent};
+}
+/* آخر نشاط حقيقي مأخوذ فعليًا من بيانات الـ HUB (سجلات/إنجازات/كلمات/أكواد/لغات/مشاريع
+   بمصدر = هذا التطبيق تحديدًا) — مش وقت وهمي ثابت، عشان مركز القيادة يبقى فعلاً شايف
+   آخر تحرّك حقيقي في كل تطبيق. */
+function lastRealActivityFor(id){
+  if(!window.HUB) return null;
+  const data = window.HUB.getAll();
+  let latest = 0;
+  (data.logs||[]).forEach(l=>{ if(l.source===id && l.at>latest) latest=l.at; });
+  (data.achievements||[]).forEach(a=>{ if(a.source===id && a.at>latest) latest=a.at; });
+  (data.words||[]).forEach(w=>{ if(w.source===id && w.addedAt>latest) latest=w.addedAt; });
+  (data.codes||[]).forEach(c=>{ if(c.source===id && c.addedAt>latest) latest=c.addedAt; });
+  (data.languages||[]).forEach(l=>{ if(l.source===id && l.addedAt>latest) latest=l.addedAt; });
+  (data.projects||[]).forEach(p=>{ if(p.source===id && p.addedAt>latest) latest=p.addedAt; });
+  return latest || null;
+}
+/* يفتح نافذة "هدف جديد" مضبوطة مسبقًا على المقياس/السجل المناسب لهذا التطبيق —
+   تحكّم مباشر من مركز القيادة بدل ما تدخل النافذة وتختار كل حاجة يدويًا. */
+function openGoalModalForApp(id){
+  openGoalModal();
+  const m = APP_METRIC_MAP[id]; if(!m || !m.goal) return;
+  $("#goalKind").value = m.goal.kind; toggleGoalFields();
+  if(m.goal.kind==="counter") $("#goalCounterMetric").value = m.goal.metric;
+  if(m.goal.kind==="time") $("#goalTimeType").value = m.goal.logType;
+  if(m.goal.kind==="range") $("#goalRangeType").value = m.goal.logType;
+  $("#goalTitle").value = `هدف جديد لـ ${app(id).name}`;
+}function drawCanvas(id,type){let c=$(id),r=c.getBoundingClientRect(),d=devicePixelRatio||1,w=r.width,h=r.height;c.width=w*d;c.height=h*d;let x=c.getContext("2d");x.scale(d,d);x.clearRect(0,0,w,h);x.font="11px Tahoma";x.fillStyle="#8ea5c1";let pad=35;for(let i=0;i<5;i++){let y=20+i*(h-45)/4;x.strokeStyle="#ffffff10";x.beginPath();x.moveTo(pad,y);x.lineTo(w-10,y);x.stroke();x.fillText(String(100-i*25),5,y+4)}if(type==="donut"){let vals=[34,31,18,17],cols=["#52d8e8","#a987ff","#ffb45d","#56dc9a"],cx=w/2,cy=h/2,r1=Math.min(w,h)*.31,st=-Math.PI/2;vals.forEach((v,i)=>{let en=st+v/100*Math.PI*2;x.beginPath();x.arc(cx,cy,r1,st,en);x.lineWidth=28;x.strokeStyle=cols[i];x.stroke();st=en});x.fillStyle="#edf5ff";x.textAlign="center";x.font="bold 22px Tahoma";x.fillText("24س",cx,cy+5);x.font="11px Tahoma";x.fillStyle="#8ea5c1";x.fillText("هذا الأسبوع",cx,cy+23);return}let vals=type==="bar"?[36,54,48,72,61,84,68]:[42,58,51,73,64,88,76];let vals2=[28,39,31,50,44,57,47];x.strokeStyle="#52d8e8";x.lineWidth=3;x.beginPath();vals.forEach((v,i)=>{let px=pad+i*(w-pad-15)/6,py=h-25-v*(h-55)/100;i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke();x.fillStyle="#52d8e8";vals.forEach((v,i)=>{let px=pad+i*(w-pad-15)/6,py=h-25-v*(h-55)/100;x.beginPath();x.arc(px,py,4,0,7);x.fill()});if(type==="bar"){vals.forEach((v,i)=>{let bw=22,px=pad+i*(w-pad-15)/6-bw/2,py=h-25-v*(h-55)/100;x.fillStyle="#a987ff99";x.fillRect(px,py,bw,h-25-py)})}else{x.strokeStyle="#a987ff";x.beginPath();vals2.forEach((v,i)=>{let px=pad+i*(w-pad-15)/6,py=h-25-v*(h-55)/100;i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()}x.textAlign="center";x.fillStyle="#8ea5c1";["س","ح","ن","ث","ر","خ","ج"].forEach((v,i)=>x.fillText(v,pad+i*(w-pad-15)/6,h-5))}
+function renderApps(){let el=$("#appList");el.innerHTML=APPS.map(a=>{
+  const rm = appRealMetric(a.id);
+  const pct = rm ? rm.percent : a.progress;
+  const last = lastRealActivityFor(a.id);
+  const lastTxt = last ? `آخر نشاط حقيقي: ${new Date(last).toLocaleString('ar-EG')}` : 'لا يوجد نشاط حقيقي مسجّل بعد';
+  const sub = rm ? `${rm.count} / ${rm.target} ${rm.label} • ${lastTxt}` : `${a.time} تركيز • ${lastTxt}`;
+  return `<div class="app-row"><div class="app-icon" style="color:${a.color}">${a.icon}</div><div><h4>${a.name}</h4><p>${sub}</p><div class="bar"><span style="width:${pct}%;background:${a.color}"></span></div></div><div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end"><div class="percent">${pct}%</div><button class="btn" style="padding:5px 8px;font-size:10px" onclick="openApp('${a.id}')">فتح</button>${rm?`<button class="btn" style="padding:5px 8px;font-size:10px" onclick="openGoalModalForApp('${a.id}')">🎯 هدف</button>`:""}</div></div>`;
+}).join("")}
 function renderHistory(){let q=($("#search")?.value||"").toLowerCase(),f=$("#filterApp")?.value||"all",list=state.events.filter(e=>(f==="all"||e.app===f)&&(`${e.title} ${e.text}`.toLowerCase().includes(q)));$("#timeline").innerHTML=list.length?list.map(e=>`<div class="event"><div class="event-dot">${e.icon||"✦"}</div><div class="event-main"><h4>${e.title} <button class="btn" style="padding:4px 7px;font-size:10px;float:left" onclick="openApp('${e.app}')">اذهب للتطبيق ↗</button></h4><p>${e.text} • ${app(e.app).name}</p></div><time>${e.date}</time></div>`).join(""):`<div class="empty">لا توجد إنجازات مطابقة بعد.</div>`}
 function renderRules(){$("#rules").innerHTML=state.rules.map((r,i)=>`<div class="rule"><div><strong>${r.title}</strong><span>${r.detail}</span></div><button class="toggle ${r.on?"on":""}" onclick="state.rules[${i}].on=!state.rules[${i}].on;save();renderRules();toast('تم تحديث القاعدة')"></button></div>`).join("")}
 function renderInsights(){$("#insights").innerHTML=[["الانتظام","84%","أنت تحافظ على روتين جيد هذا الأسبوع","#56dc9a"],["أقوى مجال","الوجبات","تقدمك الصحي هو الأعلى حاليًا","#ffb45d"],["فرصة التحسن","المحرر البرمجي","أضف جلسة قصيرة اليوم للوصول إلى 70%","#a987ff"],["أفضل توقيت","19:00 — 21:00","متوسط إنجازك يرتفع في هذا الوقت","#52d8e8"]].map(x=>`<div class="app-row"><div class="app-icon" style="color:${x[3]}">◈</div><div><h4>${x[0]} — ${x[1]}</h4><p>${x[2]}</p></div></div>`).join("")}
@@ -145,6 +198,28 @@ $("#addRule").onclick=()=>{let title=prompt("عنوان القاعدة الجد�
   async function openTool(file,fallback){let target=await resolveFile(file,fallback||file);openInHubOrDirect(file.includes("mindmap")?"mindmap":"drawing",target)}
  function renderTasks(){let now=Date.now();$("#taskList").innerHTML=state.tasks.map((t,i)=>`<div class="rule ${t.done?"task-done":""}"><div><strong>${t.title}</strong><div class="task-meta"><span class="task-chip">من: ${app(t.from).name}</span><span class="task-chip">إلى: ${app(t.to).name}</span><span class="task-chip">${t.repeat}</span><span class="task-chip due">الموعد: ${t.next}</span></div></div><div class="actions"><button class="toggle ${t.done?"on":""}" title="إنهاء المهمة" onclick="completeTask(${i})"></button><button class="btn danger" style="padding:6px 9px;font-size:11px" onclick="deleteTask(${i})">حذف</button></div></div>`).join("")||`<div class="empty">لا توجد مهام بعد. أضف أول مهمة مرتبطة بتطبيقاتك.</div>`}
  function completeTask(i){let t=state.tasks[i];t.done=!t.done;if(t.done){state.events.unshift({app:t.to,title:"اكتملت مهمة مرتبطة",text:t.title,date:"الآن",icon:"✓"});if(window.HUB)window.HUB.addAchievement({title:"أنجزت مهمة: "+t.title,icon:"✓",source:"tasks"});toast("أحسنت — تم إنهاء المهمة")}save();renderTasks();renderHistory();refreshHubUI()}
+/* ============================================================
+   ربط تلقائي بين المهام وإنجازات/سجلات التطبيقات الحقيقية: أي مهمة
+   لسه مفتوحة وموجّهة لتطبيق معيّن (t.to)، لو ظهر إنجاز حقيقي جاي
+   من نفس التطبيق ده بعد ما اتعملت المهمة، بتتقفل المهمة أوتوماتيك
+   ويتسجل ده في السجل — تفعيل فعلي لفكرة "التحكم والمتابعة" بدل
+   الإنهاء اليدوي بس.
+   ============================================================ */
+function autoLinkTasksToAchievements(){
+  if(!window.HUB) return;
+  const ach = window.HUB.getAchievements();
+  let changed=false;
+  state.tasks.forEach(t=>{
+    if(t.done) return;
+    const hit = ach.find(a=> a.source===t.to && a.at > (t.createdAt||0));
+    if(hit){
+      t.done = true;
+      state.events.unshift({app:t.to, title:"اكتملت مهمة تلقائيًا 🔗", text:`${t.title} — بسبب إنجاز حقيقي: ${hit.title}`, date:"الآن", icon:"✓"});
+      changed = true;
+    }
+  });
+  if(changed){ save(); renderTasks(); renderHistory(); toast("تم إنهاء مهمة تلقائيًا بناءً على نشاط حقيقي 🔗"); }
+}
  function deleteTask(i){if(confirm("حذف هذه المهمة؟")){state.tasks.splice(i,1);save();renderTasks();toast("تم حذف المهمة")}}
  function addTask(){let title=prompt("ما اسم المهمة؟");if(!title)return;let from=prompt("التطبيق الذي تبدأ منه (english/editor/vocab/meals/codelib/instructions)","english")||"english";let to=prompt("التطبيق الذي يجب فتحه بعد ذلك","vocab")||"vocab";let repeat=prompt("التكرار: مرة واحدة / كل ساعة / كل عدة ساعات / يوميًا / كل عدة أيام / مرات شهريًا","يوميًا")||"يوميًا";let next=prompt("الموعد القادم (مثال: اليوم 20:00)","اليوم 20:00")||"اليوم";state.tasks.push({title,from,to,repeat,next,done:false,createdAt:Date.now()});save();renderTasks();toast("تمت إضافة المهمة وربطها")}
  function requestNotifications(){if(!("Notification"in window)){toast("المتصفح لا يدعم تنبيهات النظام");return}Notification.requestPermission().then(p=>toast(p==="granted"?"تم تفعيل التنبيهات":"لم يتم السماح بالتنبيهات"))}
@@ -278,6 +353,69 @@ document.addEventListener("click",e=>{
   const b=e.target.closest("[data-log-type]"); if(!b) return;
   quickLog(b.dataset.logType);
 });
+/* ============================================================
+   أهداف جاهزة (Goal Templates) — تغطي أمثلة شائعة زي: تسجيل مجموعة
+   أجهزة جديدة، تسجيل مكوّنات في الورشة، تغيير الوزن خلال مدة،
+   إضافة كلمات إنجليزية، مراجعة كلمات، قراءة صفحات من مرجع، أو
+   إتمام قائمة كتب/مهارات. كل قالب بيسأل عن رقم واحد بس وبعدين
+   بيستخدم نفس دوال HUB (addGoal/addRangeGoal/addTimeGoal/addChecklistGoal)
+   المستخدمة أصلاً في نافذة "هدف جديد" اليدوية.
+   ============================================================ */
+const GOAL_TEMPLATES = [
+  {key:'equipment', icon:'🖥️', title:'سجّل مجموعة أجهزة', hint:'كم جهازًا تريد تسجيله؟', app:'equipment',
+    run:(n)=>window.HUB.addTimeGoal({title:`سجّل ${n} جهاز جديد`, logType:'equipment_registered', minutesTarget:n})},
+  {key:'components', icon:'🔩', title:'سجّل مكوّنات الورشة', hint:'كم مكوّنًا تريد إضافته للمخزون؟', app:'workshop',
+    run:(n)=>window.HUB.addTimeGoal({title:`أضف ${n} مكوّن جديد بالمخزون`, logType:'component_added', minutesTarget:n})},
+  {key:'words_add', icon:'🔤', title:'أضف كلمات إنجليزية', hint:'كم كلمة تريد إضافتها؟', app:'english',
+    run:(n)=>window.HUB.addGoal({title:`أضف ${n} كلمة جديدة`, metric:'words', target:n})},
+  {key:'words_review', icon:'🔁', title:'راجع كلمات', hint:'كم كلمة تريد مراجعتها؟', app:'vocab',
+    run:(n)=>window.HUB.addTimeGoal({title:`راجع ${n} كلمة`, logType:'vocab_review', minutesTarget:n})},
+  {key:'reading', icon:'📖', title:'اقرأ صفحات مرجع/كتاب', hint:'كم صفحة تريد قراءتها؟', app:'instructions',
+    run:(n)=>window.HUB.addTimeGoal({title:`اقرأ ${n} صفحة`, logType:'reading_pages', minutesTarget:n})},
+  {key:'ref_quiz', icon:'🧠', title:'اجتز اختبارات المرجع', hint:'كم اختبارًا تريد اجتيازه؟', app:'instructions',
+    run:(n)=>window.HUB.addTimeGoal({title:`اجتز ${n} اختبار من مرجع التعليمات`, logType:'reference_quiz', minutesTarget:n})},
+  {key:'weight', icon:'⚖️', title:'غيّر وزنك', hint:null, app:'command-center',
+    run:()=>{
+      const start=+prompt('وزنك الحالي (كجم)؟','')||0; if(!start) return null;
+      const target=+prompt('وزنك المستهدف (كجم)؟','')||0; if(!target) return null;
+      const deadline=prompt('موعد نهائي (YYYY-MM-DD) — اختياري','')||null;
+      return window.HUB.addRangeGoal({title:`الوصول لوزن ${target} كجم`, logType:'weight', startValue:start, targetValue:target, direction: target<start?'down':'up', deadline});
+    }},
+  {key:'english_level', icon:'🎓', title:'وصول لمستوى إنجليزي', hint:null, app:'english',
+    run:()=>{
+      const items=(prompt('اكتب مهارات/دروس المستوى، سطر لكل عنصر (مثال: 200 كلمة + اختبار Listening)','')||'').split('\n').map(s=>s.trim()).filter(Boolean);
+      if(!items.length) return null;
+      return window.HUB.addChecklistGoal({title:'الوصول لمستوى إنجليزي جديد', items});
+    }},
+  {key:'coding', icon:'💻', title:'وقت تدريب برمجي', hint:'كم دقيقة تدريب تستهدفها؟', app:'editor',
+    run:(n)=>window.HUB.addTimeGoal({title:`أنجز ${n} دقيقة تدريب برمجي`, logType:'coding_minutes', minutesTarget:n})},
+  {key:'checklist', icon:'📋', title:'قائمة مهام/كتب حرة', hint:null, app:'command-center',
+    run:()=>{
+      const title=prompt('عنوان القائمة؟','قائمة كتب')||'قائمة جديدة';
+      const items=(prompt('العناصر، سطر لكل عنصر','')||'').split('\n').map(s=>s.trim()).filter(Boolean);
+      if(!items.length) return null;
+      return window.HUB.addChecklistGoal({title, items});
+    }}
+];
+function renderGoalTemplates(){
+  const el = $("#goalTemplateGrid"); if(!el) return;
+  el.innerHTML = GOAL_TEMPLATES.map(t=>`<button data-tpl="${t.key}"><b>${t.icon} ${t.title}</b><span>مرتبط بـ ${t.app==='command-center'?'مركز القيادة':app(t.app).name}</span></button>`).join("");
+  $$('[data-tpl]').forEach(b=>b.onclick=()=>runGoalTemplate(b.dataset.tpl));
+}
+function runGoalTemplate(key){
+  if(!window.HUB) return;
+  const t = GOAL_TEMPLATES.find(x=>x.key===key); if(!t) return;
+  let result;
+  if(t.hint){
+    const n = +prompt(t.hint,"10") || 0;
+    if(!n){ return; }
+    result = t.run(n);
+  } else {
+    result = t.run();
+  }
+  if(!result){ return; }
+  refreshHubUI(); toast("تم إنشاء الهدف 🎯");
+}
 function renderQuickLog(){
   const el = $("#quickLogGrid"); if(!el || !window.HUB) return;
   const types = Object.keys(window.HUB.LOG_TYPES).filter(k=>k!=="custom");
@@ -334,12 +472,13 @@ function renderHubAlerts(){
     <button class="btn" style="padding:6px 9px;font-size:11px" onclick="openApp('${a.source}')">فتح التطبيق</button></div>`).join("")
     : `<div class="empty">لا توجد تنبيهات نشطة حاليًا من أي تطبيق ✅</div>`;
 }
-function refreshHubUI(){ renderHubMetrics(); renderHubAlerts(); renderHubGoals(); renderHubAchievements(); renderThemes(); renderQuickLog(); renderLogSummary(); renderGoalsList(); if($("#goals").classList.contains("active")) drawWeightChart(); }
+function refreshHubUI(){ renderHubMetrics(); renderHubAlerts(); renderHubGoals(); renderHubAchievements(); renderThemes(); renderQuickLog(); renderLogSummary(); renderGoalsList(); renderApps(); autoLinkTasksToAchievements(); if($("#goals").classList.contains("active")) drawWeightChart(); }
 try{
   if(window.HUB){
     window.HUB.onChange(refreshHubUI);
     window.HUB.onThemeChange(name=>{ window.HUB.applyTheme(name,'command-center'); renderThemes(); });
     refreshHubUI();
+    renderGoalTemplates();
     $("#addGoal").onclick=addGoalPrompt;
   }
 }catch(e){}

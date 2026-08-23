@@ -1661,10 +1661,18 @@ function renderPager(totalPages){
   html += `<button id="pgNext" ${state.page===totalPages?'disabled':''}>›</button>`;
   html += `<button id="pgLast" ${state.page===totalPages?'disabled':''}>»</button>`;
   pagerEl.innerHTML = html;
-  document.getElementById('pgFirst').onclick=()=>{state.page=1;render();};
-  document.getElementById('pgPrev').onclick=()=>{state.page=Math.max(1,state.page-1);render();};
-  document.getElementById('pgNext').onclick=()=>{state.page=Math.min(totalPages,state.page+1);render();};
-  document.getElementById('pgLast').onclick=()=>{state.page=totalPages;render();};
+  document.getElementById('pgFirst').onclick=()=>{logPageTurn(1-state.page);state.page=1;render();};
+  document.getElementById('pgPrev').onclick=()=>{logPageTurn(-1);state.page=Math.max(1,state.page-1);render();};
+  document.getElementById('pgNext').onclick=()=>{logPageTurn(1);state.page=Math.min(totalPages,state.page+1);render();};
+  document.getElementById('pgLast').onclick=()=>{logPageTurn(totalPages-state.page);state.page=totalPages;render();};
+}
+/* يسجّل عدد الصفحات المقلوبة فعليًا (تصفّح حقيقي) في السجل المشترك، عشان
+   هدف "اقرأ صفحات مرجع/كتاب" يتغذّى تلقائيًا من استخدامك الفعلي بدل
+   التسجيل اليدوي بس. بيتجاهل القفزات لنفس الصفحة (0). */
+function logPageTurn(delta){
+  const n = Math.abs(Math.round(delta||0));
+  if(!n) return;
+  try{ if(window.HUB) window.HUB.addLog({type:'reading_pages', value:n, note:'تصفّح داخل مرجع التعليمات'}, 'instructions'); }catch(e){}
 }
 
 function escapeHtml(s){
@@ -2103,7 +2111,7 @@ function openQuiz(){
   const { rows, label } = quizPoolForCurrentTab();
   const quizLen = +document.getElementById('quizLenSelect').value || 10;
   const questions = buildQuizQuestions(rows, quizLen);
-  quiz = { langLabel: label, questions, index:0, score:0, answers:[] };
+  quiz = { langLabel: label, questions, index:0, score:0, answers:[], logged:false };
   quizOverlay.classList.add('show');
   renderQuiz();
 }
@@ -2186,6 +2194,15 @@ function renderQuizResult(){
   const total = quiz.questions.length;
   const score = quiz.score;
   const pct = Math.round((score/total)*100);
+  if(!quiz.logged){
+    quiz.logged = true;
+    try{
+      if(window.HUB){
+        window.HUB.addLog({type:'reference_quiz', value:1, note:`${quiz.langLabel} — ${score}/${total} (${pct}%)`}, 'instructions');
+        if(pct>=70) window.HUB.addAchievement({title:`اجتزت اختبار ${quiz.langLabel} بنسبة ${pct}%`, icon:'🧠', source:'instructions'});
+      }
+    }catch(e){}
+  }
   const ringColor = pct>=70 ? 'var(--accent)' : (pct>=40 ? 'var(--accent2)' : 'var(--danger)');
   const verdict = pct>=70 ? 'ممتاز! 🎉' : (pct>=40 ? 'مو بطال، محتاج مراجعة 💪' : 'يُنصح بمراجعة القسم ده تاني 📚');
   const mistakes = quiz.answers.filter(a=> !a.correct);

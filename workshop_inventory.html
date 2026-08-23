@@ -4233,6 +4233,7 @@ function openCellDetail(cellId){
         if(!name){ toast('أدخل اسم المكون'); return; }
         const newComp={id:uid('comp'),name,partNumber:document.getElementById('fPartNumber').value,manufacturer:document.getElementById('fManufacturer').value,category:document.getElementById('fCategory').value,subcategory:'',value:document.getElementById('fValue').value,package:document.getElementById('fPackage').value,voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:Number(document.getElementById('fWarn').value||0),criticalStock:Number(document.getElementById('fCrit').value||0),targetStock:Number(document.getElementById('fTarget').value||0),reorderQty:0,notes:document.getElementById('fNotes').value,images:[],links:[]};
         state.components.push(newComp); compId=newComp.id;
+        try{ if(window.HUB) window.HUB.addLog({type:'component_added', value:1, label:newComp.name, note:[newComp.manufacturer,newComp.partNumber].filter(Boolean).join(' — ')}, 'workshop'); }catch(e){}
       }
       const ciEnabled=document.getElementById('ciEnabled')?.value==='1';
       cell.indicator={

@@ -2026,6 +2026,7 @@
     if(!entry){ entry = {date:t, correct:0, total:0}; state.history.push(entry); }
     entry.total += 1;
     if(correct) entry.correct += 1;
+    try{ if(window.HUB) window.HUB.addLog({type:'vocab_review', value:1, note: correct?'إجابة صحيحة':'إجابة خاطئة'}, 'vocab'); }catch(e){}
   }
 
   // ---------- QUIZ ----------

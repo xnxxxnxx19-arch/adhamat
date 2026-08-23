@@ -243,6 +243,9 @@
     workout_minutes:      { label: 'وقت رياضة',             unit: 'دقيقة', icon: '🏃', direction: 'up' },
     water_glasses:        { label: 'أكواب مياه',            unit: 'كوب',  icon: '💧', direction: 'up' },
     sleep_hours:          { label: 'ساعات النوم',           unit: 'ساعة', icon: '🌙', direction: 'up' },
+    vocab_review:         { label: 'مراجعة كلمات',          unit: 'كلمة', icon: '🔁', direction: 'up' },
+    component_added:      { label: 'مكوّن جديد بالمخزون',    unit: 'مكوّن', icon: '🔩', direction: 'up' },
+    reference_quiz:       { label: 'اختبار من المرجع',       unit: 'اختبار', icon: '🧠', direction: 'up' },
     custom:               { label: 'نوع مخصص',              unit: '',     icon: '✦', direction: 'up' }
   };
 

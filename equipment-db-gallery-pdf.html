@@ -5961,7 +5961,12 @@ function openItemModal(itemId, folderId){
     } finally { setTimeout(()=>setSaveBadge("idle"), 350); }
 
     if(editing) state.items = state.items.map(x=>x.id===it.id? it : x);
-    else state.items.push(it);
+    else {
+      state.items.push(it);
+      try{
+        if(window.HUB) window.HUB.addLog({type:'equipment_registered', value:1, label:it.name, note:[it.manufacturer,it.model].filter(Boolean).join(' — ')}, 'equipment');
+      }catch(e){}
+    }
 
     closeModal();
     renderSidebarTree();
