@@ -462,6 +462,21 @@ table.tbl tr:hover td{background:var(--panel2);}
     font-family:"Fira Code","Consolas",monospace; font-size:13px; direction:ltr; display:inline-block;
   }
 .sec-scope .explain-view strong{color:var(--accent-dark);}
+.sec-scope .explain-view img.md-image{
+  display:block;
+  max-width:100%;
+  height:auto;
+  margin:10px auto 12px;
+  border:1px solid var(--rule);
+  border-radius:8px;
+  box-shadow:0 3px 12px rgba(0,0,0,.12);
+  transition:transform .15s,box-shadow .15s;
+}
+.sec-scope .explain-view img.md-image:hover{
+  transform:translateY(-1px);
+  box-shadow:0 6px 18px rgba(0,0,0,.18);
+}
+
 .sec-scope .explain-view .md-table-wrap{overflow-x:auto; margin:8px 0 12px; border-radius:6px; border:1px solid var(--rule);}
 .sec-scope .explain-view table.md-table{width:100%; border-collapse:collapse; font-size:13.5px;}
 .sec-scope .explain-view table.md-table th,
@@ -772,7 +787,19 @@ table.tbl tr:hover td{background:var(--panel2);}
 .sec-scope .tbl-option-row button:hover{color:var(--danger);}
 .sec-scope .tbl-add-option-row{display:flex; gap:6px;}
 .sec-scope .tbl-add-option-row input{flex:1;}
-.sec-scope .tbl-lightbox-overlay{position:fixed; inset:0; z-index:220; background:rgba(20,20,30,0.92); display:none; flex-direction:column; align-items:center; justify-content:center; padding:0;}
+.sec-scope .tbl-lightbox-overlay{
+  position:fixed;
+  inset:0;
+  z-index:99999;
+  background:rgba(20,20,30,0.92);
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  isolation:isolate;
+}
+.sec-scope .tbl-lightbox-overlay *{z-index:auto;}
 .sec-scope .tbl-lightbox-overlay.open{display:flex;}
 .sec-scope .tbl-lightbox-stage{position:relative; flex:1; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; touch-action:none; cursor:grab;}
 .sec-scope .tbl-lightbox-stage.zoomed{cursor:grab;}
@@ -781,6 +808,29 @@ table.tbl tr:hover td{background:var(--panel2);}
 .sec-scope .tbl-lightbox-stage video{max-width:92vw; max-height:82vh;}
 .sec-scope .tbl-lightbox-stage audio{width:min(480px,86vw);}
 .sec-scope .tbl-lightbox-stage iframe{width:94vw; height:86vh; background:#fff; border:none; border-radius:8px;}
+.sec-scope .tbl-lightbox-caption{
+  position:absolute;left:50%;bottom:18px;transform:translateX(-50%);
+  width:min(92vw,1100px);max-height:24vh;overflow:auto;
+  padding:12px 16px;border:1.5px solid rgba(255,255,255,.22);
+  border-radius:12px;background:rgba(8,13,20,.90);color:#fff;
+  text-align:right;direction:rtl;line-height:1.8;font-size:14px;
+  box-shadow:0 8px 30px rgba(0,0,0,.4);backdrop-filter:blur(8px);z-index:4;
+}
+.sec-scope .tbl-lightbox-caption p{margin:4px 0;}
+.sec-scope .tbl-lightbox-caption h1,
+.sec-scope .tbl-lightbox-caption h2,
+.sec-scope .tbl-lightbox-caption h3{margin:4px 0 7px;color:#fff;}
+.sec-scope .tbl-lightbox-caption code{padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.12);}
+.sec-scope .tbl-lightbox-caption blockquote{
+  margin:6px 0;padding:5px 10px;border-right:3px solid var(--accent);
+  background:rgba(255,255,255,.06);
+}
+.sec-scope .tbl-lightbox-caption img{max-width:100%;height:auto;border-radius:7px;}
+@media(max-width:700px){
+  .sec-scope .tbl-lightbox-caption{
+    bottom:8px;width:94vw;max-height:28vh;font-size:12px;padding:9px 11px;
+  }
+}
 .sec-scope .tbl-lb-fallback{color:#fff; text-align:center; padding:20px;}
 .sec-scope .tbl-lb-fallback .fi-big-icon{font-size:64px; display:block; margin-bottom:14px;}
 .sec-scope .tbl-lb-fallback .fi-big-name{font-size:14px; color:#ddd; margin-bottom:16px; word-break:break-word; max-width:80vw;}
@@ -1101,9 +1151,60 @@ table.tbl tr:hover td{background:var(--panel2);}
   border-color:var(--accent);
 }
 .sec-scope .extra-explain-box{
+  margin:0 0 14px;
+  min-width:0;
+  background:linear-gradient(180deg,rgba(var(--accent-rgb),.025),transparent 30%);
   border:1.5px solid var(--tool-border);
+  border-radius:11px;
+  overflow:hidden;
+  box-shadow:0 3px 12px rgba(0,0,0,.08);
+  transition:border-color .18s,box-shadow .18s,transform .18s;
+}
+.sec-scope .extra-explain-box:hover{
+  border-color:rgba(var(--accent-rgb),.58);
+  box-shadow:0 7px 20px rgba(0,0,0,.12);
+}
+.sec-scope .extra-explain-box .exbox-head{
+  min-height:39px;
+  margin:0;
+  padding:5px 8px 5px 7px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  background:linear-gradient(90deg,var(--tint),transparent 70%);
+  border-bottom:1px solid var(--tool-border);
+}
+.sec-scope .extra-explain-box .exbox-head button{
+  min-width:28px;
+  line-height:1.1;
+}
+.sec-scope .extra-explain-box .exbox-title{
+  min-width:0;
+  flex:1;
+  font-size:13px;
+  font-weight:700;
+  background:var(--tool-btn-bg);
+  color:var(--tool-btn-text);
+  border:1.5px solid var(--tool-border);
+  border-radius:7px;
+  padding:5px 8px;
+}
+.sec-scope .extra-explain-box .exbox-title:focus{
+  outline:none;
+  border-color:var(--accent);
+}
+.sec-scope .extra-explain-box .exbox-body{
+  padding:9px;
   background:var(--tool-bg);
-  box-shadow:0 3px 10px rgba(0,0,0,.08);
+}
+.sec-scope .extra-explain-box .fmt-toolbar-holder{
+  margin-bottom:8px;
+}
+.sec-scope .extra-explain-box.is-collapsed{
+  background:var(--tool-bg);
+}
+.sec-scope .extra-explain-box.is-collapsed .exbox-head{
+  border-bottom:0;
 }
 
 /* مساحة عمل الأكواد */
@@ -6317,6 +6418,7 @@ document.addEventListener('click',e=>{ if(!e.target.closest('#notifBell') && !e.
       <div class="fi-big-name" id="tblLbFallbackName"></div>
       <a class="dl-btn" id="tblLbFallbackDownload" download>⬇️ تنزيل الملف</a>
     </div>
+    <div id="tblLightboxCaption" class="tbl-lightbox-caption" style="display:none;"></div>
   </div>
 </div>
 
@@ -7104,7 +7206,29 @@ function renderMarkdownFull(raw){
   }
 
 function enhanceMarkdownView(containerEl){
-    if(!containerEl || !window.mermaid) return;
+    if(!containerEl) return;
+
+    // الصور داخل الشرح/صناديق الشرح الإضافية تستخدم نفس عارض التكبير
+    // الموجود في بقية نظام التوثيق، حتى لا يظهر أي جزء من إطار الشرح
+    // فوق نافذة التكبير.
+    containerEl.querySelectorAll("img").forEach(img=>{
+      img.classList.add("md-image");
+      img.title = "اضغط للتكبير";
+      img.style.cursor = "zoom-in";
+      if(!img.dataset.viewerBound){
+        img.dataset.viewerBound = "1";
+        img.addEventListener("click", e=>{
+          e.preventDefault();
+          e.stopPropagation();
+          const src = img.currentSrc || img.src;
+          if(src && typeof openTblViewer === "function"){
+            openTblViewer({kind:"image", url:src});
+          }
+        });
+      }
+    });
+
+    if(!window.mermaid) return;
     const pendings = containerEl.querySelectorAll(".mermaid-pending");
     pendings.forEach(async (el)=>{
       const src = decodeURIComponent(el.dataset.mermaidSrc || "");
@@ -8357,6 +8481,10 @@ function tblHideAllViewers(){
     tblLightboxPdfEl.style.display = "none"; tblLightboxPdfEl.src = "";
     tblLightboxFallbackEl.style.display = "none";
     tblLightboxToolbarEl.style.display = "none";
+    if(tblLightboxCaptionEl){
+      tblLightboxCaptionEl.innerHTML = "";
+      tblLightboxCaptionEl.style.display = "none";
+    }
     resetImgZoomState();
   }
 
@@ -8367,6 +8495,15 @@ function openTblViewer(descriptor){
       tblLightboxImgEl.src = descriptor.url;
       tblLightboxImgEl.style.display = "block";
       tblLightboxToolbarEl.style.display = "flex";
+      if(tblLightboxCaptionEl && descriptor.caption && String(descriptor.caption).trim()){
+        const rawCaption = String(descriptor.caption);
+        tblLightboxCaptionEl.innerHTML =
+          typeof renderMarkdownLite === "function"
+            ? renderMarkdownLite(rawCaption)
+            : escapeHtml(rawCaption).replace(/\n/g,"<br>");
+        tblLightboxCaptionEl.style.display = "block";
+        if(typeof enhanceMarkdownView === "function") enhanceMarkdownView(tblLightboxCaptionEl);
+      }
     } else if(descriptor.kind === "video"){
       tblLightboxVideoEl.src = descriptor.url;
       tblLightboxVideoEl.style.display = "block";
@@ -9035,6 +9172,7 @@ async function migrateLegacyDataUrlsToAssets(){
 
 const tblLightboxEl = document.getElementById("tblLightbox");;
 const tblLightboxImgEl = document.getElementById("tblLightboxImg");;
+const tblLightboxCaptionEl = document.getElementById("tblLightboxCaption");
 const tblLightboxVideoEl = document.getElementById("tblLightboxVideo");;
 const tblLightboxAudioEl = document.getElementById("tblLightboxAudio");;
 const tblLightboxPdfEl = document.getElementById("tblLightboxPdf");;
@@ -10884,32 +11022,184 @@ window.ensureVisual=ensureVisual;
  async function keep(file){try{const id=genImageId();await idbPutImage(id,file,{name:file.name,mime:file.type,size:file.size});return id}catch(e){return await blobToBase64(file)}}
  function mount(host,cont){const s=cont.section=cont.section||{};if(!Array.isArray(s.images))s.images=[];if(!Array.isArray(s.codes))s.codes=[];if(typeof s.explanation!=='string')s.explanation='';if(typeof s.title!=='string')s.title='';if(!s.drawing)s.drawing={shapes:[]};let tab='text';const render=()=>{host.replaceChildren();host.className='sec-scope vdoc';const box=document.createElement('section');box.className='vdoc-box';const head=document.createElement('header');head.className='vdoc-head';const title=document.createElement('input');title.className='vdoc-title';title.placeholder='عنوان التوثيق التقني';title.value=s.title;title.oninput=()=>{s.title=title.value;save()};const note=document.createElement('div');note.className='vdoc-note';note.textContent='الحفظ تلقائي · الصور تُضمَّن في ملف ZIP الكامل للنقل بين الأجهزة';head.append(title,note);box.appendChild(head);const nav=document.createElement('nav');nav.className='vdoc-tabs';[['text','📝 الشرح والصور'],['code','💻 الأكواد'],['draw','📐 الرسم'],['map','🧠 الخريطة']].forEach(([id,label])=>{const b=button(label,id===tab?'on':'');b.onclick=()=>{tab=id;render()};nav.appendChild(b)});box.appendChild(nav);const body=document.createElement('main');body.className='vdoc-body';box.appendChild(body);host.appendChild(box);if(tab==='text')textPanel(body);else if(tab==='code')codePanel(body);else if(tab==='draw'){body.appendChild(h('الرسم التوضيحي'));body.appendChild(buildDrawingPanel(s))}else{body.appendChild(h('الخريطة الذهنية'));body.appendChild(buildMindMapPanel(s))}};
  const h=t=>{const x=document.createElement('h4');x.textContent=t;return x};
- function textPanel(body){body.appendChild(h('الشرح والصور'));const help=document.createElement('p');help.className='vdoc-help';help.textContent='أضف صورًا بلا حد، واكتب وصفًا أسفل كل صورة. اضغط الصورة أو زر تكبير لمشاهدتها بالحجم الأصلي مع التكبير والتصغير.';body.appendChild(help);const editor=document.createElement('textarea');editor.className='vdoc-editor';editor.placeholder='اكتب الشرح…';editor.value=s.explanation;const preview=document.createElement('div');preview.className='explain-view vdoc-preview';const paint=()=>{preview.innerHTML=typeof renderMarkdownLite==='function'?renderMarkdownLite(s.explanation):s.explanation.replace(/\n/g,'<br>');if(typeof enhanceMarkdownView==='function')enhanceMarkdownView(preview)};editor.oninput=()=>{s.explanation=editor.value;paint();save()};body.append(editor,preview);paint();const gallery=document.createElement('div');gallery.className='vdoc-gallery';s.images.forEach((entry,i)=>{const id=typeof entry==='object'?entry.id:entry;const card=document.createElement('article');card.className='vdoc-photo';const img=document.createElement('img');img.alt='صورة توثيق';display(id).then(u=>{if(u&&img.isConnected)img.src=u});const open=async()=>{const u=await display(id);if(u)openTblViewer({kind:'image',url:u})};img.onclick=open;const caption=document.createElement('textarea');caption.placeholder='شرح أسفل الصورة…';caption.value=typeof entry==='object'?(entry.caption||''):'';caption.oninput=()=>{s.images[i]={id,caption:caption.value};save()};const acts=document.createElement('div');acts.className='vdoc-actions';const zoom=button('تكبير','ghost');zoom.onclick=open;const del=button('حذف','danger ghost');del.onclick=()=>{s.images.splice(i,1);save();render()};acts.append(zoom,del);card.append(img,caption,acts);gallery.appendChild(card)});const add=document.createElement('label');add.className='vdoc-add';add.textContent='＋ أضف صورًا من الجهاز';const pick=document.createElement('input');pick.type='file';pick.accept='image/*';pick.multiple=true;pick.onchange=async()=>{const files=[...(pick.files||[])];if(!files.length)return;add.style.pointerEvents='none';add.textContent='جارٍ حفظ الصور…';let embedded=0;for(const f of files){const id=await keep(f);if(String(id).startsWith('data:'))embedded++;s.images.push({id,caption:''})}save();if(embedded&&typeof toast==='function')toast('تم حفظ الصور داخل المشروع كنسخة احتياطية متوافقة');render()};add.appendChild(pick);gallery.appendChild(add);body.appendChild(gallery)}
+ function textPanel(body){body.appendChild(h('الشرح والصور'));const help=document.createElement('p');help.className='vdoc-help';help.textContent='أضف صورًا بلا حد، واكتب وصفًا أسفل كل صورة. اضغط الصورة أو زر تكبير لمشاهدتها بالحجم الأصلي مع التكبير والتصغير.';body.appendChild(help);const editor=document.createElement('textarea');editor.className='vdoc-editor';editor.placeholder='اكتب الشرح…';editor.value=s.explanation;const preview=document.createElement('div');preview.className='explain-view vdoc-preview';const paint=()=>{preview.innerHTML=typeof renderMarkdownLite==='function'?renderMarkdownLite(s.explanation):s.explanation.replace(/\n/g,'<br>');if(typeof enhanceMarkdownView==='function')enhanceMarkdownView(preview)};editor.oninput=()=>{s.explanation=editor.value;paint();save()};body.append(editor,preview);paint();const gallery=document.createElement('div');gallery.className='vdoc-gallery';s.images.forEach((entry,i)=>{const id=typeof entry==='object'?entry.id:entry;const card=document.createElement('article');card.className='vdoc-photo';const img=document.createElement('img');img.alt='صورة توثيق';display(id).then(u=>{if(u&&img.isConnected)img.src=u});const open=async()=>{const u=await display(id);if(u)openTblViewer({kind:'image',url:u,caption:caption.value})};img.onclick=open;const caption=document.createElement('textarea');caption.placeholder='شرح أسفل الصورة…';caption.value=typeof entry==='object'?(entry.caption||''):'';caption.oninput=()=>{s.images[i]={id,caption:caption.value};save()};const acts=document.createElement('div');acts.className='vdoc-actions';const zoom=button('تكبير','ghost');zoom.onclick=open;const del=button('حذف','danger ghost');del.onclick=()=>{s.images.splice(i,1);save();render()};acts.append(zoom,del);card.append(img,caption,acts);gallery.appendChild(card)});const add=document.createElement('label');add.className='vdoc-add';add.textContent='＋ أضف صورًا من الجهاز';const pick=document.createElement('input');pick.type='file';pick.accept='image/*';pick.multiple=true;pick.onchange=async()=>{const files=[...(pick.files||[])];if(!files.length)return;add.style.pointerEvents='none';add.textContent='جارٍ حفظ الصور…';let embedded=0;for(const f of files){const id=await keep(f);if(String(id).startsWith('data:'))embedded++;s.images.push({id,caption:''})}save();if(embedded&&typeof toast==='function')toast('تم حفظ الصور داخل المشروع كنسخة احتياطية متوافقة');render()};add.appendChild(pick);gallery.appendChild(add);body.appendChild(gallery)}
  function codePanel(body){body.appendChild(h('كتل الأكواد'));const hold=document.createElement('div');hold.className='codes-holder';s.codes.forEach((c,i)=>hold.appendChild(buildCodeBlock(s,c,i)));body.appendChild(hold);const add=button('＋ إضافة كتلة كود','ghost addcode-btn');add.onclick=()=>{s.codes.push({lang:'text',label:'كود جديد',code:''});save();render()};body.appendChild(add)}
  render()}
  window.mountCellSection=mount;
 })();
 </script>
 <style>
-.vdoc-multi{margin-top:18px;padding-top:12px;border-top:1px solid var(--border)}.vdoc-multi-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px}.vdoc-multi-head b{font-size:13px}.vdoc-multi-list{display:grid;gap:9px}.vdoc-multi-item{display:grid;gap:7px;padding:10px;border:1px solid var(--border-lt);border-radius:9px;background:var(--panel)}.vdoc-multi-item input,.vdoc-multi-item textarea{width:100%;max-width:100%;padding:8px;background:var(--panel3);color:var(--text);border:1px solid var(--border);border-radius:7px;font:inherit}.vdoc-multi-item textarea{min-height:90px;resize:vertical}.vdoc-multi-actions{display:flex;justify-content:flex-end;gap:6px}
+/* مقاطع الشرح الإضافية في واجهة التوثيق: نفس نظام الإطارات والتنسيق */
+.sec-scope .vdoc-multi{
+  margin-top:18px;
+  padding-top:12px;
+  border-top:1px solid var(--border);
+}
+.sec-scope .vdoc-multi-head{
+  display:flex; justify-content:space-between; align-items:center; gap:9px;
+  margin-bottom:10px;
+}
+.sec-scope .vdoc-multi-head b{font-size:14px; font-weight:900; color:var(--ink);}
+.sec-scope .vdoc-multi-list{display:flex; flex-direction:column; gap:12px; min-width:0;}
+.sec-scope .vdoc-multi-item{
+  display:block; min-width:0; width:100%;
+  padding:0;
+  border:1.5px solid var(--tool-border);
+  border-radius:11px;
+  background:linear-gradient(180deg,rgba(var(--accent-rgb),.025),transparent 30%);
+  box-shadow:0 3px 12px rgba(0,0,0,.08);
+  overflow:hidden;
+  transition:border-color .18s,box-shadow .18s;
+}
+.sec-scope .vdoc-multi-item:hover{
+  border-color:rgba(var(--accent-rgb),.58);
+  box-shadow:0 7px 20px rgba(0,0,0,.12);
+}
+.sec-scope .vdoc-multi-item .vdoc-multi-head-row{
+  display:flex; align-items:center; gap:6px; min-width:0;
+  min-height:42px; padding:5px 7px;
+  background:linear-gradient(90deg,var(--tint),transparent 70%);
+  border-bottom:1px solid var(--tool-border);
+}
+.sec-scope .vdoc-multi-item .vdoc-multi-title{
+  flex:1; min-width:0; width:100%;
+  padding:6px 9px;
+  background:var(--tool-btn-bg); color:var(--tool-btn-text);
+  border:1.5px solid var(--tool-border); border-radius:7px;
+  font:700 13px/1.4 Cairo,sans-serif;
+}
+.sec-scope .vdoc-multi-item .vdoc-multi-title:focus{outline:none;border-color:var(--accent);}
+.sec-scope .vdoc-multi-item .vdoc-multi-toggle,
+.sec-scope .vdoc-multi-item .vdoc-multi-delete{
+  flex:0 0 auto; min-width:31px; height:31px; padding:3px 8px;
+}
+.sec-scope .vdoc-multi-item .vdoc-multi-body{padding:9px; min-width:0;}
+.sec-scope .vdoc-multi-item.is-collapsed .vdoc-multi-body{display:none;}
+.sec-scope .vdoc-multi-item.is-collapsed .vdoc-multi-head-row{border-bottom:0;}
+.sec-scope .vdoc-multi-item .vdoc-multi-view{
+  width:100%; min-width:0; min-height:60px;
+}
+.sec-scope .vdoc-multi-item .vdoc-multi-editor{
+  display:block; width:100%; min-width:0;
+  min-height:90px; height:auto;
+  box-sizing:border-box; resize:none; overflow:hidden;
+  padding:10px 12px;
+  background:var(--surface-soft); color:var(--ink);
+  border:1px solid var(--rule); border-radius:6px;
+  font:14.5px/1.9 Cairo,sans-serif; direction:rtl; text-align:right;
+}
+.sec-scope .vdoc-multi-item .vdoc-multi-actions{
+  display:flex; justify-content:flex-end; gap:6px; margin-top:8px;
+}
 </style>
 <script id="multiple-explanations">
 (function(){
   const prior=window.mountCellSection;
   const save=()=>{if(typeof scheduleSave==='function')scheduleSave()};
+  const esc = v => typeof escapeHtml==='function' ? escapeHtml(v||'') : String(v||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+  function autoGrow(ta){
+    if(!ta)return;
+    ta.style.height='auto';
+    ta.style.height=Math.max(90,ta.scrollHeight)+'px';
+  }
+
   function enhance(host,section){
     const active=host.querySelector('.vdoc-tabs button.on');
     const body=host.querySelector('.vdoc-body');
     if(!active||!body||!active.textContent.includes('الشرح')||body.querySelector('.vdoc-multi'))return;
     if(!Array.isArray(section.explanations))section.explanations=[];
-    const wrap=document.createElement('section');wrap.className='vdoc-multi';
-    const head=document.createElement('div');head.className='vdoc-multi-head';const label=document.createElement('b');label.textContent='مقاطع شرح إضافية';const add=document.createElement('button');add.type='button';add.className='ghost';add.textContent='＋ إضافة مقطع شرح';head.append(label,add);wrap.appendChild(head);
-    const list=document.createElement('div');list.className='vdoc-multi-list';wrap.appendChild(list);
-    const renderList=()=>{list.replaceChildren();section.explanations.forEach((item,index)=>{const row=document.createElement('article');row.className='vdoc-multi-item';const title=document.createElement('input');title.placeholder='عنوان المقطع';title.value=item.title||'';title.oninput=()=>{item.title=title.value;save()};const text=document.createElement('textarea');text.placeholder='اكتب شرح هذا المقطع…';text.value=item.content||'';text.oninput=()=>{item.content=text.value;save()};const actions=document.createElement('div');actions.className='vdoc-multi-actions';const remove=document.createElement('button');remove.type='button';remove.className='danger ghost';remove.textContent='حذف المقطع';remove.onclick=()=>{section.explanations.splice(index,1);save();renderList()};actions.appendChild(remove);row.append(title,text,actions);list.appendChild(row)})};
-    add.onclick=()=>{section.explanations.push({id:typeof secUid==='function'?secUid():'note_'+Date.now(),title:'',content:''});save();renderList()};renderList();body.appendChild(wrap);
+
+    const wrap=document.createElement('section');
+    wrap.className='vdoc-multi';
+    const head=document.createElement('div');
+    head.className='vdoc-multi-head';
+    const label=document.createElement('b');
+    label.textContent='مقاطع شرح إضافية';
+    const add=document.createElement('button');
+    add.type='button'; add.className='ghost'; add.textContent='＋ إضافة مقطع شرح';
+    head.append(label,add); wrap.appendChild(head);
+
+    const list=document.createElement('div');
+    list.className='vdoc-multi-list'; wrap.appendChild(list);
+
+    const renderList=()=>{
+      list.replaceChildren();
+      section.explanations.forEach((item,index)=>{
+        const row=document.createElement('article');
+        row.className='vdoc-multi-item';
+
+        const top=document.createElement('div');
+        top.className='vdoc-multi-head-row';
+        const title=document.createElement('input');
+        title.className='vdoc-multi-title';
+        title.placeholder='عنوان المقطع'; title.value=item.title||'';
+        const toggle=document.createElement('button');
+        toggle.type='button'; toggle.className='ghost vdoc-multi-toggle';
+        toggle.textContent='⌃'; toggle.title='إخفاء الشرح مع إبقاء العنوان';
+        const remove=document.createElement('button');
+        remove.type='button'; remove.className='danger ghost vdoc-multi-delete';
+        remove.textContent='🗑'; remove.title='حذف المقطع';
+        top.append(title,toggle,remove);
+
+        const bodyEl=document.createElement('div'); bodyEl.className='vdoc-multi-body';
+        const view=document.createElement('div');
+        view.className='explain-view vdoc-multi-view';
+        view.innerHTML=typeof renderMarkdownLite==='function'?renderMarkdownLite(item.content||''):(item.content||'').replace(/\n/g,'<br>');
+        const toolbarHolder=document.createElement('div');
+        toolbarHolder.className='fmt-toolbar-holder'; toolbarHolder.style.display='none';
+        const ta=document.createElement('textarea');
+        ta.className='vdoc-multi-editor'; ta.value=item.content||''; ta.style.display='none';
+        bodyEl.append(view,toolbarHolder,ta);
+        row.append(top,bodyEl); list.appendChild(row);
+
+        if(typeof buildFormatToolbar==='function')toolbarHolder.appendChild(buildFormatToolbar(()=>ta));
+        if(typeof enhanceMarkdownView==='function')enhanceMarkdownView(view);
+
+        title.addEventListener('input',e=>{item.title=e.target.value;save()});
+        toggle.addEventListener('click',()=>{
+          const collapsed=row.classList.toggle('is-collapsed');
+          toggle.textContent=collapsed?'⌄':'⌃';
+          toggle.title=collapsed?'إظهار الشرح':'إخفاء الشرح مع إبقاء العنوان';
+        });
+        remove.onclick=()=>{
+          if(typeof armConfirm==='function' && !armConfirm(remove,'حذف المقطع؟'))return;
+          section.explanations.splice(index,1); save(); renderList();
+        };
+
+        const edit=()=>{
+          view.style.display='none';
+          toolbarHolder.style.display='flex';
+          ta.style.display='block';
+          autoGrow(ta); ta.focus();
+        };
+        view.addEventListener('click',edit);
+        ta.addEventListener('input',()=>{item.content=ta.value;autoGrow(ta);save()});
+        ta.addEventListener('blur',()=>{
+          item.content=ta.value;
+          view.innerHTML=typeof renderMarkdownLite==='function'?renderMarkdownLite(item.content):(item.content||'').replace(/\n/g,'<br>');
+          if(typeof enhanceMarkdownView==='function')enhanceMarkdownView(view);
+          ta.style.display='none'; toolbarHolder.style.display='none'; view.style.display='block';
+          save();
+        });
+      });
+    };
+
+    add.onclick=()=>{
+      section.explanations.push({id:typeof secUid==='function'?secUid():'note_'+Date.now(),title:'',content:''});
+      save(); renderList();
+    };
+    renderList(); body.appendChild(wrap);
   }
-  window.mountCellSection=function(host,container){prior(host,container);host.__docSection=container.section;requestAnimationFrame(()=>enhance(host,container.section))};
-  new MutationObserver(()=>document.querySelectorAll('.vdoc').forEach(host=>{if(host.__docSection)enhance(host,host.__docSection)})).observe(document.body,{childList:true,subtree:true});
+
+  window.mountCellSection=function(host,container){
+    prior(host,container);
+    host.__docSection=container.section;
+    requestAnimationFrame(()=>enhance(host,container.section));
+  };
+  new MutationObserver(()=>document.querySelectorAll('.vdoc').forEach(host=>{
+    if(host.__docSection)enhance(host,host.__docSection)
+  })).observe(document.body,{childList:true,subtree:true});
 })();
 </script>
 </body>
