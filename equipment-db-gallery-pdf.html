@@ -1146,10 +1146,17 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
   .tbl-add-option-row input{flex:1;}
 
   /* lightbox لصور الجداول */
-  .tbl-lightbox-overlay{position:fixed; inset:0; z-index:220; background:rgba(20,20,30,0.92); display:none; flex-direction:column; align-items:center; justify-content:center; padding:0;}
+  .tbl-lightbox-overlay{position:fixed; inset:0; z-index:220; background:rgba(20,20,30,0.92); display:none; align-items:center; justify-content:center; padding:24px; overflow:hidden;}
   .tbl-lightbox-overlay.open{display:flex;}
-  .tbl-lightbox-stage{position:relative; flex:1; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; touch-action:none; cursor:grab;}
+  /* الصورة + الشرح أصبحا وحدة واحدة يتم توسيطها دائمًا في منتصف الشاشة */
+  .tbl-lightbox-content{position:relative; width:min(1100px,94vw); height:min(90vh,900px); max-width:94vw; max-height:90vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-width:0; min-height:0;}
+  .tbl-lightbox-stage{position:relative; flex:1 1 auto; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; touch-action:none; cursor:grab;}
   .tbl-lightbox-stage.zoomed{cursor:grab;}
+  .tbl-lightbox-caption{flex:0 0 auto; width:min(900px,100%); max-height:24vh; overflow:auto; margin:0; padding:9px 14px; border-radius:9px; background:rgba(0,0,0,.72); border:1px solid rgba(255,255,255,.18); color:#fff; text-align:right; direction:rtl; font:500 13px/1.7 "Cairo","Tahoma",sans-serif; box-sizing:border-box; z-index:4; backdrop-filter:blur(4px);}
+  .tbl-lightbox-caption p{margin:0 0 7px;}
+  .tbl-lightbox-caption p:last-child{margin-bottom:0;}
+  .tbl-lightbox-caption h1,.tbl-lightbox-caption h2,.tbl-lightbox-caption h3,.tbl-lightbox-caption h4,.tbl-lightbox-caption h5,.tbl-lightbox-caption h6{margin:4px 0 6px; color:#fff;}
+  .tbl-lightbox-caption ul,.tbl-lightbox-caption ol{margin:4px 0 7px; padding-right:22px;}
   .tbl-lightbox-stage.dragging{cursor:grabbing;}
   .tbl-lightbox-stage img{position:absolute; top:0; left:0; max-width:none; max-height:none; width:auto; height:auto; user-select:none; -webkit-user-drag:none; border-radius:6px; box-shadow:0 12px 40px rgba(0,0,0,.5); transform-origin:0 0; touch-action:none;}
   .tbl-lightbox-stage video{max-width:92vw; max-height:82vh;}
@@ -1162,7 +1169,9 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
   .tbl-lightbox-toolbar{position:absolute; top:14px; right:70px; left:70px; display:flex; align-items:center; justify-content:center; gap:8px; z-index:2;}
   .tbl-lightbox-toolbar button, .tbl-lightbox-toolbar a{background:#fff; color:var(--ink); border:none; border-radius:8px; min-width:36px; height:36px; padding:0 8px; display:flex; align-items:center; justify-content:center; font-size:15px; cursor:pointer; text-decoration:none; font-weight:900;}
   .tbl-lightbox-toolbar .zoom-level{color:#fff; font-size:12.5px; min-width:44px; text-align:center; font-weight:700;}
-  .tbl-lightbox-close{position:absolute; top:18px; left:20px; width:38px; height:38px; border-radius:50%; background:#fff; border:none; font-size:18px; cursor:pointer; color:var(--ink); font-weight:900; padding:0; z-index:3;}
+  .tbl-lightbox-image-close{position:absolute;top:14px;right:14px;width:42px;height:42px;border-radius:50%;background:#fff;color:var(--ink);border:2px solid rgba(0,0,0,.12);font-size:20px;font-weight:900;cursor:pointer;z-index:20;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.tbl-lightbox-image-close:hover{transform:scale(1.05)}
+.tbl-lightbox-close{position:absolute; top:18px; left:20px; width:38px; height:38px; border-radius:50%; background:#fff; border:none; font-size:18px; cursor:pointer; color:var(--ink); font-weight:900; padding:0; z-index:3;}
 
   /* ============================================================
      شعار التطبيق (لمسة جرافيك بسيطة في الهيدر — شكل شريحة/IC)
@@ -1418,6 +1427,7 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
 <div id="toastWrap"></div>
 
 <div class="tbl-lightbox-overlay" id="tblLightbox">
+  <button type="button" class="tbl-lightbox-image-close" id="tblLightboxImageClose" title="إغلاق">✕</button>
   <button class="tbl-lightbox-close" id="tblLightboxClose">✕</button>
   <div class="tbl-lightbox-toolbar" id="tblLightboxToolbar" style="display:none;">
     <button type="button" id="tblLbZoomOut" title="تصغير">－</button>
@@ -1425,16 +1435,19 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
     <button type="button" id="tblLbZoomIn" title="تكبير">＋</button>
     <button type="button" id="tblLbZoomReset" title="إعادة الضبط للحجم الأصلي">⤾</button>
   </div>
-  <div class="tbl-lightbox-stage" id="tblLightboxStage">
-    <img id="tblLightboxImg" src="" alt="صورة مكبّرة" style="display:none;">
-    <video id="tblLightboxVideo" controls style="display:none;"></video>
-    <audio id="tblLightboxAudio" controls style="display:none;"></audio>
-    <iframe id="tblLightboxPdf" title="ملف PDF" style="display:none;"></iframe>
-    <div id="tblLightboxFallback" class="tbl-lb-fallback" style="display:none;">
-      <span class="fi-big-icon" id="tblLbFallbackIcon">📎</span>
-      <div class="fi-big-name" id="tblLbFallbackName"></div>
-      <a class="dl-btn" id="tblLbFallbackDownload" download>⬇️ تنزيل الملف</a>
+  <div class="tbl-lightbox-content" id="tblLightboxContent">
+    <div class="tbl-lightbox-stage" id="tblLightboxStage">
+      <img id="tblLightboxImg" src="" alt="صورة مكبّرة" style="display:none;">
+      <video id="tblLightboxVideo" controls style="display:none;"></video>
+      <audio id="tblLightboxAudio" controls style="display:none;"></audio>
+      <iframe id="tblLightboxPdf" title="ملف PDF" style="display:none;"></iframe>
+      <div id="tblLightboxFallback" class="tbl-lb-fallback" style="display:none;">
+        <span class="fi-big-icon" id="tblLbFallbackIcon">📎</span>
+        <div class="fi-big-name" id="tblLbFallbackName"></div>
+        <a class="dl-btn" id="tblLbFallbackDownload" download>⬇️ تنزيل الملف</a>
+      </div>
     </div>
+    <div id="tblLightboxCaption" class="tbl-lightbox-caption" style="display:none;"></div>
   </div>
 </div>
 
@@ -2620,11 +2633,12 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
       toolbarHolder.style.display = "none";
       viewEl.style.display = "block";
     });
-    wrap.querySelector('[data-act="exbox-delete"]').addEventListener("click", (e)=>{
-      if(!armConfirm(e.currentTarget, "حذف الصندوق؟")) return;
-      s.explanations = s.explanations.filter(b=>b.id!==box.id);
+    wrap.querySelector('[data-act="exbox-delete"]').addEventListener("click", ()=>{
+      if(!Array.isArray(s.explanations)) return;
+      s.explanations = s.explanations.filter(b=>b.id !== box.id);
       scheduleAutoSave();
-      setAppView("sections");
+      renderAll();
+      showToast("تم حذف صندوق الشرح.", "ok", 1400);
     });
     enhanceMarkdownView(viewEl);
     return wrap;
@@ -3737,6 +3751,7 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
   const tblLbFallbackNameEl = document.getElementById("tblLbFallbackName");
   const tblLbFallbackDownloadEl = document.getElementById("tblLbFallbackDownload");
   const tblLightboxStageEl = document.getElementById("tblLightboxStage");
+  const tblLightboxCaptionEl = document.getElementById("tblLightboxCaption");
   const tblLightboxToolbarEl = document.getElementById("tblLightboxToolbar");
   const tblLbZoomLevelEl = document.getElementById("tblLbZoomLevel");
 
@@ -3754,7 +3769,7 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
     const stageRect = tblLightboxStageEl.getBoundingClientRect();
     if(!imgNaturalW || !imgNaturalH || !stageRect.width){ imgBaseScale = 1; }
     else{
-      const availW = stageRect.width * 0.94, availH = stageRect.height * 0.9;
+      const availW = stageRect.width * 0.94, availH = stageRect.height * 0.94;
       imgBaseScale = Math.min(availW / imgNaturalW, availH / imgNaturalH, 1);
     }
     const dispW = imgNaturalW * imgBaseScale * imgZoomFactor;
@@ -3870,6 +3885,8 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
     tblLightboxAudioEl.style.display = "none"; tblLightboxAudioEl.pause(); tblLightboxAudioEl.removeAttribute("src"); tblLightboxAudioEl.load();
     tblLightboxPdfEl.style.display = "none"; tblLightboxPdfEl.src = "";
     tblLightboxFallbackEl.style.display = "none";
+    tblLightboxCaptionEl.style.display = "none";
+    tblLightboxCaptionEl.innerHTML = "";
     tblLightboxToolbarEl.style.display = "none";
     resetImgZoomState();
   }
@@ -3881,6 +3898,11 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
       tblLightboxImgEl.src = descriptor.url;
       tblLightboxImgEl.style.display = "block";
       tblLightboxToolbarEl.style.display = "flex";
+      if(descriptor.caption){
+        tblLightboxCaptionEl.innerHTML = renderMarkdownLite(String(descriptor.caption));
+        enhanceMarkdownView(tblLightboxCaptionEl);
+        tblLightboxCaptionEl.style.display = "block";
+      }
     } else if(descriptor.kind === "video"){
       tblLightboxVideoEl.src = descriptor.url;
       tblLightboxVideoEl.style.display = "block";
@@ -3900,10 +3922,14 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
       tblLightboxFallbackEl.style.display = "block";
     }
     tblLightboxEl.classList.add("open");
+    if(descriptor.kind === "image") requestAnimationFrame(()=>{
+      if(imgNaturalW && imgNaturalH){ computeBaseScaleAndCenter(); applyImgTransform(); }
+    });
   }
   // توافقًا مع أي استدعاء قديم لعرض صورة بس
   function openTblLightbox(src){ if(src) openTblViewer({ kind:"image", url:src }); }
   function closeTblLightbox(){ tblLightboxEl.classList.remove("open"); tblHideAllViewers(); }
+  document.getElementById("tblLightboxImageClose").addEventListener("click", (e)=>{ e.stopPropagation(); closeTblLightbox(); });
   tblLightboxEl.addEventListener("click", (e)=>{ if(e.target === tblLightboxEl) closeTblLightbox(); });
   tblLightboxStageEl.addEventListener("click", (e)=>{
     if(dragMoved){ dragMoved = false; return; }
@@ -4450,7 +4476,9 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
         getImageDisplayURL(id).then(u=>{ if(u && img.isConnected) img.src = u; });
         const open = async ()=>{
           const u = await getImageDisplayURL(id);
-          if(u) openTblViewer({ kind: "image", url: u, name: (typeof entry==="object"? entry.caption : "") || "صورة توضيحية" });
+          const currentEntry = section.images[i];
+          const currentCaption = currentEntry && typeof currentEntry === "object" ? (currentEntry.caption || "") : "";
+          if(u) openTblViewer({ kind: "image", url: u, name: currentCaption || "صورة توضيحية", caption: currentCaption });
         };
         img.onclick = open;
 
