@@ -479,14 +479,14 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
       repeating-linear-gradient(90deg, rgba(31,111,178,.07) 0px, rgba(31,111,178,.07) 1px, transparent 1px, transparent 24px);
   }
   *{box-sizing:border-box;}
-  html,body{height:100%; overflow-x:hidden; max-width:100%;}
+  html,body{overflow-x:hidden; max-width:100%;}
   body{
     margin:0; color:var(--ink);
     font-family:"Cairo","Tahoma",sans-serif;
     background: var(--bg-decoration), var(--paper);
     background-attachment:fixed;
     transition:background-color .35s ease, color .35s ease;
-    min-height:100vh; position:relative;
+    position:relative;
   }
   h1,h2,.serif{font-family:var(--font-display);}
   code, pre, textarea.codearea{
@@ -942,6 +942,21 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
   .fs-overlay .fs-body > .drawpanel{min-height:calc(100vh - 62px);height:100%;}
   .fs-overlay .fs-body > .drawpanel .draw-canvas{height:100%;min-height:0;}
   .fs-overlay .fs-body > .tables-holder{overflow:auto;}
+  /* ============================== معرض الصور التوضيحية ============================== */
+  .img-gal-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px;}
+  .img-gal-card{overflow:hidden; padding:8px; border:1px solid var(--rule); border-radius:8px; background:var(--surface);}
+  .img-gal-card img{display:block; width:100%; height:130px; object-fit:cover; border-radius:5px; cursor:zoom-in; background:var(--surface-soft);}
+  .img-gal-caption{width:100%; min-height:56px; margin-top:7px; padding:6px; resize:vertical; background:var(--surface-soft); color:var(--ink); border:1px solid var(--rule); border-radius:5px; font-size:12px; font-family:"Cairo",sans-serif;}
+  .img-gal-acts{display:flex; gap:5px; margin-top:6px;}
+  .img-gal-acts button{flex:1; padding:4px !important; font-size:10.5px !important;}
+  .img-gal-add{display:flex; align-items:center; justify-content:center; min-height:118px; padding:10px; border:1px dashed var(--accent); border-radius:8px; background:var(--tint); cursor:pointer; text-align:center; color:var(--ink-soft); font-size:12.5px;}
+  .img-gal-add input{display:none;}
+  /* ============================== تبويبات دفتر الملاحظات (شرح/كود/جداول/رسم/خريطة) ============================== */
+  .nb-tabs{display:flex; gap:6px; flex-wrap:wrap; margin:14px 0 12px; padding-bottom:10px; border-bottom:1.5px solid var(--rule);}
+  .nb-tab{background:var(--surface); color:var(--ink-soft); border:1px solid var(--rule); border-radius:20px; padding:6px 14px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:"Cairo",sans-serif;}
+  .nb-tab.on{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .nb-pane{min-width:0;}
+  .pane-topbar{display:flex; justify-content:flex-end; margin-bottom:8px;}
   .content-block{margin:0 0 12px;min-width:0;}
   .block-head{display:flex;align-items:center;gap:7px;min-height:26px;}
   .block-head .section-label{flex:1;margin:10px 0 6px;}
@@ -1496,6 +1511,21 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+  }
+  /* بعض السياقات (زي فتح الملف مباشرة من تطبيق التنزيلات عبر content:// على أندرويد،
+     أو المتصفح الخاص، أو تقسيم التخزين لإطار iframe معزول) بتمنع IndexedDB تمامًا
+     ("Internal error opening backing store"). بدل ما نوقف حفظ الصورة، بنرجع تلقائيًا
+     لتضمينها Base64 داخل بيانات السكشن نفسها — أبطأ شوية وأكبر حجمًا، لكنها بتشتغل
+     دايمًا وبتتحفظ مع بيانات الجهاز عادي. */
+  async function storeImageAndGetRef(blob){
+    try{
+      const id = genImageId();
+      await idbPutImage(id, blob);
+      return id;
+    }catch(err){
+      console.warn("IndexedDB غير متاح، جاري الحفظ كـ Base64 بدلاً منه:", err);
+      return await blobToBase64(blob);
+    }
   }
   async function idbGetImage(id){
     const db = await openImageDB();
@@ -4032,8 +4062,7 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
         const files = Array.from(e.target.files || []);
         for(const file of files){
           try{
-            const id = genImageId();
-            await idbPutImage(id, file); // تخزين الملف الأصلي زي ما هو — بدون أي ضغط
+            const id = await storeImageAndGetRef(file); // تخزين الملف الأصلي زي ما هو — بدون أي ضغط
             imagesArr.push(id);
           }catch(err){
             showToast("تعذّر حفظ الصورة: " + (err && err.message ? err.message : err), "err");
@@ -4083,8 +4112,7 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
         const files = Array.from(e.target.files || []);
         for(const file of files){
           try{
-            const id = genImageId();
-            await idbPutImage(id, file); // تخزين الملف الأصلي كامل زي ما هو — بدون أي تحويل أو ضغط
+            const id = await storeImageAndGetRef(file); // تخزين الملف الأصلي كامل زي ما هو — بدون أي تحويل أو ضغط
             filesArr.push({ id, name: file.name, mime: file.type || "", size: file.size });
           }catch(err){
             showToast("تعذّر حفظ الملف: " + (err && err.message ? err.message : err), "err");
@@ -4403,6 +4431,83 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
 
   const __CTX_EVENTS = ["pointerdown","mousedown","click","input","change","keydown","blur","touchstart"];
 
+  /* ============================== معرض الصور التوضيحية (مستورد من نظام التوثيق التقني — workshop_inventory) ==============================
+     صور بلا حد، مع شرح نصي أسفل كل صورة، وتكبير ومعاينة، وحذف فردي — منفصل عن نص الشرح الرئيسي وعن مرفقات الجداول. */
+  function buildImageGalleryPanel(section){
+    if(!Array.isArray(section.images)) section.images = [];
+    const wrap = document.createElement("div");
+    wrap.className = "img-gal-grid";
+
+    function refresh(){
+      wrap.innerHTML = "";
+      section.images.forEach((entry, i)=>{
+        const id = typeof entry === "object" ? entry.id : entry;
+        const card = document.createElement("article");
+        card.className = "img-gal-card";
+
+        const img = document.createElement("img");
+        img.alt = "صورة توضيحية";
+        getImageDisplayURL(id).then(u=>{ if(u && img.isConnected) img.src = u; });
+        const open = async ()=>{
+          const u = await getImageDisplayURL(id);
+          if(u) openTblViewer({ kind: "image", url: u, name: (typeof entry==="object"? entry.caption : "") || "صورة توضيحية" });
+        };
+        img.onclick = open;
+
+        const caption = document.createElement("textarea");
+        caption.className = "img-gal-caption";
+        caption.placeholder = "شرح أسفل الصورة…";
+        caption.value = typeof entry === "object" ? (entry.caption || "") : "";
+        caption.oninput = ()=>{
+          section.images[i] = { id, caption: caption.value };
+          scheduleAutoSave();
+        };
+
+        const acts = document.createElement("div");
+        acts.className = "img-gal-acts";
+        const zoom = document.createElement("button"); zoom.className = "ghost"; zoom.textContent = "تكبير"; zoom.onclick = open;
+        const del = document.createElement("button"); del.className = "ghost danger"; del.textContent = "حذف";
+        del.onclick = ()=>{
+          const removed = section.images.splice(i, 1)[0];
+          const rid = removed && (typeof removed === "object" ? removed.id : removed);
+          if(rid) idbDeleteImage(rid);
+          scheduleAutoSave();
+          refresh();
+        };
+        acts.append(zoom, del);
+
+        card.append(img, caption, acts);
+        wrap.appendChild(card);
+      });
+
+      const add = document.createElement("label");
+      add.className = "img-gal-add";
+      add.textContent = "＋ أضف صورًا من الجهاز";
+      const pick = document.createElement("input");
+      pick.type = "file"; pick.accept = "image/*"; pick.multiple = true;
+      pick.onchange = async ()=>{
+        const files = [...(pick.files || [])];
+        if(!files.length) return;
+        add.style.pointerEvents = "none";
+        add.textContent = "جارٍ حفظ الصور…";
+        for(const f of files){
+          try{
+            const id = await storeImageAndGetRef(f);
+            section.images.push({ id, caption: "" });
+          }catch(err){
+            showToast("تعذّر حفظ الصورة: " + (err && err.message ? err.message : err), "err");
+          }
+        }
+        scheduleAutoSave();
+        refresh();
+      };
+      add.appendChild(pick);
+      wrap.appendChild(add);
+    }
+    refresh();
+    return wrap;
+  }
+
   function defaultSectionData(opts){
     opts = opts || {};
     return {
@@ -4411,6 +4516,7 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
       starred: false,
       explanation: opts.explanation || "اكتب هنا شرحك الرئيسي.\\nيدعم **بولد**، *مائل*، قوائم، وجداول ماركداون، وأكواد \`\`\`مثل هذا\`\`\`.",
       explanations: [],
+      images: opts.images || [],
       codes: opts.codes || [{ lang: "asm", label: "مثال كود", code: "; مثال بسيط\\nldi r16, 0x05\\nout PORTB, r16" }],
       drawing: { shapes: [] },
       mindmap: null,
@@ -4433,6 +4539,7 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
       if(value && typeof value === "object"){
         this.section = value;
         if(!Array.isArray(this.section.explanations)) this.section.explanations = [];
+        if(!Array.isArray(this.section.images)) this.section.images = [];
         if(!Array.isArray(this.section.codes)) this.section.codes = [];
         if(!Array.isArray(this.section.tables)) this.section.tables = [];
         if(!this.section.drawing) this.section.drawing = { shapes: [] };
@@ -4491,6 +4598,7 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
         loaded = defaultSectionData({ title: this.getAttribute("initial-title") || undefined });
       }
       if(!Array.isArray(loaded.explanations)) loaded.explanations = [];
+      if(!Array.isArray(loaded.images)) loaded.images = [];
       if(!Array.isArray(loaded.codes)) loaded.codes = [];
       if(!Array.isArray(loaded.tables)) loaded.tables = [];
       if(!loaded.drawing) loaded.drawing = { shapes: [] };
@@ -4504,23 +4612,34 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
     }
 
     _flushAutoSaveNow(){
+      // مساحة localStorage جوه الإطار محدودة (~5-10 ميجا فقط) وسهل تمتلئ لو
+      // فيه صور اتخزنت كـ Base64 داخل بيانات السكشن (بديل لما IndexedDB يبقى
+      // غير متاح). فشل النسخة المحلية دي مش خطر ومينفعش يوقف الحفظ الحقيقي —
+      // فبنعامل الاتنين (التخزين المحلي وإرسال البيانات لصفحة الاستضافة)
+      // كخطوتين مستقلتين، مش خطوة واحدة بتوقف التانية لو فشلت.
+      let localOk = false;
       try{
         localStorage.setItem(this.storageKey, JSON.stringify(this.section));
-        this._setSaveBadge("ok");
-        this.dispatchEvent(new CustomEvent("section-save", { detail: { data: this.section }, bubbles: true }));
-        // بعد الحفظ المحلي، ابعت نسخة من بيانات السكشن لصفحة الاستضافة (التطبيق الرئيسي)
-        // عشان تتحفظ مع باقي بيانات الجهاز في IndexedDB وتبقى جزء من نظام الحفظ التلقائي
-        // العام (وبالتالي من التصدير/الاستيراد كمان)، مش معزولة في تخزين الإطار بس.
-        try{
-          window.parent && window.parent.postMessage({
+        localOk = true;
+      }catch(e){
+        console.warn("تعذّر الحفظ في localStorage (مساحة التخزين المحلية ممتلئة على الأرجح) — البيانات لسه بتتبعت لصفحة الاستضافة:", e);
+      }
+      this.dispatchEvent(new CustomEvent("section-save", { detail: { data: this.section }, bubbles: true }));
+      // ابعت نسخة من بيانات السكشن لصفحة الاستضافة (التطبيق الرئيسي) عشان تتحفظ
+      // مع باقي بيانات الجهاز في IndexedDB — ده المصدر الأساسي والدائم للحفظ،
+      // وبيشتغل حتى لو التخزين المحلي جوه الإطار امتلأ أو اتعطّل بالكامل.
+      let parentOk = false;
+      try{
+        if(window.parent && window.parent !== window){
+          window.parent.postMessage({
             type: "cs-note-save",
             storageKey: this.storageKey,
             data: this.section
           }, "*");
-        }catch(e){ /* تجاهل لو مفيش صفحة أب (فتح الإطار لوحده) */ }
-      }catch(e){
-        this._setSaveBadge("err");
-      }
+          parentOk = true;
+        }
+      }catch(e){ /* تجاهل لو مفيش صفحة أب (فتح الإطار لوحده) */ }
+      this._setSaveBadge((localOk || parentOk) ? "ok" : "err");
     }
 
     _setSaveBadge(kind){
@@ -4542,38 +4661,48 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
           <span class="tag save-badge">🟢 محفوظ</span>
         </div>
 
-        <div class="content-block is-open" data-block="explain">
-          <div class="block-head"><div class="section-label">الشرح</div><button class="ghost block-toggle" data-act="collapse" title="طيّ الكتلة">⌃ طي</button><button class="ghost expand-btn" data-act="expand-explain" title="تكبير لملء الشاشة">⛶</button></div>
-          <div class="block-body">
-            <div class="explain-view" data-act="explain-view">\${renderMarkdownLite(s.explanation)}</div>
-            <div class="fmt-toolbar-holder" data-act="explain-toolbar-holder" style="display:none;"></div>
-            <textarea class="explain" data-act="explain" style="display:none;">\${escapeHtml(s.explanation)}</textarea>
-            <div class="extra-explanations-holder" data-act="extra-explanations-holder"></div>
-            <button class="ghost add-explain-btn" data-act="add-explain-box">➕ إضافة صندوق شرح</button>
-          </div>
+        <nav class="nb-tabs" data-act="nb-tabs">
+          <button class="nb-tab" data-tab="explain">📝 الشرح والصور</button>
+          <button class="nb-tab" data-tab="codes">💻 الأكواد</button>
+          <button class="nb-tab" data-tab="tables">📊 جداول</button>
+          <button class="nb-tab" data-tab="draw">📐 الرسم</button>
+          <button class="nb-tab" data-tab="mindmap">🧠 الخريطة</button>
+        </nav>
+
+        <div class="nb-pane" data-pane="explain">
+          <div class="pane-topbar"><button class="ghost expand-btn" data-act="expand-explain" title="تكبير لملء الشاشة">⛶ ملء الشاشة</button></div>
+          <div class="explain-view" data-act="explain-view">\${renderMarkdownLite(s.explanation)}</div>
+          <div class="fmt-toolbar-holder" data-act="explain-toolbar-holder" style="display:none;"></div>
+          <textarea class="explain" data-act="explain" style="display:none;">\${escapeHtml(s.explanation)}</textarea>
+          <div class="extra-explanations-holder" data-act="extra-explanations-holder"></div>
+          <button class="ghost add-explain-btn" data-act="add-explain-box">➕ إضافة صندوق شرح</button>
+          <div class="section-label" style="margin-top:18px">📷 صور توضيحية</div>
+          <div class="img-gal-holder"></div>
         </div>
 
-        <div class="content-block is-open" data-block="codes">
-          <div class="block-head"><div class="section-label">الأكواد</div><button class="ghost block-toggle" data-act="collapse" title="طيّ الكتلة">⌃ طي</button></div>
-          <div class="block-body"><div class="codes-holder"></div><button class="ghost addcode-btn" data-act="addcode">➕ إضافة كتلة كود</button></div>
+        <div class="nb-pane" data-pane="codes">
+          <div class="codes-holder"></div>
+          <button class="ghost addcode-btn" data-act="addcode">➕ إضافة كتلة كود</button>
         </div>
 
-        <div class="content-block is-open" data-block="tables">
-          <div class="block-head"><div class="section-label">📊 جداول</div><button class="ghost block-toggle" data-act="collapse" title="طيّ الكتلة">⌃ طي</button><button class="ghost expand-btn" data-act="expand-tables" title="تكبير لملء الشاشة">⛶</button></div>
-          <div class="block-body"><div class="tables-holder"></div></div>
+        <div class="nb-pane" data-pane="tables">
+          <div class="pane-topbar"><button class="ghost expand-btn" data-act="expand-tables" title="تكبير لملء الشاشة">⛶ ملء الشاشة</button></div>
+          <div class="tables-holder"></div>
         </div>
 
-        <div class="content-block is-open" data-block="draw">
-          <div class="block-head"><div class="section-label">📐 رسم توضيحي (لتثبيت المعلومة)</div><button class="ghost block-toggle" data-act="collapse" title="طيّ الكتلة">⌃ طي</button><button class="ghost expand-btn" data-act="expand-draw" title="تكبير لملء الشاشة">⛶</button></div>
-          <div class="block-body"><div class="drawing-holder"></div></div>
+        <div class="nb-pane" data-pane="draw">
+          <div class="pane-topbar"><button class="ghost expand-btn" data-act="expand-draw" title="تكبير لملء الشاشة">⛶ ملء الشاشة</button></div>
+          <div class="drawing-holder"></div>
         </div>
 
-        <div class="content-block is-open" data-block="mindmap">
-          <div class="block-head"><div class="section-label">🧠 خريطة ذهنية</div><button class="ghost block-toggle" data-act="collapse" title="طيّ الكتلة">⌃ طي</button><button class="ghost expand-btn" data-act="expand-mindmap" title="تكبير لملء الشاشة">⛶</button></div>
-          <div class="block-body"><div class="mindmap-holder"></div></div>
+        <div class="nb-pane" data-pane="mindmap">
+          <div class="pane-topbar"><button class="ghost expand-btn" data-act="expand-mindmap" title="تكبير لملء الشاشة">⛶ ملء الشاشة</button></div>
+          <div class="mindmap-holder"></div>
         </div>
 
       \`;
+
+      card.querySelector(".img-gal-holder").appendChild(buildImageGalleryPanel(s));
 
       const holder = card.querySelector(".codes-holder");
       s.codes.forEach((c, ci)=>{ holder.appendChild(buildCodeBlock(s, c, ci)); });
@@ -4621,12 +4750,18 @@ const CODE_SECTION_TEMPLATE = `<!DOCTYPE html>
         scheduleAutoSave();
         renderAll();
       });
-      card.querySelectorAll('[data-act="collapse"]').forEach(btn=>{
+      if(!card._activeTab) card._activeTab = "explain";
+      const tabBtns = card.querySelectorAll(".nb-tab");
+      const panes = card.querySelectorAll(".nb-pane");
+      const applyActiveTab = ()=>{
+        tabBtns.forEach(b=> b.classList.toggle("on", b.dataset.tab === card._activeTab));
+        panes.forEach(p=> p.style.display = (p.dataset.pane === card._activeTab) ? "" : "none");
+      };
+      applyActiveTab();
+      tabBtns.forEach(btn=>{
         btn.addEventListener("click", ()=>{
-          const block = btn.closest(".content-block");
-          const collapsed = block.classList.toggle("is-collapsed");
-          btn.textContent = collapsed ? "⌄ فتح" : "⌃ طي";
-          btn.title = collapsed ? "فتح الكتلة" : "طيّ الكتلة";
+          card._activeTab = btn.dataset.tab;
+          applyActiveTab();
         });
       });
       card.querySelector('[data-act="expand-explain"]').addEventListener("click", ()=>{
@@ -4792,8 +4927,11 @@ function buildCodeSectionEmbed(item){
   iframe.addEventListener("load", ()=>{
     try{
       const doc = iframe.contentDocument;
+      let lastH = 0;
       const resize = ()=>{
         const h = Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight);
+        if(Math.abs(h - lastH) < 3) return; // فرق تافه — تجاهله عشان مايبقاش فيه حلقة تغذية راجعة
+        lastH = h;
         iframe.style.height = (h + 4) + "px";
       };
       resize();
