@@ -40,13 +40,13 @@
     --paper-card:#f9f3e6;
     --paper-shadow:#d8c9a8;
     --ink:#2e2a22;
-    --ink-soft:#6c6250;
+    --ink-soft:#695f4e;
     --rule:#c9b896;
-    --accent:#5c7a52; --accent-rgb:92,122,82;
+    --accent:#536e4a; --accent-rgb:83,110,74;
     --accent-dark:#41592e;
     --marker:#f2c94c;     /* هايلايتر أصفر */
-    --danger:#a63a3a;
-    --tab:#8a7355;        /* لون شريط الفهرس (بوكماركة) */
+    --danger:#a23939;
+    --tab:#877053;        /* لون شريط الفهرس (بوكماركة) */
     --surface:#ffffff;
     --surface-soft:#fffdf7;
     --tint:#eef3ea;
@@ -67,13 +67,13 @@
     --paper-card:#231f18;
     --paper-shadow:#0c0a07;
     --ink:#ece3d2;
-    --ink-soft:#a4967a;
+    --ink-soft:#a6987d;
     --rule:#423a2b;
-    --accent:#5fa34f; --accent-rgb:95,163,79;
+    --accent:#61a651; --accent-rgb:97,166,81;
     --accent-dark:#437a37;
     --marker:#f2c94c;
-    --danger:#d9564c;
-    --tab:#5c4a2c;
+    --danger:#da5a50;
+    --tab:#59472a;
     --surface:#2b2620;
     --surface-soft:#262119;
     --tint: rgba(95,163,79,.16);
@@ -94,13 +94,13 @@
     --paper-card:#101a13;
     --paper-shadow:#050805;
     --ink:#e6f3ea;
-    --ink-soft:#87a893;
+    --ink-soft:#8aaa96;
     --rule:#1f3226;
-    --accent:#26b866; --accent-rgb:38,184,102;
+    --accent:#27bc68; --accent-rgb:39,188,104;
     --accent-dark:#178a4c;
     --marker:#ffb238;
-    --danger:#ef4444;
-    --tab:#1f6b45;
+    --danger:#ef4949;
+    --tab:#1e6742;
     --surface:#132018;
     --surface-soft:#0e1712;
     --tint: rgba(38,184,102,.14);
@@ -124,13 +124,13 @@
     --paper-card:#ffffff;
     --paper-shadow:#d7e0ea;
     --ink:#16324a;
-    --ink-soft:#5c7893;
+    --ink-soft:#56708a;
     --rule:#cfdce8;
-    --accent:#1f6fb2; --accent-rgb:31,111,178;
+    --accent:#1e6cae; --accent-rgb:30,108,174;
     --accent-dark:#144d7d;
     --marker:#ff8a3d;
-    --danger:#d64545;
-    --tab:#35597a;
+    --danger:#cf2e2e;
+    --tab:#335676;
     --surface:#ffffff;
     --surface-soft:#f6fafd;
     --tint:#e6f0fa;
@@ -254,7 +254,7 @@
   #tocToggle{
     position:fixed; top:96px; inset-inline-end:16px; z-index:40;
     width:38px; height:38px; padding:0; display:flex; align-items:center; justify-content:center;
-    background:var(--paper-card); color:var(--tab); border:1.5px solid var(--rule);
+    background:var(--paper-card); color:var(--accent); border:1.5px solid var(--rule);
     border-radius:50%; font-size:15px; cursor:pointer;
     box-shadow:0 2px 6px rgba(var(--shadow-rgb),.12); opacity:.55;
     transition:opacity .2s, transform .15s, box-shadow .2s;
@@ -1416,6 +1416,17 @@
   async function embedAllImagesAsBase64(indexesClone){
     for(const ix of (indexesClone||[])){
       for(const sec of (ix.sections||[])){
+        if(Array.isArray(sec.images) && sec.images.length){
+          const resolved = [];
+          for(const ref of sec.images){
+            if(typeof ref === "string" && ref.indexOf("data:") === 0){ resolved.push(ref); continue; }
+            if(isIdbImageRef(ref)){
+              const blob = await idbGetImage(ref);
+              if(blob){ resolved.push(await blobToBase64(blob)); }
+            }
+          }
+          sec.images = resolved;
+        }
         for(const tbl of (sec.tables||[])){
           for(const row of (tbl.rows||[])){
             if(Array.isArray(row.images) && row.images.length){
@@ -1458,6 +1469,25 @@
     let counter = 0;
     for(const ix of (indexesClone||[])){
       for(const sec of (ix.sections||[])){
+        if(Array.isArray(sec.images) && sec.images.length){
+          const out = [];
+          for(const ref of sec.images){
+            let blob = null, mime = "";
+            if(typeof ref === "string" && ref.indexOf("data:") === 0){
+              blob = base64ToBlob(ref); mime = blob.type;
+            } else if(isIdbImageRef(ref)){
+              blob = await idbGetImage(ref); mime = blob ? blob.type : "";
+            }
+            if(blob){
+              const path = "assets/img_" + (counter++) + ".bin";
+              zip.file(path, blob);
+              out.push({ __zipimg:true, ref: path, mime: mime });
+            } else {
+              out.push(ref); // احتياط: سيبها زي ما هي لو مقدرناش نجيب الصورة
+            }
+          }
+          sec.images = out;
+        }
         for(const tbl of (sec.tables||[])){
           for(const row of (tbl.rows||[])){
             if(Array.isArray(row.images) && row.images.length){
@@ -1511,6 +1541,29 @@
     rep = rep || {restored:0, failed:[]};
     for(const ix of (indexesArr||[])){
       for(const sec of (ix.sections||[])){
+        if(Array.isArray(sec.images) && sec.images.length){
+          const migratedSecImgs = [];
+          for(const ref of sec.images){
+            if(ref && typeof ref === "object" && ref.__zipimg && ref.ref){
+              try{
+                const entry = zip.file(ref.ref);
+                if(!entry) throw new Error("الملف "+ref.ref+" مفقود جوه الأرشيف");
+                const raw = await entry.async("blob");
+                const typedBlob = ref.mime ? new Blob([raw], {type: ref.mime}) : raw;
+                const id = genImageId();
+                await idbPutImage(id, typedBlob);
+                migratedSecImgs.push(id); rep.restored++;
+              }catch(e){ rep.failed.push({type:"صورة سكشن", ref:ref.ref, reason:String(e && e.message || e)}); }
+            } else if(typeof ref === "string" && ref.indexOf("data:") === 0){
+              try{
+                const id = genImageId();
+                await idbPutImage(id, base64ToBlob(ref));
+                migratedSecImgs.push(id); rep.restored++;
+              }catch(e){ migratedSecImgs.push(ref); rep.failed.push({type:"صورة سكشن (base64)", ref:"embedded", reason:String(e && e.message || e)}); }
+            } else { migratedSecImgs.push(ref); }
+          }
+          sec.images = migratedSecImgs;
+        }
         for(const tbl of (sec.tables||[])){
           for(const row of (tbl.rows||[])){
             if(Array.isArray(row.images) && row.images.length){
@@ -1576,6 +1629,7 @@
     const missing = [];
     for(const ix of (indexesArr||[])){
       for(const sec of (ix.sections||[])){
+        (sec.images||[]).forEach(ref=>{ if(isIdbImageRef(ref) && !stored.has(ref)) missing.push(ref); });
         for(const tbl of (sec.tables||[])){
           for(const row of (tbl.rows||[])){
             (row.images||[]).forEach(ref=>{ if(isIdbImageRef(ref) && !stored.has(ref)) missing.push(ref); });
@@ -1593,6 +1647,21 @@
     rep = rep || {restored:0, failed:[]};
     for(const ix of (indexesArr||[])){
       for(const sec of (ix.sections||[])){
+        if(Array.isArray(sec.images) && sec.images.length){
+          const migratedSecImgs = [];
+          for(const ref of sec.images){
+            if(typeof ref === "string" && ref.indexOf("data:") === 0){
+              try{
+                const id = genImageId();
+                await idbPutImage(id, base64ToBlob(ref));
+                migratedSecImgs.push(id); rep.restored++;
+              }catch(e){ migratedSecImgs.push(ref); rep.failed.push({type:"صورة سكشن", ref:"embedded", reason:String(e && e.message || e)}); }
+            } else {
+              migratedSecImgs.push(ref);
+            }
+          }
+          sec.images = migratedSecImgs;
+        }
         for(const tbl of (sec.tables||[])){
           for(const row of (tbl.rows||[])){
             if(Array.isArray(row.images) && row.images.length){
@@ -3219,6 +3288,11 @@
           </div>
         </div>
 
+        <div class="content-block is-open" data-block="images">
+          <div class="block-head"><div class="section-label">🖼️ صور السكشن</div><button class="ghost block-toggle" data-act="collapse" title="طيّ الكتلة">⌃ طي</button></div>
+          <div class="block-body"><div class="section-images-holder"></div></div>
+        </div>
+
         <div class="content-block is-open" data-block="codes">
           <div class="block-head"><div class="section-label">الأكواد</div><button class="ghost block-toggle" data-act="collapse" title="طيّ الكتلة">⌃ طي</button></div>
           <div class="block-body"><div class="codes-holder"></div><button class="ghost addcode-btn" data-act="addcode">➕ إضافة كتلة كود</button></div>
@@ -3257,6 +3331,11 @@
       s.explanations.forEach((box, bi)=>{
         exHolder.appendChild(buildExtraExplainBox(s, box, bi));
       });
+
+      if(!Array.isArray(s.images)) s.images = [];
+      card.querySelector(".section-images-holder").appendChild(
+        tblBuildMultiImagePicker(s.images, ()=> scheduleAutoSave())
+      );
 
       cardsWrap.appendChild(card);
       enhanceMarkdownView(card.querySelector('[data-act="explain-view"]'));
