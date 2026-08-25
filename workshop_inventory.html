@@ -10895,7 +10895,11 @@ setTimeout(v5Init,120);
       const id=String(c.id).replace(/"/g,'&quot;');
       const title=escapeHtml(suggestionText(c,spec));
       const loc=escapeHtml(componentLocationText(c));
-      return `<button type="button" class="acs-suggestion" data-comp-id="${id}">
+      // نربط الاقتراح بأول خلية فعلية للمكون حتى الضغط على الاقتراح
+      // يفتح نفس موقع هذا المكون بالضبط، ولا يعيد البحث عن القيمة فقط.
+      const targetCell=getStorageCells().find(cell=>String(cell.componentId||cell.component_id||cell.component)===String(c.id));
+      const cellId=targetCell ? String(targetCell.id).replace(/"/g,'&quot;') : '';
+      return `<button type="button" class="acs-suggestion" data-comp-id="${id}" data-cell-id="${cellId}">
         <span class="acs-suggestion-title">${title}</span>
         <span class="acs-suggestion-loc">${loc}</span>
       </button>`;
@@ -10907,8 +10911,28 @@ setTimeout(v5Init,120);
         const raw=getCategorySpecValue(comp,spec);
         q.value=String(raw||comp.name||comp.partNumber||'');
         box.innerHTML='';
-        // تنفيذ البحث ثم الانتقال الفعلي للموقع، وليس مجرد تغيير قيمة الحقل.
-        search();
+
+        // مهم: لا نعيد تشغيل search() هنا، لأن ذلك قد يأخذ أول مكون
+        // يطابق نفس القيمة بدل المكون الذي اختاره المستخدم.
+        // ننتقل مباشرةً إلى خلية الاقتراح المحددة.
+        const targetCellId=btn.dataset.cellId||'';
+        if(targetCellId){
+          rememberSearch(cat.value, document.getElementById('acsField')?.value||'', q.value, spec);
+          clearMarks();
+          if(typeof revealAndFlash==='function'){
+            revealAndFlash(targetCellId);
+            const result=document.getElementById('acsResult');
+            setTimeout(()=>{
+              if(result) result.innerHTML=`تم الانتقال إلى <b>${escapeHtml(comp.name||comp.partNumber||'المكون')}</b> — <b>${escapeHtml(locationLabel(targetCellId))}</b>`;
+            },1250);
+          }else{
+            const cell=findCell(targetCellId);
+            if(cell) applyHighlights(new Set([String(targetCellId)]),targetCellId);
+          }
+        }else{
+          // المكون قد لا يكون مخزنًا في خلية حاليًا؛ عندها نستخدم البحث المعتاد.
+          search();
+        }
       };
     });
   }
