@@ -4508,7 +4508,149 @@ function syncLowStockToHub(){
     window.HUB.syncAlertsForSource('workshop', alerts);
   }catch(e){}
 }
+
+/* ============================= DETAILED AUDIT HISTORY =============================
+   يسجل كل تغيير فعلي في الخلية/المكون حتى لو كان تغيير حرف واحد في صفة أو توثيق.
+   لا نستخدم usageHistory لهذا الغرض حتى لا نخلط بين حركة المخزون وسجل التعديلات.
+*/
+let auditBaseline='';
+let auditReady=false;
+const AUDIT_MAX_PER_SAVE=80;
+const AUDIT_MAX_TOTAL=10000;
+
+function auditClone(v){
+  try{return JSON.parse(JSON.stringify(v));}catch(e){return v;}
+}
+function auditProjection(){
+  if(!state) return {};
+  const x=auditClone(state)||{};
+  delete x.usageHistory; delete x.history; delete x.future; delete x.auditHistory;
+  return x;
+}
+function auditSafeString(v){
+  if(v===undefined)return 'غير موجود';
+  if(v===null)return 'فارغ';
+  if(typeof v==='object'){
+    try{const j=JSON.stringify(v); return j.length>260?j.slice(0,257)+'…':j;}catch(e){return String(v);}
+  }
+  const t=String(v);
+  return t.length>260?t.slice(0,257)+'…':t;
+}
+function auditFieldLabel(path,kind,ownerId){
+  const m=String(path||'').split('.');
+  const key=m[m.length-1]||'';
+  if(kind==='cell'){
+    const map={quantity:'الكمية',componentId:'المكون',dateAdded:'تاريخ الإضافة',indicator:'مؤشر الخلية',indicators:'مؤشرات الخلية',section:'التوثيق الفني',boxId:'العبوة',index:'رقم الخلية'};
+    if(map[key]) return map[key];
+    if(m.includes('customSpecs')){
+      const comp=findComponent(ownerId); const specKey=key;
+      const def=comp?categorySpecDefs(comp.category).find(x=>x.key===specKey):null;
+      return 'مواصفة: '+(def?.label||specKey);
+    }
+    if(m.includes('customFields')){
+      const comp=findComponent(ownerId); const def=comp?categoryFieldDefs(comp.category).find(x=>x.key===key):null;
+      return 'حقل بيانات: '+(def?.label||key);
+    }
+  }
+  if(kind==='component'){
+    const base={name:'اسم المكون',partNumber:'رقم القطعة',manufacturer:'الشركة المصنعة',category:'الفئة',subcategory:'النوع الفرعي',package:'الحزمة',value:'القيمة',voltage:'الجهد',current:'التيار',power:'القدرة',tolerance:'السماح',frequency:'التردد',datasheet:'الداتا شيت',supplier:'المورد',supplierPartNumber:'رقم المورد',purchasePrice:'سعر الشراء',warningStock:'حد التحذير',criticalStock:'الحد الحرج',targetStock:'هدف المخزون',reorderQty:'كمية إعادة الطلب',notes:'الملاحظات',customSpecs:'مواصفات الفئة',customFields:'حقول بيانات المكون',images:'الصور',links:'الروابط'};
+    if(base[key]) return base[key];
+    if(m.includes('customSpecs')){const def=categorySpecDefs(state.components.find(c=>c.id===ownerId)?.category).find(x=>x.key===key);return 'مواصفة: '+(def?.label||key);}
+    if(m.includes('customFields')){const c=state.components.find(x=>x.id===ownerId);const def=categoryFieldDefs(c?.category).find(x=>x.key===key);return 'حقل بيانات: '+(def?.label||key);}
+  }
+  if(kind==='category') return 'إعدادات الفئة: '+key;
+  if(kind==='layout') return 'تخطيط التخزين: '+key;
+  return key||'تعديل';
+}
+function auditDeepDiff(a,b,path,out,limit,depth){
+  if(out.length>=limit)return;
+  if(a===b)return;
+  if(depth>7){out.push({path,oldValue:a,newValue:b});return;}
+  const ao=a&&typeof a==='object', bo=b&&typeof b==='object';
+  if(!ao||!bo){out.push({path,oldValue:a,newValue:b});return;}
+  if(Array.isArray(a)||Array.isArray(b)){
+    const aa=Array.isArray(a)?a:[], bb=Array.isArray(b)?b:[];
+    const n=Math.max(aa.length,bb.length);
+    for(let i=0;i<n&&out.length<limit;i++) auditDeepDiff(aa[i],bb[i],path+'['+i+']',out,limit,depth+1);
+    return;
+  }
+  const keys=new Set([...Object.keys(a||{}),...Object.keys(b||{})]);
+  for(const k of keys){ if(out.length>=limit)break; auditDeepDiff(a?.[k],b?.[k],path?path+'.'+k:k,out,limit,depth+1); }
+}
+function auditIndexById(arr){const m=new Map();(Array.isArray(arr)?arr:[]).forEach(x=>{if(x&&x.id!=null)m.set(String(x.id),x)});return m;}
+function auditRecord(kind,id,cellId,componentId,field,oldValue,newValue,extra){
+  const cell=cellId?findContainer(cellId):null;
+  const comp=componentId?findComponent(componentId):null;
+  const componentName=comp?.name||extra?.componentName||'—';
+  const rec={id:uid('audit'),date:nowISO(),kind,action:'تعديل',cellId:cellId||null,componentId:componentId||null,componentName,location:cellId?locationLabel(cellId):(extra?.location||''),field:field||'',oldValue:auditSafeString(oldValue),newValue:auditSafeString(newValue),oldValueRaw:auditClone(oldValue),newValueRaw:auditClone(newValue),description:extra?.description||''};
+  if(!Array.isArray(state.auditHistory))state.auditHistory=[];
+  state.auditHistory.unshift(rec);
+  if(state.auditHistory.length>AUDIT_MAX_TOTAL)state.auditHistory.length=AUDIT_MAX_TOTAL;
+}
+function auditCaptureChanges(){
+  if(!auditReady||!state)return;
+  let now;
+  try{now=JSON.stringify(auditProjection());}catch(e){return;}
+  if(!auditBaseline){auditBaseline=now;return;}
+  if(now===auditBaseline)return;
+  let before,after;try{before=JSON.parse(auditBaseline);after=JSON.parse(now);}catch(e){auditBaseline=now;return;}
+  const created=[];
+  const bc=auditIndexById(before.containers), ac=auditIndexById(after.containers);
+  const bcomp=auditIndexById(before.components), acomp=auditIndexById(after.components);
+  const cellIds=new Set([...bc.keys(),...ac.keys()]);
+  for(const id of cellIds){
+    const diffs=[];auditDeepDiff(bc.get(id)||{},ac.get(id)||{},'',diffs,30,0);
+    const current=ac.get(id)||bc.get(id); const compId=current?.componentId||bc.get(id)?.componentId||null;
+    diffs.forEach(d=>created.push({kind:'cell',cellId:id,componentId:compId,field:d.path.replace(/^\./,''),oldValue:d.oldValue,newValue:d.newValue,description:'تعديل داخل الخلية'}));
+  }
+  const compIds=new Set([...bcomp.keys(),...acomp.keys()]);
+  for(const id of compIds){
+    const diffs=[];auditDeepDiff(bcomp.get(id)||{},acomp.get(id)||{},'',diffs,30,0);
+    const affected=(state.containers||[]).filter(c=>c.componentId===id).map(c=>c.id);
+    if(!affected.length) diffs.forEach(d=>created.push({kind:'component',componentId:id,field:d.path.replace(/^\./,''),oldValue:d.oldValue,newValue:d.newValue,description:'تعديل في بيانات المكون'}));
+    else diffs.forEach(d=>affected.forEach(cid=>created.push({kind:'cell',cellId:cid,componentId:id,field:d.path.replace(/^\./,''),oldValue:d.oldValue,newValue:d.newValue,description:'تعديل في بيانات المكون المرتبط بالخلية'})));
+  }
+  const simpleKinds=[['categorySchemas','category'],['categories','category'],['shelves','layout'],['drawers','layout'],['columns','layout'],['boxes','layout'],['workshopMap','layout'],['preferences','layout'],['projects','layout'],['experiments','layout'],['purchases','layout'],['checklist','layout']];
+  simpleKinds.forEach(([key,kind])=>{
+    const diffs=[];auditDeepDiff(before[key],after[key],key,diffs,20,0);
+    diffs.forEach(d=>created.push({kind,field:d.path,oldValue:d.oldValue,newValue:d.newValue,description:kind==='category'?'تعديل في الفئات والمواصفات':'تعديل في بيانات البرنامج'}));
+  });
+  if(created.length){
+    const room=Math.max(0,AUDIT_MAX_TOTAL-(state.auditHistory?.length||0));
+    created.slice(0,Math.min(AUDIT_MAX_PER_SAVE,room)).forEach(x=>auditRecord(x.kind,x.cellId,x.cellId,x.componentId,auditFieldLabel(x.field,x.kind,x.componentId),x.oldValue,x.newValue,{description:x.description}));
+  }
+  auditBaseline=now;
+}
+function initAuditTracker(){
+  if(!state)return;
+  if(!Array.isArray(state.auditHistory))state.auditHistory=[];
+  try{auditBaseline=JSON.stringify(auditProjection());auditReady=true;}catch(e){auditBaseline='';auditReady=false;}
+}
+function resetAuditTracker(){auditReady=false;auditBaseline='';if(state&&!Array.isArray(state.auditHistory))state.auditHistory=[];try{auditBaseline=JSON.stringify(auditProjection());auditReady=true;}catch(e){} }
+function deleteSelectedAudit(id){
+  if(!state?.auditHistory)return;
+  state.auditHistory=state.auditHistory.filter(x=>x.id!==id);scheduleSave();renderHistory();toast('تم حذف سجل التعديل المحدد');
+}
+function clearAllAuditHistory(){
+  if(!state?.auditHistory?.length){toast('لا يوجد سجل تعديلات للحذف');return;}
+  if(!confirm('سيتم حذف سجل التعديلات التفصيلي بالكامل. لا يمكن التراجع عن هذا الحذف. هل تريد المتابعة؟'))return;
+  state.auditHistory=[];scheduleSave();renderHistory();toast('تم حذف سجل التعديلات بالكامل');
+}
+function openAuditEntry(a){
+  if(a?.cellId && findContainer(a.cellId)){
+    revealAndFlash(a.cellId);
+    setTimeout(()=>{if(findContainer(a.cellId))openCellDetail(a.cellId);},1250);
+    return;
+  }
+  if(a?.componentId && findComponent(a.componentId)){
+    const c=containerOfComponent(a.componentId)[0];
+    if(c){revealAndFlash(c.id);setTimeout(()=>openCellDetail(c.id),1250);return;}
+  }
+  if(a?.kind==='category')showView('categories');
+}
+
 function scheduleSave(){
+  auditCaptureChanges();
   saveDirty=true;
   setSaveBadge('pending');
   clearTimeout(saveTimer);
@@ -4545,6 +4687,26 @@ async function doSave(){
     saveInFlight=false;
     if(saveQueued){ saveQueued=false; scheduleSave(); }
   }
+}
+
+/* انتظار اكتمال آخر حفظ فعلي قبل أي Export/Import. هذا يمنع تصدير نسخة أقدم
+   عندما يكون هناك مؤقت حفظ أو عملية IndexedDB ما زالت تعمل. */
+async function flushSaveForBackup(){
+  if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; }
+  for(let i=0;i<250;i++){
+    if(saveInFlight){ await new Promise(r=>setTimeout(r,20)); continue; }
+    if(saveDirty){ await doSave(); continue; }
+    if(saveQueued){ await new Promise(r=>setTimeout(r,20)); continue; }
+    return true;
+  }
+  throw new Error('انتهى وقت انتظار الحفظ التلقائي؛ لم يكتمل الحفظ قبل النسخ الاحتياطي.');
+}
+async function verifyPersistedStateForBackup(){
+  await flushSaveForBackup();
+  const persisted=await idbGet(STATE_KEY);
+  if(typeof persisted!=='string' || !persisted.length) throw new Error('تعذر التحقق من state المحفوظ في IndexedDB.');
+  let parsed; try{ parsed=JSON.parse(persisted); }catch(e){ throw new Error('بيانات الحالة المحفوظة غير صالحة JSON.'); }
+  return parsed;
 }
 function flushSaveNow(){
   try{
@@ -4597,6 +4759,7 @@ function ensureNewFields(){
     }
   });
   if(!state.checklist){ state.checklist=[]; changed=true; }
+  if(!Array.isArray(state.auditHistory)){ state.auditHistory=[]; changed=true; }
   if(!state.purchases) state.purchases=[];
   if(!state.uiTheme){ state.uiTheme='amber'; changed=true; }
   if(!Array.isArray(state.categories)) { state.categories=[...DEFAULT_CATEGORIES]; changed=true; }
@@ -6307,16 +6470,61 @@ function openAddManualPurchase(){
 
 function renderHistory(){
   const vc=document.getElementById('viewContainer');
-  vc.innerHTML=viewHeader('سجل الاستخدام','كل ما حدث لكل مكون بالترتيب الزمني')+`
-    <div class="toolbar"><input class="searchbox-inline" id="histFilter" placeholder="فلترة بالاسم..."></div>
-    <div class="panel" id="histList"></div>
+  vc.innerHTML=viewHeader('سجل الاستخدام والتعديلات','يسجل كل تغيير داخل الخلايا والمكونات، مع إمكانية الرجوع إلى موقع الخلية وحذف السجلات')+`
+    <div class="toolbar" style="gap:7px;flex-wrap:wrap;">
+      <input class="searchbox-inline" id="histFilter" placeholder="فلترة بالاسم أو الخلية أو التعديل..." style="flex:1;min-width:180px;">
+      <button class="btn small danger" id="clearAuditBtn">🗑 حذف كل التعديلات</button>
+    </div>
+    <div class="panel" style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <b>📝 سجل التعديلات التفصيلي</b><span class="sub" id="auditCount"></span>
+      </div>
+      <div id="auditList"></div>
+    </div>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;"><b>📦 سجل حركة المخزون</b><span class="sub">استخدام / شراء / نقل</span></div>
+      <div id="usageHistList"></div>
+    </div>
   `;
+  const auditListEl=document.getElementById('auditList'),usageListEl=document.getElementById('usageHistList'),filterEl=document.getElementById('histFilter');
   function draw(f){
     f=(f||'').toLowerCase();
-    const list=state.usageHistory.filter(h=>{ const c=findComponent(h.componentId); return !f || (c&&c.name.toLowerCase().includes(f)); });
-    document.getElementById('histList').innerHTML= list.length? list.map(histRowHTML).join('') : '<div class="empty-state">لا يوجد سجل</div>';
+    const audits=(state.auditHistory||[]).filter(a=>{
+      const hay=[a.componentName,a.location,a.field,a.description,a.oldValue,a.newValue].filter(Boolean).join(' ').toLowerCase();
+      return !f||hay.includes(f);
+    });
+    document.getElementById('auditCount').textContent=`${audits.length} سجل`;
+    auditListEl.innerHTML=audits.length?audits.map(a=>{
+      const loc=a.location||'بدون موقع';
+      return `<div class="hist-row audit-row" data-audit-id="${a.id}" style="cursor:pointer;position:relative;">
+        <input type="checkbox" class="audit-select" data-audit-select="${a.id}" title="تحديد للحذف" style="margin-left:6px;transform:scale(1.1);">
+        <div class="hist-ico adjust">✏️</div>
+        <div class="hist-main" style="flex:1;min-width:0;">
+          <b>${a.componentName||'—'}</b>
+          <div class="d">${fmtDate(a.date)} · ${loc}</div>
+          <div style="font-size:12px;margin-top:3px;"><strong>${a.field||'تعديل'}</strong> — ${a.description||'تعديل'}</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:2px;word-break:break-word;">${auditSafeString(a.oldValue)} ← ${auditSafeString(a.newValue)}</div>
+        </div>
+        <button class="btn small danger audit-delete-one" data-audit-delete="${a.id}" title="حذف هذا السجل">🗑</button>
+      </div>`;
+    }).join(''):'<div class="empty-state">لا توجد تعديلات مسجلة بعد</div>';
+
+    const usage=(state.usageHistory||[]).filter(h=>{const c=findComponent(h.componentId);return !f||(c&&c.name.toLowerCase().includes(f))||String(h.purpose||'').toLowerCase().includes(f);});
+    usageListEl.innerHTML=usage.length?usage.map(histRowHTML).join(''):'<div class="empty-state">لا يوجد سجل حركة</div>';
+    auditListEl.querySelectorAll('.audit-select').forEach(cb=>cb.addEventListener('click',e=>e.stopPropagation()));
+    auditListEl.querySelectorAll('[data-audit-delete]').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();deleteSelectedAudit(btn.dataset.auditDelete);}));
+    auditListEl.querySelectorAll('[data-audit-id]').forEach(row=>row.addEventListener('click',e=>{if(e.target.closest('input,button'))return;const a=(state.auditHistory||[]).find(x=>x.id===row.dataset.auditId);if(a)openAuditEntry(a);}));
   }
-  draw(''); document.getElementById('histFilter').addEventListener('input',e=>draw(e.target.value));
+  draw('');
+  filterEl.addEventListener('input',e=>draw(e.target.value));
+  document.getElementById('clearAuditBtn').onclick=()=>{
+    const selected=[...auditListEl.querySelectorAll('.audit-select:checked')].map(x=>x.dataset.auditSelect);
+    if(selected.length){
+      if(!confirm(`سيتم حذف ${selected.length} سجل محدد. هل تريد المتابعة؟`))return;
+      state.auditHistory=(state.auditHistory||[]).filter(x=>!selected.includes(x.id));
+      scheduleSave();draw(filterEl.value);toast('تم حذف السجلات المحددة');
+    }else clearAllAuditHistory();
+  };
 }
 
 function renderProjects(){
@@ -6557,7 +6765,7 @@ function setUiTheme(themeId){
 }
 
 /* ============================= FULL PROJECT IMPORT / EXPORT ============================= */
-const FULL_BACKUP_VERSION=3;
+const FULL_BACKUP_VERSION=5;
 const STREAM_EXPORT_THRESHOLD=100*1024*1024;
 function backupSafeName(name,fallback='item'){return String(name||fallback).replace(/[\\/:*?"<>|\u0000-\u001F]/g,'_').replace(/\s+/g,' ').trim().slice(0,120)||fallback;}
 function backupUtf8(s){return new TextEncoder().encode(String(s));}
@@ -6574,25 +6782,98 @@ function parseStoredZip(buf){const a=new Uint8Array(buf),out=new Map();let pos=0
 async function backupAllImageKeys(){return await listStoredAssetIds();}
 function backupFindTables(v,path='root',out=[]){if(!v||typeof v!=='object')return out;if(Array.isArray(v)){v.forEach((x,i)=>backupFindTables(x,`${path}[${i}]`,out));return out;}if(Array.isArray(v.columns)&&Array.isArray(v.rows))out.push({table:v,path});Object.keys(v).forEach(k=>{if(k!=='history'&&k!=='future')backupFindTables(v[k],`${path}.${k}`,out)});return out;}
 function backupCsv(t){const cols=(t.columns||[]).map(c=>c.label||c.name||c.id),esc=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};const rows=[cols];(t.rows||[]).forEach(r=>rows.push((t.columns||[]).map(c=>r.values?.[c.id]??r[c.id]??'')));return '\ufeff'+rows.map(r=>r.map(esc).join(',')).join('\r\n');}
+/*
+ * الحفظ الشامل v4: لا نعتمد على قائمة قصيرة من مفاتيح localStorage.
+ * بعض أنظمة الواجهة/البحث القديمة تحفظ إعداداتها خارج state، لذلك نحفظ كل مفاتيح
+ * localStorage الخاصة بالتطبيق معًا، مع إبقاء المفاتيح الحساسة/الخاصة بالمتصفح خارج الحزمة.
+ */
+const BACKUP_LS_EXCLUDE_PREFIXES=['__'];
 function getPortableLocalStorage(){
-  const keys=['workshop_custom_cell_specs_v1','storageVisualLayout_v4','storageVisualLayout_v5','workshop_cell_indicator_mode'];
   const out={};
-  for(const k of keys){try{const v=localStorage.getItem(k);if(v!==null)out[k]=v;}catch(e){}}
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i); if(!k) continue;
+      if(BACKUP_LS_EXCLUDE_PREFIXES.some(p=>k.startsWith(p))) continue;
+      const v=localStorage.getItem(k);
+      if(v!==null) out[k]=v;
+    }
+  }catch(e){}
   return out;
 }
 function restorePortableLocalStorage(data,rep){
   if(!data||typeof data!=='object') return;
-  const keys=['workshop_custom_cell_specs_v1','storageVisualLayout_v4','storageVisualLayout_v5','workshop_cell_indicator_mode'];
-  for(const k of keys){if(!(k in data))continue;try{localStorage.setItem(k,String(data[k]));}catch(e){if(rep)rep.warnings.push('تعذر استعادة إعداد التخزين المحلي: '+k);}}
+  for(const [k,v] of Object.entries(data)){
+    if(BACKUP_LS_EXCLUDE_PREFIXES.some(p=>String(k).startsWith(p))) continue;
+    try{localStorage.setItem(k,String(v));}
+    catch(e){if(rep)rep.warnings.push('تعذر استعادة إعداد التخزين المحلي: '+k);}
+  }
+}
+async function collectBackupIndexedDBMeta(){
+  const out={};
+  try{
+    const db=await openDB();
+    const keys=await new Promise((resolve,reject)=>{
+      const tx=db.transaction(STORE,'readonly'),req=tx.objectStore(STORE).getAllKeys();
+      req.onsuccess=()=>resolve(req.result||[]); req.onerror=()=>reject(req.error);
+    });
+    for(const key of keys){
+      const k=String(key);
+      if(k===STATE_KEY || k.startsWith(ASSET_META_PREFIX)) continue;
+      try{
+        const v=await idbGet(key);
+        if(v!==undefined) out[k]=v;
+      }catch(e){}
+    }
+  }catch(e){}
+  return out;
+}
+async function restoreBackupIndexedDBMeta(data,rep){
+  if(!data||typeof data!=='object') return;
+  for(const [k,v] of Object.entries(data)){
+    try{await idbSet(k,v);}catch(e){if(rep)rep.warnings.push('تعذر استعادة بيانات IndexedDB الإضافية: '+k);}
+  }
 }
 async function collectBackupEntries(){
   const entries=[],seen=new Set();
   const add=(name,data,mime='application/octet-stream',size)=>{name=name.replace(/^\/+/, '');if(seen.has(name))return;seen.add(name);entries.push({name,data,mime,size:size!=null?size:(data instanceof Uint8Array?data.length:data?.size||0)});};
-  add('project/state.json',backupUtf8(JSON.stringify(state,null,2)),'application/json');
-  add('project/local-storage.json',backupUtf8(JSON.stringify(getPortableLocalStorage(),null,2)),'application/json');
-  const refs=backupFindTables(state);
-  const meta={format:'Workshop Inventory Full Project',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),theme:state.uiTheme||'amber',tables:refs.map((x,i)=>({index:i,path:x.path,title:x.table.title||`table_${i+1}`})),storage:{database:'IndexedDB',largeFiles:'OPFS when available',largeFileThreshold:LARGE_ASSET_THRESHOLD}};
-  add('project/categories.json',backupUtf8(JSON.stringify(state.categories||[],null,2)),'application/json');
+  /* نأخذ نسخة مستقلة من الحالة بعد التحقق من آخر نسخة محفوظة فعليًا. */
+  const persistedState=await verifyPersistedStateForBackup();
+  const exportState=persistedState && typeof persistedState==='object' ? persistedState : state;
+  const stateJson=JSON.stringify(exportState,null,2);
+  add('project/state.json',backupUtf8(stateJson),'application/json');
+  const portableLS=getPortableLocalStorage();
+  add('project/local-storage.json',backupUtf8(JSON.stringify(portableLS,null,2)),'application/json');
+  try{ const fb=localStorage.getItem(FALLBACK_KEY); if(fb) add('project/emergency-fallback.json',backupUtf8(fb),'application/json'); }catch(e){}
+  add('project/backup-runtime.json',backupUtf8(JSON.stringify({dbName:DB_NAME,dbVersion:DB_VERSION,store:STORE,stateKey:STATE_KEY,imageDbName:typeof IMG_DB_NAME!=='undefined'?IMG_DB_NAME:null,imageDbVersion:typeof IMG_DB_VERSION!=='undefined'?IMG_DB_VERSION:null,imageStore:typeof IMG_STORE!=='undefined'?IMG_STORE:null,appStore:typeof APP_STORE!=='undefined'?APP_STORE:null,exportedAt:new Date().toISOString(),userAgent:navigator.userAgent},null,2)),'application/json');
+  add('project/ui-state.json',backupUtf8(JSON.stringify(uiState||{},null,2)),'application/json');
+  try{ const sm=await idbGet('state_meta'); if(sm) add('project/state-meta.json',backupUtf8(JSON.stringify(sm,null,2)),'application/json'); }catch(e){}
+  const idbMeta=await collectBackupIndexedDBMeta();
+  add('project/indexeddb-extra.json',backupUtf8(JSON.stringify(idbMeta,null,2)),'application/json');
+
+  /* نسخ صريحة للأجزاء الحساسة حتى يمكن تدقيق الحزمة واسترجاعها حتى لو كان state قديمًا. */
+  add('project/categories.json',backupUtf8(JSON.stringify(exportState.categories||[],null,2)),'application/json');
+  add('project/category-schemas.json',backupUtf8(JSON.stringify(exportState.categorySchemas||{},null,2)),'application/json');
+  add('project/components.json',backupUtf8(JSON.stringify(exportState.components||[],null,2)),'application/json');
+  add('project/storage-layout.json',backupUtf8(JSON.stringify({shelves:exportState.shelves||[],drawers:exportState.drawers||[],columns:exportState.columns||[],boxes:exportState.boxes||[],containers:exportState.containers||[]},null,2)),'application/json');
+  add('project/history.json',backupUtf8(JSON.stringify(exportState.usageHistory||[],null,2)),'application/json');
+  add('project/audit-history.json',backupUtf8(JSON.stringify(exportState.auditHistory||[],null,2)),'application/json');
+  add('project/audit-history-meta.json',backupUtf8(JSON.stringify({count:(exportState.auditHistory||[]).length,max:10000,exportedAt:new Date().toISOString(),covers:'تغييرات الحالة المسجلة في auditHistory؛ القيم القديمة والجديدة ومواقع الخلايا عند توفرها.'},null,2)),'application/json');
+  add('project/undo-history.json',backupUtf8(JSON.stringify({history:exportState.history||[],future:exportState.future||[]},null,2)),'application/json');
+  add('project/maps.json',backupUtf8(JSON.stringify(exportState.workshopMap||[],null,2)),'application/json');
+  add('project/projects.json',backupUtf8(JSON.stringify(exportState.projects||[],null,2)),'application/json');
+  add('project/experiments.json',backupUtf8(JSON.stringify(exportState.experiments||[],null,2)),'application/json');
+  add('project/purchases.json',backupUtf8(JSON.stringify(exportState.purchases||[],null,2)),'application/json');
+  add('project/checklist.json',backupUtf8(JSON.stringify(exportState.checklist||[],null,2)),'application/json');
+  add('project/preferences.json',backupUtf8(JSON.stringify(exportState.preferences||{},null,2)),'application/json');
+
+  const refs=backupFindTables(exportState);
+  const meta={format:'Workshop Inventory Full Project',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),theme:exportState.uiTheme||'amber',
+    counts:{categories:(exportState.categories||[]).length,components:(exportState.components||[]).length,categorySchemas:Object.keys(exportState.categorySchemas||{}).length,
+      shelves:(exportState.shelves||[]).length,drawers:(exportState.drawers||[]).length,columns:(exportState.columns||[]).length,boxes:(exportState.boxes||[]).length,cells:(exportState.containers||[]).length,
+      usageHistory:(exportState.usageHistory||[]).length,auditHistory:(exportState.auditHistory||[]).length,undoHistory:(exportState.history||[]).length,redoHistory:(exportState.future||[]).length,
+      maps:(exportState.workshopMap||[]).length,projects:(exportState.projects||[]).length,experiments:(exportState.experiments||[]).length,checklist:(exportState.checklist||[]).length},
+    tables:refs.map((x,i)=>({index:i,path:x.path,title:x.table.title||`table_${i+1}`})),
+    storage:{database:'IndexedDB',largeFiles:'OPFS when available',largeFileThreshold:LARGE_ASSET_THRESHOLD}};
   refs.forEach((x,i)=>{const b=`tables/${String(i+1).padStart(3,'0')}_${backupSafeName(x.table.title||'جدول')}`;add(b+'.json',backupUtf8(JSON.stringify(x.table,null,2)),'application/json');add(b+'.csv',backupUtf8(backupCsv(x.table)),'text/csv');});
   const assetManifest={};let assetCount=0,totalAssetBytes=0;
   try{
@@ -6637,7 +6918,10 @@ async function writeStoredZipStream(entries,handle,onProgress){
 async function exportFullProject(){
   const st=document.getElementById('backupStatus');if(st)st.textContent='⏳ جارٍ تجهيز المشروع وحساب الملفات الكبيرة…';
   try{
-    flushSaveNow();await migrateLegacyDataUrlsToAssets();
+    /* لا نبدأ التصدير قبل إجبار آخر تعديل معلّق على الحفظ والتحقق من النسخة المستقرة. */
+    await flushSaveForBackup();
+    await migrateLegacyDataUrlsToAssets();
+    await flushSaveForBackup();
     const entries=await collectBackupEntries();const total=entries.reduce((n,e)=>n+Number(e.size||0),0);const name=`workshop_project_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.zip`;
     let r='';
     if(total>=STREAM_EXPORT_THRESHOLD && window.showSaveFilePicker){
@@ -6662,7 +6946,7 @@ function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))retu
    تُستعاد بأقصى ما يمكن استعادته، مع تقرير واضح بما نجح وما فشل وليه. */
 function importReport(){ return {restoredAssets:0, failedAssets:[], skippedEntries:[], warnings:[], legacyEmbeddedConverted:0}; }
 async function importStoredZipStream(file,st,rep){
-  let pos=0,stateBytes=null,manifestBytes=null,assetManifestBytes=null,localStorageBytes=null,assets=[];const total=file.size;
+  let pos=0,stateBytes=null,manifestBytes=null,assetManifestBytes=null,localStorageBytes=null,indexedDbExtraBytes=null,explicit={},assets=[];const total=file.size;
   while(pos+4<=total){
     let h,name,dataStart,dataEnd,sig;
     try{
@@ -6682,6 +6966,9 @@ async function importStoredZipStream(file,st,rep){
       else if(name==='project/manifest.json') manifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       else if(name==='project/asset-manifest.json') assetManifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       else if(name==='project/local-storage.json') localStorageBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/indexeddb-extra.json') indexedDbExtraBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(/^project\/(categories|category-schemas|components|storage-layout|history|audit-history|audit-history-meta|undo-history|maps|projects|experiments|purchases|checklist|preferences)\.json$/.test(name)) explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/emergency-fallback.json' || name==='project/backup-runtime.json' || name==='project/ui-state.json' || name==='project/state-meta.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       // نتعرّف على أي مجلد أصول محتمل (assets/…) وليس فقط المسارين الحاليين، حتى تبقى الحزم
       // القديمة/المستقبلية بأسماء مجلدات مختلفة قابلة للاستيراد بدل تجاهلها بصمت.
       else if(/^assets\//.test(name)) assets.push({name,start:dataStart,end:dataEnd,crc:h.crc});
@@ -6701,6 +6988,26 @@ async function importStoredZipStream(file,st,rep){
   catch(e){ throw new Error('project/state.json تالف ولا يمكن تحليله (JSON غير صالح): '+(e?.message||e)); }
   migrateStateIfNeeded();ensureNewFields();ensureStoragePreferences();applyPreferences();applyUiTheme();
   if(localStorageBytes){try{restorePortableLocalStorage(JSON.parse(new TextDecoder().decode(localStorageBytes)),rep);}catch(e){rep.warnings.push('local-storage.json تالف — تم استيراد بيانات المشروع بدونه.');}}
+  if(indexedDbExtraBytes){try{await restoreBackupIndexedDBMeta(JSON.parse(new TextDecoder().decode(indexedDbExtraBytes)),rep);}catch(e){rep.warnings.push('indexeddb-extra.json تالف — تم تجاهله.');}}
+  /* تحقق واسترجاع صريح للأجزاء المهمة. state.json هو المصدر الأساسي، وهذه الملفات تمنع فقدان جزء
+     إذا كان ملف حالة قديمًا أو ناقصًا جزئيًا. لا نستبدل قيمًا موجودة فعليًا بقيم فارغة. */
+  const parseExplicit=(name)=>{try{return JSON.parse(new TextDecoder().decode(explicit[name]));}catch(e){rep.warnings.push(name+' تالف — تم الاعتماد على state.json.');return null;}};
+  /* الملفات الصريحة هي نسخ تحقق مستقلة؛ إذا كانت سليمة نعيدها بالكامل بدل شرط 'إذا كانت فارغة'،
+     لأن الهدف من Full Restore هو عدم ترك نسخة قديمة/ناقصة من أي قسم فوق النسخة المستوردة. */
+  if(explicit['project/categories.json']){const x=parseExplicit('project/categories.json');if(Array.isArray(x))state.categories=x;}
+  if(explicit['project/category-schemas.json']){const x=parseExplicit('project/category-schemas.json');if(x&&typeof x==='object')state.categorySchemas=x;}
+  if(explicit['project/components.json']){const x=parseExplicit('project/components.json');if(Array.isArray(x))state.components=x;}
+  if(explicit['project/storage-layout.json']){const x=parseExplicit('project/storage-layout.json');if(x&&typeof x==='object'){for(const k of ['shelves','drawers','columns','boxes','containers'])if(Array.isArray(x[k]))state[k]=x[k];}}
+  if(explicit['project/history.json']){const x=parseExplicit('project/history.json');if(Array.isArray(x))state.usageHistory=x;}
+  if(explicit['project/audit-history.json']){const x=parseExplicit('project/audit-history.json');if(Array.isArray(x))state.auditHistory=x;}
+  if(explicit['project/undo-history.json']){const x=parseExplicit('project/undo-history.json');if(x&&typeof x==='object'){if(Array.isArray(x.history))state.history=x.history;if(Array.isArray(x.future))state.future=x.future;}}
+  if(explicit['project/maps.json']){const x=parseExplicit('project/maps.json');if(Array.isArray(x))state.workshopMap=x;}
+  for(const [file,key] of [['project/projects.json','projects'],['project/experiments.json','experiments'],['project/purchases.json','purchases'],['project/checklist.json','checklist']]){
+    if(explicit[file]){const x=parseExplicit(file);if(Array.isArray(x))state[key]=x;}
+  }
+  if(explicit['project/preferences.json']){const x=parseExplicit('project/preferences.json');if(x&&typeof x==='object')state.preferences=x;}
+  if(explicit['project/ui-state.json']){try{const x=parseExplicit('project/ui-state.json');if(x&&typeof x==='object')uiState=x;}catch(e){}}
+  migrateStateIfNeeded();ensureNewFields();ensureStoragePreferences();
   let amap={};
   if(assetManifestBytes){ try{ amap=JSON.parse(new TextDecoder().decode(assetManifestBytes))||{}; }catch(e){ rep.warnings.push('asset-manifest.json تالف — سيتم استنتاج معرّفات الملفات من أسمائها مباشرة.'); } }
   for(const a of assets){
@@ -6778,7 +7085,10 @@ async function importFullProject(file){
       await importPlainJSONFile(file,rep);
     }
     const missingRefs=await scanForMissingAssetRefs();
-    scheduleSave();showView('dashboard');
+    resetAuditTracker();
+    scheduleSave();
+    await flushSaveForBackup();
+    showView('dashboard');
     if(st){ st.textContent=renderImportReport(rep,missingRefs); st.style.whiteSpace='pre-line'; }
     toast(rep.failedAssets.length||missingRefs.length?'تم الاستيراد مع بعض التحذيرات — راجع التفاصيل':'تم استيراد المشروع بالكامل');
   }catch(e){
@@ -6860,6 +7170,7 @@ document.addEventListener('click',e=>{ if(!e.target.closest('#notifBell') && !e.
 (async function init(){
   if(navigator.storage && navigator.storage.persist){ try{ await navigator.storage.persist(); }catch(e){} }
   await loadState();
+  initAuditTracker();
   showView('dashboard');
   renderNotifBadge();
   setInterval(renderNotifBadge,4000);
@@ -10513,6 +10824,7 @@ setTimeout(v5Init,120);
         const raw=getCategorySpecValue(comp,spec);
         q.value=String(raw||comp.name||comp.partNumber||'');
         box.innerHTML='';
+        // تنفيذ البحث ثم الانتقال الفعلي للموقع، وليس مجرد تغيير قيمة الحقل.
         search();
       };
     });
@@ -10621,36 +10933,26 @@ setTimeout(v5Init,120);
     if(!matchCells.length)return;
     const first=matchCells[0];
     const loc=cellLocation(first);
-    if(!loc.rack){
-      applyHighlights(new Set(matchCells.map(c=>String(c.id))),first.id);
+    rememberSearch(category,field,query,spec);
+
+    // استخدم مسار التنقل الموحد الموجود في البرنامج نفسه.
+    // هذا المسار يفتح الرف + يحدد العبوة + يعيد الرسم + يصل للخلية
+    // ويعمل وميضًا عليها، بدل الاكتفاء بتظليل نتائج البحث داخل لوحة البحث.
+    if(typeof revealAndFlash==='function' && loc.rack){
+      revealAndFlash(first.id);
+      setTimeout(()=>{
+        const result=document.getElementById('acsResult');
+        if(result){
+          result.innerHTML=`تم العثور على <b>${matchCells.length}</b> خلية مطابقة — `+
+            `تم الانتقال إلى: <b>${locationLabel(first.id)}</b>`+
+            (matchCells.length>1?` · عدد النتائج: <b>${matchCells.length}</b>`:'');
+        }
+      },1250);
       return;
     }
 
-    // افتح الرف الذي يحتوي على أول نتيجة، ثم أعد رسم الصفحة حتى تصبح الخلية
-    // موجودة فعليًا في DOM، وبعدها نعمل scroll إليها.
-    uiState.expandedColumn=null;
-    uiState.expandedRack=loc.rack.id;
-    uiState.selectedBox=loc.box?.id||null;
-    rememberSearch(category,field,query,spec);
-
-    if(typeof showView==='function') showView('storage');
-
-    setTimeout(()=>{
-      mount();
-      restoreSearchUI();
-
-      const ids=new Set(matchCells
-        .filter(c=>cellLocation(c).rack?.id===loc.rack.id)
-        .map(c=>String(c.id)));
-
-      const visible=applyHighlights(ids,first.id);
-      const result=document.getElementById('acsResult');
-      if(result){
-        result.innerHTML=`تم العثور على <b>${matchCells.length}</b> خلية مطابقة — `+
-          `تم فتح الموقع: <b>${locationLabel(first.id)}</b>`+
-          (matchCells.length>visible?` · المعروض في هذا الرف: <b>${visible}</b>`:'');
-      }
-    },120);
+    // احتياطي في حالة وجود نتيجة غير مرتبطة برف.
+    applyHighlights(new Set(matchCells.map(c=>String(c.id))),first.id);
   }
   function search(){
     const category=document.getElementById('acsCategory')?.value||'';
@@ -10685,19 +10987,8 @@ setTimeout(v5Init,120);
       return;
     }
 
-    // إذا كان الرف المطلوب مفتوحًا بالفعل، أبرز النتائج فورًا.
-    const currentRack=uiState.expandedRack;
-    if(currentRack && matches.some(c=>cellLocation(c).rack?.id===currentRack)){
-      const ids=new Set(matches.filter(c=>cellLocation(c).rack?.id===currentRack).map(c=>String(c.id)));
-      const first=matches.find(c=>cellLocation(c).rack?.id===currentRack)||matches[0];
-      const visible=applyHighlights(ids,first.id);
-      if(result)result.innerHTML=`تم العثور على <b>${matches.length}</b> خلية مطابقة — `+
-        `الموقع الأول: <b>${locationLabel(first.id)}</b>`+
-        (matches.length>visible?` · في هذا الرف: <b>${visible}</b>`:'');
-      setTimeout(()=>{ const t=document.querySelector(`.cell[data-cell-id="${CSS.escape(String(first.id))}"]`); if(t)t.scrollIntoView({behavior:'smooth',block:'center',inline:'center'}); },80);
-      return;
-    }
-
+    // في كل الحالات انتقل فعليًا إلى أول خلية مطابقة، حتى لو كان الرف
+    // الحالي مفتوحًا؛ يجب أيضًا اختيار العبوة الصحيحة وإظهار محتواها.
     navigateToFirstMatch(matches,category,field,query,spec);
   }
   function clearSearch(){
@@ -12200,5 +12491,6 @@ window.ensureVisual=ensureVisual;
   })).observe(document.body,{childList:true,subtree:true});
 })();
 </script>
+<!-- Advanced search navigation fix v10 + detailed audit history v12 -->
 </body>
 </html>
