@@ -4023,11 +4023,11 @@ function seedState(){
   ];
 
   const components=[
-    {id:uid('comp'),name:'1N4148',partNumber:'1N4148',manufacturer:'Vishay',category:'ثنائيات',subcategory:'إشارة',value:'',package:'DO-35',voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:100,criticalStock:20,targetStock:300,reorderQty:200,notes:'',images:[],links:[]},
-    {id:uid('comp'),name:'LM358',partNumber:'LM358',manufacturer:'TI',category:'دوائر متكاملة',subcategory:'مضخم عمليات',value:'',package:'DIP-8',voltage:'3-32V',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:4,criticalStock:1,targetStock:20,reorderQty:15,notes:'',images:[],links:[]},
-    {id:uid('comp'),name:'IRF540',partNumber:'IRF540',manufacturer:'IR',category:'MOSFET',subcategory:'N-Channel',value:'',package:'TO-220',voltage:'100V',current:'28A',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:4,criticalStock:1,targetStock:20,reorderQty:15,notes:'',images:[],links:[]},
-    {id:uid('comp'),name:'BC547',partNumber:'BC547',manufacturer:'ON Semi',category:'ترانزستورات',subcategory:'NPN',value:'',package:'TO-92',voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:20,criticalStock:5,targetStock:100,reorderQty:80,notes:'',images:[],links:[]},
-    {id:uid('comp'),name:'مقاومة 10K',partNumber:'R10K',manufacturer:'',category:'مقاومات',subcategory:'',value:'10K',package:'THT 1/4W',voltage:'',current:'',power:'0.25W',tolerance:'5%',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:100,criticalStock:20,targetStock:500,reorderQty:400,notes:'',images:[],links:[]},
+    {id:uid('comp'),name:'1N4148',partNumber:'1N4148',manufacturer:'Vishay',category:'ثنائيات',subcategory:'إشارة',value:'',package:'DO-35',voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:100,criticalStock:20,targetStock:300,reorderQty:200,notes:'',images:[],links:[],customSpecs:{},enabledSpecs:[]},
+    {id:uid('comp'),name:'LM358',partNumber:'LM358',manufacturer:'TI',category:'دوائر متكاملة',subcategory:'مضخم عمليات',value:'',package:'DIP-8',voltage:'3-32V',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:4,criticalStock:1,targetStock:20,reorderQty:15,notes:'',images:[],links:[],customSpecs:{},enabledSpecs:[]},
+    {id:uid('comp'),name:'IRF540',partNumber:'IRF540',manufacturer:'IR',category:'MOSFET',subcategory:'N-Channel',value:'',package:'TO-220',voltage:'100V',current:'28A',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:4,criticalStock:1,targetStock:20,reorderQty:15,notes:'',images:[],links:[],customSpecs:{},enabledSpecs:[]},
+    {id:uid('comp'),name:'BC547',partNumber:'BC547',manufacturer:'ON Semi',category:'ترانزستورات',subcategory:'NPN',value:'',package:'TO-92',voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:20,criticalStock:5,targetStock:100,reorderQty:80,notes:'',images:[],links:[],customSpecs:{},enabledSpecs:[]},
+    {id:uid('comp'),name:'مقاومة 10K',partNumber:'R10K',manufacturer:'',category:'مقاومات',subcategory:'',value:'10K',package:'THT 1/4W',voltage:'',current:'',power:'0.25W',tolerance:'5%',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:100,criticalStock:20,targetStock:500,reorderQty:400,notes:'',images:[],links:[],customSpecs:{},enabledSpecs:[]},
   ];
 
   const columns=[], boxes=[], containers=[];
@@ -4394,6 +4394,7 @@ function openCellDetail(cellId){
           <div class="field"><label>هدف المخزون (Target)</label><input type="number" id="fTarget" value="50"></div>
           <div class="field"><label>ملاحظات</label><input id="fNotes"></div>
         </div>
+        <div id="newCompSpecs"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>الكمية الحالية</label><input type="number" id="fQty" value="10"></div>
@@ -4407,6 +4408,10 @@ function openCellDetail(cellId){
     document.getElementById('fCompSelect').onchange=(e)=>{
       document.getElementById('newCompFields').classList.toggle('hidden',!!e.target.value);
     };
+    window.__newCompSpecTarget={customSpecs:{},enabledSpecs:[]};
+    if(typeof renderSpecsEditor==='function'){
+      renderSpecsEditor(window.__newCompSpecTarget, document.getElementById('newCompSpecs'));
+    }
     wireCellIndicatorSettings(cell, cellId);
     document.getElementById('cancelBtn').onclick=closeModal;
     document.getElementById('saveNewBtn').onclick=()=>{
@@ -4415,7 +4420,7 @@ function openCellDetail(cellId){
       if(!compId){
         const name=document.getElementById('fName').value.trim();
         if(!name){ toast('أدخل اسم المكون'); return; }
-        const newComp={id:uid('comp'),name,partNumber:document.getElementById('fPartNumber').value,manufacturer:document.getElementById('fManufacturer').value,category:document.getElementById('fCategory').value,subcategory:'',value:document.getElementById('fValue').value,package:document.getElementById('fPackage').value,voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:Number(document.getElementById('fWarn').value||0),criticalStock:Number(document.getElementById('fCrit').value||0),targetStock:Number(document.getElementById('fTarget').value||0),reorderQty:0,notes:document.getElementById('fNotes').value,images:[],links:[]};
+        const newComp={id:uid('comp'),name,partNumber:document.getElementById('fPartNumber').value,manufacturer:document.getElementById('fManufacturer').value,category:document.getElementById('fCategory').value,subcategory:'',value:document.getElementById('fValue').value,package:document.getElementById('fPackage').value,voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:Number(document.getElementById('fWarn').value||0),criticalStock:Number(document.getElementById('fCrit').value||0),targetStock:Number(document.getElementById('fTarget').value||0),reorderQty:0,notes:document.getElementById('fNotes').value,images:[],links:[],customSpecs:Object.assign({},window.__newCompSpecTarget?.customSpecs),enabledSpecs:(window.__newCompSpecTarget?.enabledSpecs||[]).slice()};
         state.components.push(newComp); compId=newComp.id;
       }
       const ciEnabled=document.getElementById('ciEnabled')?.value==='1';
@@ -4469,6 +4474,7 @@ function openCellDetail(cellId){
       <div class="field"><label>الشركة المصنعة</label><input value="${comp.manufacturer||''}" readonly></div></div>
       <div class="field-row"><div class="field"><label>القيمة</label><input value="${comp.value||''}" readonly></div>
       <div class="field"><label>الجهد / التيار</label><input value="${(comp.voltage||'')+' / '+(comp.current||'')}" readonly></div></div>
+      ${typeof enabledSpecsHTML==='function'?enabledSpecsHTML(comp):''}
       <button class="btn small" id="editCompBtn" style="margin-top:6px;">تعديل بيانات المكون</button>
     </div>
 
@@ -4672,7 +4678,15 @@ function openEditComponent(compId,after){
     <div class="field"><label>التيار</label><input id="ecCurr" value="${comp.current||''}"></div></div>
     <div class="field-row"><div class="field"><label>المورد</label><input id="ecSupplier" value="${comp.supplier||''}"></div>
     <div class="field"><label>سعر الشراء</label><input type="number" id="ecPrice" value="${comp.purchasePrice||0}"></div></div>
+    <div class="field-row"><div class="field"><label>القدرة (Power)</label><input id="ecPower" value="${comp.power||''}"></div>
+    <div class="field"></div></div>
+    <div id="editCompSpecs"></div>
   `,`<button class="btn" id="ecCancel">إلغاء</button><button class="btn primary" id="ecSave">حفظ</button>`);
+  if(!comp.customSpecs) comp.customSpecs={};
+  if(!Array.isArray(comp.enabledSpecs)) comp.enabledSpecs=[];
+  if(typeof renderSpecsEditor==='function'){
+    renderSpecsEditor(comp, document.getElementById('editCompSpecs'), ()=>scheduleSave());
+  }
   document.getElementById('ecCancel').onclick=()=>after?after():closeModal();
   document.getElementById('ecSave').onclick=()=>{
     comp.name=document.getElementById('ecName').value;
@@ -4685,6 +4699,7 @@ function openEditComponent(compId,after){
     comp.current=document.getElementById('ecCurr').value;
     comp.supplier=document.getElementById('ecSupplier').value;
     comp.purchasePrice=Number(document.getElementById('ecPrice').value||0);
+    comp.power=document.getElementById('ecPower').value;
     scheduleSave(); toast('تم الحفظ');
     if(after) after(); else closeModal();
   };
@@ -5076,6 +5091,10 @@ function cellIndicatorValue(cell){
   else if(cfg.source==='partNumber') value=comp?.partNumber||'';
   else if(cfg.source==='componentName') value=comp?.name||'';
   else if(cfg.source==='link') value=(comp?.links||[])[0]||'';
+  else if(cfg.source && cfg.source.indexOf('spec_')===0 && typeof getSpecValue==='function' && typeof allSpecDefs==='function'){
+    const def=allSpecDefs().find(d=>('spec_'+d.key)===cfg.source);
+    value=def && comp?getSpecValue(comp,def):'';
+  }
   else value=cfg.value;
   return String(value??'');
 }
@@ -5144,6 +5163,7 @@ function cellIndicatorFieldsHTML(cell){
           <option value="partNumber" ${cfg.source==='partNumber'?'selected':''}>رقم القطعة</option>
           <option value="componentName" ${cfg.source==='componentName'?'selected':''}>اسم المكون</option>
           <option value="link" ${cfg.source==='link'?'selected':''}>الرابط</option>
+          ${(typeof allSpecDefs==='function'?allSpecDefs():[]).map(d=>`<option value="spec_${d.key}" ${cfg.source==='spec_'+d.key?'selected':''}>${d.label}</option>`).join('')}
           <option value="custom" ${cfg.source==='custom'?'selected':''}>قيمة مخصصة</option>
         </select>
       </div>
@@ -6342,14 +6362,27 @@ searchInput.addEventListener('input',()=>{
   const seenCell=new Set();
   let rows='';
 
-  const compMatches=state.components.filter(c=>(c.name+' '+(c.partNumber||'')+' '+(c.category||'')).toLowerCase().includes(q)).slice(0,8);
+  const compSearchText=c=>{
+    const parts=[c.name,c.partNumber,c.category,c.manufacturer,c.value,c.package,c.voltage,c.current,c.power,c.tolerance,c.frequency,c.notes,c.supplier];
+    if(c.customSpecs) parts.push(...Object.values(c.customSpecs));
+    return parts.filter(Boolean).join(' ').toLowerCase();
+  };
+  const compMatches=state.components.filter(c=>compSearchText(c).includes(q)).slice(0,8);
   compMatches.forEach(c=>{
     const containers=containerOfComponent(c.id);
     const first=containers[0];
     const loc=first? locationLabel(first.id): 'مخزون مؤقت (غير مخصص)';
     if(first) seenCell.add(first.id);
+    let specHint='';
+    if(c.customSpecs){
+      const hit=Object.entries(c.customSpecs).find(([k,v])=>v && String(v).toLowerCase().includes(q));
+      if(hit && typeof allSpecDefs==='function'){
+        const def=allSpecDefs().find(d=>d.key===hit[0]);
+        if(def) specHint=` · ${def.label}: ${hit[1]}`;
+      }
+    }
     rows+=`<div class="sres-item" data-comp="${c.id}" data-cell="${first?first.id:''}">
-      <div><div class="sres-name">${c.name}</div><div class="sres-meta">${c.category||''} · إجمالي: ${totalQtyOfComponent(c.id)}</div></div>
+      <div><div class="sres-name">${c.name}</div><div class="sres-meta">${c.category||''} · إجمالي: ${totalQtyOfComponent(c.id)}${specHint}</div></div>
       <div class="sres-loc">${loc}</div>
     </div>`;
   });
@@ -9814,7 +9847,7 @@ setTimeout(v5Init,120);
 <script id="advanced-cell-search-js">
 (function(){
   const FIELD_ALIASES={
-    price:['price','السعر','cost'],
+    price:['price','السعر','cost','purchasePrice'],
     current:['current','amperage','amps','amp','تيار','التيار'],
     voltage:['voltage','volt','v','فولت','الجهد'],
     size:['size','dimension','dimensions','حجم','الحجم','مقاس'],
@@ -9846,6 +9879,9 @@ setTimeout(v5Init,120);
     for(const key of aliases){
       if(Object.prototype.hasOwnProperty.call(obj,key) && obj[key]!=='' && obj[key]!=null)return obj[key];
     }
+    if(obj && obj.customSpecs && Object.prototype.hasOwnProperty.call(obj.customSpecs,field) && obj.customSpecs[field]!=='' && obj.customSpecs[field]!=null){
+      return obj.customSpecs[field];
+    }
     return '';
   }
   function extractComponent(cell){
@@ -9864,6 +9900,7 @@ setTimeout(v5Init,120);
       const cv=fieldValue(cell,f); if(cv!=='') vals.push(cv);
     }
     vals.push(cell.name,cell.label,cell.code,cell.description,c.name,c.label,c.code,c.description);
+    if(c.customSpecs) vals.push(...Object.values(c.customSpecs));
     return norm(vals.filter(Boolean).join(' | '));
   }
   function parseNumber(v){
@@ -9977,6 +10014,165 @@ setTimeout(v5Init,120);
 </script>
 
 
+
+<style id="item-specs-editor-css">
+.spec-editor-box{margin-top:10px;padding-top:10px;border-top:1px solid var(--border, rgba(255,255,255,.08));}
+.spec-editor-title{font-size:12px;font-weight:800;margin-bottom:2px;}
+.spec-editor-sub{font-size:10.5px;color:var(--dim,#8ea0b3);margin-bottom:8px;}
+.spec-editor-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
+.spec-editor-row .check-row{display:flex;align-items:center;gap:6px;font-size:12px;min-width:150px;cursor:pointer;}
+.spec-editor-row input[type="text"]{flex:1;min-width:120px;}
+.spec-editor-row .del-spec-btn{border:0;background:none;color:#c0554f;cursor:pointer;font-size:13px;}
+.spec-editor-add{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-top:6px;}
+.enabled-specs-view{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border,rgba(255,255,255,.1));}
+.enabled-specs-view .esv-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--dim,#8ea0b3);}
+.enabled-specs-view .esv-row b{color:inherit;font-weight:600;}
+</style>
+<script id="item-specs-editor-js">
+(function(){
+  const SPEC_KEY='workshop_custom_cell_specs_v1';
+  const BASE_EXTRA_SPECS=[
+    {key:'power',label:'القدرة (Power)',real:'power'},
+    {key:'tolerance',label:'التفاوت (Tolerance)',real:'tolerance'},
+    {key:'frequency',label:'التردد (Frequency)',real:'frequency'}
+  ];
+  function loadRegistry(){
+    try{
+      const x=JSON.parse(localStorage.getItem(SPEC_KEY)||'[]');
+      return Array.isArray(x)?x.filter(s=>s&&s.key&&s.label):[];
+    }catch(e){return [];}
+  }
+  function saveRegistry(a){ try{localStorage.setItem(SPEC_KEY,JSON.stringify(a));}catch(e){} }
+  function makeKey(s){
+    return 'custom_'+String(s).trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0600-\u06ff-]/g,'_').slice(0,50);
+  }
+  function allSpecDefs(){
+    return BASE_EXTRA_SPECS.map(f=>({key:f.key,label:f.label,real:f.real,builtin:true}))
+      .concat(loadRegistry().map(s=>({key:s.key,label:s.label,real:null,builtin:false})));
+  }
+  function addSpecDefinition(label,example){
+    label=String(label||'').trim();
+    if(!label) return null;
+    const k=makeKey(label);
+    const built=BASE_EXTRA_SPECS.map(f=>f.key);
+    const reg=loadRegistry();
+    if(built.includes(k)||reg.some(s=>s.key===k)) return k;
+    reg.push({key:k,label,example:String(example||'').trim()});
+    saveRegistry(reg);
+    if(typeof window.refreshSpecSearchField==='function') window.refreshSpecSearchField();
+    return k;
+  }
+  function removeSpecDefinition(key){
+    saveRegistry(loadRegistry().filter(s=>s.key!==key));
+    const list=(window.state&&Array.isArray(window.state.components))?window.state.components:[];
+    list.forEach(c=>{
+      if(c.customSpecs) delete c.customSpecs[key];
+      if(Array.isArray(c.enabledSpecs)) c.enabledSpecs=c.enabledSpecs.filter(k=>k!==key);
+    });
+    if(typeof scheduleSave==='function') scheduleSave();
+    if(typeof window.refreshSpecSearchField==='function') window.refreshSpecSearchField();
+  }
+  function getSpecValue(obj,def){
+    if(def.real) return obj[def.real]||'';
+    return (obj.customSpecs&&obj.customSpecs[def.key])||'';
+  }
+  function setSpecValue(obj,def,val){
+    if(def.real){ obj[def.real]=val; return; }
+    if(!obj.customSpecs) obj.customSpecs={};
+    obj.customSpecs[def.key]=val;
+  }
+  function esc(v){ return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+  window.getSpecRegistry=loadRegistry;
+  window.allSpecDefs=allSpecDefs;
+  window.addSpecDefinition=addSpecDefinition;
+  window.removeSpecDefinition=removeSpecDefinition;
+  window.getSpecValue=getSpecValue;
+
+  window.renderSpecsEditor=function(targetObj,container,onChange){
+    if(!container) return;
+    if(!targetObj.customSpecs) targetObj.customSpecs={};
+    if(!Array.isArray(targetObj.enabledSpecs)) targetObj.enabledSpecs=[];
+    const defs=allSpecDefs();
+    const rows=defs.map(def=>{
+      const enabled=targetObj.enabledSpecs.includes(def.key);
+      const val=getSpecValue(targetObj,def);
+      return `<div class="spec-editor-row" data-spec-row="${def.key}">
+        <label class="check-row"><input type="checkbox" data-spec-toggle="${def.key}" ${enabled?'checked':''}><span>${esc(def.label)}</span></label>
+        <input type="text" data-spec-value="${def.key}" value="${esc(val)}" placeholder="القيمة" style="display:${enabled?'block':'none'}">
+        ${def.builtin?'':`<button type="button" class="del-spec-btn" data-del-spec="${def.key}" title="حذف هذه المواصفة نهائيًا من النظام">🗑</button>`}
+      </div>`;
+    }).join('');
+    container.innerHTML=`<div class="spec-editor-box">
+      <div class="spec-editor-title">⚙️ مواصفات إضافية</div>
+      <div class="spec-editor-sub">حدد أي بيانات تنطبق على هذا العنصر — تقدر تضيف مواصفة جديدة زي "السعة" أو أي حاجة تانية</div>
+      <div class="spec-editor-list">${rows||''}</div>
+      <div class="spec-editor-add">
+        <input type="text" class="new-spec-label" placeholder="اسم مواصفة جديدة: السعة">
+        <input type="text" class="new-spec-example" placeholder="مثال: 1000mAh">
+        <button type="button" class="btn small add-spec-btn">＋ إضافة</button>
+      </div>
+    </div>`;
+    function fire(){ if(typeof onChange==='function') onChange(); }
+    container.querySelectorAll('[data-spec-toggle]').forEach(cb=>{
+      cb.addEventListener('change',()=>{
+        const key=cb.dataset.specToggle;
+        const row=container.querySelector(`[data-spec-row="${key}"]`);
+        const input=row?row.querySelector('[data-spec-value]'):null;
+        if(cb.checked){
+          if(!targetObj.enabledSpecs.includes(key)) targetObj.enabledSpecs.push(key);
+          if(input) input.style.display='block';
+        }else{
+          targetObj.enabledSpecs=targetObj.enabledSpecs.filter(k=>k!==key);
+          if(input) input.style.display='none';
+        }
+        fire();
+      });
+    });
+    container.querySelectorAll('[data-spec-value]').forEach(inp=>{
+      inp.addEventListener('input',()=>{
+        const key=inp.dataset.specValue;
+        const def=defs.find(d=>d.key===key);
+        if(def) setSpecValue(targetObj,def,inp.value);
+        fire();
+      });
+    });
+    container.querySelectorAll('[data-del-spec]').forEach(btn=>{
+      btn.onclick=()=>{
+        if(!confirm('حذف هذه المواصفة نهائيًا من كل العناصر؟')) return;
+        removeSpecDefinition(btn.dataset.delSpec);
+        window.renderSpecsEditor(targetObj,container,onChange);
+      };
+    });
+    const addBtn=container.querySelector('.add-spec-btn');
+    if(addBtn) addBtn.onclick=()=>{
+      const l=container.querySelector('.new-spec-label');
+      const e=container.querySelector('.new-spec-example');
+      const label=l.value.trim();
+      if(!label){ if(typeof toast==='function') toast('اكتب اسم المواصفة'); else alert('اكتب اسم المواصفة'); return; }
+      const key=addSpecDefinition(label,e.value);
+      if(key && !targetObj.enabledSpecs.includes(key)) targetObj.enabledSpecs.push(key);
+      fire();
+      window.renderSpecsEditor(targetObj,container,onChange);
+    };
+  };
+
+  window.enabledSpecsHTML=function(comp){
+    if(!comp||!Array.isArray(comp.enabledSpecs)||!comp.enabledSpecs.length) return '';
+    const defs=allSpecDefs();
+    const rows=comp.enabledSpecs.map(key=>{
+      const def=defs.find(d=>d.key===key);
+      if(!def) return '';
+      const val=getSpecValue(comp,def);
+      if(!val) return '';
+      return `<div class="esv-row"><span>${esc(def.label)}</span><b>${esc(val)}</b></div>`;
+    }).filter(Boolean).join('');
+    if(!rows) return '';
+    return `<div class="enabled-specs-view">${rows}</div>`;
+  };
+})();
+</script>
+
 <script id="custom-specs-js">
 (function(){
 const KEY='workshop_custom_cell_specs_v1';
@@ -10045,6 +10241,7 @@ window.getCustomCellSpecs=load;
     load().forEach(s=>sel.insertAdjacentHTML('beforeend',`<option value="${s.key}">${s.label}</option>`));
     if([...sel.options].some(o=>o.value===old))sel.value=old;
   }
+  window.refreshSpecSearchField=refreshSelect;
 
   function render(){
     const list=document.querySelector('#advancedCellSearch .custom-spec-list');
