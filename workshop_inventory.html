@@ -240,6 +240,9 @@ nav.navlist{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;}
 .check-row .ctext.done{color:var(--dim);text-decoration:line-through;}
 .check-row .cdate{font-size:10.5px;color:var(--dim2);font-family:var(--mono);}
 
+/* ============================= CATEGORY DATABASE PAGE ============================= */
+.category-db-layout{display:grid;grid-template-columns:minmax(230px,290px) minmax(0,1fr);gap:16px;align-items:start}.category-list-panel,.category-editor-panel{min-width:0}.category-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.category-muted{display:block;color:var(--dim);font-size:10.5px;margin-top:3px}.category-search-row{margin-bottom:10px}.category-search-row input{width:100%}.category-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 11px;margin-bottom:6px;text-align:right;transition:.15s}.category-row:hover{border-color:var(--amber);background:var(--panel3)}.category-row.active{border-color:var(--amber);background:var(--amber-dim);box-shadow:inset -3px 0 0 var(--amber)}.category-row-main{display:flex;flex-direction:column;gap:3px;min-width:0}.category-row-main b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.category-row-main small{color:var(--dim);font-size:9.5px}.category-row-arrow{color:var(--amber);font-size:18px}.category-editor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding-bottom:14px;border-bottom:1px solid var(--border)}.category-kicker{font-family:var(--mono);font-size:9px;color:var(--amber);letter-spacing:1px}.category-editor-head h2{margin:3px 0 5px;font-size:20px}.category-editor-head p{margin:0;color:var(--dim);font-size:11.5px;line-height:1.7;max-width:720px}.category-editor-actions{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}.category-desc-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--border)}.category-desc-row label{font-size:11px;color:var(--dim)}.category-desc-row input{width:100%}.category-spec-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:15px 0 9px}.category-spec-toolbar b{font-size:14px}.category-spec-toolbar span{font-size:10px;color:var(--dim)}.category-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--panel2)}.category-spec-table{min-width:680px;margin:0}.category-spec-table th{background:var(--panel3)!important;color:var(--dim)!important;position:sticky;top:0;z-index:1}.category-spec-table td{vertical-align:middle}.cat-spec-input{width:100%;min-width:100px;padding:7px 8px!important;font-size:11.5px!important}.category-spec-table select.cat-spec-input{min-width:125px}.category-no-specs{text-align:center;color:var(--dim);padding:28px!important}.category-db-note{margin-top:12px;padding:10px 12px;border:1px solid var(--amber-border);background:var(--amber-dim);border-radius:8px;color:var(--dim);font-size:11px;line-height:1.8}@media(max-width:900px){.category-db-layout{grid-template-columns:1fr}.category-editor-head{flex-direction:column}.category-editor-actions{width:100%}.category-editor-actions .btn{flex:1}.category-desc-row{grid-template-columns:1fr}.category-desc-row .btn{width:100%}}
+
 /* Modal */
 .modal-backdrop{position:fixed;inset:0;background:rgba(4,6,9,.7);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
 .modal-box{background:var(--panel);border:1px solid var(--border-lt);border-radius:16px;width:100%;max-width:640px;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6);}
@@ -260,6 +263,42 @@ nav.navlist{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;}
 .chip{display:inline-block;background:var(--panel3);border:1px solid var(--border-lt);border-radius:20px;padding:3px 10px;font-size:11px;margin:2px;}
 .chip.green{color:var(--green);} .chip.yellow{color:var(--yellow);} .chip.red{color:var(--red);}
 
+
+/* مواصفات الفئة داخل نموذج الخلية والمكون */
+.cat-cell-spec-box{
+  margin-top:10px;
+  padding:11px;
+  border:1px solid var(--amber-border);
+  border-radius:10px;
+  background:var(--panel2);
+}
+.cat-cell-spec-title{font-size:12.5px;font-weight:800;color:var(--amber);margin-bottom:3px}
+.cat-cell-spec-sub{font-size:10.5px;color:var(--dim);line-height:1.6;margin-bottom:9px}
+.cat-cell-spec-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cat-cell-spec-row{min-width:0}
+.cat-cell-spec-row label{display:block;font-size:10.5px;color:var(--dim);margin-bottom:4px}
+.cat-cell-spec-unit{font-family:var(--mono);font-size:9.5px;color:var(--amber)}
+.cat-cell-spec-control{width:100%!important;min-width:0}
+.cat-managed-fields-box{margin:12px 0;padding:10px;border:1px solid var(--border);background:var(--panel);border-radius:10px}.cat-managed-fields-title{font-weight:900;font-size:13px;margin-bottom:4px}.cat-managed-fields-sub{font-size:10.5px;color:var(--dim);line-height:1.6;margin-bottom:8px}.cat-managed-combo{width:100%}.cat-managed-combo input{width:100%}.cat-managed-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}.cat-managed-chip{border:1px solid var(--amber-border);background:rgba(216,162,74,.07);color:var(--text);border-radius:999px;padding:4px 8px;font-size:10px;line-height:1.1;cursor:pointer}.cat-managed-chip.active{border-color:var(--amber);background:rgba(216,162,74,.18);color:var(--amber);font-weight:800}
+.cat-cell-combo{width:100%;min-width:0}
+.cat-cell-combo .cat-cell-spec-control{width:100%!important}
+.cat-cell-quick-label{font-size:11px;opacity:.72;margin-top:5px;margin-bottom:3px}
+.cat-cell-quick-options{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;max-width:100%}
+.cat-cell-quick-chip{
+  border:1px solid var(--amber-border);background:rgba(216,162,74,.07);color:var(--text);
+  border-radius:999px;padding:4px 8px;font-size:10px;line-height:1.1;cursor:pointer
+}
+.cat-cell-quick-chip:hover,.cat-cell-quick-chip.active{
+  border-color:var(--amber);background:rgba(216,162,74,.18);color:var(--amber);font-weight:800
+}
+
+.cat-cell-spec-view{margin-top:9px;padding:9px 10px;border:1px solid var(--border);border-radius:9px;background:var(--panel2)}
+.cat-cell-spec-view-title{font-size:11.5px;font-weight:800;color:var(--amber);margin-bottom:5px}
+.cat-cell-spec-view-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--border)}
+.cat-cell-spec-view-row:last-child{border-bottom:0}
+.cat-cell-spec-view-row span{color:var(--dim);font-size:11px}
+.cat-cell-spec-view-row b{font-size:11.5px;text-align:left}
+@media(max-width:700px){.cat-cell-spec-grid{grid-template-columns:1fr}}
 table.tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
 table.tbl th{text-align:right;color:var(--dim);font-weight:500;font-size:11px;padding:8px 10px;border-bottom:1px solid var(--border);}
 table.tbl td{padding:9px 10px;border-bottom:1px solid var(--border);}
@@ -980,6 +1019,11 @@ table.tbl tr:hover td{background:var(--panel2);}
 }
 
 
+
+/* حقول المكون الأساسية القديمة أصبحت تُدار من جدول الفئة؛ نُبقيها في DOM للتوافق ونخفي واجهتها حتى لا تتكرر. */
+#newCompFields > .field-row:has(#fPartNumber),#newCompFields > .field-row:has(#fPackage),#newCompFields > .field-row:has(#fValue),#newCompFields > .field-row:has(#fWarn),#newCompFields > .field-row:has(#fTarget){display:none!important}
+#editCategoryManagedFields ~ .field-row:has(#ecPart),#editCategoryManagedFields ~ .field-row:has(#ecPkg),#editCategoryManagedFields ~ .field-row:has(#ecVolt),#editCategoryManagedFields ~ .field-row:has(#ecSupplier),#editCategoryManagedFields ~ .field-row:has(#ecPower){display:none!important}
+#editCategoryManagedFields + #editCompSpecs{margin-top:8px}
 </style>
 <style>
 
@@ -3126,50 +3170,68 @@ table.tbl tr:hover td{background:var(--panel2);}
 
 
 <style id="advanced-cell-search-css">
-/* Advanced cell/spec search */
+/* بحث الفئة ← المواصفة ← القيمة */
 .advanced-cell-search{
-  margin:10px 0 12px;
-  padding:10px;
-  border:1px solid rgba(216,162,74,.22);
-  border-radius:10px;
-  background:rgba(18,13,9,.72);
+  margin:10px 0 12px;padding:10px;border:1px solid rgba(216,162,74,.22);
+  border-radius:10px;background:rgba(18,13,9,.72);overflow:hidden;
 }
-.advanced-cell-search .acs-top{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-}
-.advanced-cell-search .acs-label{font-weight:900;color:#f0d09d;font-size:11px}
+.advanced-cell-search .acs-top{display:grid;grid-template-columns:auto minmax(150px,1fr) minmax(150px,1fr) minmax(170px,1.4fr) auto auto;align-items:center;gap:7px}
+.advanced-cell-search .acs-label{font-weight:900;color:#f0d09d;font-size:11px;white-space:nowrap}
 .advanced-cell-search input,.advanced-cell-search select{
-  min-height:34px;border-radius:7px;border:1px solid rgba(255,255,255,.12);
+  min-height:34px;width:100%;min-width:0;border-radius:7px;border:1px solid rgba(255,255,255,.12);
   background:rgba(255,255,255,.045);color:#eee;padding:0 9px;outline:none;
 }
-.advanced-cell-search input{flex:1 1 180px;min-width:150px}
-.advanced-cell-search select{min-width:105px}
-.advanced-cell-search .acs-help{
-  margin-top:7px;color:#9e948b;font-size:9px;line-height:1.5
+.advanced-cell-search select:focus,.advanced-cell-search input:focus{border-color:rgba(216,162,74,.65)}
+.advanced-cell-search .acs-value-choices{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.advanced-cell-search .acs-value-chip{
+  border:1px solid rgba(216,162,74,.24);background:rgba(216,162,74,.07);
+  color:#d9c4a5;border-radius:6px;padding:4px 8px;font-size:9px;cursor:pointer
 }
-.advanced-cell-search .acs-chips{
-  display:flex;gap:5px;flex-wrap:wrap;margin-top:7px
+.advanced-cell-search .acs-value-chip:hover,.advanced-cell-search .acs-value-chip.active{
+  border-color:rgba(216,162,74,.7);color:#f1d09a;background:rgba(216,162,74,.16)
 }
-.advanced-cell-search .acs-chip{
-  border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);
-  color:#c9bfb5;border-radius:6px;padding:4px 7px;font-size:8px;cursor:pointer
-}
-.advanced-cell-search .acs-chip:hover{border-color:rgba(216,162,74,.45);color:#f1d09a}
-.acs-match{
-  outline:3px solid #e0a92b!important;
-  outline-offset:2px!important;
-  box-shadow:0 0 18px rgba(224,169,43,.28)!important;
-  z-index:4!important;
-}
+.advanced-cell-search .acs-help{margin-top:7px;color:#9e948b;font-size:9px;line-height:1.5}
+.acs-match{outline:3px solid #e0a92b!important;outline-offset:2px!important;box-shadow:0 0 18px rgba(224,169,43,.28)!important;z-index:4!important}
 .acs-dim{opacity:.22!important;filter:saturate(.25)!important}
 .acs-match .cell-actions,.acs-match .actions{opacity:1!important;visibility:visible!important}
-.acs-result{
-  margin-top:7px;font-size:9px;color:#b9aea4;min-height:14px
+.acs-result{margin-top:7px;font-size:9px;color:#b9aea4;min-height:14px}
+.acs-result b{color:#f0d09d}
+@media(max-width:850px){
+  .advanced-cell-search .acs-top{grid-template-columns:1fr 1fr}
+  .advanced-cell-search .acs-label{grid-column:1/-1}
 }
-@media(max-width:700px){
- .advanced-cell-search .acs-top{align-items:stretch}
- .advanced-cell-search input,.advanced-cell-search select{width:100%;flex:1 1 100%}
+@media(max-width:600px){
+  .advanced-cell-search .acs-top{grid-template-columns:1fr}
+  .advanced-cell-search .acs-label{grid-column:auto}
 }
+
+.acs-search-target{
+  outline:4px solid #ffd24a!important;
+  outline-offset:4px!important;
+  box-shadow:0 0 0 5px rgba(255,210,74,.18),0 0 28px rgba(255,190,40,.65)!important;
+  animation:acsTargetPulse .75s ease-in-out 2;
+}
+@keyframes acsTargetPulse{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.06)}
+}
+.advanced-cell-search{position:relative;z-index:20}
+.advanced-cell-search .acs-result{display:block;padding:5px 0;line-height:1.7}
+
+.acs-query-wrap{position:relative;flex:1;min-width:160px}
+.acs-query-wrap #acsQuery{width:100%}
+.acs-suggestions{
+  position:absolute;z-index:99999;top:calc(100% + 4px);right:0;left:0;
+  max-height:260px;overflow:auto;border:1px solid var(--amber-border);
+  border-radius:10px;background:var(--panel,#17212b);box-shadow:0 12px 30px rgba(0,0,0,.38)
+}
+.acs-suggestion{
+  display:block;width:100%;text-align:right;padding:9px 11px;border:0;border-bottom:1px solid rgba(255,255,255,.06);
+  background:transparent;color:var(--text);cursor:pointer
+}
+.acs-suggestion:hover{background:rgba(242,169,60,.13)}
+.acs-suggestion-title{display:block;font-weight:800;font-size:12px}
+.acs-suggestion-loc{display:block;color:var(--dim);font-size:9px;margin-top:3px;white-space:normal}
 </style>
 
 
@@ -3956,6 +4018,47 @@ table.tbl tr:hover td{background:var(--panel2);}
 [data-theme="royal"]{--bg:#0a0812;--panel:#130f20;--panel2:#1b1630;--panel3:#261e3e;--border:#40345d;--border-lt:#594a7c;--text:#f3edff;--dim:#aaa0c2;--dim2:#74698e;--amber:#d7a84a;--amber-dim:#3a2c13;--amber-dark:#a07827;--amber-ink:#1b1200;--amber-border:#6a5220;--amber-rgb:215,168,74;--green:#55d79a;--green-dim:#123528;--yellow:#f2d05a;--yellow-dim:#3a3312;--red:#ff6878;--red-dim:#3b141a;--blue:#7f9cff;--blue-dim:#18294a;--grid-rgb:215,168,74;--grid-op:.025;--theme-emoji:"👑";--theme-label:"ملكي"}
 [data-theme="mint-light"]{--bg:#edf7f4;--panel:#ffffff;--panel2:#e2f0ec;--panel3:#d6e8e2;--border:#c5dbd4;--border-lt:#afcfc5;--text:#17302b;--dim:#5e7771;--dim2:#849c96;--amber:#1b9c83;--amber-dim:#d9f0e9;--amber-dark:#14745f;--amber-ink:#fff;--amber-border:#7abbaa;--amber-rgb:27,156,131;--green:#218b57;--green-dim:#dff3e8;--yellow:#9a7a12;--yellow-dim:#f7f0d6;--red:#c43f45;--red-dim:#f8e3e5;--blue:#2979b8;--blue-dim:#e2eff8;--grid-rgb:27,156,131;--grid-op:.025;--theme-emoji:"🌿";--theme-label:"نعناعي فاتح"}
 </style>
+<style id="category-managed-quick-unify">
+.cat-managed-fields-box{
+  background:var(--panel)!important;
+  border:1px solid var(--border)!important;
+  border-radius:10px!important;
+}
+.cat-managed-fields-box .cat-cell-quick-label{
+  font-size:11px;
+  opacity:.72;
+  margin-top:5px;
+  margin-bottom:3px;
+}
+.cat-managed-fields-box .cat-cell-quick-options{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  margin-top:5px;
+  max-width:100%;
+}
+.cat-managed-fields-box .cat-cell-quick-chip{
+  border:1px solid var(--amber-border);
+  background:rgba(216,162,74,.07);
+  color:var(--text);
+  border-radius:999px;
+  padding:4px 8px;
+  font-size:10px;
+  line-height:1.1;
+  cursor:pointer;
+  transition:.15s;
+}
+.cat-managed-fields-box .cat-cell-quick-chip:hover,
+.cat-managed-fields-box .cat-cell-quick-chip.active{
+  border-color:var(--amber);
+  background:rgba(216,162,74,.18);
+  color:var(--amber);
+  font-weight:800;
+}
+.cat-managed-fields-box .cat-managed-combo input{
+  width:100%;
+}
+</style>
 </head>
 <body>
 <div class="app-shell">
@@ -3969,6 +4072,7 @@ table.tbl tr:hover td{background:var(--panel2);}
       <button class="nav-item" data-view="storage"><span class="ico">🗄️</span><span class="lbl">التخزين المرئي</span></button>
       <button class="nav-item" data-view="map"><span class="ico">🗺️</span><span class="lbl">خريطة الورشة</span></button>
       <button class="nav-item" data-view="components"><span class="ico">🔩</span><span class="lbl">المكونات</span></button>
+      <button class="nav-item" data-view="categories"><span class="ico">🗂️</span><span class="lbl">الفئات والمواصفات</span></button>
       <button class="nav-item" data-view="lowstock"><span class="ico">⚠️</span><span class="lbl">نقص المخزون</span></button>
       <button class="nav-item" data-view="purchases"><span class="ico">🛒</span><span class="lbl">المشتريات</span></button>
       <button class="nav-item" data-view="checklist"><span class="ico">✅</span><span class="lbl">تشيك ليست</span></button>
@@ -4010,6 +4114,254 @@ function fmtDate(iso){const d=new Date(iso);return d.toLocaleDateString('ar-EG',
 let state=null;
 /* حالة عرض مؤقتة (لا تُحفظ): أي رف/عبوة مُكبّرة حاليًا في شاشة التخزين المرئي */
 let uiState={expandedRack:null,selectedBox:null,selectedColumn:null,expandedColumn:null};
+
+/* ============================= CATEGORY / SPEC DATABASE ============================= */
+const CATEGORY_SPEC_TEMPLATES={
+  'ترانزستورات':[
+    {key:'type',label:'نوع الترانزستور',type:'select',options:['NPN','PNP','MOSFET','IGBT','JFET','Darlington']},
+    {key:'channel',label:'القناة',type:'select',options:['N-Channel','P-Channel','N/A']},
+    {key:'voltage',label:'أقصى جهد',type:'text',unit:'V'},
+    {key:'current',label:'أقصى تيار',type:'text',unit:'A'},
+    {key:'power',label:'القدرة',type:'text',unit:'W'},
+    {key:'frequency',label:'التردد',type:'text',unit:'Hz'},
+    {key:'package',label:'الحزمة',type:'text'}
+  ],
+  'MOSFET':[
+    {key:'type',label:'النوع',type:'select',options:['N-Channel','P-Channel']},
+    {key:'voltage',label:'VDS أقصى جهد',type:'text',unit:'V'},
+    {key:'current',label:'ID أقصى تيار',type:'text',unit:'A'},
+    {key:'rds_on',label:'RDS(on)',type:'text',unit:'Ω'},
+    {key:'power',label:'القدرة',type:'text',unit:'W'},
+    {key:'package',label:'الحزمة',type:'text'}
+  ],
+  'IGBT':[
+    {key:'type',label:'النوع',type:'select',options:['N-Channel','P-Channel','Module']},
+    {key:'voltage',label:'VCE أقصى جهد',type:'text',unit:'V'},
+    {key:'current',label:'IC أقصى تيار',type:'text',unit:'A'},
+    {key:'power',label:'القدرة',type:'text',unit:'W'},
+    {key:'frequency',label:'تردد التشغيل',type:'text',unit:'Hz'},
+    {key:'package',label:'الحزمة',type:'text'}
+  ],
+  'ثنائيات':[
+    {key:'type',label:'نوع الدايود',type:'select',options:['Signal','Rectifier','Fast','Schottky','LED','Photodiode']},
+    {key:'voltage',label:'الجهد العكسي',type:'text',unit:'V'},
+    {key:'current',label:'التيار الأمامي',type:'text',unit:'A'},
+    {key:'frequency',label:'التردد',type:'text',unit:'Hz'},
+    {key:'package',label:'الحزمة',type:'text'}
+  ],
+  'مقاومات':[
+    {key:'resistance',label:'المقاومة',type:'text',unit:'Ω'},
+    {key:'power',label:'القدرة',type:'text',unit:'W'},
+    {key:'tolerance',label:'التسامح',type:'text',unit:'%'},
+    {key:'voltage',label:'أقصى جهد',type:'text',unit:'V'},
+    {key:'package',label:'الحزمة',type:'text'}
+  ],
+  'مكثفات':[
+    {key:'capacitance',label:'السعة',type:'text',unit:'F'},
+    {key:'voltage',label:'جهد التحمل',type:'text',unit:'V'},
+    {key:'tolerance',label:'التسامح',type:'text',unit:'%'},
+    {key:'type',label:'نوع المكثف',type:'select',options:['Ceramic','Electrolytic','Tantalum','Film','Variable']},
+    {key:'package',label:'الحزمة',type:'text'}
+  ],
+  'دوائر متكاملة':[
+    {key:'type',label:'نوع الدائرة',type:'text'},
+    {key:'voltage',label:'جهد التشغيل',type:'text',unit:'V'},
+    {key:'current',label:'التيار',type:'text',unit:'A'},
+    {key:'frequency',label:'التردد',type:'text',unit:'Hz'},
+    {key:'package',label:'الحزمة',type:'text'}
+  ]
+};
+function categorySpecKey(label){return 'cs_'+String(label||'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0600-\u06ff-]/g,'_').slice(0,70);}
+function defaultSpecsForCategory(category){
+  const tpl=CATEGORY_SPEC_TEMPLATES[category];
+  if(tpl)return tpl.map(x=>({...x}));
+  return [{key:'type',label:'النوع',type:'text'},{key:'voltage',label:'الجهد',type:'text',unit:'V'},{key:'current',label:'التيار',type:'text',unit:'A'},{key:'package',label:'الحزمة',type:'text'}];
+}
+const CATEGORY_BASE_FIELD_TEMPLATES=[
+ {key:'name',label:'اسم المكون',type:'text',options:[],defaultValue:''},
+ {key:'partNumber',label:'رقم القطعة',type:'text',options:[],defaultValue:''},
+ {key:'manufacturer',label:'الشركة المصنعة',type:'text',options:[],defaultValue:''},
+ {key:'package',label:'الحزمة Package',type:'text',options:[],defaultValue:''},
+ {key:'value',label:'القيمة',type:'text',options:[],defaultValue:''},
+ {key:'subcategory',label:'النوع / النوع الفرعي',type:'text',options:[],defaultValue:''},
+ {key:'voltage',label:'الجهد',type:'text',options:[],defaultValue:''},
+ {key:'current',label:'التيار',type:'text',options:[],defaultValue:''},
+ {key:'power',label:'القدرة Power',type:'text',options:[],defaultValue:''},
+ {key:'supplier',label:'المورد',type:'text',options:[],defaultValue:''},
+ {key:'purchasePrice',label:'سعر الشراء',type:'number',options:[],defaultValue:'0'},
+ {key:'warningStock',label:'حد التحذير Yellow',type:'number',options:[],defaultValue:'10'},
+ {key:'criticalStock',label:'الحد الحرج Red',type:'number',options:[],defaultValue:'2'},
+ {key:'targetStock',label:'هدف المخزون Target',type:'number',options:[],defaultValue:'50'},
+ {key:'reorderQty',label:'كمية إعادة الطلب',type:'number',options:[],defaultValue:'0'},
+ {key:'notes',label:'ملاحظات',type:'text',options:[],defaultValue:''}
+];
+function defaultCategoryFields(){return CATEGORY_BASE_FIELD_TEMPLATES.map(x=>({...x,options:[...(x.options||[])]}));}
+function normalizeCategoryFields(schema){
+ if(!Array.isArray(schema.fields)) schema.fields=defaultCategoryFields();
+ schema.fields=schema.fields.map(f=>{
+   let options=normalizeCategorySpecOptions(f.options);
+   let defaultValue=f.defaultValue??'';
+   // إصلاح الحقول القديمة: إذا وُضعت القيم الجاهزة في خانة القيمة
+   // بهذا الشكل 5,6,7 بدل خانة الاختيارات، ننقلها تلقائيًا إلى الاختيارات.
+   if(!options.length && typeof defaultValue==='string' && /[,،;؛]/.test(defaultValue.trim())){
+     const migrated=normalizeCategorySpecOptions(defaultValue);
+     if(migrated.length>1){ options=migrated; defaultValue=''; }
+   }
+   // وجود اختيارات يجعل الحقل قائمة اختيار حتى لو كان النوع محفوظًا قديمًا كنص.
+   const type=(options.length && (f.type||'text')==='text')?'select':(f.type||'text');
+   return {key:f.key||('field_'+Date.now()),label:f.label||f.key||'حقل',type,options,defaultValue};
+ });
+ return schema.fields;
+}
+function categoryFieldDefs(category){ensureCategorySchemas();const schema=state.categorySchemas?.[category];return schema?normalizeCategoryFields(schema):[];}
+function getCategoryFieldValue(obj,field){
+ if(!obj)return field.defaultValue??'';
+ if(obj[field.key]!==undefined&&obj[field.key]!==null)return obj[field.key];
+ if(obj.customFields?.[field.key]!==undefined)return obj.customFields[field.key];
+ return field.defaultValue??'';
+}
+function setCategoryFieldValue(obj,field,value){
+ const base=['name','partNumber','manufacturer','package','value','subcategory','voltage','current','power','supplier','purchasePrice','warningStock','criticalStock','targetStock','reorderQty','notes'];
+ if(base.includes(field.key)) obj[field.key]=(field.type==='number'&&value!==''?Number(value):value);
+ else {if(!obj.customFields)obj.customFields={};obj.customFields[field.key]=field.type==='number'&&value!==''?Number(value):value;}
+}
+function renderCategoryManagedFields(obj,category,containerId,prefix,onChange){
+ const defs=categoryFieldDefs(category), wrap=document.getElementById(containerId);if(!wrap)return;
+ const rows=defs.map(f=>{const v=getCategoryFieldValue(obj,f),opts=normalizeCategorySpecOptions(f.options),id=prefix+'_'+String(f.key).replace(/[^a-zA-Z0-9_-]/g,'_');let control='';
+  if(f.type==='number')control=`<input type="number" id="${id}" data-cat-base-field="${categorySpecEscape(f.key)}" value="${categorySpecEscape(v)}" placeholder="${categorySpecEscape(f.defaultValue||'القيمة')}">`;
+  else if(f.type==='select'||opts.length){const lid=id+'_list';control=`<div class="cat-managed-combo"><input type="text" id="${id}" data-cat-base-field="${categorySpecEscape(f.key)}" list="${lid}" value="${categorySpecEscape(v)}" placeholder="اكتب أو اختر"><datalist id="${lid}">${opts.map(o=>`<option value="${categorySpecEscape(o)}"></option>`).join('')}</datalist>${opts.length?`<div class="cat-cell-quick-label">اختيارات سريعة:</div><div class="cat-cell-quick-options">${opts.map(o=>`<button type="button" class="cat-cell-quick-chip" data-cat-base-chip="${categorySpecEscape(f.key)}" data-cat-base-value="${categorySpecEscape(o)}">${categorySpecEscape(o)}</button>`).join('')}</div>`:''}</div>`;}
+  else control=`<input type="text" id="${id}" data-cat-base-field="${categorySpecEscape(f.key)}" value="${categorySpecEscape(v)}" placeholder="${categorySpecEscape(f.defaultValue||'القيمة')}">`;
+  return `<div class="field"><label>${categorySpecEscape(f.label||f.key)}</label>${control}</div>`;}).join('');
+ wrap.innerHTML=`<div class="cat-managed-fields-box"><div class="cat-managed-fields-title">⚙️ حقول الفئة «${categorySpecEscape(category||'بدون فئة')}»</div><div class="cat-managed-fields-sub">هذه الحقول تدار من صفحة الفئات والمواصفات، ولكل فئة حقولها واختياراتها وقيمها الجاهزة.</div><div class="field-row">${rows}</div></div>`;
+ wrap.querySelectorAll('[data-cat-base-field]').forEach(el=>{const f=defs.find(x=>x.key===el.dataset.catBaseField);if(!f)return;const save=()=>{setCategoryFieldValue(obj,f,el.value);if(typeof onChange==='function')onChange();};el.addEventListener('input',save);el.addEventListener('change',save);});
+ wrap.querySelectorAll('[data-cat-base-chip]').forEach(btn=>btn.addEventListener('click',()=>{const key=btn.dataset.catBaseChip,f=defs.find(x=>x.key===key),el=wrap.querySelector(`[data-cat-base-field="${CSS.escape(key)}"]`);if(f&&el){el.value=btn.dataset.catBaseValue||'';setCategoryFieldValue(obj,f,el.value);wrap.querySelectorAll(`[data-cat-base-chip="${CSS.escape(key)}"]`).forEach(x=>x.classList.remove('active'));btn.classList.add('active');if(typeof onChange==='function')onChange();}}));
+}
+function buildDefaultCategorySchemas(){const out={};DEFAULT_CATEGORIES.forEach(cat=>{out[cat]={id:categorySpecKey(cat),description:'',specs:defaultSpecsForCategory(cat),fields:defaultCategoryFields()};});return out;}
+function ensureCategorySchemas(){
+ if(!state.categorySchemas||typeof state.categorySchemas!=='object'||Array.isArray(state.categorySchemas)){state.categorySchemas=buildDefaultCategorySchemas();return true;}
+ let changed=false;(state.categories||[]).forEach(cat=>{if(!state.categorySchemas[cat]){state.categorySchemas[cat]={id:categorySpecKey(cat),description:'',specs:defaultSpecsForCategory(cat),fields:defaultCategoryFields()};changed=true;}else{const sc=state.categorySchemas[cat];if(!Array.isArray(sc.specs)){sc.specs=[];changed=true;}if(!Array.isArray(sc.fields)){sc.fields=defaultCategoryFields();changed=true;}else normalizeCategoryFields(sc);}});return changed;
+}
+
+/* ===== ربط جدول مواصفات الفئة مباشرةً بنموذج الخلية/المكون ===== */
+function categorySpecDefs(category){
+  ensureCategorySchemas();
+  const schema=state.categorySchemas?.[category];
+  return schema && Array.isArray(schema.specs) ? schema.specs : [];
+}
+function categorySpecRealField(key){
+  // هذه الحقول موجودة أصلًا في المكون، فنحفظها فيها بدل إنشاء نسخة ثانية.
+  return ({voltage:'voltage',current:'current',power:'power',package:'package'}[key]) || null;
+}
+function getCategorySpecValue(obj,spec){
+  const real=categorySpecRealField(spec.key);
+  if(real) return obj?.[real] ?? '';
+  return obj?.customSpecs?.[spec.key] ?? '';
+}
+function setCategorySpecValue(obj,spec,value){
+  const real=categorySpecRealField(spec.key);
+  if(real){ obj[real]=value; return; }
+  if(!obj.customSpecs) obj.customSpecs={};
+  obj.customSpecs[spec.key]=value;
+}
+function categorySpecEscape(v){
+  return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function normalizeCategorySpecOptions(value){
+  if(Array.isArray(value)) return value.map(x=>String(x??'').trim()).filter(Boolean);
+  return String(value??'')
+    .replace(/،/g,',')
+    .replace(/[؛;]/g,',')
+    .split(',')
+    .map(x=>x.trim())
+    .filter(Boolean);
+}
+function renderCategorySpecsEditor(targetObj,container,category,onChange){
+  if(!container) return;
+  if(!targetObj.customSpecs) targetObj.customSpecs={};
+  const defs=categorySpecDefs(category);
+
+  // كل مواصفات الفئة تظهر تلقائيًا داخل الخلية، بدون الحاجة لإضافتها مرة أخرى.
+  const rows=defs.map(spec=>{
+    const value=getCategorySpecValue(targetObj,spec);
+    const type=spec.type||'text';
+    const opts=normalizeCategorySpecOptions(spec.options);
+    const unit=spec.unit?` <span class="cat-cell-spec-unit">${categorySpecEscape(spec.unit)}</span>`:'';
+    let control='';
+    if(type==='select' || opts.length){
+      const opts=normalizeCategorySpecOptions(spec.options);
+      const listId='catopts_'+String(spec.key).replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+Math.random().toString(36).slice(2,7);
+      control=`<div class="cat-cell-combo">
+        <input class="cat-cell-spec-control cat-cell-spec-combo" type="text"
+          data-cat-spec-value="${categorySpecEscape(spec.key)}"
+          list="${listId}" value="${categorySpecEscape(value)}"
+          placeholder="اكتب القيمة أو اختر من الاختيارات">
+        <datalist id="${listId}">
+          ${opts.map(o=>`<option value="${categorySpecEscape(o)}"></option>`).join('')}
+        </datalist>
+        ${opts.length?`<div class="cat-cell-quick-label">اختيارات سريعة:</div><div class="cat-cell-quick-options">
+          ${opts.map(o=>`<button type="button" class="cat-cell-quick-chip" data-cat-quick-key="${categorySpecEscape(spec.key)}" data-cat-quick-value="${categorySpecEscape(o)}">${categorySpecEscape(o)}</button>`).join('')}
+        </div>`:''}
+      </div>`;
+    }else if(type==='number'){
+      control=`<input class="cat-cell-spec-control" type="number" data-cat-spec-value="${categorySpecEscape(spec.key)}" value="${categorySpecEscape(value)}" placeholder="القيمة">`;
+    }else{
+      control=`<input class="cat-cell-spec-control" type="text" data-cat-spec-value="${categorySpecEscape(spec.key)}" value="${categorySpecEscape(value)}" placeholder="القيمة">`;
+    }
+    return `<div class="cat-cell-spec-row" data-cat-cell-spec="${categorySpecEscape(spec.key)}">
+      <label>${categorySpecEscape(spec.label||spec.key)}${unit}</label>${control}
+    </div>`;
+  }).join('');
+
+  container.innerHTML=defs.length
+    ? `<div class="cat-cell-spec-box">
+        <div class="cat-cell-spec-title">📋 مواصفات فئة «${categorySpecEscape(category||'بدون فئة')}»</div>
+        <div class="cat-cell-spec-sub">هذه الحقول مأخوذة مباشرة من جدول الفئة. أي مواصفة تضيفها هناك تظهر هنا تلقائيًا.</div>
+        <div class="cat-cell-spec-grid">${rows}</div>
+      </div>`
+    : `<div class="cat-cell-spec-box">
+        <div class="cat-cell-spec-title">📋 مواصفات الفئة</div>
+        <div class="cat-cell-spec-sub">لا توجد مواصفات معرفة لهذه الفئة حاليًا.</div>
+      </div>`;
+
+  container.querySelectorAll('[data-cat-quick-value]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const key=btn.dataset.catQuickKey;
+      const spec=defs.find(s=>s.key===key);
+      const input=container.querySelector(`[data-cat-spec-value="${CSS.escape(key)}"]`);
+      if(spec && input){
+        input.value=btn.dataset.catQuickValue||'';
+        setCategorySpecValue(targetObj,spec,input.value);
+        container.querySelectorAll(`[data-cat-quick-key="${CSS.escape(key)}"]`).forEach(x=>x.classList.remove('active'));
+        btn.classList.add('active');
+        if(typeof onChange==='function') onChange();
+      }
+    });
+  });
+  container.querySelectorAll('[data-cat-spec-value]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      const key=el.dataset.catSpecValue;
+      const spec=defs.find(s=>s.key===key);
+      if(spec) setCategorySpecValue(targetObj,spec,el.value);
+      if(typeof onChange==='function') onChange();
+    });
+    el.addEventListener('change',()=>{
+      const key=el.dataset.catSpecValue;
+      const spec=defs.find(s=>s.key===key);
+      if(spec) setCategorySpecValue(targetObj,spec,el.value);
+      if(typeof onChange==='function') onChange();
+    });
+  });
+}
+function categorySpecsHTML(comp){
+  if(!comp) return '';
+  const defs=categorySpecDefs(comp.category);
+  const rows=defs.map(spec=>{
+    const value=getCategorySpecValue(comp,spec);
+    if(value===null || value===undefined || String(value)==='') return '';
+    return `<div class="cat-cell-spec-view-row"><span>${categorySpecEscape(spec.label||spec.key)}</span><b>${categorySpecEscape(value)}${spec.unit?' '+categorySpecEscape(spec.unit):''}</b></div>`;
+  }).filter(Boolean).join('');
+  return rows ? `<div class="cat-cell-spec-view"><div class="cat-cell-spec-view-title">📋 مواصفات الفئة</div>${rows}</div>` : '';
+}
 
 /* رف (rack) -> أعمدة (columns) -> عبوات (boxes/containers) -> خلايا (cells) */
 function seedState(){
@@ -4075,6 +4427,7 @@ function seedState(){
       addBehavior:{newRack:'storage',newColumn:'open',newBox:'select'}
     },
     categories:[...DEFAULT_CATEGORIES],
+    categorySchemas:buildDefaultCategorySchemas(),
     uiTheme:'amber',
     usageHistory:[{id:uid('h'),date:nowISO(),componentId:components[0].id,type:'purchase',qtyChange:145,project:'',purpose:'مخزون أولي',notes:'',fromLocation:'',toLocation:containers.find(c=>c.boxId===boxA.id&&c.index===0).id}],
     purchases:[],
@@ -4156,6 +4509,7 @@ function syncLowStockToHub(){
   }catch(e){}
 }
 function scheduleSave(){
+  saveDirty=true;
   setSaveBadge('pending');
   clearTimeout(saveTimer);
   saveTimer=setTimeout(doSave,500);
@@ -4178,6 +4532,7 @@ async function doSave(){
     if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){
       try{ localStorage.setItem(FALLBACK_KEY,json); }catch(e){}
     }
+    saveDirty=false;
     setSaveBadge('saved');
   }catch(e){
     // محاولة أخيرة للنسخة المحلية الصغيرة فقط.
@@ -4201,6 +4556,7 @@ function flushSaveNow(){
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSaveNow(); });
 window.addEventListener('pagehide',flushSaveNow);
 window.addEventListener('beforeunload',flushSaveNow);
+setInterval(()=>{if(saveDirty&&!saveInFlight)doSave();},10000);
 
 /* ترقية البيانات القديمة (رفوف بها صفوف/أعمدة شبكية) إلى نظام الأعمدة/العبوات/الخلايا الجديد */
 function migrateStateIfNeeded(){
@@ -4245,6 +4601,7 @@ function ensureNewFields(){
   if(!state.uiTheme){ state.uiTheme='amber'; changed=true; }
   if(!Array.isArray(state.categories)) { state.categories=[...DEFAULT_CATEGORIES]; changed=true; }
   else { const merged=[...state.categories]; DEFAULT_CATEGORIES.forEach(c=>{ if(!merged.includes(c)) merged.push(c); }); if(merged.length!==state.categories.length){ state.categories=merged; changed=true; } }
+  if(ensureCategorySchemas()) changed=true;
   if(changed) scheduleSave();
 }
 function applyUiTheme(){
@@ -4311,7 +4668,7 @@ let currentView='dashboard';
 function showView(v){
   currentView=v;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
-  const map={dashboard:renderDashboard,storage:renderStorage,map:renderMap,components:renderComponents,lowstock:renderLowStock,purchases:renderPurchases,checklist:renderChecklist,history:renderHistory,projects:renderProjects,experiments:renderExperiments,stats:renderStats,settings:renderSettings};
+  const map={dashboard:renderDashboard,storage:renderStorage,map:renderMap,components:renderComponents,categories:renderCategories,lowstock:renderLowStock,purchases:renderPurchases,checklist:renderChecklist,history:renderHistory,projects:renderProjects,experiments:renderExperiments,stats:renderStats,settings:renderSettings};
   (map[v]||renderDashboard)();
 }
 document.getElementById('navlist').addEventListener('click',e=>{
@@ -4394,7 +4751,7 @@ function openCellDetail(cellId){
           <div class="field"><label>هدف المخزون (Target)</label><input type="number" id="fTarget" value="50"></div>
           <div class="field"><label>ملاحظات</label><input id="fNotes"></div>
         </div>
-        <div id="newCompSpecs"></div>
+        <div id="newCategoryManagedFields"></div><div id="newCompSpecs"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>الكمية الحالية</label><input type="number" id="fQty" value="10"></div>
@@ -4409,9 +4766,19 @@ function openCellDetail(cellId){
       document.getElementById('newCompFields').classList.toggle('hidden',!!e.target.value);
     };
     window.__newCompSpecTarget={customSpecs:{},enabledSpecs:[]};
-    if(typeof renderSpecsEditor==='function'){
-      renderSpecsEditor(window.__newCompSpecTarget, document.getElementById('newCompSpecs'));
-    }
+    const renderNewCategorySpecs=()=>{
+      const cat=document.getElementById('fCategory')?.value||'';
+      renderCategorySpecsEditor(window.__newCompSpecTarget, document.getElementById('newCompSpecs'), cat);
+    };
+    renderNewCategorySpecs();
+    window.__newManagedTarget={};
+    const renderNewManaged=()=>renderCategoryManagedFields(window.__newManagedTarget,document.getElementById('fCategory')?.value||'', 'newCategoryManagedFields','ncf');
+    renderNewManaged();
+    document.getElementById('fCategory').addEventListener('change',()=>{ renderNewCategorySpecs(); renderNewManaged(); });
+    document.getElementById('fCategory').addEventListener('change',()=>{
+      // نحتفظ بالقيم التي تم إدخالها لكل فئة، ونبدّل فقط الحقول المعروضة.
+      renderNewCategorySpecs();
+    });
     wireCellIndicatorSettings(cell, cellId);
     document.getElementById('cancelBtn').onclick=closeModal;
     document.getElementById('saveNewBtn').onclick=()=>{
@@ -4420,7 +4787,12 @@ function openCellDetail(cellId){
       if(!compId){
         const name=document.getElementById('fName').value.trim();
         if(!name){ toast('أدخل اسم المكون'); return; }
-        const newComp={id:uid('comp'),name,partNumber:document.getElementById('fPartNumber').value,manufacturer:document.getElementById('fManufacturer').value,category:document.getElementById('fCategory').value,subcategory:'',value:document.getElementById('fValue').value,package:document.getElementById('fPackage').value,voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:Number(document.getElementById('fWarn').value||0),criticalStock:Number(document.getElementById('fCrit').value||0),targetStock:Number(document.getElementById('fTarget').value||0),reorderQty:0,notes:document.getElementById('fNotes').value,images:[],links:[],customSpecs:Object.assign({},window.__newCompSpecTarget?.customSpecs),enabledSpecs:(window.__newCompSpecTarget?.enabledSpecs||[]).slice()};
+        const cat=document.getElementById('fCategory').value;
+        const managedDefs=categoryFieldDefs(cat);
+        const managedKeys=new Set(managedDefs.map(f=>f.key));
+        const newComp={id:uid('comp'),name,partNumber:document.getElementById('fPartNumber').value,manufacturer:document.getElementById('fManufacturer').value,category:cat,subcategory:'',value:document.getElementById('fValue').value,package:document.getElementById('fPackage').value,voltage:'',current:'',power:'',tolerance:'',frequency:'',datasheet:'',supplier:'',supplierPartNumber:'',purchasePrice:0,warningStock:Number(document.getElementById('fWarn').value||0),criticalStock:Number(document.getElementById('fCrit').value||0),targetStock:Number(document.getElementById('fTarget').value||0),reorderQty:0,notes:document.getElementById('fNotes').value,images:[],links:[],customSpecs:Object.assign({},window.__newCompSpecTarget?.customSpecs),enabledSpecs:(window.__newCompSpecTarget?.enabledSpecs||[]).slice()};
+        // حقول الفئة هي المصدر الأساسي. الحقول القديمة تُستخدم فقط كقيمة احتياطية للحقول التي حذفها المستخدم من إعداد الفئة.
+        managedDefs.forEach(f=>{const el=document.querySelector(`[data-cat-base-field="${CSS.escape(f.key)}"]`);if(el)setCategoryFieldValue(newComp,f,el.value);});
         state.components.push(newComp); compId=newComp.id;
       }
       const ciEnabled=document.getElementById('ciEnabled')?.value==='1';
@@ -4474,7 +4846,7 @@ function openCellDetail(cellId){
       <div class="field"><label>الشركة المصنعة</label><input value="${comp.manufacturer||''}" readonly></div></div>
       <div class="field-row"><div class="field"><label>القيمة</label><input value="${comp.value||''}" readonly></div>
       <div class="field"><label>الجهد / التيار</label><input value="${(comp.voltage||'')+' / '+(comp.current||'')}" readonly></div></div>
-      ${typeof enabledSpecsHTML==='function'?enabledSpecsHTML(comp):''}
+      ${categorySpecsHTML(comp)}
       <button class="btn small" id="editCompBtn" style="margin-top:6px;">تعديل بيانات المكون</button>
     </div>
 
@@ -4680,13 +5052,18 @@ function openEditComponent(compId,after){
     <div class="field"><label>سعر الشراء</label><input type="number" id="ecPrice" value="${comp.purchasePrice||0}"></div></div>
     <div class="field-row"><div class="field"><label>القدرة (Power)</label><input id="ecPower" value="${comp.power||''}"></div>
     <div class="field"></div></div>
-    <div id="editCompSpecs"></div>
+    <div id="editCategoryManagedFields"></div><div id="editCompSpecs"></div>
   `,`<button class="btn" id="ecCancel">إلغاء</button><button class="btn primary" id="ecSave">حفظ</button>`);
   if(!comp.customSpecs) comp.customSpecs={};
   if(!Array.isArray(comp.enabledSpecs)) comp.enabledSpecs=[];
-  if(typeof renderSpecsEditor==='function'){
-    renderSpecsEditor(comp, document.getElementById('editCompSpecs'), ()=>scheduleSave());
-  }
+  const renderEditCategorySpecs=()=>{
+    const cat=document.getElementById('ecCategory')?.value||comp.category||'';
+    renderCategorySpecsEditor(comp, document.getElementById('editCompSpecs'), cat, ()=>scheduleSave());
+  };
+  renderEditCategorySpecs();
+  const renderEditManaged=()=>renderCategoryManagedFields(comp,document.getElementById('ecCategory')?.value||comp.category||'', 'editCategoryManagedFields','ecf',()=>scheduleSave());
+  renderEditManaged();
+  document.getElementById('ecCategory').addEventListener('change',()=>{renderEditCategorySpecs();renderEditManaged();});
   document.getElementById('ecCancel').onclick=()=>after?after():closeModal();
   document.getElementById('ecSave').onclick=()=>{
     comp.name=document.getElementById('ecName').value;
@@ -4700,6 +5077,7 @@ function openEditComponent(compId,after){
     comp.supplier=document.getElementById('ecSupplier').value;
     comp.purchasePrice=Number(document.getElementById('ecPrice').value||0);
     comp.power=document.getElementById('ecPower').value;
+    categoryFieldDefs(comp.category).forEach(f=>{const el=document.querySelector(`[data-cat-base-field="${CSS.escape(f.key)}"]`);if(el)setCategoryFieldValue(comp,f,el.value);});
     scheduleSave(); toast('تم الحفظ');
     if(after) after(); else closeModal();
   };
@@ -5764,6 +6142,49 @@ function renderMap(){
   });
 }
 
+function escCategory(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function renderCategoryFieldRow(field,index){
+ const options=normalizeCategorySpecOptions(field.options).join(', ');
+ return `<tr data-cat-field-row="${escCategory(field.key)}"><td><input class="cat-spec-input" data-cf="label" value="${escCategory(field.label||'')}" placeholder="اسم الحقل"></td><td><select class="cat-spec-input" data-cf="type"><option value="text" ${(field.type||'text')==='text'?'selected':''}>نص / قيمة</option><option value="number" ${field.type==='number'?'selected':''}>رقم</option><option value="select" ${field.type==='select'?'selected':''}>قائمة اختيار</option></select></td><td><input class="cat-spec-input" data-cf="options" value="${escCategory(options)}" placeholder="DIP-8, TO-92"></td><td><input class="cat-spec-input" data-cf="defaultValue" value="${escCategory(field.defaultValue??'')}" placeholder="قيمة جاهزة"></td><td><button class="btn small danger" data-cat-del-field="${escCategory(field.key)}">🗑 حذف</button></td></tr>`;
+}
+function renderCategorySpecRow(spec,index){
+  const options=Array.isArray(spec.options)?spec.options.join(', '):'';
+  return `<tr data-cat-spec-row="${escCategory(spec.key)}"><td><input class="cat-spec-input" data-cs="label" value="${escCategory(spec.label||'')}" placeholder="اسم المواصفة"></td><td><select class="cat-spec-input" data-cs="type"><option value="text" ${(spec.type||'text')==='text'?'selected':''}>نص / قيمة</option><option value="number" ${spec.type==='number'?'selected':''}>رقم</option><option value="select" ${spec.type==='select'?'selected':''}>قائمة اختيار</option></select></td><td><input class="cat-spec-input" data-cs="unit" value="${escCategory(spec.unit||'')}" placeholder="V / A / W"></td><td><input class="cat-spec-input" data-cs="options" value="${escCategory(options)}" placeholder="NPN, PNP, MOSFET"></td><td><button class="btn small danger" data-cat-del-spec="${escCategory(spec.key)}">🗑 حذف</button></td></tr>`;
+}
+function renderCategories(){
+  ensureCategorySchemas();const vc=document.getElementById('viewContainer');
+  vc.innerHTML=viewHeader('الفئات والمواصفات','قاعدة بيانات category الحالية: كل فئة لها جدول مواصفات مستقل يمكنك إضافته وتعديله وحذفه')+`<div class="category-db-layout"><section class="panel category-list-panel"><div class="category-panel-head"><div><h3 style="margin:0">🗂️ الفئات</h3><span class="category-muted">عدد الفئات: ${state.categories.length}</span></div><button class="btn primary small" id="catAddBtn">＋ فئة جديدة</button></div><div class="category-search-row"><input id="catSearch" placeholder="🔍 ابحث عن فئة..."></div><div id="categoryList"></div></section><section class="panel category-editor-panel"><div id="categoryEditor"><div class="empty-state"><div class="big">🗃️</div>اختر فئة من الجدول لعرض مواصفاتها</div></div></section></div>`;
+  let selected=state.categories[0]||null;const listEl=document.getElementById('categoryList'),editorEl=document.getElementById('categoryEditor');
+  function drawList(filter=''){
+    const f=String(filter||'').trim().toLowerCase(),cats=state.categories.filter(c=>!f||c.toLowerCase().includes(f));
+    listEl.innerHTML=cats.length?cats.map(cat=>{const schema=state.categorySchemas[cat]||{specs:[]};const count=Array.isArray(schema.specs)?schema.specs.length:0;const compCount=state.components.filter(c=>c.category===cat).length;return `<button type="button" class="category-row ${cat===selected?'active':''}" data-cat="${escCategory(cat)}"><span class="category-row-main"><b>${escCategory(cat)}</b><small>${compCount} مكون · ${count} مواصفة</small></span><span class="category-row-arrow">‹</span></button>`;}).join(''):'<div class="empty-state" style="padding:25px 10px">لا توجد فئات مطابقة</div>';
+    listEl.querySelectorAll('[data-cat]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.cat;drawList(document.getElementById('catSearch').value);drawEditor();});
+  }
+  function drawEditor(){
+    if(!selected||!state.categories.includes(selected)){editorEl.innerHTML='<div class="empty-state">اختر فئة لبدء العمل</div>';return;}
+    const schema=state.categorySchemas[selected]||(state.categorySchemas[selected]={id:categorySpecKey(selected),description:'',specs:[]});if(!Array.isArray(schema.specs))schema.specs=[];
+    editorEl.innerHTML=`<div class="category-editor-head"><div><div class="category-kicker">CATEGORY TABLE</div><h2>${escCategory(selected)}</h2><p>هذه الفئة ليست نظامًا منفصلًا؛ إنها نفس حقل <b>category</b> الموجود بالمكونات، لكن إدارتها أصبحت في جدول مستقل.</p></div><div class="category-editor-actions"><button class="btn small" id="catRenameBtn">✏️ تعديل اسم الفئة</button><button class="btn small danger" id="catDeleteBtn">🗑 حذف الفئة</button></div></div><div class="category-desc-row"><label>وصف الفئة</label><input id="catDescription" value="${escCategory(schema.description||'')}" placeholder="مثال: جميع الترانزستورات المستخدمة في الورشة"><button class="btn small" id="catDescSave">حفظ</button></div><div class="category-spec-toolbar"><div><b>مواصفات الفئة</b><span> · ${schema.specs.length} مواصفة</span></div><button class="btn primary small" id="catAddSpecBtn">＋ إضافة مواصفة</button></div><div class="category-table-wrap"><table class="tbl category-spec-table"><thead><tr><th>اسم المواصفة</th><th>نوع الحقل</th><th>الوحدة</th><th>خيارات القائمة</th><th>إجراء</th></tr></thead><tbody id="categorySpecBody">${schema.specs.map(renderCategorySpecRow).join('')||'<tr><td colspan="5" class="category-no-specs">لا توجد مواصفات بعد — أضف أول مواصفة للفئة.</td></tr>'}</tbody></table></div><div class="category-spec-toolbar"><div><b>حقول بيانات المكون</b><span> · ${normalizeCategoryFields(schema).length} حقل</span></div><button class="btn primary small" id="catAddFieldBtn">＋ إضافة حقل</button></div><div class="category-table-wrap"><table class="tbl category-spec-table"><thead><tr><th>اسم الحقل</th><th>نوع الحقل</th><th>اختيارات جاهزة</th><th>قيمة افتراضية</th><th>إجراء</th></tr></thead><tbody id="categoryFieldBody">${normalizeCategoryFields(schema).map(renderCategoryFieldRow).join('')||'<tr><td colspan="5" class="category-no-specs">لا توجد حقول — أضف أول حقل للفئة.</td></tr>'}</tbody></table></div><div class="category-db-note"><b>مثال:</b> فئة «ترانزستورات» يمكن أن تحتوي على نوع = NPN / PNP / MOSFET / IGBT، مع الجهد والتيار والقدرة والتردد والحزمة. وكل فئة أخرى لها جدولها الخاص.</div>`;
+    document.getElementById('catDescSave').onclick=()=>{schema.description=document.getElementById('catDescription').value.trim();scheduleSave();toast('تم حفظ وصف الفئة');};
+    document.getElementById('catRenameBtn').onclick=()=>{const next=prompt('اسم الفئة الجديد:',selected);if(next===null)return;const name=next.trim();if(!name||name===selected)return;if(state.categories.includes(name)){toast('هذه الفئة موجودة بالفعل');return;}const oldName=selected;state.categories[state.categories.indexOf(oldName)]=name;state.categorySchemas[name]=state.categorySchemas[oldName]||{id:categorySpecKey(name),description:'',specs:[]};delete state.categorySchemas[oldName];state.components.forEach(c=>{if(c.category===oldName)c.category=name;});selected=name;ensureCategorySchemas();scheduleSave();drawList(document.getElementById('catSearch').value);drawEditor();toast('تم تعديل اسم الفئة وتحديث المكونات المرتبطة بها');};
+    document.getElementById('catDeleteBtn').onclick=()=>{const used=state.components.filter(c=>c.category===selected).length;const msg=used?`الفئة «${selected}» مستخدمة في ${used} مكون. حذفها سيحوّل هذه المكونات إلى «بدون فئة». هل تريد المتابعة؟`:`حذف الفئة «${selected}» مع جدول مواصفاتها؟`;if(!confirm(msg))return;state.components.forEach(c=>{if(c.category===selected)c.category='';});delete state.categorySchemas[selected];state.categories=state.categories.filter(c=>c!==selected);selected=state.categories[0]||null;ensureCategorySchemas();scheduleSave();drawList(document.getElementById('catSearch').value);drawEditor();toast('تم حذف الفئة');};
+    document.getElementById('catAddSpecBtn').onclick=()=>{let key='spec_'+Date.now().toString(36),n=1;while(schema.specs.some(x=>x.key===key))key='spec_'+Date.now().toString(36)+'_'+(n++);schema.specs.push({key,label:'مواصفة جديدة',type:'text',unit:'',options:[]});scheduleSave();drawEditor();setTimeout(()=>{const el=editorEl.querySelector('[data-cat-spec-row="'+key+'"] [data-cs="label"]');if(el){el.focus();el.select();}},30);};
+    editorEl.querySelectorAll('[data-cat-spec-row]').forEach(row=>{const key=row.dataset.catSpecRow,spec=schema.specs.find(x=>x.key===key);row.querySelectorAll('[data-cs]').forEach(inp=>{const saveField=()=>{const field=inp.dataset.cs;if(field==='options'){spec.options=normalizeCategorySpecOptions(inp.value);if(spec.options.length)spec.type='select';}else spec[field]=inp.value.trim();if(field==='type'&&spec.type==='select'&&!Array.isArray(spec.options))spec.options=[];scheduleSave();if(field==='label')drawList(document.getElementById('catSearch').value);};inp.addEventListener('change',saveField);if(inp.dataset.cs==='options')inp.addEventListener('input',saveField);});});
+    document.getElementById('catAddFieldBtn').onclick=()=>{let key='field_'+Date.now().toString(36),n=1;while(schema.fields.some(x=>x.key===key))key='field_'+Date.now().toString(36)+'_'+(n++);schema.fields.push({key,label:'حقل جديد',type:'text',options:[],defaultValue:''});scheduleSave();drawEditor();setTimeout(()=>{const el=editorEl.querySelector('[data-cat-field-row="'+key+'"] [data-cf="label"]');if(el){el.focus();el.select();}},30);};
+    editorEl.querySelectorAll('[data-cat-field-row]').forEach(row=>{const key=row.dataset.catFieldRow,field=schema.fields.find(x=>x.key===key);row.querySelectorAll('[data-cf]').forEach(inp=>{const saveField=()=>{const k=inp.dataset.cf;if(k==='options'){field.options=normalizeCategorySpecOptions(inp.value);if(field.options.length)field.type='select';}else if(k==='defaultValue')field.defaultValue=inp.value;else field[k]=inp.value.trim();scheduleSave();};inp.addEventListener('change',saveField);if(inp.dataset.cf==='options')inp.addEventListener('input',saveField);});});
+    editorEl.querySelectorAll('[data-cat-del-field]').forEach(btn=>btn.onclick=()=>{const key=btn.dataset.catDelField,field=schema.fields.find(x=>x.key===key);if(!confirm(`حذف الحقل «${field?.label||key}» من فئة «${selected}»؟`))return;schema.fields=schema.fields.filter(x=>x.key!==key);scheduleSave();drawEditor();});
+    editorEl.querySelectorAll('[data-cat-del-spec]').forEach(btn=>btn.onclick=()=>{
+      const key=btn.dataset.catDelSpec,spec=schema.specs.find(x=>x.key===key);
+      if(!confirm(`حذف المواصفة «${spec?.label||key}» من فئة «${selected}»؟`))return;
+      schema.specs=schema.specs.filter(x=>x.key!==key);
+      // لا نحذف بيانات المكونات القديمة؛ تبقى محفوظة ويمكن استعادتها إذا أُعيدت المواصفة.
+      scheduleSave();drawEditor();drawList(document.getElementById('catSearch').value);
+    });
+  }
+  document.getElementById('catSearch').addEventListener('input',e=>drawList(e.target.value));
+  document.getElementById('catAddBtn').onclick=()=>{const name=prompt('اسم الفئة الجديدة:');if(name===null)return;const cat=name.trim();if(!cat)return;if(state.categories.includes(cat)){toast('الفئة موجودة بالفعل');return;}state.categories.push(cat);state.categorySchemas[cat]={id:categorySpecKey(cat),description:'',specs:defaultSpecsForCategory(cat)};selected=cat;scheduleSave();drawList();drawEditor();toast('تمت إضافة الفئة');};
+  drawList();drawEditor();
+}
+
 function renderComponents(){
   const vc=document.getElementById('viewContainer');
   vc.innerHTML=viewHeader('المكونات','كل مكون إلكتروني مسجل في المكتبة')+`
@@ -6153,10 +6574,22 @@ function parseStoredZip(buf){const a=new Uint8Array(buf),out=new Map();let pos=0
 async function backupAllImageKeys(){return await listStoredAssetIds();}
 function backupFindTables(v,path='root',out=[]){if(!v||typeof v!=='object')return out;if(Array.isArray(v)){v.forEach((x,i)=>backupFindTables(x,`${path}[${i}]`,out));return out;}if(Array.isArray(v.columns)&&Array.isArray(v.rows))out.push({table:v,path});Object.keys(v).forEach(k=>{if(k!=='history'&&k!=='future')backupFindTables(v[k],`${path}.${k}`,out)});return out;}
 function backupCsv(t){const cols=(t.columns||[]).map(c=>c.label||c.name||c.id),esc=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};const rows=[cols];(t.rows||[]).forEach(r=>rows.push((t.columns||[]).map(c=>r.values?.[c.id]??r[c.id]??'')));return '\ufeff'+rows.map(r=>r.map(esc).join(',')).join('\r\n');}
+function getPortableLocalStorage(){
+  const keys=['workshop_custom_cell_specs_v1','storageVisualLayout_v4','storageVisualLayout_v5','workshop_cell_indicator_mode'];
+  const out={};
+  for(const k of keys){try{const v=localStorage.getItem(k);if(v!==null)out[k]=v;}catch(e){}}
+  return out;
+}
+function restorePortableLocalStorage(data,rep){
+  if(!data||typeof data!=='object') return;
+  const keys=['workshop_custom_cell_specs_v1','storageVisualLayout_v4','storageVisualLayout_v5','workshop_cell_indicator_mode'];
+  for(const k of keys){if(!(k in data))continue;try{localStorage.setItem(k,String(data[k]));}catch(e){if(rep)rep.warnings.push('تعذر استعادة إعداد التخزين المحلي: '+k);}}
+}
 async function collectBackupEntries(){
   const entries=[],seen=new Set();
   const add=(name,data,mime='application/octet-stream',size)=>{name=name.replace(/^\/+/, '');if(seen.has(name))return;seen.add(name);entries.push({name,data,mime,size:size!=null?size:(data instanceof Uint8Array?data.length:data?.size||0)});};
   add('project/state.json',backupUtf8(JSON.stringify(state,null,2)),'application/json');
+  add('project/local-storage.json',backupUtf8(JSON.stringify(getPortableLocalStorage(),null,2)),'application/json');
   const refs=backupFindTables(state);
   const meta={format:'Workshop Inventory Full Project',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),theme:state.uiTheme||'amber',tables:refs.map((x,i)=>({index:i,path:x.path,title:x.table.title||`table_${i+1}`})),storage:{database:'IndexedDB',largeFiles:'OPFS when available',largeFileThreshold:LARGE_ASSET_THRESHOLD}};
   add('project/categories.json',backupUtf8(JSON.stringify(state.categories||[],null,2)),'application/json');
@@ -6219,7 +6652,7 @@ async function exportFullProject(){
     if(r!=='cancel'){if(st)st.textContent=`✅ تم التصدير بنجاح — ${entries.length} عنصر، ${formatFileSize(total)}`;toast('تم تصدير المشروع بالكامل');}
   }catch(e){console.error(e);if(st)st.textContent='❌ فشل التصدير: '+(e.message||e);toast('فشل التصدير');}
 }
-async function exportPlainJSON(){await backupSaveFile(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),`workshop_inventory_${new Date().toISOString().slice(0,10)}.json`);toast('تم تصدير JSON');}
+async function exportPlainJSON(){const payload={format:'Workshop Inventory Full Project JSON',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),state,localStorage:getPortableLocalStorage()};await backupSaveFile(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),`workshop_inventory_${new Date().toISOString().slice(0,10)}.json`);toast('تم تصدير JSON الكامل');}
 async function readZipHeader(file,pos){const b=new Uint8Array(await file.slice(pos,pos+30).arrayBuffer());if(b.length<30)throw new Error('ZIP ناقص أو تالف');return {sig:backupReadU32(b,0),flags:backupReadU16(b,6),method:backupReadU16(b,8),crc:backupReadU32(b,14),csize:backupReadU32(b,18),usize:backupReadU32(b,22),nlen:backupReadU16(b,26),xlen:backupReadU16(b,28)};}
 function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))return'image/png';if(x.endsWith('.jpg')||x.endsWith('.jpeg'))return'image/jpeg';if(x.endsWith('.gif'))return'image/gif';if(x.endsWith('.webp'))return'image/webp';if(x.endsWith('.svg'))return'image/svg+xml';if(x.endsWith('.pdf'))return'application/pdf';if(x.endsWith('.mp4'))return'video/mp4';if(x.endsWith('.webm'))return'video/webm';return'application/octet-stream';}
 /* ============================= IMPORT: قراءة متسامحة (resilient) ============================= */
@@ -6229,7 +6662,7 @@ function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))retu
    تُستعاد بأقصى ما يمكن استعادته، مع تقرير واضح بما نجح وما فشل وليه. */
 function importReport(){ return {restoredAssets:0, failedAssets:[], skippedEntries:[], warnings:[], legacyEmbeddedConverted:0}; }
 async function importStoredZipStream(file,st,rep){
-  let pos=0,stateBytes=null,manifestBytes=null,assetManifestBytes=null,assets=[];const total=file.size;
+  let pos=0,stateBytes=null,manifestBytes=null,assetManifestBytes=null,localStorageBytes=null,assets=[];const total=file.size;
   while(pos+4<=total){
     let h,name,dataStart,dataEnd,sig;
     try{
@@ -6248,6 +6681,7 @@ async function importStoredZipStream(file,st,rep){
       if(name==='project/state.json') stateBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       else if(name==='project/manifest.json') manifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       else if(name==='project/asset-manifest.json') assetManifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/local-storage.json') localStorageBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       // نتعرّف على أي مجلد أصول محتمل (assets/…) وليس فقط المسارين الحاليين، حتى تبقى الحزم
       // القديمة/المستقبلية بأسماء مجلدات مختلفة قابلة للاستيراد بدل تجاهلها بصمت.
       else if(/^assets\//.test(name)) assets.push({name,start:dataStart,end:dataEnd,crc:h.crc});
@@ -6266,6 +6700,7 @@ async function importStoredZipStream(file,st,rep){
   try{ state=JSON.parse(new TextDecoder().decode(stateBytes)); }
   catch(e){ throw new Error('project/state.json تالف ولا يمكن تحليله (JSON غير صالح): '+(e?.message||e)); }
   migrateStateIfNeeded();ensureNewFields();ensureStoragePreferences();applyPreferences();applyUiTheme();
+  if(localStorageBytes){try{restorePortableLocalStorage(JSON.parse(new TextDecoder().decode(localStorageBytes)),rep);}catch(e){rep.warnings.push('local-storage.json تالف — تم استيراد بيانات المشروع بدونه.');}}
   let amap={};
   if(assetManifestBytes){ try{ amap=JSON.parse(new TextDecoder().decode(assetManifestBytes))||{}; }catch(e){ rep.warnings.push('asset-manifest.json تالف — سيتم استنتاج معرّفات الملفات من أسمائها مباشرة.'); } }
   for(const a of assets){
@@ -6295,7 +6730,7 @@ async function importPlainJSONFile(file,rep){
   if(parsed && typeof parsed==='object' && !Array.isArray(parsed) && (parsed.columns||parsed.boxes||parsed.containers)){
     state=parsed;
   }else if(parsed && typeof parsed==='object' && parsed.state && typeof parsed.state==='object'){
-    state=parsed.state; rep.warnings.push('تم استخراج بيانات المشروع من مفتاح "state" داخل الملف.');
+    state=parsed.state; if(parsed.localStorage) restorePortableLocalStorage(parsed.localStorage,rep); rep.warnings.push('تم استخراج بيانات المشروع من مفتاح "state" داخل الملف.');
   }else{
     throw new Error('لا يمكن التعرّف على بنية بيانات المخزن داخل هذا الملف JSON.');
   }
@@ -9844,148 +10279,504 @@ setTimeout(v5Init,120);
 
 
 
+
+<script id="category-search-state-bridge">
+(function(){
+  try{
+    if(!window.getWorkshopState){
+      window.getWorkshopState=function(){
+        try{ if(typeof state!=='undefined' && state) return state; }catch(e){}
+        return window.state||null;
+      };
+    }
+  }catch(e){}
+})();
+</script>
 <script id="advanced-cell-search-js">
 (function(){
-  const FIELD_ALIASES={
-    price:['price','السعر','cost','purchasePrice'],
-    current:['current','amperage','amps','amp','تيار','التيار'],
-    voltage:['voltage','volt','v','فولت','الجهد'],
-    size:['size','dimension','dimensions','حجم','الحجم','مقاس'],
-    package:['package','packaging','packageType','pack','باكدج','الباكديج','التعبئة'],
-    type:['type','category','kind','نوع','النوع'],
-    power:['power','watt','watts','قدرة','القدرة'],
-    manufacturer:['manufacturer','brand','maker','الشركة','الماركة'],
-    model:['model','partNumber','pn','الموديل'],
-    description:['description','desc','notes','الوصف','ملاحظات']
+  /* بحث هرمي: الفئة ← المواصفة ← قيمة المواصفة */
+  const labels={
+    price:'السعر',current:'التيار',voltage:'الجهد',size:'الحجم',package:'الباكديج',
+    type:'النوع',power:'القدرة',manufacturer:'الشركة',model:'الموديل',description:'الوصف'
   };
-  const labels={price:'السعر',current:'التيار',voltage:'الجهد',size:'الحجم',package:'الباكديج',type:'النوع',power:'القدرة',manufacturer:'الشركة',model:'الموديل',description:'الوصف'};
-
-  function allObjects(){
-    const s=window.state;
-    if(!s)return [];
-    const a=[];
-    ['cells','components','boxes','columns','racks'].forEach(k=>{
-      if(Array.isArray(s[k])) a.push(...s[k].map(x=>({obj:x,kind:k})));
-    });
-    return a;
+  // state الرئيسي معرف بـ let داخل التطبيق وليس كـ window.state.
+  // نقرأه مباشرةً مع fallback حتى يكون البحث مرتبطًا بنفس قاعدة البيانات.
+  function appState(){
+    try{
+      if(typeof state!=='undefined' && state) return state;
+    }catch(e){}
+    return window.state||{};
   }
+
+  const builtinDefs=[
+    {key:'price',label:'السعر',type:'number'},
+    {key:'current',label:'التيار',type:'text'},
+    {key:'voltage',label:'الجهد',type:'text'},
+    {key:'size',label:'الحجم',type:'text'},
+    {key:'package',label:'الباكديج',type:'text'},
+    {key:'type',label:'النوع',type:'text'},
+    {key:'power',label:'القدرة',type:'text'},
+    {key:'manufacturer',label:'الشركة',type:'text'},
+    {key:'model',label:'الموديل',type:'text'},
+    {key:'description',label:'الوصف',type:'text'}
+  ];
+
   function norm(v){
     return String(v??'').trim().toLowerCase()
       .replace(/أ|إ|آ/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه')
       .replace(/٫/g,'.').replace(/،/g,',');
   }
-  function fieldValue(obj,field){
-    const aliases=FIELD_ALIASES[field]||[];
-    for(const key of aliases){
-      if(Object.prototype.hasOwnProperty.call(obj,key) && obj[key]!=='' && obj[key]!=null)return obj[key];
+  function categoryDefs(category){
+    const s=appState();
+    const schema=s.categorySchemas?.[category];
+    if(!schema) return [];
+    // البحث يعرض مجموعتين منفصلتين:
+    // 1) حقول بيانات المكون التي تديرها الفئة
+    // 2) مواصفات الفئة
+    const fields=Array.isArray(schema.fields)
+      ? schema.fields.map(f=>({...f, __source:'field', __key:String(f.key||''), key:'field:'+String(f.key||'')}))
+      : [];
+    const specs=Array.isArray(schema.specs)
+      ? schema.specs.map(f=>({...f, __source:'spec', __key:String(f.key||''), key:'spec:'+String(f.key||'')}))
+      : [];
+    return fields.concat(specs).filter(d=>d.__key);
+  }
+  function allCategories(){
+    const s=appState();
+    return Array.isArray(s.categories)?s.categories:[];
+  }
+  function getCategorySpecValue(comp,spec){
+    if(!comp||!spec)return '';
+    const key=String(spec.__key||spec.key||'');
+    const source=spec.__source || (key.startsWith('field:')?'field':'spec');
+    const cleanKey=key.replace(/^(field|spec):/,'');
+
+    if(source==='field'){
+      // نفس مصدر البيانات المستخدم في نموذج «حقول الفئة».
+      if(typeof getCategoryFieldValue==='function'){
+        const v=getCategoryFieldValue(comp,{...spec,key:cleanKey});
+        // لا نستخدم القيمة الافتراضية للفئة كأنها قيمة فعلية للمكون.
+        const direct=comp[cleanKey]!==undefined && comp[cleanKey]!==null ? comp[cleanKey] : undefined;
+        const custom=comp.customFields?.[cleanKey];
+        if(direct!==undefined && String(direct)!=='') return direct;
+        if(custom!==undefined && custom!==null && String(custom)!=='') return custom;
+      }
+      if(comp[cleanKey]!==undefined && comp[cleanKey]!==null && String(comp[cleanKey])!=='') return comp[cleanKey];
+      if(comp.customFields && Object.prototype.hasOwnProperty.call(comp.customFields,cleanKey)){
+        return comp.customFields[cleanKey] ?? '';
+      }
+      return '';
     }
-    if(obj && obj.customSpecs && Object.prototype.hasOwnProperty.call(obj.customSpecs,field) && obj.customSpecs[field]!=='' && obj.customSpecs[field]!=null){
-      return obj.customSpecs[field];
+
+    const real={voltage:'voltage',current:'current',power:'power',package:'package'}[cleanKey];
+    if(real && comp[real]!==undefined && comp[real]!==null && comp[real]!=='') return comp[real];
+    if(comp.customSpecs && Object.prototype.hasOwnProperty.call(comp.customSpecs,cleanKey)){
+      const v=comp.customSpecs[cleanKey];
+      if(v!==undefined && v!==null && String(v)!=='') return v;
     }
+
+    // توافق مع البيانات القديمة لمواصفات الفئة.
+    const label=norm(spec.label||cleanKey);
+    if(/نوع|type|ترانزستور|channel/.test(label)) return comp.subcategory||comp.type||comp.value||'';
+    if(/جهد|voltage|volt/.test(label)) return comp.voltage||'';
+    if(/تيار|current|amp|امبير|أمبير/.test(label)) return comp.current||'';
+    if(/قدره|قدرة|power|watt|وات/.test(label)) return comp.power||'';
+    if(/حزمه|حزمة|package|pack|باكدج/.test(label)) return comp.package||'';
+    if(/سعر|price/.test(label)) return comp.purchasePrice??'';
+    if(/شركة|مصنع|manufacturer|supplier|مورد/.test(label)) return comp.manufacturer||comp.supplier||'';
+    if(/موديل|model|part|قطعه|قطعة|رقم/.test(label)) return comp.partNumber||'';
+    if(/قيمه|قيمة|value/.test(label)) return comp.value||'';
+    if(/وصف|ملاحظ|description|notes/.test(label)) return comp.notes||'';
     return '';
   }
-  function extractComponent(cell){
-    if(!cell)return null;
-    const id=cell.componentId||cell.component_id||cell.component;
-    if(!id)return null;
-    const s=window.state;
-    if(!s)return null;
-    return (s.components||[]).find(c=>c.id===id)||null;
+  function getSelectedSpec(){
+    const cat=document.getElementById('acsCategory')?.value||'';
+    const key=document.getElementById('acsField')?.value||'';
+    const defs=cat ? categoryDefs(cat) : builtinDefs.map(d=>({...d,__source:'field',__key:d.key}));
+    return defs.find(d=>d.key===key)||null;
   }
-  function searchableText(cell){
-    const c=extractComponent(cell)||{};
-    const vals=[];
-    for(const f of Object.keys(FIELD_ALIASES)){
-      const v=fieldValue(c,f); if(v!=='') vals.push(v);
-      const cv=fieldValue(cell,f); if(cv!=='') vals.push(cv);
+  function refreshSpecSelect(){
+    const cat=document.getElementById('acsCategory');
+    const sel=document.getElementById('acsField');
+    const q=document.getElementById('acsQuery');
+    if(!cat||!sel)return;
+    const old=sel.value;
+    let defs=[];
+    if(cat.value){
+      defs=categoryDefs(cat.value);
+    }else{
+      defs=builtinDefs;
     }
-    vals.push(cell.name,cell.label,cell.code,cell.description,c.name,c.label,c.code,c.description);
-    if(c.customSpecs) vals.push(...Object.values(c.customSpecs));
-    return norm(vals.filter(Boolean).join(' | '));
+    if(cat.value){
+      const fields=defs.filter(d=>d.__source==='field');
+      const specs=defs.filter(d=>d.__source==='spec');
+      const optionHtml=d=>`<option value="${String(d.key).replace(/"/g,'&quot;')}">${String(d.label||d.__key||d.key).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}</option>`;
+      sel.innerHTML='<option value="">— اختر الحقل أو المواصفة —</option>'+
+        (fields.length?`<optgroup label="حقول بيانات المكون">${fields.map(optionHtml).join('')}</optgroup>`:'')+
+        (specs.length?`<optgroup label="مواصفات الفئة">${specs.map(optionHtml).join('')}</optgroup>`:'');
+    }else{
+      sel.innerHTML='<option value="">— اختر الحقل —</option>'+
+        defs.map(d=>`<option value="${String(d.key).replace(/"/g,'&quot;')}">${String(d.label||d.key).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}</option>`).join('');
+    }
+    if([...sel.options].some(o=>o.value===old)) sel.value=old;
+    if(q){
+      const spec=getSelectedSpec();
+      q.placeholder=spec?.type==='select' ? 'اكتب/اختر قيمة الحقل أو المواصفة...' :
+        (cat.value ? `ابحث في «${spec?.label||'الحقل أو المواصفة'}» فقط...` : 'اختر الفئة ثم الحقل ثم اكتب القيمة...');
+    }
+    updateValueChoices();
   }
+  function updateValueChoices(){
+    const wrap=document.getElementById('acsValueChoices');
+    const q=document.getElementById('acsQuery');
+    if(!wrap||!q)return;
+    const spec=getSelectedSpec();
+    const opts=spec ? normalizeCategorySpecOptions(spec.options) : [];
+    if(!spec || !opts.length){
+      wrap.innerHTML='';
+      return;
+    }
+    wrap.innerHTML=opts.map(o=>{
+      const safe=String(o).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+      return `<button type="button" class="acs-value-chip" data-value="${safe}">${safe}</button>`;
+    }).join('');
+    wrap.querySelectorAll('[data-value]').forEach(btn=>btn.onclick=()=>{
+      q.value=btn.dataset.value||'';
+      wrap.querySelectorAll('.acs-value-chip').forEach(x=>x.classList.remove('active'));
+      btn.classList.add('active');
+      showSearchSuggestions();
+      search();
+    });
+  }
+  function getSearchableComponents(){
+    const s=appState();
+    return Array.isArray(s.components)?s.components:[];
+  }
+  function componentLocationText(comp){
+    const s=appState();
+    const cells=getStorageCells().filter(c=>componentOf(c)?.id===comp.id);
+    if(!cells.length)return 'غير موجود حاليًا في الخلايا';
+    const locs=cells.slice(0,3).map(c=>{
+      const loc=cellLocation(c);
+      const rn=loc.rack?.name||'رف';
+      const cn=loc.col?.name||'عمود';
+      const bn=loc.box?.label||'عبوة';
+      const ix=Number.isFinite(Number(c.index))?`خلية ${Number(c.index)+1}`:'خلية';
+      return `${rn} › ${cn} › ${bn} › ${ix}`;
+    });
+    return locs.join(' · ')+(cells.length>3?` · +${cells.length-3}`:'');
+  }
+  function suggestionText(comp,spec){
+    const raw=getCategorySpecValue(comp,spec);
+    const name=comp.name||comp.partNumber||'مكون';
+    const part=comp.partNumber && comp.partNumber!==name ? ` · ${comp.partNumber}`:'';
+    const val=raw!==''?` · ${raw}`:'';
+    const source=spec?.__source==='field'?'حقل بيانات المكون':'مواصفة الفئة';
+    return `${name}${part} · ${source}: ${spec?.label||spec?.__key||''}${val}`;
+  }
+  function showSearchSuggestions(){
+    const box=document.getElementById('acsSuggestions');
+    const q=document.getElementById('acsQuery');
+    const cat=document.getElementById('acsCategory')?.value||'';
+    const spec=getSelectedSpec();
+    if(!box||!q||!cat||!spec){if(box)box.innerHTML='';return;}
+    const query=norm(q.value);
+    if(!query){box.innerHTML='';return;}
+    const comps=getSearchableComponents().filter(c=>{
+      // التلميحات تخص الفئة المحددة والحقل/المواصفة المحددة فقط.
+      if(norm(c.category)!==norm(cat))return false;
+      const raw=getCategorySpecValue(c,spec);
+      if(raw===undefined || raw===null || String(raw).trim()==='')return false;
+      // لا نبحث في اسم المكون أو باقي المواصفات؛ فقط في الحقل الذي اختاره المستخدم.
+      return !query || norm(raw).includes(query);
+    });
+    if(!comps.length){box.innerHTML='';return;}
+    const unique=[];
+    const seen=new Set();
+    comps.forEach(c=>{
+      const key=String(c.id);
+      if(!seen.has(key)){seen.add(key);unique.push(c);}
+    });
+    box.innerHTML=unique.slice(0,8).map(c=>{
+      const id=String(c.id).replace(/"/g,'&quot;');
+      const title=escapeHtml(suggestionText(c,spec));
+      const loc=escapeHtml(componentLocationText(c));
+      return `<button type="button" class="acs-suggestion" data-comp-id="${id}">
+        <span class="acs-suggestion-title">${title}</span>
+        <span class="acs-suggestion-loc">${loc}</span>
+      </button>`;
+    }).join('');
+    box.querySelectorAll('[data-comp-id]').forEach(btn=>{
+      btn.onclick=()=>{
+        const comp=getSearchableComponents().find(c=>String(c.id)===String(btn.dataset.compId));
+        if(!comp)return;
+        const raw=getCategorySpecValue(comp,spec);
+        q.value=String(raw||comp.name||comp.partNumber||'');
+        box.innerHTML='';
+        search();
+      };
+    });
+  }
+  function escapeHtml(v){
+    return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  function populateCategories(){
+    const sel=document.getElementById('acsCategory');
+    if(!sel)return;
+    const old=sel.value;
+    const cats=allCategories();
+    sel.innerHTML='<option value="">— كل الفئات —</option>'+
+      cats.map(c=>`<option value="${String(c).replace(/"/g,'&quot;')}">${String(c).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}</option>`).join('');
+    if(cats.includes(old))sel.value=old;
+    refreshSpecSelect();
+  }
+
   function parseNumber(v){
     const m=norm(v).replace(/,/g,'.').match(/-?\d+(?:\.\d+)?/);
     return m?Number(m[0]):NaN;
   }
-  function matches(cell,field,query){
-    if(!cell)return false;
-    const c=extractComponent(cell)||{};
-    const raw=fieldValue(c,field)||fieldValue(cell,field)||searchableText(cell);
-    if(field==='current'||field==='voltage'||field==='price'||field==='size'||field==='power'){
-      const qn=parseNumber(query), rn=parseNumber(raw);
-      if(!Number.isNaN(qn)&&!Number.isNaN(rn)) return rn===qn;
+  function valueMatches(raw,query){
+    if(raw===undefined||raw===null||String(raw)==='')return false;
+    const a=norm(raw), b=norm(query);
+    if(!b)return false;
+    const an=parseNumber(raw), bn=parseNumber(query);
+    if(!Number.isNaN(an)&&!Number.isNaN(bn) &&
+       /^(price|current|voltage|size|power)$/.test(document.getElementById('acsField')?.value||'')){
+      if(an===bn)return true;
     }
-    return norm(raw).includes(norm(query));
+    return a.includes(b);
+  }
+  function getStorageCells(){
+    const s=appState();
+    if(Array.isArray(s.containers))return s.containers;
+    if(Array.isArray(s.cells))return s.cells;
+    return [];
+  }
+  function componentOf(cell){
+    const s=appState();
+    const id=cell?.componentId||cell?.component_id||cell?.component;
+    return id ? (s.components||[]).find(c=>c.id===id)||null : null;
+  }
+  function matchesCell(cell,category,spec,query){
+    const comp=componentOf(cell);
+    if(!comp)return false;
+    if(category && norm(comp.category)!==norm(category))return false;
+    if(!spec)return false;
+    const raw=getCategorySpecValue(comp,spec);
+    return valueMatches(raw,query);
   }
   function getCellElements(){
     const root=document.querySelector('#viewContainer');
     if(!root)return [];
-    return [...root.querySelectorAll('.cell,[data-cell-id]')].filter(el=>el.closest('.vs3-cell-panel')||el.dataset.cellId);
+    return [...root.querySelectorAll('.cell[data-cell-id]')];
   }
   function clearMarks(){
-    getCellElements().forEach(el=>el.classList.remove('acs-match','acs-dim'));
+    document.querySelectorAll('#viewContainer .cell[data-cell-id]').forEach(el=>{
+      el.classList.remove('acs-match','acs-dim','acs-search-target');
+    });
+  }
+  function cellLocation(cell){
+    const s=appState();
+    const box=s.boxes?.find(b=>b.id===cell.boxId);
+    const col=box ? s.columns?.find(c=>c.id===box.columnId) : null;
+    const rack=col ? (s.racks||[]).find(r=>r.id===col.rackId) : null;
+    return {box,col,rack};
+  }
+  function rememberSearch(category,field,query,spec){
+    window.__acsLastSearch={category,field,query,specKey:spec?.key||''};
+  }
+  function restoreSearchUI(){
+    const last=window.__acsLastSearch;
+    if(!last)return;
+    const c=document.getElementById('acsCategory');
+    const f=document.getElementById('acsField');
+    const q=document.getElementById('acsQuery');
+    if(c && [...c.options].some(o=>o.value===last.category)) c.value=last.category;
+    refreshSpecSelect();
+    if(f && [...f.options].some(o=>o.value===last.field)) f.value=last.field;
+    if(q)q.value=last.query;
+    updateValueChoices();
+  }
+  function applyHighlights(ids,scrollId){
+    const els=getCellElements();
+    let count=0, target=null;
+    els.forEach(el=>{
+      const id=String(el.dataset.cellId||'');
+      if(ids.has(id)){
+        el.classList.add('acs-match'); count++;
+        if(id===String(scrollId)) target=el;
+      }else{
+        el.classList.add('acs-dim');
+      }
+    });
+    if(target){
+      target.classList.add('acs-search-target');
+      setTimeout(()=>target.scrollIntoView({behavior:'smooth',block:'center',inline:'center'}),80);
+      setTimeout(()=>target.classList.remove('acs-search-target'),1800);
+    }
+    return count;
+  }
+  function navigateToFirstMatch(matchCells,category,field,query,spec){
+    if(!matchCells.length)return;
+    const first=matchCells[0];
+    const loc=cellLocation(first);
+    if(!loc.rack){
+      applyHighlights(new Set(matchCells.map(c=>String(c.id))),first.id);
+      return;
+    }
+
+    // افتح الرف الذي يحتوي على أول نتيجة، ثم أعد رسم الصفحة حتى تصبح الخلية
+    // موجودة فعليًا في DOM، وبعدها نعمل scroll إليها.
+    uiState.expandedColumn=null;
+    uiState.expandedRack=loc.rack.id;
+    uiState.selectedBox=loc.box?.id||null;
+    rememberSearch(category,field,query,spec);
+
+    if(typeof showView==='function') showView('storage');
+
+    setTimeout(()=>{
+      mount();
+      restoreSearchUI();
+
+      const ids=new Set(matchCells
+        .filter(c=>cellLocation(c).rack?.id===loc.rack.id)
+        .map(c=>String(c.id)));
+
+      const visible=applyHighlights(ids,first.id);
+      const result=document.getElementById('acsResult');
+      if(result){
+        result.innerHTML=`تم العثور على <b>${matchCells.length}</b> خلية مطابقة — `+
+          `تم فتح الموقع: <b>${locationLabel(first.id)}</b>`+
+          (matchCells.length>visible?` · المعروض في هذا الرف: <b>${visible}</b>`:'');
+      }
+    },120);
   }
   function search(){
-    const field=document.getElementById('acsField')?.value;
-    const q=document.getElementById('acsQuery')?.value?.trim();
+    const category=document.getElementById('acsCategory')?.value||'';
+    const field=document.getElementById('acsField')?.value||'';
+    const query=document.getElementById('acsQuery')?.value?.trim()||'';
     const result=document.getElementById('acsResult');
+    const spec=getSelectedSpec();
     clearMarks();
-    if(!field||!q){if(result)result.textContent='';return;}
-    const cells=Array.isArray(window.state?.cells)?window.state.cells:[];
-    let count=0;
-    const ids=new Set();
-    cells.forEach(cell=>{
-      if(matches(cell,field,q)){ids.add(String(cell.id));count++;}
-    });
-    getCellElements().forEach(el=>{
-      const id=String(el.dataset.cellId||el.getAttribute('data-cell-id')||'');
-      if(ids.has(id)) el.classList.add('acs-match');
-      else el.classList.add('acs-dim');
-    });
-    if(result)result.textContent=`تم العثور على ${count} خلية مطابقة لـ ${labels[field]||field}: ${q}`;
+
+    if(!category){
+      if(result)result.textContent='اختر الفئة أولًا.';
+      return;
+    }
+    if(!field||!spec){
+      if(result)result.textContent='اختر المواصفة المطلوبة لهذه الفئة.';
+      return;
+    }
+    if(!query){
+      if(result)result.textContent='اكتب قيمة المواصفة التي تريد البحث عنها.';
+      return;
+    }
+
+    const cells=getStorageCells().filter(c=>c && (c.componentId||c.component_id||c.component));
+    const matches=cells.filter(cell=>matchesCell(cell,category,spec,query));
+
+    rememberSearch(category,field,query,spec);
+
+    if(!matches.length){
+      if(result){
+        result.innerHTML=`لا توجد نتائج للفئة <b>${category}</b> والمواصفة <b>${spec.label||spec.key}</b> بالقيمة <b>${query}</b>.`;
+      }
+      return;
+    }
+
+    // إذا كان الرف المطلوب مفتوحًا بالفعل، أبرز النتائج فورًا.
+    const currentRack=uiState.expandedRack;
+    if(currentRack && matches.some(c=>cellLocation(c).rack?.id===currentRack)){
+      const ids=new Set(matches.filter(c=>cellLocation(c).rack?.id===currentRack).map(c=>String(c.id)));
+      const first=matches.find(c=>cellLocation(c).rack?.id===currentRack)||matches[0];
+      const visible=applyHighlights(ids,first.id);
+      if(result)result.innerHTML=`تم العثور على <b>${matches.length}</b> خلية مطابقة — `+
+        `الموقع الأول: <b>${locationLabel(first.id)}</b>`+
+        (matches.length>visible?` · في هذا الرف: <b>${visible}</b>`:'');
+      setTimeout(()=>{ const t=document.querySelector(`.cell[data-cell-id="${CSS.escape(String(first.id))}"]`); if(t)t.scrollIntoView({behavior:'smooth',block:'center',inline:'center'}); },80);
+      return;
+    }
+
+    navigateToFirstMatch(matches,category,field,query,spec);
   }
   function clearSearch(){
+    window.__acsLastSearch=null;
     const q=document.getElementById('acsQuery'); if(q)q.value='';
     const r=document.getElementById('acsResult'); if(r)r.textContent='';
+    const sg=document.getElementById('acsSuggestions'); if(sg)sg.innerHTML='';
+    const f=document.getElementById('acsField'); if(f)f.value='';
+    const c=document.getElementById('acsCategory'); if(c)c.value='';
     clearMarks();
+    refreshSpecSelect();
   }
+
   window.acsSearch=search;
   window.acsClear=clearSearch;
 
   function mount(){
     const vc=document.querySelector('#viewContainer');
-    if(!vc || document.getElementById('advancedCellSearch'))return;
-    const box=document.createElement('div');
-    box.id='advancedCellSearch';
-    box.className='advanced-cell-search';
-    box.innerHTML=`
-      <div class="acs-top">
-        <span class="acs-label">🔎 بحث بالمواصفات</span>
-        <select id="acsField" aria-label="نوع المواصفة">
-          ${Object.entries(labels).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}
-        </select>
-        <input id="acsQuery" placeholder="مثال: 1 أمبير أو TO-220 أو 1000" autocomplete="off">
-        <button class="btn small primary" type="button" id="acsRun">بحث</button>
-        <button class="btn small" type="button" id="acsClear">مسح</button>
-      </div>
-      <div class="acs-chips">
-        ${['السعر','التيار','الجهد','الحجم','الباكديج','النوع','القدرة','الشركة','الموديل'].map(x=>`<button class="acs-chip" type="button" data-label="${x}">${x}</button>`).join('')}
-      </div>
-      <div class="acs-help">اختر المواصفة ثم اكتب القيمة. النتائج المطابقة سيتم تمييزها داخل جميع أماكن التخزين، بينما غير المطابق سيصبح باهتًا.</div>
-      <div id="acsResult" class="acs-result"></div>`;
-    const target=vc.querySelector('.rack-fullpage-wrap,.storage-view,.storage-dashboard')||vc.firstElementChild;
-    if(target) target.parentNode.insertBefore(box,target);
-    else vc.prepend(box);
+    if(!vc)return;
+    let box=document.getElementById('advancedCellSearch');
+    if(!box){
+      box=document.createElement('div');
+      box.id='advancedCellSearch';
+      box.className='advanced-cell-search';
+      box.innerHTML=`
+        <div class="acs-top">
+          <span class="acs-label">🔎 بحث متقدم</span>
+          <select id="acsCategory" aria-label="الفئة">
+            <option value="">— الفئة —</option>
+          </select>
+          <select id="acsField" aria-label="حقل بيانات المكون أو مواصفة الفئة">
+            <option value="">— المواصفة —</option>
+          </select>
+          <div class="acs-query-wrap">
+            <input id="acsQuery" placeholder="اختر الفئة ثم المواصفة ثم اكتب القيمة..." autocomplete="off">
+            <div id="acsSuggestions" class="acs-suggestions"></div>
+          </div>
+          <button class="btn small primary" type="button" id="acsRun">بحث</button>
+          <button class="btn small" type="button" id="acsClear">مسح</button>
+        </div>
+        <div id="acsValueChoices" class="acs-value-choices"></div>
+        <div class="acs-help">حدد الفئة، ثم اختر إحدى مواصفاتها، ثم اكتب القيمة المطلوبة. سيتم تمييز الخلايا المطابقة وإخفاء/تعتيم غير المطابق.</div>
+        <div id="acsResult" class="acs-result"></div>`;
+      const target=vc.querySelector('.rack-fullpage-wrap,.rack-panel,.storage-view,.storage-dashboard')||vc.firstElementChild;
+      if(target)target.parentNode.insertBefore(box,target);
+      else vc.prepend(box);
 
-    document.getElementById('acsRun').onclick=search;
-    document.getElementById('acsClear').onclick=clearSearch;
-    document.getElementById('acsQuery').addEventListener('keydown',e=>{if(e.key==='Enter')search();});
-    document.querySelectorAll('.acs-chip').forEach(ch=>ch.onclick=()=>{
-      const txt=ch.dataset.label;
-      const map=Object.entries(labels).find(([,v])=>v===txt);
-      if(map)document.getElementById('acsField').value=map[0];
-      document.getElementById('acsQuery').focus();
-    });
+      document.getElementById('acsCategory').addEventListener('change',()=>{
+        document.getElementById('acsField').value='';
+        document.getElementById('acsQuery').value='';
+        clearMarks();
+        const sg=document.getElementById('acsSuggestions');if(sg)sg.innerHTML='';
+        refreshSpecSelect();
+      });
+      document.getElementById('acsField').addEventListener('change',()=>{
+        document.getElementById('acsQuery').value='';
+        const sg=document.getElementById('acsSuggestions');if(sg)sg.innerHTML='';
+        updateValueChoices();
+      });
+      document.getElementById('acsRun').onclick=search;
+      document.getElementById('acsClear').onclick=clearSearch;
+      document.getElementById('acsQuery').addEventListener('input',()=>showSearchSuggestions());
+      document.getElementById('acsQuery').addEventListener('focus',()=>showSearchSuggestions());
+      document.getElementById('acsQuery').addEventListener('keydown',e=>{
+        if(e.key==='Enter'){
+          e.preventDefault();
+          const first=document.querySelector('#acsSuggestions [data-comp-id]');
+          if(first && document.getElementById('acsQuery').value.trim()) first.click();
+          else search();
+        }
+      });
+      document.addEventListener('click',e=>{
+        const box=document.getElementById('advancedCellSearch');
+        const sg=document.getElementById('acsSuggestions');
+        if(box&&sg&&!box.contains(e.target))sg.innerHTML='';
+      });
+    }
+    populateCategories();
+    restoreSearchUI();
   }
 
   const oldShow=window.showView;
@@ -9995,8 +10786,8 @@ setTimeout(v5Init,120);
       if(v==='storage')setTimeout(mount,30);
     };
   }
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(mount,50));
-  setTimeout(mount,200);
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(mount,60));
+  setTimeout(mount,250);
 })();
 </script>
 
@@ -10027,6 +10818,11 @@ setTimeout(v5Init,120);
 .enabled-specs-view{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border,rgba(255,255,255,.1));}
 .enabled-specs-view .esv-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--dim,#8ea0b3);}
 .enabled-specs-view .esv-row b{color:inherit;font-weight:600;}
+</style>
+<style id="category-fields-v7-fix-css">
+.cat-managed-fields-box .cat-cell-quick-options{display:flex!important;flex-wrap:wrap!important;gap:6px!important;margin:6px 0 2px!important;}
+.cat-managed-fields-box .cat-cell-quick-chip{display:inline-flex!important;align-items:center;justify-content:center;min-width:34px;max-width:100%;border:1px solid var(--amber-border)!important;background:rgba(var(--amber-rgb),.07)!important;color:var(--text)!important;border-radius:999px!important;padding:5px 9px!important;font-size:11px!important;line-height:1.2!important;cursor:pointer!important;}
+.cat-managed-fields-box .cat-cell-quick-chip:hover,.cat-managed-fields-box .cat-cell-quick-chip.active{border-color:var(--amber)!important;background:rgba(var(--amber-rgb),.18)!important;color:var(--amber)!important;font-weight:800!important;}
 </style>
 <script id="item-specs-editor-js">
 (function(){
@@ -10175,35 +10971,40 @@ setTimeout(v5Init,120);
 
 <script id="custom-specs-js">
 (function(){
+/*
+  متوافق مع نظام الفئات:
+  هذا الجزء يحتفظ بالمواصفات القديمة المضافة من البحث، لكنه لا يعيد بناء
+  #acsField ولا يحذف مواصفات الفئة. مصدر مواصفات البحث الأساسي هو
+  state.categorySchemas[category].specs.
+*/
 const KEY='workshop_custom_cell_specs_v1';
 function load(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return[]}}
 function save(x){localStorage.setItem(KEY,JSON.stringify(x))}
 function key(s){return 'custom_'+String(s).trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0600-\u06ff-]/g,'_').slice(0,50)}
-function refresh(){
- const sel=document.getElementById('acsField'); if(!sel)return;
- const old=sel.value, base=[['price','السعر'],['current','التيار'],['voltage','الجهد'],['size','الحجم'],['package','الباكديج'],['type','النوع'],['power','القدرة'],['manufacturer','الشركة'],['model','الموديل'],['description','الوصف']];
- sel.innerHTML=base.map(x=>'<option value="'+x[0]+'">'+x[1]+'</option>').join('');
- load().forEach(s=>sel.insertAdjacentHTML('beforeend','<option value="'+s.key+'">'+s.label+'</option>'));
- if([...sel.options].some(o=>o.value===old))sel.value=old;
-}
 function render(){
  const r=document.querySelector('.custom-spec-list');if(!r)return;
  const a=load();
- r.innerHTML=a.length?a.map(s=>'<span class="custom-spec-item">'+s.label+' <button data-del="'+s.key+'">×</button></span>').join(''):'<span style="font-size:8px;color:#887e75">لا توجد مواصفات مخصصة</span>';
- r.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{save(load().filter(s=>s.key!==b.dataset.del));render();refresh()});
+ r.innerHTML=a.length?a.map(s=>'<span class="custom-spec-item">'+String(s.label).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))+' <button type="button" data-del="'+s.key+'">×</button></span>').join(''):'<span style="font-size:8px;color:#887e75">لا توجد مواصفات إضافية قديمة</span>';
+ r.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+   save(load().filter(s=>s.key!==b.dataset.del)); render();
+ });
 }
 function add(){
  const l=document.getElementById('customSpecLabel'),e=document.getElementById('customSpecExample');
- const label=l.value.trim();if(!label)return alert('اكتب اسم المواصفة');
+ if(!l)return;
+ const label=l.value.trim(); if(!label)return alert('اكتب اسم المواصفة');
  const k=key(label),a=load();
  if(a.some(s=>s.key===k))return alert('المواصفة موجودة بالفعل');
- a.push({key:k,label:label,example:e.value.trim()});save(a);l.value='';e.value='';render();refresh();
+ a.push({key:k,label:label,example:e?.value.trim()||''});save(a);
+ l.value=''; if(e)e.value=''; render();
 }
 function mount(){
- const box=document.getElementById('advancedCellSearch');if(!box||document.getElementById('customSpecsArea'))return;
+ const box=document.getElementById('advancedCellSearch');
+ if(!box||document.getElementById('customSpecsArea'))return;
  const d=document.createElement('div');d.id='customSpecsArea';d.className='custom-specs-box';
- d.innerHTML='<div class="custom-specs-head"><b>⚙️ إضافة مواصفة جديدة</b><span style="font-size:8px;color:#8f867d">مثل التردد، الحرارة، الوزن، الشركة المصنعة...</span></div><div class="custom-spec-list"></div><div class="custom-spec-add"><input id="customSpecLabel" placeholder="اسم المواصفة: التردد"><input id="customSpecExample" placeholder="مثال: 50Hz"><button class="btn small" id="customSpecAdd">＋ إضافة</button></div>';
- box.appendChild(d);document.getElementById('customSpecAdd').onclick=add;render();refresh();
+ d.innerHTML='<div class="custom-specs-head"><b>⚙️ إضافة مواصفة إضافية</b><span style="font-size:8px;color:#8f867d">المواصفات الأساسية الخاصة بكل فئة يتم إدارتها من صفحة «الفئات والمواصفات».</span></div><div class="custom-spec-list"></div><div class="custom-spec-add"><input id="customSpecLabel" placeholder="اسم المواصفة: التردد"><input id="customSpecExample" placeholder="مثال: 50Hz"><button class="btn small" id="customSpecAdd">＋ إضافة</button></div>';
+ box.appendChild(d);
+ document.getElementById('customSpecAdd').onclick=add; render();
 }
 const old=window.showView;
 if(typeof old==='function')window.showView=function(v){old(v);if(v==='storage')setTimeout(mount,50)};
