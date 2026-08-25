@@ -4197,6 +4197,7 @@ const CATEGORY_BASE_FIELD_TEMPLATES=[
 ];
 function defaultCategoryFields(){return CATEGORY_BASE_FIELD_TEMPLATES.map(x=>({...x,options:[...(x.options||[])]}));}
 function normalizeCategoryFields(schema){
+ const before=Array.isArray(schema.fields)?JSON.stringify(schema.fields):null;
  if(!Array.isArray(schema.fields)) schema.fields=defaultCategoryFields();
  schema.fields=schema.fields.map(f=>{
    let options=normalizeCategorySpecOptions(f.options);
@@ -4211,6 +4212,7 @@ function normalizeCategoryFields(schema){
    const type=(options.length && (f.type||'text')==='text')?'select':(f.type||'text');
    return {key:f.key||('field_'+Date.now()),label:f.label||f.key||'حقل',type,options,defaultValue};
  });
+ try{ const after=JSON.stringify(schema.fields); if(before!==after && typeof saveDirty!=='undefined') scheduleSave(); }catch(_e){}
  return schema.fields;
 }
 function categoryFieldDefs(category){ensureCategorySchemas();const schema=state.categorySchemas?.[category];return schema?normalizeCategoryFields(schema):[];}
@@ -4478,6 +4480,7 @@ async function idbSet(key,val){
 }
 
 let saveTimer=null;
+let saveDirty=false;
 function setSaveBadge(status,extra){
   const el=document.getElementById('saveBadge');
   el.classList.remove('fail');
@@ -4649,7 +4652,34 @@ function openAuditEntry(a){
   if(a?.kind==='category')showView('categories');
 }
 
+/* ================= RUNTIME PERSISTENCE BRIDGE v1 =================
+   كل ما يمكن أن يعيش خارج state يدخل في النسخة الموحدة أيضًا.
+*/
+const RUNTIME_PERSIST_KEY='__runtimePersistence';
+function getPortableLocalStorageSafe(){
+  const out={};
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||k.startsWith('__')||k===FALLBACK_KEY)continue;const v=localStorage.getItem(k);if(v!==null)out[k]=v;}}catch(_e){}
+  return out;
+}
+function captureRuntimeLocalStorageIntoState(){
+  if(!state)return;
+  const ls=getPortableLocalStorageSafe();
+  state[RUNTIME_PERSIST_KEY]=state[RUNTIME_PERSIST_KEY]&&typeof state[RUNTIME_PERSIST_KEY]==='object'?state[RUNTIME_PERSIST_KEY]:{};
+  state[RUNTIME_PERSIST_KEY].localStorage=ls;
+  state[RUNTIME_PERSIST_KEY].capturedAt=new Date().toISOString();
+}
+function restoreRuntimeLocalStorageFromState(){
+  try{const data=state?.[RUNTIME_PERSIST_KEY]?.localStorage;if(data&&typeof data==='object')restorePortableLocalStorage(data,{warnings:[]});}catch(_e){}
+}
+let runtimeLocalStorageFingerprint='';
+function runtimeLocalStorageFingerprintNow(){try{return JSON.stringify(getPortableLocalStorageSafe());}catch(_e){return '';}}
+function startRuntimePersistenceWatcher(){
+  runtimeLocalStorageFingerprint=runtimeLocalStorageFingerprintNow();
+  setInterval(()=>{const fp=runtimeLocalStorageFingerprintNow();if(fp!==runtimeLocalStorageFingerprint){runtimeLocalStorageFingerprint=fp;try{scheduleSave();}catch(_e){}}},1500);
+}
+
 function scheduleSave(){
+  try{captureRuntimeLocalStorageIntoState();}catch(_e){}
   auditCaptureChanges();
   saveDirty=true;
   setSaveBadge('pending');
@@ -4665,6 +4695,7 @@ async function doSave(){
   if(saveInFlight){ saveQueued=true; return; }
   saveInFlight=true;
   try{
+    captureRuntimeLocalStorageIntoState();
     const json=JSON.stringify(state);
     const revision=++saveRevision;
     // التخزين الرئيسي: IndexedDB. لا نستخدم localStorage كقاعدة البيانات لأنه صغير ومناسب فقط للطوارئ.
@@ -4774,11 +4805,11 @@ function applyUiTheme(){
 async function loadState(){
   try{
     const raw=await idbGet(STATE_KEY);
-    if(raw){ state=JSON.parse(raw); migrateStateIfNeeded(); ensureNewFields(); ensureStoragePreferences(); applyPreferences(); applyUiTheme(); return; }
+    if(raw){ state=JSON.parse(raw); restoreRuntimeLocalStorageFromState(); migrateStateIfNeeded(); ensureNewFields(); ensureStoragePreferences(); applyPreferences(); applyUiTheme(); return; }
   }catch(e){}
   try{
     const raw=localStorage.getItem(FALLBACK_KEY);
-    if(raw){ state=JSON.parse(raw); migrateStateIfNeeded(); ensureNewFields(); ensureStoragePreferences(); applyPreferences(); applyUiTheme(); scheduleSave(); return; }
+    if(raw){ state=JSON.parse(raw); restoreRuntimeLocalStorageFromState(); migrateStateIfNeeded(); ensureNewFields(); ensureStoragePreferences(); applyPreferences(); applyUiTheme(); scheduleSave(); return; }
   }catch(e){}
   state=seedState();
   ensureStoragePreferences();
@@ -6765,7 +6796,7 @@ function setUiTheme(themeId){
 }
 
 /* ============================= FULL PROJECT IMPORT / EXPORT ============================= */
-const FULL_BACKUP_VERSION=5;
+const FULL_BACKUP_VERSION=6;
 const STREAM_EXPORT_THRESHOLD=100*1024*1024;
 function backupSafeName(name,fallback='item'){return String(name||fallback).replace(/[\\/:*?"<>|\u0000-\u001F]/g,'_').replace(/\s+/g,' ').trim().slice(0,120)||fallback;}
 function backupUtf8(s){return new TextEncoder().encode(String(s));}
@@ -6800,6 +6831,10 @@ function getPortableLocalStorage(){
   }catch(e){}
   return out;
 }
+function clearPortableLocalStorageExcept(data){
+  const keep=new Set(Object.keys(data||{}));
+  try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&!k.startsWith('__'))keys.push(k);}keys.forEach(k=>{if(!keep.has(k))try{localStorage.removeItem(k);}catch(_e){}});}catch(_e){}
+}
 function restorePortableLocalStorage(data,rep){
   if(!data||typeof data!=='object') return;
   for(const [k,v] of Object.entries(data)){
@@ -6833,6 +6868,32 @@ async function restoreBackupIndexedDBMeta(data,rep){
     try{await idbSet(k,v);}catch(e){if(rep)rep.warnings.push('تعذر استعادة بيانات IndexedDB الإضافية: '+k);}
   }
 }
+async function collectImageDbExtra(){
+  const out={};
+  try{
+    const db=await openImageDB();
+    if(db.objectStoreNames.contains(APP_STORE)){
+      const keys=await new Promise((resolve,reject)=>{const tx=db.transaction(APP_STORE,'readonly'),req=tx.objectStore(APP_STORE).getAllKeys();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
+      for(const key of keys){try{const v=await new Promise((resolve,reject)=>{const tx=db.transaction(APP_STORE,'readonly'),req=tx.objectStore(APP_STORE).get(key);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});if(v!==undefined)out[String(key)]=v;}catch(_e){}}
+    }
+  }catch(_e){}
+  return out;
+}
+async function restoreImageDbExtra(data,rep){
+  if(!data||typeof data!=='object')return;
+  try{
+    const db=await openImageDB();
+    if(!db.objectStoreNames.contains(APP_STORE))return;
+    const oldKeys=await new Promise((resolve,reject)=>{const tx=db.transaction(APP_STORE,'readonly'),req=tx.objectStore(APP_STORE).getAllKeys();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
+    const tx=db.transaction(APP_STORE,'readwrite');const os=tx.objectStore(APP_STORE);
+    oldKeys.forEach(k=>{if(!(String(k) in data))os.delete(k);});
+    for(const [k,v] of Object.entries(data))os.put(v,k);
+    await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
+  }catch(e){if(rep)rep.warnings.push('تعذر استعادة بيانات مخزن التطبيق الإضافي: '+(e?.message||e));}
+}
+async function collectAllOPFSFiles(){
+  const out=[];try{const root=await getOPFSRoot();if(!root)return out;for await(const [name,handle] of root.entries()){if(handle.kind==='file'){try{const file=await handle.getFile();out.push({name,file});}catch(_e){}}}}catch(_e){}return out;
+}
 async function collectBackupEntries(){
   const entries=[],seen=new Set();
   const add=(name,data,mime='application/octet-stream',size)=>{name=name.replace(/^\/+/, '');if(seen.has(name))return;seen.add(name);entries.push({name,data,mime,size:size!=null?size:(data instanceof Uint8Array?data.length:data?.size||0)});};
@@ -6849,6 +6910,8 @@ async function collectBackupEntries(){
   try{ const sm=await idbGet('state_meta'); if(sm) add('project/state-meta.json',backupUtf8(JSON.stringify(sm,null,2)),'application/json'); }catch(e){}
   const idbMeta=await collectBackupIndexedDBMeta();
   add('project/indexeddb-extra.json',backupUtf8(JSON.stringify(idbMeta,null,2)),'application/json');
+  const imageDbExtra=await collectImageDbExtra();
+  add('project/image-db-extra.json',backupUtf8(JSON.stringify(imageDbExtra,null,2)),'application/json');
 
   /* نسخ صريحة للأجزاء الحساسة حتى يمكن تدقيق الحزمة واسترجاعها حتى لو كان state قديمًا. */
   add('project/categories.json',backupUtf8(JSON.stringify(exportState.categories||[],null,2)),'application/json');
@@ -6887,6 +6950,14 @@ async function collectBackupEntries(){
       assetCount++;totalAssetBytes+=Number(blob.size||0);
     }
   }catch(e){meta.assetError=String(e.message||e)}
+  // حفظ ملفات OPFS الموجودة حتى لو لم يعد لها مرجع داخل state/metadata، منعًا لفقدان أي ملف يدوي.
+  try{
+    for(const item of await collectAllOPFSFiles()){
+      const n='assets/opfs-orphans/'+backupSafeName(item.name);
+      if(seen.has(n))continue;
+      add(n,item.file,item.file.type||'application/octet-stream',item.file.size||0);
+    }
+  }catch(_e){}
   meta.assetCount=assetCount;meta.assetBytes=totalAssetBytes;meta.assets=assetManifest;meta.fileCount=entries.length+1;
   add('project/asset-manifest.json',backupUtf8(JSON.stringify(assetManifest,null,2)),'application/json');
   meta.fileCount=entries.length+1;
@@ -6918,7 +6989,8 @@ async function writeStoredZipStream(entries,handle,onProgress){
 async function exportFullProject(){
   const st=document.getElementById('backupStatus');if(st)st.textContent='⏳ جارٍ تجهيز المشروع وحساب الملفات الكبيرة…';
   try{
-    /* لا نبدأ التصدير قبل إجبار آخر تعديل معلّق على الحفظ والتحقق من النسخة المستقرة. */
+    captureRuntimeLocalStorageIntoState();
+    saveDirty=true;
     await flushSaveForBackup();
     await migrateLegacyDataUrlsToAssets();
     await flushSaveForBackup();
@@ -6936,7 +7008,7 @@ async function exportFullProject(){
     if(r!=='cancel'){if(st)st.textContent=`✅ تم التصدير بنجاح — ${entries.length} عنصر، ${formatFileSize(total)}`;toast('تم تصدير المشروع بالكامل');}
   }catch(e){console.error(e);if(st)st.textContent='❌ فشل التصدير: '+(e.message||e);toast('فشل التصدير');}
 }
-async function exportPlainJSON(){const payload={format:'Workshop Inventory Full Project JSON',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),state,localStorage:getPortableLocalStorage()};await backupSaveFile(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),`workshop_inventory_${new Date().toISOString().slice(0,10)}.json`);toast('تم تصدير JSON الكامل');}
+async function exportPlainJSON(){captureRuntimeLocalStorageIntoState();saveDirty=true;await flushSaveForBackup();const persisted=await verifyPersistedStateForBackup();const payload={format:'Workshop Inventory Full Project JSON',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),state:persisted,localStorage:getPortableLocalStorage()};await backupSaveFile(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),`workshop_inventory_${new Date().toISOString().slice(0,10)}.json`);toast('تم تصدير JSON الكامل');}
 async function readZipHeader(file,pos){const b=new Uint8Array(await file.slice(pos,pos+30).arrayBuffer());if(b.length<30)throw new Error('ZIP ناقص أو تالف');return {sig:backupReadU32(b,0),flags:backupReadU16(b,6),method:backupReadU16(b,8),crc:backupReadU32(b,14),csize:backupReadU32(b,18),usize:backupReadU32(b,22),nlen:backupReadU16(b,26),xlen:backupReadU16(b,28)};}
 function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))return'image/png';if(x.endsWith('.jpg')||x.endsWith('.jpeg'))return'image/jpeg';if(x.endsWith('.gif'))return'image/gif';if(x.endsWith('.webp'))return'image/webp';if(x.endsWith('.svg'))return'image/svg+xml';if(x.endsWith('.pdf'))return'application/pdf';if(x.endsWith('.mp4'))return'video/mp4';if(x.endsWith('.webm'))return'video/webm';return'application/octet-stream';}
 /* ============================= IMPORT: قراءة متسامحة (resilient) ============================= */
@@ -6967,6 +7039,7 @@ async function importStoredZipStream(file,st,rep){
       else if(name==='project/asset-manifest.json') assetManifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       else if(name==='project/local-storage.json') localStorageBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       else if(name==='project/indexeddb-extra.json') indexedDbExtraBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/image-db-extra.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       else if(/^project\/(categories|category-schemas|components|storage-layout|history|audit-history|audit-history-meta|undo-history|maps|projects|experiments|purchases|checklist|preferences)\.json$/.test(name)) explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       else if(name==='project/emergency-fallback.json' || name==='project/backup-runtime.json' || name==='project/ui-state.json' || name==='project/state-meta.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
       // نتعرّف على أي مجلد أصول محتمل (assets/…) وليس فقط المسارين الحاليين، حتى تبقى الحزم
@@ -6987,8 +7060,10 @@ async function importStoredZipStream(file,st,rep){
   try{ state=JSON.parse(new TextDecoder().decode(stateBytes)); }
   catch(e){ throw new Error('project/state.json تالف ولا يمكن تحليله (JSON غير صالح): '+(e?.message||e)); }
   migrateStateIfNeeded();ensureNewFields();ensureStoragePreferences();applyPreferences();applyUiTheme();
-  if(localStorageBytes){try{restorePortableLocalStorage(JSON.parse(new TextDecoder().decode(localStorageBytes)),rep);}catch(e){rep.warnings.push('local-storage.json تالف — تم استيراد بيانات المشروع بدونه.');}}
+  if(localStorageBytes){try{const incomingLS=JSON.parse(new TextDecoder().decode(localStorageBytes));clearPortableLocalStorageExcept(incomingLS);restorePortableLocalStorage(incomingLS,rep);}catch(e){rep.warnings.push('local-storage.json تالف — تم استيراد بيانات المشروع بدونه.');}}
+  restoreRuntimeLocalStorageFromState();
   if(indexedDbExtraBytes){try{await restoreBackupIndexedDBMeta(JSON.parse(new TextDecoder().decode(indexedDbExtraBytes)),rep);}catch(e){rep.warnings.push('indexeddb-extra.json تالف — تم تجاهله.');}}
+  if(explicit['project/image-db-extra.json']){try{await restoreImageDbExtra(JSON.parse(new TextDecoder().decode(explicit['project/image-db-extra.json'])),rep);}catch(e){rep.warnings.push('image-db-extra.json تالف — تم تجاهله.');}}
   /* تحقق واسترجاع صريح للأجزاء المهمة. state.json هو المصدر الأساسي، وهذه الملفات تمنع فقدان جزء
      إذا كان ملف حالة قديمًا أو ناقصًا جزئيًا. لا نستبدل قيمًا موجودة فعليًا بقيم فارغة. */
   const parseExplicit=(name)=>{try{return JSON.parse(new TextDecoder().decode(explicit[name]));}catch(e){rep.warnings.push(name+' تالف — تم الاعتماد على state.json.');return null;}};
@@ -7085,6 +7160,8 @@ async function importFullProject(file){
       await importPlainJSONFile(file,rep);
     }
     const missingRefs=await scanForMissingAssetRefs();
+    restoreRuntimeLocalStorageFromState();
+    captureRuntimeLocalStorageIntoState();
     resetAuditTracker();
     scheduleSave();
     await flushSaveForBackup();
@@ -7170,7 +7247,13 @@ document.addEventListener('click',e=>{ if(!e.target.closest('#notifBell') && !e.
 (async function init(){
   if(navigator.storage && navigator.storage.persist){ try{ await navigator.storage.persist(); }catch(e){} }
   await loadState();
+  restoreRuntimeLocalStorageFromState();
+  captureRuntimeLocalStorageIntoState();
+  startRuntimePersistenceWatcher();
   initAuditTracker();
+  // طبقة أمان إضافية: أي input/change داخل التطبيق يضمن دخول الحفظ في الدورة.
+  document.addEventListener('input',e=>{if(e.target&&e.target.closest('#viewContainer,#modalRoot')){setTimeout(()=>{try{scheduleSave();}catch(_e){}},0);}},false);
+  document.addEventListener('change',e=>{if(e.target&&e.target.closest('#viewContainer,#modalRoot')){setTimeout(()=>{try{scheduleSave();}catch(_e){}},0);}},false);
   showView('dashboard');
   renderNotifBadge();
   setInterval(renderNotifBadge,4000);
