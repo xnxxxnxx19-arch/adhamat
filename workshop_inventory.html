@@ -5517,8 +5517,8 @@ function openVisualVariables(id,kind){
   };
 }
 
-function wireVisualIndicators(){
-  document.querySelectorAll('[data-visual-indicator]').forEach(el=>{
+function wireVisualIndicators(root){
+  (root||document).querySelectorAll('[data-visual-indicator]').forEach(el=>{
     const id=el.dataset.visualIndicator, box=findBox(id); if(!box) return;
     ensureVisual(box); el.addEventListener('pointerdown',e=>{
       e.preventDefault(); const startX=e.clientX,startY=e.clientY,orig={...box.visualIndicator}; el.setPointerCapture(e.pointerId);
@@ -5733,15 +5733,53 @@ function openColumnPage(colId){
   uiState.selectedBox=null;
   showView('storage');
 }
+/* تحديث جزئي لحالة التحديد (عمود/عبوة) داخل صفحة الرف المكبّرة، من غير هدم/إعادة بناء
+   الصفحة كلها (innerHTML كامل). بنبدّل بس كلاسات "محدد" على العمود/العبوة، وبنحدّث محتوى
+   لوحة التفاصيل السفلية فقط. طالما مفيش هدم لعناصر الـ DOM الحالية، مكان التمرير (أفقي
+   ورأسي) بيفضل ثابت تلقائيًا من غير أي تدخل إضافي. يرجع true لو نفّذ التحديث، أو false
+   لو مفيش صفحة رف مكبّرة مفتوحة حاليًا (وفي الحالة دي بيتم اللجوء لإعادة الرسم الكاملة كما كان). */
+function updateRackSelectionUiOnly(){
+  const wrap=document.querySelector('.rack-fullpage-wrap[data-rack-id]');
+  if(!wrap) return false;
+
+  wrap.querySelectorAll('.vs3-full-column[data-col-id]').forEach(el=>{
+    const isSel = uiState.selectedColumn===el.dataset.colId;
+    el.classList.toggle('column-selected', isSel);
+    const toolbar=el.querySelector('.vs3-col-toolbar');
+    if(toolbar) toolbar.classList.toggle('is-visible', isSel);
+    const actions=el.querySelector('.vs3-col-actions');
+    if(actions) actions.classList.toggle('is-visible', isSel);
+  });
+
+  wrap.querySelectorAll('.vs3-full-book[data-box-id]').forEach(el=>{
+    const isSel = uiState.selectedBox===el.dataset.boxId;
+    el.classList.toggle('selected', isSel);
+    const actions=el.querySelector('.vs3-book-actions');
+    if(actions) actions.classList.toggle('is-visible', isSel);
+  });
+
+  const panel=wrap.querySelector('[data-detail-panel]');
+  if(panel){
+    const selectedBox=uiState.selectedBox?findBox(uiState.selectedBox):null;
+    panel.innerHTML = selectedBox
+      ? `<div class="vs3-cell-title"><b>📦 ${selectedBox.label}</b><span>اضغط على خلية لعرض تفاصيلها</span></div>${boxDetailHTML(selectedBox)}`
+      : '<div class="rack-detail-empty">اضغط على عمود لاختياره، أو اضغط على عبوة لعرض خلاياها.</div>';
+    wireCellEvents(panel);
+    wireVisualIndicators(panel);
+  }
+  return true;
+}
 function selectColumn(colId){
   uiState.expandedColumn=null;
   uiState.selectedColumn = (uiState.selectedColumn===colId) ? null : colId;
   uiState.selectedBox = null;
+  if(updateRackSelectionUiOnly()){ currentView='storage'; return; }
   showView('storage');
 }
 function selectBox(boxId){
   uiState.selectedBox = (uiState.selectedBox===boxId) ? null : boxId;
   uiState.selectedColumn = null;
+  if(updateRackSelectionUiOnly()){ currentView='storage'; return; }
   showView('storage');
 }
 function boxChipHTML(box){
@@ -6176,8 +6214,8 @@ function wireBoxChipEvents(){
     el.addEventListener('click',()=>selectBox(el.dataset.boxId));
   });
 }
-function wireCellEvents(){
-  document.querySelectorAll('.cell').forEach(el=>{
+function wireCellEvents(root){
+  (root||document).querySelectorAll('.cell').forEach(el=>{
     el.addEventListener('click',e=>{ e.stopPropagation(); el.classList.remove('flash-wait'); openCellDetail(el.dataset.cellId); });
     el.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain',el.dataset.cellId); });
     el.addEventListener('dragover',e=>{ e.preventDefault(); el.classList.add('dragover'); });
@@ -12419,6 +12457,13 @@ window.ensureVisual=ensureVisual;
   min-width:250px!important;
   transition:flex-basis .2s ease,min-width .2s ease,box-shadow .2s ease,outline-color .2s ease;
   z-index:12;
+  /* تخطيط عمودي ثابت الارتفاع: رأس + قائمة عبوات قابلة للتمرير + شريط أزرار ثابت أسفلها دائمًا خارج التمرير */
+  display:flex!important;
+  flex-direction:column!important;
+  max-height:min(72dvh,560px)!important;
+}
+#viewContainer .vs3-full-column.column-selected .vs3-full-col-head{
+  flex:0 0 auto!important;
 }
 
 #viewContainer .vs3-full-column.column-selected .vs3-full-col-head{
@@ -12426,11 +12471,15 @@ window.ensureVisual=ensureVisual;
   padding:9px 7px 10px!important;
 }
 
-/* شريط الأزرار السفلي */
+/* شريط الأزرار السفلي: أصبح عنصرًا عاديًا ثابتًا أسفل العمود (ليس عائمًا فوق العبوات)،
+   بهذا يستحيل أن تغطيه عبوة أيًا كان عددها؛ قائمة العبوات فوقه تتمرر داخل مساحتها الخاصة */
 #viewContainer .vs3-full-column.column-selected .vs3-col-actions{
-  left:8px!important;
-  right:8px!important;
-  bottom:8px!important;
+  position:relative!important;
+  left:auto!important;
+  right:auto!important;
+  bottom:auto!important;
+  flex:0 0 auto!important;
+  margin-top:8px!important;
   display:grid!important;
   grid-template-columns:repeat(3,minmax(0,1fr))!important;
   gap:6px!important;
@@ -12522,9 +12571,16 @@ window.ensureVisual=ensureVisual;
   color:#fff!important;
 }
 
-/* مسافة سفلية حتى لا تختفي آخر عبوة خلف شريط الأزرار */
+/* قائمة العبوات تتمرر داخل مساحتها المتاحة فقط، وشريط الأزرار يبقى دائمًا أسفلها خارج منطقة التمرير
+   (لم نعد نعتمد على padding كبير يخمّن ارتفاع الشريط) */
 #viewContainer .vs3-full-column.column-selected .vs3-full-books{
-  padding-bottom:125px!important;
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  scrollbar-width:thin;
+  -webkit-overflow-scrolling:touch;
+  padding-bottom:10px!important;
 }
 
 /* الموبايل: نكبر العمود المحدد بما يكفي للأزرار، بدون خروجها خارج الإطار */
