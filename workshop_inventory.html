@@ -5588,20 +5588,37 @@ function computeNotifications(){
   const list=[];
   state.components.forEach(comp=>{
     const total=totalQtyOfComponent(comp.id);
-    if(total<=0) list.push({type:'crit',icon:'⛔',text:`${comp.name} — نفد المخزون`,go:()=>{showView('components');}});
-    else if(total<=comp.criticalStock) list.push({type:'crit',icon:'🔴',text:`${comp.name} — مستوى حرج (${total})`,go:()=>{showView('components');}});
-    else if(total<=comp.warningStock) list.push({type:'warn',icon:'⚠️',text:`${comp.name} — مخزون منخفض (${total})`,go:()=>{showView('components');}});
+    if(total<=0) list.push({key:'comp:'+comp.id,type:'crit',icon:'⛔',text:`${comp.name} — نفد المخزون`,go:()=>{showView('components');}});
+    else if(total<=comp.criticalStock) list.push({key:'comp:'+comp.id,type:'crit',icon:'🔴',text:`${comp.name} — مستوى حرج (${total})`,go:()=>{showView('components');}});
+    else if(total<=comp.warningStock) list.push({key:'comp:'+comp.id,type:'warn',icon:'⚠️',text:`${comp.name} — مخزون منخفض (${total})`,go:()=>{showView('components');}});
   });
   const pendingPurchases=state.purchases.filter(p=>p.status==='pending').length;
-  if(pendingPurchases) list.push({type:'info',icon:'🛒',text:`${pendingPurchases} عناصر بانتظار الشراء`,go:()=>showView('purchases')});
+  if(pendingPurchases) list.push({key:'purchases-pending',type:'info',icon:'🛒',text:`${pendingPurchases} عناصر بانتظار الشراء`,go:()=>showView('purchases')});
   const failedExp=state.experiments.filter(e=>e.result==='FAIL').length;
-  if(failedExp) list.push({type:'info',icon:'🧪',text:`${failedExp} تجارب بنتيجة FAIL تحتاج مراجعة`,go:()=>showView('experiments')});
-  return list;
+  if(failedExp) list.push({key:'experiments-fail',type:'info',icon:'🧪',text:`${failedExp} تجارب بنتيجة FAIL تحتاج مراجعة`,go:()=>showView('experiments')});
+  const dismissed=new Set(state.dismissedNotifications||[]);
+  return list.filter(n=>!dismissed.has(n.key));
 }
 function renderNotifBadge(){
   const list=computeNotifications();
   const c=document.getElementById('notifCount');
   if(list.length){ c.textContent=list.length; c.classList.remove('hidden'); } else c.classList.add('hidden');
+}
+function dismissNotification(key){
+  if(!Array.isArray(state.dismissedNotifications)) state.dismissedNotifications=[];
+  if(!state.dismissedNotifications.includes(key)) state.dismissedNotifications.push(key);
+  scheduleSave();
+  renderNotifBadge();
+  const panel=document.getElementById('notifPanel');
+  if(panel && !panel.classList.contains('hidden')) renderNotifPanel();
+  if(currentView==='dashboard') showView('dashboard');
+}
+function restoreAllNotifications(){
+  state.dismissedNotifications=[];
+  scheduleSave();
+  renderNotifBadge();
+  renderNotifPanel();
+  if(currentView==='dashboard') showView('dashboard');
 }
 
 function renderDashboard(){
@@ -5630,7 +5647,11 @@ function renderDashboard(){
     </div>
     <div class="panel">
       <h3>🔔 التنبيهات (${notifs.length})</h3>
-      ${notifs.length? notifs.slice(0,8).map(n=>`<div class="notif-row" onclick='(${n.go.toString()})()'>${n.icon} ${n.text}</div>`).join(''):'<div class="empty-state">لا توجد تنبيهات — كل شيء تحت السيطرة 👍</div>'}
+      ${notifs.length? notifs.slice(0,8).map(n=>`<div class="notif-row" style="justify-content:space-between;">
+        <span style="cursor:pointer;flex:1;" onclick='(${n.go.toString()})()'>${n.icon} ${n.text}</span>
+        <span title="حذف الإشعار" style="cursor:pointer;color:var(--red);padding-inline-start:8px;" onclick="dismissNotification('${n.key}')">✕</span>
+      </div>`).join(''):'<div class="empty-state">لا توجد تنبيهات — كل شيء تحت السيطرة 👍</div>'}
+      ${(state.dismissedNotifications||[]).length?`<div style="margin-top:8px;font-size:11px;color:var(--dim);">${state.dismissedNotifications.length} إشعار مخفي · <span style="cursor:pointer;text-decoration:underline;" onclick="restoreAllNotifications()">إظهار الكل</span></div>`:''}
     </div>
     <div class="panel">
       <h3>🗄️ اختصار: التخزين المرئي <button class="btn small" onclick="showView('storage')">فتح</button></h3>
@@ -6570,7 +6591,8 @@ function renderComponents(){
     grid.innerHTML=list.map(c=>{
       const total=totalQtyOfComponent(c.id);
       const st=total<=0?'red':(total<=c.criticalStock?'red':(total<=c.warningStock?'yellow':'green'));
-      return `<div class="card" onclick="openComponentQuickView('${c.id}')">
+      return `<div class="card" style="position:relative;" onclick="openComponentQuickView('${c.id}')">
+        <span title="حذف المكون" onclick="event.stopPropagation();deleteComponent('${c.id}')" style="position:absolute;top:8px;left:8px;cursor:pointer;color:var(--red);font-size:14px;">✕</span>
         <div style="display:flex;justify-content:space-between;"><b>${c.name}</b><span class="pill ${st}">${total}</span></div>
         <div class="sub">${c.category||'—'} ${c.package?(' · '+c.package):''}</div>
       </div>`;
@@ -6587,8 +6609,28 @@ function openComponentQuickView(compId){
     <div class="field"><label>رقم القطعة</label><input value="${comp.partNumber||''}" readonly></div></div>
     <h3 style="font-size:13px;margin-top:14px;">المواقع الحالية (${containers.length})</h3>
     ${containers.length? containers.map(ct=>{ const box=findBox(ct.boxId); return `<div class="card" style="margin-bottom:8px;" onclick="closeModal();revealAndFlash('${ct.id}');"><b>${box?box.label:'—'}</b><div class="sub">${locationLabel(ct.id)} · الكمية: ${ct.quantity}</div></div>`; }).join(''):'<div class="empty-state">غير موجود في أي موقع فعليًا (مخزون مؤقت)</div>'}
-  `,`<button class="btn" id="editFromQuick">تعديل بيانات المكون</button><button class="btn" onclick="closeModal()">إغلاق</button>`);
+  `,`<button class="btn danger" id="deleteFromQuick">🗑 حذف المكون</button><button class="btn" id="editFromQuick">تعديل بيانات المكون</button><button class="btn" onclick="closeModal()">إغلاق</button>`);
   document.getElementById('editFromQuick').onclick=()=>openEditComponent(compId,()=>openComponentQuickView(compId));
+  document.getElementById('deleteFromQuick').onclick=()=>deleteComponent(compId);
+}
+function deleteComponent(compId){
+  const comp=findComponent(compId);
+  if(!comp) return;
+  const containers=containerOfComponent(compId);
+  const total=totalQtyOfComponent(compId);
+  const usageCount=(state.usageHistory||[]).filter(h=>h.componentId===compId).length;
+  let msg=`سيتم حذف المكون «${comp.name}» نهائيًا من المكتبة.`;
+  if(containers.length) msg+=`\nستُفرَّغ ${containers.length} خلية/موقع كان يحتوي عليه (إجمالي الكمية: ${total}).`;
+  if(usageCount) msg+=`\nسجل الاستخدام السابق (${usageCount} حركة) سيبقى في السجل التاريخي دون ربط بمكون قائم.`;
+  msg+='\nهل أنت متأكد؟';
+  if(!confirm(msg)) return;
+  containers.forEach(c=>{ c.componentId=null; c.quantity=0; });
+  state.purchases=(state.purchases||[]).filter(p=>p.componentId!==compId);
+  state.components=state.components.filter(c=>c.id!==compId);
+  scheduleSave();
+  closeModal();
+  showView('components');
+  toast('تم حذف المكون');
 }
 
 function renderLowStock(){
@@ -6958,9 +7000,19 @@ function renderSettings(){
     if(!state.categories.includes(v)) state.categories.push(v);
     scheduleSave(); renderSettings();
   };
-  document.getElementById('resetBtn').onclick=()=>{
-    if(!confirm('تحذير: سيتم حذف كل شيء نهائيًا. هل أنت متأكد؟')) return;
-    state=seedState(); scheduleSave(); showView('dashboard'); toast('تمت إعادة التهيئة');
+  document.getElementById('resetBtn').onclick=async()=>{
+    if(!confirm('تحذير: سيتم حذف كل شيء نهائيًا — كل المكونات، التخزين، الصور والملفات المرفقة، السجلات، والإعدادات — بدون أي رجعة. هل أنت متأكد؟')) return;
+    if(!confirm('تأكيد أخير: هذه الخطوة لا يمكن التراجع عنها إطلاقًا ولن يتبقى أي أثر للبيانات القديمة. متابعة المسح؟')) return;
+    const btn=document.getElementById('resetBtn');
+    if(btn){ btn.disabled=true; btn.textContent='⏳ جارٍ مسح كل شيء...'; }
+    let errors=[];
+    try{ errors=await wipeAllAppData(); }catch(e){ errors=[String(e?.message||e)]; }
+    state=seedState();
+    try{ await idbSet(STATE_KEY, JSON.stringify(state)); }catch(e){}
+    saveDirty=true; scheduleSave();
+    showView('dashboard');
+    if(errors.length) toast('تم المسح مع بعض التحذيرات — راجع الإعدادات');
+    else toast('تم مسح كل البيانات نهائيًا');
   };
 }
 function removeCategory(i){ state.categories.splice(i,1); scheduleSave(); renderSettings(); }
@@ -7410,13 +7462,25 @@ searchResultsEl.addEventListener('click',e=>{
 document.addEventListener('click',e=>{ if(!e.target.closest('.search-wrap')) searchResultsEl.classList.add('hidden'); });
 
 /* notifications panel */
+function renderNotifPanel(){
+  const panel=document.getElementById('notifPanel');
+  const list=computeNotifications();
+  const dismissedCount=(state.dismissedNotifications||[]).length;
+  panel.innerHTML=(list.length? list.map((n,i)=>`<div class="notif-row" data-i="${i}" style="justify-content:space-between;">
+      <span class="notif-go" data-i="${i}" style="cursor:pointer;flex:1;">${n.icon} ${n.text}</span>
+      <span class="notif-del" data-i="${i}" title="حذف الإشعار" style="cursor:pointer;color:var(--red);padding-inline-start:8px;">✕</span>
+    </div>`).join(''):'<div class="empty-state">لا توجد تنبيهات</div>')
+    +(dismissedCount?`<div style="padding:8px 12px;font-size:11px;color:var(--dim);">${dismissedCount} إشعار مخفي · <span id="notifRestoreAll" style="cursor:pointer;text-decoration:underline;">إظهار الكل</span></div>`:'');
+  panel.querySelectorAll('.notif-go').forEach(el=>{ el.onclick=()=>{ const i=Number(el.dataset.i); list[i].go(); panel.classList.add('hidden'); }; });
+  panel.querySelectorAll('.notif-del').forEach(el=>{ el.onclick=(e)=>{ e.stopPropagation(); const i=Number(el.dataset.i); dismissNotification(list[i].key); }; });
+  const restoreEl=document.getElementById('notifRestoreAll');
+  if(restoreEl) restoreEl.onclick=()=>restoreAllNotifications();
+}
 document.getElementById('notifBell').addEventListener('click',e=>{
   e.stopPropagation();
   const panel=document.getElementById('notifPanel');
-  const list=computeNotifications();
-  panel.innerHTML= list.length? list.map((n,i)=>`<div class="notif-row" data-i="${i}">${n.icon} ${n.text}</div>`).join(''):'<div class="empty-state">لا توجد تنبيهات</div>';
+  renderNotifPanel();
   panel.classList.toggle('hidden');
-  panel.querySelectorAll('.notif-row').forEach((row,i)=>{ row.onclick=()=>{ list[i].go(); panel.classList.add('hidden'); }; });
 });
 document.addEventListener('click',e=>{ if(!e.target.closest('#notifBell') && !e.target.closest('#notifPanel')) document.getElementById('notifPanel').classList.add('hidden'); });
 
@@ -10181,6 +10245,48 @@ async function listStoredAssetIds(){
     keys.filter(k=>String(k).startsWith(ASSET_META_PREFIX)).forEach(k=>ids.add(String(k).slice(ASSET_META_PREFIX.length)));
   }catch(e){}
   return [...ids];
+}
+/* ============================= مسح كامل لكل بيانات التطبيق ============================= */
+/* يمسح فعليًا: قاعدة بيانات الحالة (IndexedDB)، قاعدة بيانات الصور/الملفات المرفقة (IndexedDB)،
+   ملفات OPFS الكبيرة، وكل مفاتيح localStorage الخاصة بالتطبيق. لا يُبقي أي أثر لأي بيانات سابقة. */
+async function wipeAllAppData(){
+  const errors=[];
+  // 1) تفريغ متجر الحالة الرئيسي (state + asset_meta + أي مفاتيح أخرى بداخله)
+  try{
+    const db=await openDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(STORE,'readwrite');
+      tx.objectStore(STORE).clear();
+      tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error);
+    });
+  }catch(e){ errors.push('state-db: '+(e?.message||e)); }
+  // 2) تفريغ قاعدة بيانات الصور/الملفات المرفقة بالكامل (كل الـ object stores بداخلها)
+  try{
+    const idb=await openImageDB();
+    const names=Array.from(idb.objectStoreNames||[]);
+    if(names.length){
+      await new Promise((resolve,reject)=>{
+        const tx=idb.transaction(names,'readwrite');
+        names.forEach(n=>tx.objectStore(n).clear());
+        tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error);
+      });
+    }
+  }catch(e){ errors.push('image-db: '+(e?.message||e)); }
+  // 3) حذف كل الملفات الكبيرة المخزَّنة في OPFS
+  try{
+    if(navigator.storage?.getDirectory){
+      const root=await navigator.storage.getDirectory();
+      const dir=await root.getDirectoryHandle('workshop-assets',{create:false}).catch(()=>null);
+      if(dir){
+        const names=[];
+        for await (const name of dir.keys()) names.push(name);
+        for(const name of names){ try{ await dir.removeEntry(name); }catch(e){} }
+      }
+    }
+  }catch(e){ errors.push('opfs: '+(e?.message||e)); }
+  // 4) مسح كل مفاتيح localStorage الخاصة بالتطبيق (نفس منطق الاستيراد الكامل: كل شيء عدا مفاتيح __ المحجوزة)
+  try{ clearPortableLocalStorageExcept({}); }catch(e){ errors.push('localStorage: '+(e?.message||e)); }
+  return errors;
 }
 async function migrateLegacyDataUrlsToAssets(){
   if(!state || state.__largeAssetMigrationDone) return;
