@@ -299,6 +299,14 @@ nav.navlist{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;}
 .cat-cell-spec-view-row span{color:var(--dim);font-size:11px}
 .cat-cell-spec-view-row b{font-size:11.5px;text-align:left}
 @media(max-width:700px){.cat-cell-spec-grid{grid-template-columns:1fr}}
+
+/* ملء تلقائي ذكي لمواصفات الفئة: الصق كتلة نص فيها أسماء الحقول وقيمها (بأي ترتيب) وهو يوزّعها بنفسه */
+.cat-autofill-box{margin-bottom:11px;padding:10px;border:1px dashed var(--amber-border);border-radius:9px;background:rgba(216,162,74,.05)}
+.cat-autofill-title{font-size:11.5px;font-weight:800;color:var(--amber);margin-bottom:3px}
+.cat-autofill-sub{font-size:10px;color:var(--dim);line-height:1.6;margin-bottom:7px}
+.cat-autofill-input{width:100%;min-height:90px;resize:vertical;font-family:var(--mono);font-size:11px;line-height:1.6}
+.cat-autofill-row{display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap}
+.cat-autofill-result{font-size:10.5px;color:var(--dim);flex:1;min-width:160px}
 table.tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
 table.tbl th{text-align:right;color:var(--dim);font-weight:500;font-size:11px;padding:8px 10px;border-bottom:1px solid var(--border);}
 table.tbl td{padding:9px 10px;border-bottom:1px solid var(--border);}
@@ -4425,10 +4433,21 @@ function renderCategorySpecsEditor(targetObj,container,category,onChange){
     </div>`;
   }).join('');
 
+  const autofillHTML=defs.length ? `<div class="cat-autofill-box">
+        <div class="cat-autofill-title">🪄 ملء تلقائي من نص ملصوق</div>
+        <div class="cat-autofill-sub">الصق البيانات — يفضّل كل سطر بالصيغة: <b>اسم الحقل,القيمة</b>. أي سطر ما يطابقش اسم حقل موجود بالظبط يُتجاهل ولا يُسجَّل في أي حقل تاني.</div>
+        <textarea class="cat-autofill-input" placeholder="الصق البيانات هنا..."></textarea>
+        <div class="cat-autofill-row">
+          <button type="button" class="btn small primary cat-autofill-btn">✨ تحليل وملء الحقول</button>
+          <span class="cat-autofill-result"></span>
+        </div>
+      </div>` : '';
+
   container.innerHTML=defs.length
     ? `<div class="cat-cell-spec-box">
         <div class="cat-cell-spec-title">📋 مواصفات فئة «${categorySpecEscape(category||'بدون فئة')}»</div>
         <div class="cat-cell-spec-sub">هذه الحقول مأخوذة مباشرة من جدول الفئة. أي مواصفة تضيفها هناك تظهر هنا تلقائيًا.</div>
+        ${autofillHTML}
         <div class="cat-cell-spec-grid">${rows}</div>
       </div>`
     : `<div class="cat-cell-spec-box">
@@ -4464,6 +4483,70 @@ function renderCategorySpecsEditor(targetObj,container,category,onChange){
       if(typeof onChange==='function') onChange();
     });
   });
+
+  // ===== ملء تلقائي ذكي: مطابقة أسماء الحقول بغض النظر عن ترتيبها في النص الملصوق =====
+  const autofillBtn=container.querySelector('.cat-autofill-btn');
+  if(autofillBtn){
+    autofillBtn.addEventListener('click',()=>{
+      const ta=container.querySelector('.cat-autofill-input');
+      const resultEl=container.querySelector('.cat-autofill-result');
+      const raw=ta?ta.value:'';
+      if(!raw || !raw.trim()){
+        if(resultEl) resultEl.textContent='⚠️ الصق البيانات في المربع أولًا.';
+        return;
+      }
+      const normLabel=s=>String(s??'')
+        .replace(/[\u064B-\u065F\u0670]/g,'')
+        .replace(/^[•\-–—*]+\s*/,'')
+        .replace(/[:：\-–—]+$/,'')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g,' ');
+      const labelMap={};
+      defs.forEach(d=>{
+        const l1=normLabel(d.label||d.key); if(l1 && !(l1 in labelMap)) labelMap[l1]=d;
+        const l2=normLabel(d.key); if(l2 && !(l2 in labelMap)) labelMap[l2]=d;
+      });
+      const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length);
+      const found={};
+      let pendingLabel=null; // سطر اسم حقل بلا فاصلة، بينتظر قيمته في السطر اللي بعده مباشرة فقط
+      lines.forEach(line=>{
+        // الصيغة الصريحة والمفضّلة: اسم الحقل,القيمة — لازم يطابق اسم حقل موجود فعلاً بالظبط
+        const commaIdx=line.indexOf(',');
+        if(commaIdx>-1){
+          const left=line.slice(0,commaIdx), right=line.slice(commaIdx+1).trim();
+          const def=labelMap[normLabel(left)];
+          if(def && right){ found[def.key]=right; }
+          pendingLabel=null;
+          return; // أي سطر فيه فاصلة يُعامَل كصيغة صريحة فقط، ولو ما طابقش يُتجاهل تمامًا
+        }
+        // صيغة بديلة: سطر اسم الحقل وحده، ثم قيمته في السطر التالي مباشرة فقط (بلا تراكم لأسطر تانية)
+        const asLabel=labelMap[normLabel(line)];
+        if(asLabel){ pendingLabel=asLabel; return; }
+        if(pendingLabel){
+          found[pendingLabel.key]=line;
+          pendingLabel=null;
+          return;
+        }
+        // أي سطر تاني مش مطابق ومفيش حقل مستني قيمة → يُتجاهل نهائيًا، ولا يُسجَّل في أي حقل تاني
+      });
+      const matchedKeys=Object.keys(found);
+      matchedKeys.forEach(key=>{
+        const def=defs.find(d=>d.key===key);
+        if(!def) return;
+        const val=found[key];
+        setCategorySpecValue(targetObj,def,val);
+        const input=container.querySelector(`[data-cat-spec-value="${CSS.escape(key)}"]`);
+        if(input) input.value=val;
+      });
+      if(resultEl){
+        resultEl.textContent=matchedKeys.length
+          ? `✅ تم التعرف على ${matchedKeys.length} من ${defs.length} حقل وملؤها.`
+          : '⚠️ لم يتم التعرف على أي حقل. تأكد أن أسماء الحقول في النص مطابقة لأسماء حقول هذه الفئة.';
+      }
+      if(matchedKeys.length && typeof onChange==='function') onChange();
+    });
+  }
 }
 function categorySpecsHTML(comp){
   if(!comp) return '';
