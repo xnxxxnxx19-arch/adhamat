@@ -4435,7 +4435,7 @@ function renderCategorySpecsEditor(targetObj,container,category,onChange){
 
   const autofillHTML=defs.length ? `<div class="cat-autofill-box">
         <div class="cat-autofill-title">🪄 ملء تلقائي من نص ملصوق</div>
-        <div class="cat-autofill-sub">الصق البيانات — يفضّل كل سطر بالصيغة: <b>اسم الحقل,القيمة</b>. أي سطر ما يطابقش اسم حقل موجود بالظبط يُتجاهل ولا يُسجَّل في أي حقل تاني.</div>
+        <div class="cat-autofill-sub">الصق البيانات — أي سطر يبدأ باسم حقل موجود فعلًا (متبوع بمسافة أو فاصلة أو نقطتين) هيتسجل تلقائيًا. أي سطر ما يبدأش باسم حقل مطابق يُتجاهل ولا يُسجَّل في أي حقل تاني.</div>
         <textarea class="cat-autofill-input" placeholder="الصق البيانات هنا..."></textarea>
         <div class="cat-autofill-row">
           <button type="button" class="btn small primary cat-autofill-btn">✨ تحليل وملء الحقول</button>
@@ -4502,29 +4502,47 @@ function renderCategorySpecsEditor(targetObj,container,category,onChange){
         .trim()
         .toLowerCase()
         .replace(/\s+/g,' ');
-      const labelMap={};
+      // قائمة أسماء الحقول (تسمية + المفتاح كبديل)، مرتبة من الأطول للأقصر
+      // حتى يتم اختيار أدق تطابق أولًا (مثلاً "Frequency Range" قبل "Frequency")
+      const candidates=[];
+      const seen=new Set();
       defs.forEach(d=>{
-        const l1=normLabel(d.label||d.key); if(l1 && !(l1 in labelMap)) labelMap[l1]=d;
-        const l2=normLabel(d.key); if(l2 && !(l2 in labelMap)) labelMap[l2]=d;
+        [d.label,d.key].forEach(txt=>{
+          const t=String(txt??'').trim();
+          if(!t) return;
+          const nk=normLabel(t);
+          if(seen.has(nk)) return;
+          seen.add(nk);
+          candidates.push({text:t,norm:nk,def:d});
+        });
       });
-      const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length);
+      candidates.sort((a,b)=>b.text.length-a.text.length);
+      const stripValue=v=>{
+        let r=v.replace(/^\s+/,'');
+        r=r.replace(/^[,:：]+\s*/,''); // فاصل صريح بعد اسم الحقل (: أو ,)
+        r=r.replace(/^[–—]+\s*/,''); // شرطة طويلة كفاصل
+        r=r.replace(/^-\s+/,''); // شرطة عادية كفاصل (بمسافة بعدها) — لا تمس رقم سالب زي -40
+        r=r.replace(/^\s+/,'');
+        return r.replace(/\s*,+\s*$/,'').trim();
+      };
+      const lines=raw.split(/\r?\n/).map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length);
       const found={};
-      let pendingLabel=null; // سطر اسم حقل بلا فاصلة، بينتظر قيمته في السطر اللي بعده مباشرة فقط
+      let pendingLabel=null; // سطر اسم حقل بلا قيمة بعده، بينتظر قيمته في السطر التالي مباشرة فقط
       lines.forEach(line=>{
-        // الصيغة الصريحة والمفضّلة: اسم الحقل,القيمة — لازم يطابق اسم حقل موجود فعلاً بالظبط
-        const commaIdx=line.indexOf(',');
-        if(commaIdx>-1){
-          const left=line.slice(0,commaIdx), right=line.slice(commaIdx+1).trim();
-          const def=labelMap[normLabel(left)];
-          if(def && right){ found[def.key]=right; }
-          pendingLabel=null;
-          return; // أي سطر فيه فاصلة يُعامَل كصيغة صريحة فقط، ولو ما طابقش يُتجاهل تمامًا
+        // نبحث عن اسم حقل موجود فعلًا يبدأ به السطر (بأي فاصل بعده: مسافة، فاصلة، نقطتين...)
+        const hit=candidates.find(c=>{
+          if(!line.toLowerCase().startsWith(c.text.toLowerCase())) return false;
+          const rest=line.slice(c.text.length);
+          return rest==='' || /^[\s,:：\-–—(]/.test(rest);
+        });
+        if(hit){
+          const remainder=stripValue(line.slice(hit.text.length));
+          if(remainder){ found[hit.def.key]=remainder; pendingLabel=null; }
+          else{ pendingLabel=hit.def; } // اسم الحقل وحده بلا قيمة على نفس السطر
+          return;
         }
-        // صيغة بديلة: سطر اسم الحقل وحده، ثم قيمته في السطر التالي مباشرة فقط (بلا تراكم لأسطر تانية)
-        const asLabel=labelMap[normLabel(line)];
-        if(asLabel){ pendingLabel=asLabel; return; }
         if(pendingLabel){
-          found[pendingLabel.key]=line;
+          found[pendingLabel.key]=stripValue(line);
           pendingLabel=null;
           return;
         }
