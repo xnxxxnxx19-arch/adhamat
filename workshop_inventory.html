@@ -114,13 +114,14 @@ nav.navlist{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;}
 .topbar{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:relative;z-index:20;}
 .search-wrap{position:relative;flex:1;max-width:520px;}
 #searchInput{width:100%;padding:10px 14px;font-size:13.5px;}
-.search-results{position:absolute;top:calc(100% + 6px);right:0;left:0;background:var(--panel3);border:1px solid var(--border-lt);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.4);max-height:360px;overflow-y:auto;z-index:50;}
-.sres-item{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:10px;align-items:center;}
-.sres-item:last-child{border-bottom:none;}
-.sres-item:hover{background:var(--panel2);}
-.sres-name{font-weight:600;font-size:13.5px;}
-.sres-meta{font-size:11px;color:var(--dim);font-family:var(--mono);}
-.sres-loc{font-size:11px;color:var(--amber);font-family:var(--mono);white-space:nowrap;}
+.search-results{position:absolute;top:calc(100% + 6px);right:0;left:0;background:var(--panel3);border:1px solid var(--border-lt);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.45);max-height:380px;overflow-y:auto;z-index:50;padding:7px;}
+.sres-item{padding:10px 12px;margin:0 0 7px;border:1px solid var(--border-lt);border-radius:10px;background:var(--panel2);display:flex;justify-content:space-between;gap:10px;align-items:center;transition:.15s;cursor:pointer;}
+.sres-item:last-child{margin-bottom:0;}
+.sres-item:hover{background:var(--panel);border-color:var(--amber);}
+.sres-name{font-weight:700;font-size:13.5px;color:var(--text);}
+.sres-meta{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:4px;font-size:10.5px;color:var(--dim);font-family:var(--mono);}
+.sres-count{background:var(--panel3);border:1px solid var(--border-lt);color:var(--dim);border-radius:999px;padding:1px 7px;font-size:9.5px;}
+.sres-loc{font-size:10.5px;font-family:var(--mono);white-space:nowrap;color:var(--amber);background:var(--amber-dim);border:1px solid var(--amber-border);border-radius:999px;padding:4px 10px;font-weight:700;flex-shrink:0;}
 .notif-bell{position:relative;font-size:19px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;}
 #notifCount{position:absolute;top:-4px;left:-4px;background:var(--red);color:#fff;font-size:10px;font-family:var(--mono);border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;}
 .notif-panel{position:absolute;top:60px;left:20px;width:340px;max-height:70vh;overflow-y:auto;background:var(--panel3);border:1px solid var(--border-lt);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.5);z-index:60;padding:8px;}
@@ -201,6 +202,8 @@ nav.navlist{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;}
 .flash-step{animation:flashStep .55s ease-in-out 2;}
 @keyframes pulseWait{0%,100%{box-shadow:0 0 0 3px var(--blue-dim);} 50%{box-shadow:0 0 0 8px rgba(77,163,255,.4);}}
 .cell.flash-wait{animation:pulseWait 1s ease-in-out infinite !important;border-color:var(--blue) !important;z-index:5;}
+@keyframes pulseWaitAmber{0%,100%{box-shadow:0 0 0 3px var(--amber-dim);} 50%{box-shadow:0 0 0 9px rgba(var(--amber-rgb),.45);}}
+.flash-wait-persist{animation:pulseWaitAmber 1s ease-in-out infinite !important;border-color:var(--amber) !important;z-index:5;}
 
 /* collapsed rack list card */
 .rack-panel.compact-only{cursor:default;}
@@ -241,7 +244,17 @@ nav.navlist{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;}
 .check-row .cdate{font-size:10.5px;color:var(--dim2);font-family:var(--mono);}
 
 /* ============================= CATEGORY DATABASE PAGE ============================= */
-.category-db-layout{display:grid;grid-template-columns:minmax(230px,290px) minmax(0,1fr);gap:16px;align-items:start}.category-list-panel,.category-editor-panel{min-width:0}.category-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.category-muted{display:block;color:var(--dim);font-size:10.5px;margin-top:3px}.category-search-row{margin-bottom:10px}.category-search-row input{width:100%}.category-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 11px;margin-bottom:6px;text-align:right;transition:.15s}.category-row:hover{border-color:var(--amber);background:var(--panel3)}.category-row.active{border-color:var(--amber);background:var(--amber-dim);box-shadow:inset -3px 0 0 var(--amber)}.category-row-main{display:flex;flex-direction:column;gap:3px;min-width:0}.category-row-main b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.category-row-main small{color:var(--dim);font-size:9.5px}.category-row-arrow{color:var(--amber);font-size:18px}.category-editor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding-bottom:14px;border-bottom:1px solid var(--border)}.category-kicker{font-family:var(--mono);font-size:9px;color:var(--amber);letter-spacing:1px}.category-editor-head h2{margin:3px 0 5px;font-size:20px}.category-editor-head p{margin:0;color:var(--dim);font-size:11.5px;line-height:1.7;max-width:720px}.category-editor-actions{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}.category-desc-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--border)}.category-desc-row label{font-size:11px;color:var(--dim)}.category-desc-row input{width:100%}.category-spec-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:15px 0 9px}.category-spec-toolbar b{font-size:14px}.category-spec-toolbar span{font-size:10px;color:var(--dim)}.category-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--panel2)}.category-spec-table{min-width:680px;margin:0}.category-spec-table th{background:var(--panel3)!important;color:var(--dim)!important;position:sticky;top:0;z-index:1}.category-spec-table td{vertical-align:middle}.cat-spec-input{width:100%;min-width:100px;padding:7px 8px!important;font-size:11.5px!important}.category-spec-table select.cat-spec-input{min-width:125px}.category-no-specs{text-align:center;color:var(--dim);padding:28px!important}.category-db-note{margin-top:12px;padding:10px 12px;border:1px solid var(--amber-border);background:var(--amber-dim);border-radius:8px;color:var(--dim);font-size:11px;line-height:1.8}@media(max-width:900px){.category-db-layout{grid-template-columns:1fr}.category-editor-head{flex-direction:column}.category-editor-actions{width:100%}.category-editor-actions .btn{flex:1}.category-desc-row{grid-template-columns:1fr}.category-desc-row .btn{width:100%}}
+.category-db-layout{display:grid;grid-template-columns:minmax(230px,290px) minmax(0,1fr);gap:16px;align-items:start}.category-list-panel,.category-editor-panel{min-width:0}.category-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.category-muted{display:block;color:var(--dim);font-size:10.5px;margin-top:3px}.category-search-row{margin-bottom:10px}.category-search-row input{width:100%}.category-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 11px;margin-bottom:6px;text-align:right;transition:.15s}.category-row:hover{border-color:var(--amber);background:var(--panel3)}.category-row.active{border-color:var(--amber);background:var(--amber-dim);box-shadow:inset -3px 0 0 var(--amber)}.category-row-main{display:flex;flex-direction:column;gap:3px;min-width:0}.category-row-main b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.category-row-main small{color:var(--dim);font-size:9.5px}.category-row-arrow{color:var(--amber);font-size:18px}
+.category-row-wrap{display:flex;align-items:center;gap:6px;margin-bottom:6px;touch-action:pan-y;}
+.category-row-wrap.dragging{opacity:.55;}
+.category-row-wrap .category-row{margin-bottom:0;flex:1;min-width:0;}
+.cat-drag-handle{flex-shrink:0;width:28px;height:38px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:16px;cursor:grab;border-radius:6px;touch-action:none;user-select:none;}
+.cat-drag-handle:active{cursor:grabbing;color:var(--amber);background:var(--panel2);}
+.cat-select-check{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:22px;height:38px;cursor:pointer;}
+.cat-select-check input{width:16px;height:16px;accent-color:var(--amber);cursor:pointer;}
+.category-bulk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--amber-dim);border:1px solid var(--amber-border);border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;color:var(--text);}
+.category-bulk-bar.hidden{display:none;}
+.category-bulk-bar span{flex:1;min-width:60px;font-weight:700;}.category-editor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding-bottom:14px;border-bottom:1px solid var(--border)}.category-kicker{font-family:var(--mono);font-size:9px;color:var(--amber);letter-spacing:1px}.category-editor-head h2{margin:3px 0 5px;font-size:20px}.category-editor-head p{margin:0;color:var(--dim);font-size:11.5px;line-height:1.7;max-width:720px}.category-editor-actions{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}.category-desc-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--border)}.category-desc-row label{font-size:11px;color:var(--dim)}.category-desc-row input{width:100%}.category-spec-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:15px 0 9px}.category-spec-toolbar b{font-size:14px}.category-spec-toolbar span{font-size:10px;color:var(--dim)}.category-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--panel2)}.category-spec-table{min-width:680px;margin:0}.category-spec-table th{background:var(--panel3)!important;color:var(--dim)!important;position:sticky;top:0;z-index:1}.category-spec-table td{vertical-align:middle}.cat-spec-input{width:100%;min-width:100px;padding:7px 8px!important;font-size:11.5px!important}.category-spec-table select.cat-spec-input{min-width:125px}.category-no-specs{text-align:center;color:var(--dim);padding:28px!important}.category-db-note{margin-top:12px;padding:10px 12px;border:1px solid var(--amber-border);background:var(--amber-dim);border-radius:8px;color:var(--dim);font-size:11px;line-height:1.8}@media(max-width:900px){.category-db-layout{grid-template-columns:1fr}.category-editor-head{flex-direction:column}.category-editor-actions{width:100%}.category-editor-actions .btn{flex:1}.category-desc-row{grid-template-columns:1fr}.category-desc-row .btn{width:100%}}
 
 /* Modal */
 .modal-backdrop{position:fixed;inset:0;background:rgba(4,6,9,.7);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
@@ -3230,7 +3243,7 @@ table.tbl tr:hover td{background:var(--panel2);}
 .acs-query-wrap #acsQuery{width:100%}
 .acs-suggestions{
   position:absolute;z-index:99999;top:calc(100% + 4px);right:0;left:0;
-  max-height:260px;overflow:auto;border:1px solid var(--amber-border);
+  max-height:420px;overflow:auto;border:1px solid var(--amber-border);
   border-radius:10px;background:var(--panel,#17212b);box-shadow:0 12px 30px rgba(0,0,0,.38)
 }
 .acs-suggestion{
@@ -3238,8 +3251,22 @@ table.tbl tr:hover td{background:var(--panel2);}
   background:transparent;color:var(--text);cursor:pointer
 }
 .acs-suggestion:hover{background:rgba(242,169,60,.13)}
+.acs-suggestion-count{
+  position:sticky;top:0;z-index:1;padding:6px 11px;font-size:9px;font-weight:800;
+  color:#f0d09d;background:var(--panel,#17212b);border-bottom:1px solid rgba(216,162,74,.22);
+}
 .acs-suggestion-title{display:block;font-weight:800;font-size:12px}
 .acs-suggestion-loc{display:block;color:var(--dim);font-size:9px;margin-top:3px;white-space:normal}
+
+.acs-suggestion.acs-cat-card{padding:10px 11px}
+.acs-cat-chips{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 4px}
+.acs-cat-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 4px 3px 2px;border-radius:6px;background:rgba(255,255,255,.03)}
+.acs-cat-chip-active{background:rgba(255,210,74,.1);box-shadow:0 0 0 1px rgba(255,210,74,.5);border-radius:7px}
+.acs-cat-chip-active .acs-cat-chip-label{color:#ffd24a}
+.acs-cat-chip-label{font-size:8px;font-weight:800;color:var(--dim,#9e948b);white-space:nowrap}
+.acs-cat-chip-value{font-size:9.5px;font-weight:900;padding:2px 7px;border-radius:5px;border:1px solid;white-space:nowrap}
+.acs-suggestion.acs-empty{color:var(--dim,#9e948b);font-size:10px;cursor:default;text-align:center;padding:12px}
+.acs-suggestion.acs-empty:hover{background:transparent}
 </style>
 
 
@@ -6338,7 +6365,7 @@ function wireBoxChipEvents(){
 }
 function wireCellEvents(root){
   (root||document).querySelectorAll('.cell').forEach(el=>{
-    el.addEventListener('click',e=>{ e.stopPropagation(); el.classList.remove('flash-wait'); openCellDetail(el.dataset.cellId); });
+    el.addEventListener('click',e=>{ e.stopPropagation(); el.classList.remove('flash-wait'); clearPersistentFlash(); openCellDetail(el.dataset.cellId); });
     el.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain',el.dataset.cellId); });
     el.addEventListener('dragover',e=>{ e.preventDefault(); el.classList.add('dragover'); });
     el.addEventListener('dragleave',()=>el.classList.remove('dragover'));
@@ -6361,12 +6388,46 @@ function wireCellEvents(root){
     const cell=e.target.closest('.cell[data-cell-id]');
     if(!cell || !vc.contains(cell) || e.defaultPrevented) return;
     cell.classList.remove('flash-wait');
+    clearPersistentFlash();
     openCellDetail(cell.dataset.cellId);
   });
 })();
+let __persistFlashState={colId:null,boxId:null,cellId:null,active:false};
+function findColEl(colId){
+  if(!colId)return null;
+  return document.querySelector(`.rack-column[data-col-id="${colId}"]`)
+      || document.querySelector(`.vs3-full-column[data-col-id="${colId}"]`)
+      || document.querySelector(`[data-col-id="${colId}"]`);
+}
+function findBoxChipEl(boxId){
+  if(!boxId)return null;
+  return document.querySelector(`.box-chip[data-box-id="${boxId}"]`)
+      || document.querySelector(`.box-card[data-box-id="${boxId}"]`)
+      || document.querySelector(`.vs3-full-book[data-box-id="${boxId}"]`)
+      || document.querySelector(`[data-box-id="${boxId}"]`);
+}
+function ensurePersistentFlash(){
+  if(!__persistFlashState.active) return;
+  const colEl=findColEl(__persistFlashState.colId);
+  const chipEl=findBoxChipEl(__persistFlashState.boxId);
+  const cellEl=__persistFlashState.cellId?document.querySelector(`.cell[data-cell-id="${__persistFlashState.cellId}"]`):null;
+  [colEl,chipEl].forEach(el=>{ if(el && !el.classList.contains('flash-wait-persist')) el.classList.add('flash-wait-persist'); });
+  if(cellEl && !cellEl.classList.contains('flash-wait')) cellEl.classList.add('flash-wait');
+}
+function startPersistentFlash(colId,boxId,cellId){
+  __persistFlashState={colId,boxId,cellId,active:true};
+  ensurePersistentFlash();
+  if(!window.__persistFlashInterval) window.__persistFlashInterval=setInterval(ensurePersistentFlash,350);
+}
+function clearPersistentFlash(){
+  __persistFlashState={colId:null,boxId:null,cellId:null,active:false};
+  document.querySelectorAll('.flash-wait-persist').forEach(el=>el.classList.remove('flash-wait-persist','flash-step'));
+  document.querySelectorAll('.cell.flash-wait').forEach(el=>el.classList.remove('flash-wait'));
+}
 /* يفتح الرف بحجم الصفحة، يختار العبوة المطلوبة (تظهر تقسيمتها ومحتواها أسفل الأعمدة)،
    ثم يعمل فلاش متسلسل: رف ← عمود/عبوة ← لوحة التفاصيل ← خلية، وتبقى الخلية توميض حتى يفتحها المستخدم */
 function revealAndFlash(cellId){
+  clearPersistentFlash();
   const cell=findContainer(cellId); if(!cell) return;
   const box=findBox(cell.boxId); if(!box) return;
   const col=findColumn(box.columnId); if(!col) return;
@@ -6378,8 +6439,8 @@ function revealAndFlash(cellId){
 
   setTimeout(()=>{
     const wrapEl=document.querySelector('.rack-fullpage-wrap');
-    const colEl=document.querySelector(`.rack-column[data-col-id="${col.id}"]`);
-    const chipEl=document.querySelector(`.box-chip[data-box-id="${box.id}"]`);
+    const colEl=findColEl(col.id);
+    const chipEl=findBoxChipEl(box.id);
     const panelEl=document.querySelector('[data-detail-panel]');
     const cellEl=document.querySelector(`.cell[data-cell-id="${cellId}"]`);
 
@@ -6388,8 +6449,9 @@ function revealAndFlash(cellId){
     if(colEl){ colEl.classList.add('flash-step'); setTimeout(()=>colEl.classList.remove('flash-step'),1150); }
     setTimeout(()=>{ if(chipEl){ chipEl.classList.add('flash-step'); setTimeout(()=>chipEl.classList.remove('flash-step'),1150); } },380);
     setTimeout(()=>{ if(panelEl){ panelEl.classList.add('flash-step'); setTimeout(()=>panelEl.classList.remove('flash-step'),1150); } },760);
+    startPersistentFlash(col.id, box.id, cellId);
     setTimeout(()=>{
-      if(cellEl){ cellEl.scrollIntoView({behavior:'smooth',block:'center'}); cellEl.classList.add('flash-wait'); }
+      if(cellEl){ cellEl.scrollIntoView({behavior:'smooth',block:'center'}); }
     },1150);
   },80);
 }
@@ -6648,19 +6710,127 @@ function renderCategories(){
   ensureCategorySchemas();const vc=document.getElementById('viewContainer');
   vc.innerHTML=viewHeader('الفئات والمواصفات','قاعدة بيانات category الحالية: كل فئة لها جدول مواصفات مستقل يمكنك إضافته وتعديله وحذفه')+`<div class="category-db-layout"><section class="panel category-list-panel"><div class="category-panel-head"><div><h3 style="margin:0">🗂️ الفئات</h3><span class="category-muted">عدد الفئات: ${state.categories.length}</span></div><button class="btn primary small" id="catAddBtn">＋ فئة جديدة</button></div><div class="category-search-row"><input id="catSearch" placeholder="🔍 ابحث عن فئة..."></div><div id="categoryList"></div></section><section class="panel category-editor-panel"><div id="categoryEditor"><div class="empty-state"><div class="big">🗃️</div>اختر فئة من الجدول لعرض مواصفاتها</div></div></section></div>`;
   let selected=state.categories[0]||null;const listEl=document.getElementById('categoryList'),editorEl=document.getElementById('categoryEditor');
+  const selectedCats=new Set();
+  let catDragWrap=null,catDragMoved=false;
+  function catDragMove(e){
+    if(!catDragWrap)return;
+    catDragMoved=true;
+    const rows=[...listEl.querySelectorAll('.category-row-wrap')];
+    const y=e.touches?e.touches[0].clientY:e.clientY;
+    for(const row of rows){
+      if(row===catDragWrap)continue;
+      const r=row.getBoundingClientRect();
+      if(y>r.top&&y<r.bottom){
+        if(y<r.top+r.height/2)listEl.insertBefore(catDragWrap,row);
+        else listEl.insertBefore(catDragWrap,row.nextSibling);
+        break;
+      }
+    }
+    e.preventDefault();
+  }
+  function catDragEnd(){
+    if(!catDragWrap)return;
+    catDragWrap.classList.remove('dragging');
+    const wasMoved=catDragMoved;
+    const newOrder=[...listEl.querySelectorAll('.category-row-wrap')].map(w=>w.dataset.cat);
+    const rest=state.categories.filter(c=>!newOrder.includes(c));
+    state.categories=[...newOrder,...rest];
+    catDragWrap=null;catDragMoved=false;
+    document.removeEventListener('pointermove',catDragMove);
+    document.removeEventListener('pointerup',catDragEnd);
+    document.removeEventListener('pointercancel',catDragEnd);
+    document.removeEventListener('touchmove',catDragMove);
+    document.removeEventListener('touchend',catDragEnd);
+    document.removeEventListener('touchcancel',catDragEnd);
+    if(wasMoved){scheduleSave();drawList(document.getElementById('catSearch').value);}
+  }
+  function catDragStart(e){
+    if(catDragWrap)return;
+    const handle=e.target.closest('.cat-drag-handle');
+    if(!handle)return;
+    const wrap=handle.closest('.category-row-wrap');
+    if(!wrap)return;
+    catDragWrap=wrap;catDragMoved=false;
+    wrap.classList.add('dragging');
+    document.addEventListener('pointermove',catDragMove);
+    document.addEventListener('pointerup',catDragEnd);
+    document.addEventListener('pointercancel',catDragEnd);
+    document.addEventListener('touchmove',catDragMove,{passive:false});
+    document.addEventListener('touchend',catDragEnd);
+    document.addEventListener('touchcancel',catDragEnd);
+    e.preventDefault();
+  }
+  listEl.addEventListener('pointerdown',catDragStart);
+  listEl.addEventListener('touchstart',catDragStart,{passive:false});
   function drawList(filter=''){
-    const f=String(filter||'').trim().toLowerCase(),cats=state.categories.filter(c=>!f||c.toLowerCase().includes(f));
-    listEl.innerHTML=cats.length?cats.map(cat=>{const schema=state.categorySchemas[cat]||{specs:[]};const count=Array.isArray(schema.specs)?schema.specs.length:0;const compCount=state.components.filter(c=>c.category===cat).length;return `<button type="button" class="category-row ${cat===selected?'active':''}" data-cat="${escCategory(cat)}"><span class="category-row-main"><b>${escCategory(cat)}</b><small>${compCount} مكون · ${count} مواصفة</small></span><span class="category-row-arrow">‹</span></button>`;}).join(''):'<div class="empty-state" style="padding:25px 10px">لا توجد فئات مطابقة</div>';
-    listEl.querySelectorAll('[data-cat]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.cat;drawList(document.getElementById('catSearch').value);drawEditor();});
+    const f=String(filter||'').trim().toLowerCase(),filtering=!!f;
+    const cats=state.categories.filter(c=>!f||c.toLowerCase().includes(f));
+    const bulkBarHTML=`<div class="category-bulk-bar ${selectedCats.size?'':'hidden'}" id="catBulkBar"><span>${selectedCats.size} فئة محددة</span><button type="button" class="btn small" id="catSelectNoneBtn">إلغاء التحديد</button><button type="button" class="btn small danger" id="catBulkDeleteBtn">🗑 حذف المحدد</button></div>`;
+    listEl.innerHTML=bulkBarHTML+(cats.length?cats.map(cat=>{const schema=state.categorySchemas[cat]||{specs:[]};const count=Array.isArray(schema.specs)?schema.specs.length:0;const compCount=state.components.filter(c=>c.category===cat).length;const checked=selectedCats.has(cat);return `<div class="category-row-wrap" data-cat="${escCategory(cat)}">${filtering?'':'<span class="cat-drag-handle" title="اسحب لإعادة الترتيب">⠿</span>'}<label class="cat-select-check"><input type="checkbox" data-cat-check="${escCategory(cat)}" ${checked?'checked':''}></label><button type="button" class="category-row ${cat===selected?'active':''}" data-cat="${escCategory(cat)}"><span class="category-row-main"><b>${escCategory(cat)}</b><small>${compCount} مكون · ${count} مواصفة</small></span><span class="category-row-arrow">‹</span></button></div>`;}).join(''):'<div class="empty-state" style="padding:25px 10px">لا توجد فئات مطابقة</div>');
+    listEl.querySelectorAll('.category-row[data-cat]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.cat;drawList(document.getElementById('catSearch').value);drawEditor();});
+    listEl.querySelectorAll('[data-cat-check]').forEach(chk=>{
+      chk.addEventListener('change',()=>{
+        const cat=chk.dataset.catCheck;
+        if(chk.checked)selectedCats.add(cat);else selectedCats.delete(cat);
+        drawList(document.getElementById('catSearch').value);
+      });
+    });
+    const noneBtn=document.getElementById('catSelectNoneBtn');
+    if(noneBtn)noneBtn.onclick=()=>{selectedCats.clear();drawList(document.getElementById('catSearch').value);};
+    const bulkDelBtn=document.getElementById('catBulkDeleteBtn');
+    if(bulkDelBtn)bulkDelBtn.onclick=()=>{
+      const list=[...selectedCats];
+      if(!list.length)return;
+      const usedTotal=state.components.filter(c=>list.includes(c.category)).length;
+      const msg=usedTotal?`حذف ${list.length} فئة؟ سيتم تحويل ${usedTotal} مكون مرتبط بها إلى «بدون فئة».`:`حذف ${list.length} فئة محددة؟`;
+      if(!confirm(msg))return;
+      state.components.forEach(c=>{if(list.includes(c.category))c.category='';});
+      list.forEach(cat=>{delete state.categorySchemas[cat];});
+      state.categories=state.categories.filter(c=>!list.includes(c));
+      selectedCats.clear();
+      if(!state.categories.includes(selected))selected=state.categories[0]||null;
+      ensureCategorySchemas();
+      scheduleSave();
+      drawList(document.getElementById('catSearch').value);
+      drawEditor();
+      toast(`تم حذف ${list.length} فئة`);
+    };
   }
   function drawEditor(){
     if(!selected||!state.categories.includes(selected)){editorEl.innerHTML='<div class="empty-state">اختر فئة لبدء العمل</div>';return;}
     const schema=state.categorySchemas[selected]||(state.categorySchemas[selected]={id:categorySpecKey(selected),description:'',specs:[]});if(!Array.isArray(schema.specs))schema.specs=[];
-    editorEl.innerHTML=`<div class="category-editor-head"><div><div class="category-kicker">CATEGORY TABLE</div><h2>${escCategory(selected)}</h2><p>هذه الفئة ليست نظامًا منفصلًا؛ إنها نفس حقل <b>category</b> الموجود بالمكونات، لكن إدارتها أصبحت في جدول مستقل.</p></div><div class="category-editor-actions"><button class="btn small" id="catRenameBtn">✏️ تعديل اسم الفئة</button><button class="btn small danger" id="catDeleteBtn">🗑 حذف الفئة</button></div></div><div class="category-desc-row"><label>وصف الفئة</label><input id="catDescription" value="${escCategory(schema.description||'')}" placeholder="مثال: جميع الترانزستورات المستخدمة في الورشة"><button class="btn small" id="catDescSave">حفظ</button></div><div class="category-spec-toolbar"><div><b>مواصفات الفئة</b><span> · ${schema.specs.length} مواصفة</span></div><button class="btn primary small" id="catAddSpecBtn">＋ إضافة مواصفة</button></div><div class="category-table-wrap"><table class="tbl category-spec-table"><thead><tr><th>اسم المواصفة</th><th>نوع الحقل</th><th>الوحدة</th><th>خيارات القائمة</th><th>إجراء</th></tr></thead><tbody id="categorySpecBody">${schema.specs.map(renderCategorySpecRow).join('')||'<tr><td colspan="5" class="category-no-specs">لا توجد مواصفات بعد — أضف أول مواصفة للفئة.</td></tr>'}</tbody></table></div><div class="category-spec-toolbar"><div><b>حقول بيانات المكون</b><span> · ${normalizeCategoryFields(schema).length} حقل</span></div><button class="btn primary small" id="catAddFieldBtn">＋ إضافة حقل</button></div><div class="category-table-wrap"><table class="tbl category-spec-table"><thead><tr><th>اسم الحقل</th><th>نوع الحقل</th><th>اختيارات جاهزة</th><th>قيمة افتراضية</th><th>إجراء</th></tr></thead><tbody id="categoryFieldBody">${normalizeCategoryFields(schema).map(renderCategoryFieldRow).join('')||'<tr><td colspan="5" class="category-no-specs">لا توجد حقول — أضف أول حقل للفئة.</td></tr>'}</tbody></table></div><div class="category-db-note"><b>مثال:</b> فئة «ترانزستورات» يمكن أن تحتوي على نوع = NPN / PNP / MOSFET / IGBT، مع الجهد والتيار والقدرة والتردد والحزمة. وكل فئة أخرى لها جدولها الخاص.</div>`;
+    editorEl.innerHTML=`<div class="category-editor-head"><div><div class="category-kicker">CATEGORY TABLE</div><h2>${escCategory(selected)}</h2><p>هذه الفئة ليست نظامًا منفصلًا؛ إنها نفس حقل <b>category</b> الموجود بالمكونات، لكن إدارتها أصبحت في جدول مستقل.</p></div><div class="category-editor-actions"><button class="btn small" id="catRenameBtn">✏️ تعديل اسم الفئة</button><button class="btn small danger" id="catDeleteBtn">🗑 حذف الفئة</button></div></div><div class="category-desc-row"><label>وصف الفئة</label><input id="catDescription" value="${escCategory(schema.description||'')}" placeholder="مثال: جميع الترانزستورات المستخدمة في الورشة"><button class="btn small" id="catDescSave">حفظ</button></div><div class="category-spec-toolbar"><div><b>مواصفات الفئة</b><span> · ${schema.specs.length} مواصفة</span></div><button class="btn primary small" id="catAddSpecBtn">＋ إضافة مواصفة</button></div><div class="cat-autofill-box"><div class="cat-autofill-title">🪄 ملء تلقائي لأسماء المواصفات</div><div class="cat-autofill-sub">الصق قائمة أسماء المواصفات (اسم واحد في كل سطر) وسيتم إنشاء مواصفة نصية لكل اسم جديد، بنفس ترتيب اللصق. الأسماء المكررة (الموجودة بالفعل) تُتخطى تلقائيًا.</div><textarea class="cat-autofill-input" id="catSpecBulkInput" placeholder="اسم المواصفة الأولى
+اسم المواصفة الثانية
+..."></textarea><div class="cat-autofill-row"><button type="button" class="btn small primary" id="catSpecBulkBtn">✨ تحويل إلى مواصفات</button><span class="cat-autofill-result" id="catSpecBulkResult"></span></div></div><div class="category-table-wrap"><table class="tbl category-spec-table"><thead><tr><th>اسم المواصفة</th><th>نوع الحقل</th><th>الوحدة</th><th>خيارات القائمة</th><th>إجراء</th></tr></thead><tbody id="categorySpecBody">${schema.specs.map(renderCategorySpecRow).join('')||'<tr><td colspan="5" class="category-no-specs">لا توجد مواصفات بعد — أضف أول مواصفة للفئة.</td></tr>'}</tbody></table></div><div class="category-spec-toolbar"><div><b>حقول بيانات المكون</b><span> · ${normalizeCategoryFields(schema).length} حقل</span></div><button class="btn primary small" id="catAddFieldBtn">＋ إضافة حقل</button></div><div class="category-table-wrap"><table class="tbl category-spec-table"><thead><tr><th>اسم الحقل</th><th>نوع الحقل</th><th>اختيارات جاهزة</th><th>قيمة افتراضية</th><th>إجراء</th></tr></thead><tbody id="categoryFieldBody">${normalizeCategoryFields(schema).map(renderCategoryFieldRow).join('')||'<tr><td colspan="5" class="category-no-specs">لا توجد حقول — أضف أول حقل للفئة.</td></tr>'}</tbody></table></div><div class="category-db-note"><b>مثال:</b> فئة «ترانزستورات» يمكن أن تحتوي على نوع = NPN / PNP / MOSFET / IGBT، مع الجهد والتيار والقدرة والتردد والحزمة. وكل فئة أخرى لها جدولها الخاص.</div>`;
     document.getElementById('catDescSave').onclick=()=>{schema.description=document.getElementById('catDescription').value.trim();scheduleSave();toast('تم حفظ وصف الفئة');};
     document.getElementById('catRenameBtn').onclick=()=>{const next=prompt('اسم الفئة الجديد:',selected);if(next===null)return;const name=next.trim();if(!name||name===selected)return;if(state.categories.includes(name)){toast('هذه الفئة موجودة بالفعل');return;}const oldName=selected;state.categories[state.categories.indexOf(oldName)]=name;state.categorySchemas[name]=state.categorySchemas[oldName]||{id:categorySpecKey(name),description:'',specs:[]};delete state.categorySchemas[oldName];state.components.forEach(c=>{if(c.category===oldName)c.category=name;});selected=name;ensureCategorySchemas();scheduleSave();drawList(document.getElementById('catSearch').value);drawEditor();toast('تم تعديل اسم الفئة وتحديث المكونات المرتبطة بها');};
     document.getElementById('catDeleteBtn').onclick=()=>{const used=state.components.filter(c=>c.category===selected).length;const msg=used?`الفئة «${selected}» مستخدمة في ${used} مكون. حذفها سيحوّل هذه المكونات إلى «بدون فئة». هل تريد المتابعة؟`:`حذف الفئة «${selected}» مع جدول مواصفاتها؟`;if(!confirm(msg))return;state.components.forEach(c=>{if(c.category===selected)c.category='';});delete state.categorySchemas[selected];state.categories=state.categories.filter(c=>c!==selected);selected=state.categories[0]||null;ensureCategorySchemas();scheduleSave();drawList(document.getElementById('catSearch').value);drawEditor();toast('تم حذف الفئة');};
     document.getElementById('catAddSpecBtn').onclick=()=>{let key='spec_'+Date.now().toString(36),n=1;while(schema.specs.some(x=>x.key===key))key='spec_'+Date.now().toString(36)+'_'+(n++);schema.specs.push({key,label:'مواصفة جديدة',type:'text',unit:'',options:[]});scheduleSave();drawEditor();setTimeout(()=>{const el=editorEl.querySelector('[data-cat-spec-row="'+key+'"] [data-cs="label"]');if(el){el.focus();el.select();}},30);};
+    document.getElementById('catSpecBulkBtn').onclick=()=>{
+      const ta=document.getElementById('catSpecBulkInput'),resEl=document.getElementById('catSpecBulkResult');
+      const raw=ta?ta.value:'';
+      if(!raw||!raw.trim()){ if(resEl)resEl.textContent='⚠️ الصق أسماء المواصفات في المربع أولًا.'; return; }
+      const lines=raw.split(/\r?\n/).map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length);
+      const existingLabels=new Set(schema.specs.map(s=>String(s.label||'').trim().toLowerCase()));
+      let added=0,skipped=0;
+      lines.forEach(line=>{
+        const norm=line.toLowerCase();
+        if(existingLabels.has(norm)){ skipped++; return; }
+        let key=categorySpecKey(line),n=1;
+        while(schema.specs.some(x=>x.key===key)) key=categorySpecKey(line)+'_'+(n++);
+        schema.specs.push({key,label:line,type:'text',unit:'',options:[]});
+        existingLabels.add(norm);
+        added++;
+      });
+      if(added){
+        scheduleSave();
+        drawEditor();
+        drawList(document.getElementById('catSearch').value);
+        toast(`تمت إضافة ${added} مواصفة جديدة${skipped?` (وتخطي ${skipped} مكررة)`:''}`);
+      } else if(resEl){
+        resEl.textContent=skipped?`⚠️ كل الأسماء (${skipped}) موجودة بالفعل — لم تُضَف أي مواصفة جديدة.`:'⚠️ لم يتم العثور على أي اسم صالح في النص.';
+      }
+    };
     editorEl.querySelectorAll('[data-cat-spec-row]').forEach(row=>{const key=row.dataset.catSpecRow,spec=schema.specs.find(x=>x.key===key);row.querySelectorAll('[data-cs]').forEach(inp=>{const saveField=()=>{const field=inp.dataset.cs;if(field==='options'){spec.options=normalizeCategorySpecOptions(inp.value);if(spec.options.length)spec.type='select';}else spec[field]=inp.value.trim();if(field==='type'&&spec.type==='select'&&!Array.isArray(spec.options))spec.options=[];scheduleSave();if(field==='label')drawList(document.getElementById('catSearch').value);};inp.addEventListener('change',saveField);if(inp.dataset.cs==='options')inp.addEventListener('input',saveField);});});
     document.getElementById('catAddFieldBtn').onclick=()=>{let key='field_'+Date.now().toString(36),n=1;while(schema.fields.some(x=>x.key===key))key='field_'+Date.now().toString(36)+'_'+(n++);schema.fields.push({key,label:'حقل جديد',type:'text',options:[],defaultValue:''});scheduleSave();drawEditor();setTimeout(()=>{const el=editorEl.querySelector('[data-cat-field-row="'+key+'"] [data-cf="label"]');if(el){el.focus();el.select();}},30);};
     editorEl.querySelectorAll('[data-cat-field-row]').forEach(row=>{const key=row.dataset.catFieldRow,field=schema.fields.find(x=>x.key===key);row.querySelectorAll('[data-cf]').forEach(inp=>{const saveField=()=>{const k=inp.dataset.cf;if(k==='options'){field.options=normalizeCategorySpecOptions(inp.value);if(field.options.length)field.type='select';}else if(k==='defaultValue')field.defaultValue=inp.value;else field[k]=inp.value.trim();scheduleSave();};inp.addEventListener('change',saveField);if(inp.dataset.cf==='options')inp.addEventListener('input',saveField);});});
@@ -7533,8 +7703,16 @@ searchInput.addEventListener('input',()=>{
         if(def) specHint=` · ${def.label}: ${hit[1]}`;
       }
     }
+    const catCount=c.category? state.components.filter(x=>x.category===c.category).length : 0;
     rows+=`<div class="sres-item" data-comp="${c.id}" data-cell="${first?first.id:''}">
-      <div><div class="sres-name">${c.name}</div><div class="sres-meta">${c.category||''} · إجمالي: ${totalQtyOfComponent(c.id)}${specHint}</div></div>
+      <div>
+        <div class="sres-name">${c.name}</div>
+        <div class="sres-meta">
+          <span>${c.category||'بدون فئة'}</span>
+          ${c.category?`<span class="sres-count">${catCount} في الفئة</span>`:''}
+          <span>إجمالي: ${totalQtyOfComponent(c.id)}${specHint}</span>
+        </div>
+      </div>
       <div class="sres-loc">${loc}</div>
     </div>`;
   });
@@ -7543,8 +7721,16 @@ searchInput.addEventListener('input',()=>{
   const locMatches=state.containers.filter(c=>!seenCell.has(c.id) && locationLabel(c.id).toLowerCase().includes(q)).slice(0,8);
   locMatches.forEach(c=>{
     const comp=c.componentId?findComponent(c.componentId):null;
+    const catCount=comp&&comp.category? state.components.filter(x=>x.category===comp.category).length : 0;
     rows+=`<div class="sres-item" data-cell="${c.id}">
-      <div><div class="sres-name">${comp?comp.name:'خلية فارغة'}</div><div class="sres-meta">${comp?('إجمالي: '+totalQtyOfComponent(comp.id)):'موقع تخزين'}</div></div>
+      <div>
+        <div class="sres-name">${comp?comp.name:'خلية فارغة'}</div>
+        <div class="sres-meta">
+          ${comp?`<span>${comp.category||'بدون فئة'}</span>`:''}
+          ${comp&&comp.category?`<span class="sres-count">${catCount} في الفئة</span>`:''}
+          <span>${comp?('إجمالي: '+totalQtyOfComponent(comp.id)):'موقع تخزين'}</span>
+        </div>
+      </div>
       <div class="sres-loc">${locationLabel(c.id)}</div>
     </div>`;
   });
@@ -10841,8 +11027,11 @@ const oldShowView=window.showView;if(typeof oldShowView==='function')window.show
 (function(){
 'use strict';
 const V5KEY='storageVisualLayout_v5';
+const V5VISKEY='storageVisualEditorOpen_v5';
 let v5Layout={};
 try{v5Layout=JSON.parse(localStorage.getItem(V5KEY)||'{}')||{};}catch(e){v5Layout={};}
+let v5ToolbarOpen=false;
+try{v5ToolbarOpen=localStorage.getItem(V5VISKEY)==='1';}catch(e){v5ToolbarOpen=false;}
 const SEL='.rack-panel[data-rack-id],.rack-fullpage-wrap[data-rack-id],.rack-column[data-col-id],.vs3-full-column[data-col-id],.box-chip[data-box-id],.box-card[data-box-id],.vs3-full-book[data-box-id],.cell[data-cell-id]';
 let v5Mode='move', v5Resize=null;
 
@@ -10920,9 +11109,32 @@ function v5AddHandles(el){
   });
 }
 function v5Refresh(){v5All().forEach(el=>{v5Apply(el);v5AddHandles(el);});v5UpdateToolbar();}
+function v5SetToolbarOpen(open){
+  v5ToolbarOpen=!!open;
+  try{localStorage.setItem(V5VISKEY,v5ToolbarOpen?'1':'0');}catch(e){}
+  const t=document.getElementById('storageVisualEditor');
+  if(t)t.style.display=v5ToolbarOpen?'flex':'none';
+  const btn=document.getElementById('sv5ToggleBtn');
+  if(btn)btn.classList.toggle('active',v5ToolbarOpen);
+}
+function v5ToggleBtnMount(){
+  let btn=document.getElementById('sv5ToggleBtn');
+  if(!btn){
+    btn=document.createElement('button');
+    btn.id='sv5ToggleBtn';
+    btn.type='button';
+    btn.title='إظهار/إخفاء تحرير المشهد';
+    btn.innerHTML='🛠️';
+    btn.onclick=()=>v5SetToolbarOpen(!v5ToolbarOpen);
+    document.body.appendChild(btn);
+  }
+  btn.style.display='flex';
+  btn.classList.toggle('active',v5ToolbarOpen);
+}
 function v5Toolbar(){
   let old=document.getElementById('storageVisualEditor');if(old)old.remove();
   const t=document.createElement('div');t.id='storageVisualEditor';
+  t.style.display=v5ToolbarOpen?'flex':'none';
   t.innerHTML=`
     <span class="sv-title">🛠️ تحرير المشهد</span>
     <button class="btn small active" data-v5mode="move">↔ تحريك</button>
@@ -10978,10 +11190,14 @@ function v5Init(){
       .sv-handle-x{right:2px;top:50%;transform:translateY(-50%);width:11px;height:38px;border-radius:6px;cursor:ew-resize}
       .sv-handle-y{bottom:2px;left:50%;transform:translateX(-50%);width:38px;height:11px;border-radius:6px;cursor:ns-resize}
       .sv-handle-both{right:2px;bottom:2px;width:18px;height:18px;border-radius:5px;cursor:nwse-resize}
+      #sv5ToggleBtn{position:fixed;left:10px;top:50%;transform:translateY(-50%);z-index:100001;width:44px;height:44px;border-radius:50%;background:var(--panel2);border:1px solid var(--border-lt);color:var(--text);font-size:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.4);cursor:pointer;padding:0}
+      #sv5ToggleBtn.active{border-color:var(--amber);box-shadow:0 0 0 3px var(--amber-dim),0 6px 18px rgba(0,0,0,.4)}
     `;
     document.head.appendChild(st);
   }
-  v5Toolbar();v5Refresh();
+  {const old=document.getElementById('storageVisualEditor');if(old)old.remove();}
+  {const oldBtn=document.getElementById('sv5ToggleBtn');if(oldBtn)oldBtn.remove();}
+  v5Refresh();
   if(vc.dataset.v5Bound)return;
   vc.dataset.v5Bound='1';
 
@@ -11021,7 +11237,12 @@ function v5Init(){
 }
 const oldShow=window.showView;
 if(typeof oldShow==='function'){
-  window.showView=function(v){oldShow(v);if(v==='storage')requestAnimationFrame(()=>requestAnimationFrame(v5Init));};
+  window.showView=function(v){
+    oldShow(v);
+    if(v==='storage'){
+      requestAnimationFrame(()=>requestAnimationFrame(v5Init));
+    }
+  };
 }
 window.initStorageVisualEditorV5=v5Init;
 setTimeout(v5Init,120);
@@ -11197,12 +11418,16 @@ setTimeout(v5Init,120);
         defs.map(d=>`<option value="${String(d.key).replace(/"/g,'&quot;')}">${String(d.label||d.key).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}</option>`).join('');
     }
     if([...sel.options].some(o=>o.value===old)) sel.value=old;
-    if(q){
-      const spec=getSelectedSpec();
-      q.placeholder=spec?.type==='select' ? 'اكتب/اختر قيمة الحقل أو المواصفة...' :
-        (cat.value ? `ابحث في «${spec?.label||'الحقل أو المواصفة'}» فقط...` : 'اختر الفئة ثم الحقل ثم اكتب القيمة...');
-    }
+    updatePlaceholder();
     updateValueChoices();
+  }
+  function updatePlaceholder(){
+    const cat=document.getElementById('acsCategory');
+    const q=document.getElementById('acsQuery');
+    if(!cat||!q)return;
+    const spec=getSelectedSpec();
+    q.placeholder=spec?.type==='select' ? 'اكتب/اختر قيمة الحقل أو المواصفة...' :
+      (cat.value ? (spec ? `ابحث في «${spec.label}» فقط، أو انقر لعرض كل القيم المتاحة...` : 'انقر هنا لعرض كل عناصر هذا التصنيف، أو اكتب للتصفية...') : 'اختر الفئة ثم الحقل ثم اكتب القيمة...');
   }
   function updateValueChoices(){
     const wrap=document.getElementById('acsValueChoices');
@@ -11244,64 +11469,105 @@ setTimeout(v5Init,120);
     });
     return locs.join(' · ')+(cells.length>3?` · +${cells.length-3}`:'');
   }
-  function suggestionText(comp,spec){
-    const raw=getCategorySpecValue(comp,spec);
-    const name=comp.name||comp.partNumber||'مكون';
-    const part=comp.partNumber && comp.partNumber!==name ? ` · ${comp.partNumber}`:'';
-    const val=raw!==''?` · ${raw}`:'';
-    const source=spec?.__source==='field'?'حقل بيانات المكون':'مواصفة الفئة';
-    return `${name}${part} · ${source}: ${spec?.label||spec?.__key||''}${val}`;
-  }
   function showSearchSuggestions(){
     const box=document.getElementById('acsSuggestions');
     const q=document.getElementById('acsQuery');
     const cat=document.getElementById('acsCategory')?.value||'';
     const spec=getSelectedSpec();
-    if(!box||!q||!cat||!spec){if(box)box.innerHTML='';return;}
-    const query=norm(q.value);
-    if(!query){box.innerHTML='';return;}
-    const comps=getSearchableComponents().filter(c=>{
-      // التلميحات تخص الفئة المحددة والحقل/المواصفة المحددة فقط.
-      if(norm(c.category)!==norm(cat))return false;
-      const raw=getCategorySpecValue(c,spec);
-      if(raw===undefined || raw===null || String(raw).trim()==='')return false;
-      // لا نبحث في اسم المكون أو باقي المواصفات؛ فقط في الحقل الذي اختاره المستخدم.
-      return !query || norm(raw).includes(query);
-    });
-    if(!comps.length){box.innerHTML='';return;}
-    const unique=[];
-    const seen=new Set();
-    comps.forEach(c=>{
-      const key=String(c.id);
-      if(!seen.has(key)){seen.add(key);unique.push(c);}
-    });
-    box.innerHTML=unique.slice(0,8).map(c=>{
+    if(!box||!q||!cat){if(box)box.innerHTML='';return;}
+    renderSuggestionCards(box,cat,spec,q.value);
+  }
+  function escapeHtml(v){
+    return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  const CHIP_PALETTE=['#ffd24a','#7ee0c3','#8ab4ff','#ff9f7a','#d9a6ff','#9fe07e','#ffb3c6','#8fd6ff','#f2c94c','#6fe3d6'];
+  function colorForKey(key){
+    const s=String(key||'');
+    let h=0;
+    for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0;
+    return CHIP_PALETTE[h%CHIP_PALETTE.length];
+  }
+  function hexToRgba(hex,alpha){
+    const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if(!m)return hex;
+    const r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  // عرض موحّد لكل الاقتراحات: كل عنصر في كارت منسّق يعرض اسمه، ثم
+  // شرائح (chips) ملوّنة لكل حقل/مواصفة معبأة لديه، ثم موقعه في الرفوف.
+  // لو تم تحديد مواصفة/حقل بعينه (spec)، تُبرز شريحته بإطار مضيء مميز،
+  // وتُستخدم قيمته في تصفية وترتيب النتائج. لو لم يُحدَّد أي حقل، تُعرض
+  // كل عناصر الفئة (أو المصفّاة حسب النص المكتوب) بنفس الشكل المنسّق.
+  function renderSuggestionCards(box,category,spec,queryRaw){
+    const query=norm(queryRaw);
+    const defsAll=categoryDefs(category);
+    let comps=getSearchableComponents().filter(c=>norm(c.category)===norm(category));
+    if(spec){
+      comps=comps.filter(c=>{
+        const raw=getCategorySpecValue(c,spec);
+        if(raw===undefined||raw===null||String(raw).trim()==='')return false;
+        if(!query)return true;
+        return norm(raw).includes(query);
+      });
+    }else if(query){
+      comps=comps.filter(c=>{
+        if(norm(c.name||'').includes(query)||norm(c.partNumber||'').includes(query))return true;
+        return defsAll.some(d=>{
+          const v=getCategorySpecValue(c,d);
+          return v!==undefined && v!==null && String(v)!=='' && norm(v).includes(query);
+        });
+      });
+    }
+    if(!comps.length){
+      const specMsg=spec?` بالمواصفة «${escapeHtml(spec.label||spec.__key||'')}»`:'';
+      box.innerHTML=`<div class="acs-suggestion acs-empty">لا توجد عناصر${query?' مطابقة':''} في هذه الفئة${specMsg}.</div>`;
+      return;
+    }
+    const unique=[]; const seen=new Set();
+    comps.forEach(c=>{const key=String(c.id); if(!seen.has(key)){seen.add(key);unique.push(c);}});
+    const countHtml=`<div class="acs-suggestion-count">عدد العناصر: ${unique.length}</div>`;
+    box.innerHTML=countHtml+unique.slice(0,300).map(c=>{
       const id=String(c.id).replace(/"/g,'&quot;');
-      const title=escapeHtml(suggestionText(c,spec));
+      const title=escapeHtml(c.name||c.partNumber||'مكون بلا اسم');
       const loc=escapeHtml(componentLocationText(c));
-      // نربط الاقتراح بأول خلية فعلية للمكون حتى الضغط على الاقتراح
-      // يفتح نفس موقع هذا المكون بالضبط، ولا يعيد البحث عن القيمة فقط.
+      const catColor=colorForKey(category);
+      const catChip=`<span class="acs-cat-chip"><span class="acs-cat-chip-label">التصنيف</span><span class="acs-cat-chip-value" style="color:${catColor};border-color:${hexToRgba(catColor,.55)};background:${hexToRgba(catColor,.12)}">${escapeHtml(category)}</span></span>`;
+      let valChip='';
+      if(spec){
+        const raw=getCategorySpecValue(c,spec);
+        if(raw!==undefined && raw!==null && String(raw).trim()!==''){
+          const color=colorForKey(spec.__key||spec.key);
+          valChip=`<span class="acs-cat-chip acs-cat-chip-active"><span class="acs-cat-chip-label">${escapeHtml(spec.label||spec.__key||'')}</span><span class="acs-cat-chip-value" style="color:${color};border-color:${hexToRgba(color,.55)};background:${hexToRgba(color,.12)}">${escapeHtml(String(raw))}</span></span>`;
+        }
+      }
       const targetCell=getStorageCells().find(cell=>String(cell.componentId||cell.component_id||cell.component)===String(c.id));
-      const cellId=targetCell ? String(targetCell.id).replace(/"/g,'&quot;') : '';
-      return `<button type="button" class="acs-suggestion" data-comp-id="${id}" data-cell-id="${cellId}">
+      const cellId=targetCell?String(targetCell.id).replace(/"/g,'&quot;'):'';
+      return `<button type="button" class="acs-suggestion acs-cat-card" data-comp-id="${id}" data-cell-id="${cellId}">
         <span class="acs-suggestion-title">${title}</span>
+        <span class="acs-cat-chips">${catChip}${valChip}</span>
         <span class="acs-suggestion-loc">${loc}</span>
       </button>`;
     }).join('');
     box.querySelectorAll('[data-comp-id]').forEach(btn=>{
       btn.onclick=()=>{
-        const comp=getSearchableComponents().find(c=>String(c.id)===String(btn.dataset.compId));
+        const comp=unique.find(c=>String(c.id)===String(btn.dataset.compId));
         if(!comp)return;
-        const raw=getCategorySpecValue(comp,spec);
-        q.value=String(raw||comp.name||comp.partNumber||'');
+        const q=document.getElementById('acsQuery');
+        if(q){
+          if(spec){
+            const raw=getCategorySpecValue(comp,spec);
+            q.value=String(raw||comp.name||comp.partNumber||'');
+          }else{
+            q.value=comp.name||comp.partNumber||'';
+          }
+        }
         box.innerHTML='';
-
-        // مهم: لا نعيد تشغيل search() هنا، لأن ذلك قد يأخذ أول مكون
-        // يطابق نفس القيمة بدل المكون الذي اختاره المستخدم.
-        // ننتقل مباشرةً إلى خلية الاقتراح المحددة.
         const targetCellId=btn.dataset.cellId||'';
+        const fieldVal=document.getElementById('acsField')?.value||'';
         if(targetCellId){
-          rememberSearch(cat.value, document.getElementById('acsField')?.value||'', q.value, spec);
+          rememberSearch(category,fieldVal,q?q.value:'',spec);
           clearMarks();
           if(typeof revealAndFlash==='function'){
             revealAndFlash(targetCellId);
@@ -11310,18 +11576,14 @@ setTimeout(v5Init,120);
               if(result) result.innerHTML=`تم الانتقال إلى <b>${escapeHtml(comp.name||comp.partNumber||'المكون')}</b> — <b>${escapeHtml(locationLabel(targetCellId))}</b>`;
             },1250);
           }else{
-            const cell=findCell(targetCellId);
-            if(cell) applyHighlights(new Set([String(targetCellId)]),targetCellId);
+            applyHighlights(new Set([String(targetCellId)]),targetCellId);
           }
         }else{
-          // المكون قد لا يكون مخزنًا في خلية حاليًا؛ عندها نستخدم البحث المعتاد.
-          search();
+          const result=document.getElementById('acsResult');
+          if(result) result.innerHTML=`المكون <b>${escapeHtml(comp.name||comp.partNumber||'')}</b> غير موجود حاليًا في أي خلية.`;
         }
       };
     });
-  }
-  function escapeHtml(v){
-    return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   }
 
   function populateCategories(){
@@ -11537,6 +11799,7 @@ setTimeout(v5Init,120);
       document.getElementById('acsField').addEventListener('change',()=>{
         document.getElementById('acsQuery').value='';
         const sg=document.getElementById('acsSuggestions');if(sg)sg.innerHTML='';
+        updatePlaceholder();
         updateValueChoices();
       });
       document.getElementById('acsRun').onclick=search;
@@ -11750,155 +12013,6 @@ setTimeout(v5Init,120);
   };
 })();
 </script>
-
-<script id="custom-specs-js">
-(function(){
-/*
-  متوافق مع نظام الفئات:
-  هذا الجزء يحتفظ بالمواصفات القديمة المضافة من البحث، لكنه لا يعيد بناء
-  #acsField ولا يحذف مواصفات الفئة. مصدر مواصفات البحث الأساسي هو
-  state.categorySchemas[category].specs.
-*/
-const KEY='workshop_custom_cell_specs_v1';
-function load(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return[]}}
-function save(x){localStorage.setItem(KEY,JSON.stringify(x))}
-function key(s){return 'custom_'+String(s).trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0600-\u06ff-]/g,'_').slice(0,50)}
-function render(){
- const r=document.querySelector('.custom-spec-list');if(!r)return;
- const a=load();
- r.innerHTML=a.length?a.map(s=>'<span class="custom-spec-item">'+String(s.label).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))+' <button type="button" data-del="'+s.key+'">×</button></span>').join(''):'<span style="font-size:8px;color:#887e75">لا توجد مواصفات إضافية قديمة</span>';
- r.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
-   save(load().filter(s=>s.key!==b.dataset.del)); render();
- });
-}
-function add(){
- const l=document.getElementById('customSpecLabel'),e=document.getElementById('customSpecExample');
- if(!l)return;
- const label=l.value.trim(); if(!label)return alert('اكتب اسم المواصفة');
- const k=key(label),a=load();
- if(a.some(s=>s.key===k))return alert('المواصفة موجودة بالفعل');
- a.push({key:k,label:label,example:e?.value.trim()||''});save(a);
- l.value=''; if(e)e.value=''; render();
-}
-function mount(){
- const box=document.getElementById('advancedCellSearch');
- if(!box||document.getElementById('customSpecsArea'))return;
- const d=document.createElement('div');d.id='customSpecsArea';d.className='custom-specs-box';
- d.innerHTML='<div class="custom-specs-head"><b>⚙️ إضافة مواصفة إضافية</b><span style="font-size:8px;color:#8f867d">المواصفات الأساسية الخاصة بكل فئة يتم إدارتها من صفحة «الفئات والمواصفات».</span></div><div class="custom-spec-list"></div><div class="custom-spec-add"><input id="customSpecLabel" placeholder="اسم المواصفة: التردد"><input id="customSpecExample" placeholder="مثال: 50Hz"><button class="btn small" id="customSpecAdd">＋ إضافة</button></div>';
- box.appendChild(d);
- document.getElementById('customSpecAdd').onclick=add; render();
-}
-const old=window.showView;
-if(typeof old==='function')window.showView=function(v){old(v);if(v==='storage')setTimeout(mount,50)};
-document.addEventListener('DOMContentLoaded',()=>setTimeout(mount,80));setTimeout(mount,300);
-window.getCustomCellSpecs=load;
-})();
-</script>
-
-<script id="toggle-specs-js">
-(function(){
-  const KEY='workshop_custom_cell_specs_v1';
-
-  function load(){
-    try{
-      const x=JSON.parse(localStorage.getItem(KEY)||'[]');
-      return Array.isArray(x)?x.filter(s=>s&&s.key&&s.label):[];
-    }catch(e){return[]}
-  }
-  function save(x){localStorage.setItem(KEY,JSON.stringify(x))}
-  function makeKey(s){
-    return 'custom_'+String(s).trim().toLowerCase()
-      .replace(/\s+/g,'_').replace(/[^\w\u0600-\u06ff-]/g,'_').slice(0,50);
-  }
-
-  function refreshSelect(){
-    const sel=document.getElementById('acsField'); if(!sel)return;
-    const old=sel.value;
-    const base=[
-      ['price','السعر'],['current','التيار'],['voltage','الجهد'],
-      ['size','الحجم'],['package','الباكديج'],['type','النوع'],
-      ['power','القدرة'],['manufacturer','الشركة'],['model','الموديل'],
-      ['description','الوصف']
-    ];
-    sel.innerHTML=base.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('');
-    load().forEach(s=>sel.insertAdjacentHTML('beforeend',`<option value="${s.key}">${s.label}</option>`));
-    if([...sel.options].some(o=>o.value===old))sel.value=old;
-  }
-  window.refreshSpecSearchField=refreshSelect;
-
-  function render(){
-    const list=document.querySelector('#advancedCellSearch .custom-spec-list');
-    if(!list)return;
-    const a=load();
-    list.innerHTML=a.length
-      ? a.map(s=>`<button type="button" class="custom-spec-item" data-spec-key="${s.key}">
-          <span class="spec-toggle-dot"></span><span>${s.label}</span>
-        </button>`).join('')
-      : '<span style="font-size:8px;color:#887e75">لا توجد مواصفات مخصصة</span>';
-
-    list.querySelectorAll('[data-spec-key]').forEach(btn=>{
-      btn.onclick=()=>{
-        list.querySelectorAll('.custom-spec-item').forEach(x=>x.classList.remove('active'));
-        btn.classList.add('active');
-        const sel=document.getElementById('acsField');
-        if(sel){sel.value=btn.dataset.specKey;sel.dispatchEvent(new Event('change',{bubbles:true}));}
-        const q=document.getElementById('acsQuery');if(q)q.focus();
-      };
-    });
-  }
-
-  function add(){
-    const l=document.getElementById('customSpecLabel');
-    const e=document.getElementById('customSpecExample');
-    const label=l?.value.trim();
-    if(!label){alert('اكتب اسم المواصفة أولاً');return}
-    const k=makeKey(label), a=load();
-    const built=['price','current','voltage','size','package','type','power','manufacturer','model','description'];
-    if(built.includes(k)||a.some(s=>s.key===k)){alert('هذه المواصفة موجودة بالفعل');return}
-    a.push({key:k,label,example:e?.value.trim()||''});
-    save(a);
-    if(l)l.value=''; if(e)e.value='';
-    render(); refreshSelect();
-  }
-
-  function mount(){
-    const search=document.getElementById('advancedCellSearch');
-    if(!search)return;
-    let box=document.getElementById('customSpecsArea');
-    if(!box){
-      box=document.createElement('div');
-      box.id='customSpecsArea';
-      box.className='custom-specs-box';
-      box.innerHTML=`
-        <div class="custom-specs-head">
-          <b>⚙️ مواصفات إضافية</b>
-          <span style="font-size:8px;color:#8f867d">اضغط على المواصفة لتفعيلها</span>
-        </div>
-        <div class="custom-spec-list"></div>
-        <div class="custom-spec-add">
-          <input id="customSpecLabel" placeholder="اسم المواصفة: التردد">
-          <input id="customSpecExample" placeholder="مثال: 50Hz">
-          <button class="btn small" id="customSpecAdd" type="button">＋ إضافة</button>
-        </div>`;
-      search.appendChild(box);
-      document.getElementById('customSpecAdd').onclick=add;
-      document.getElementById('customSpecExample').addEventListener('keydown',e=>{if(e.key==='Enter')add()});
-    }
-    render();refreshSelect();
-  }
-
-  const oldShow=window.showView;
-  if(typeof oldShow==='function'){
-    window.showView=function(v){
-      oldShow(v);
-      if(v==='storage')setTimeout(mount,50);
-    };
-  }
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(mount,80));
-  setTimeout(mount,300);
-})();
-</script>
-
 
 <script>
 /* Mobile UX: keep the documentation screen compact on first open. */
