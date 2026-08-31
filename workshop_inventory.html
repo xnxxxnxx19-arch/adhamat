@@ -4669,6 +4669,7 @@ function seedState(){
     },
     categories:[...DEFAULT_CATEGORIES],
     categorySchemas:buildDefaultCategorySchemas(),
+    removedDefaultCategories:[],
     uiTheme:'amber',
     usageHistory:[{id:uid('h'),date:nowISO(),componentId:components[0].id,type:'purchase',qtyChange:145,project:'',purpose:'مخزون أولي',notes:'',fromLocation:'',toLocation:containers.find(c=>c.boxId===boxA.id&&c.index===0).id}],
     purchases:[],
@@ -4935,6 +4936,7 @@ async function doSave(){
   saveInFlight=true;
   try{
     captureRuntimeLocalStorageIntoState();
+    state.__savedAtTs=Date.now();
     const json=JSON.stringify(state);
     const revision=++saveRevision;
     // التخزين الرئيسي: IndexedDB. لا نستخدم localStorage كقاعدة البيانات لأنه صغير ومناسب فقط للطوارئ.
@@ -4980,6 +4982,7 @@ async function verifyPersistedStateForBackup(){
 }
 function flushSaveNow(){
   try{
+    state.__savedAtTs=Date.now();
     const json=JSON.stringify(state);
     if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){ try{ localStorage.setItem(FALLBACK_KEY,json); }catch(e){} }
     try{ idbSet(STATE_KEY,json).catch(()=>{}); }catch(e){}
@@ -5021,6 +5024,13 @@ function migrateStateIfNeeded(){
 }
 
 /* يضمن وجود تقسيمة صفوف/أعمدة لكل عبوة (للبيانات القديمة التي بها عدد خلايا فقط) وقائمة تشيك ليست */
+function markCategoryRemoved(name){
+  if(!name)return;
+  if(!Array.isArray(state.removedDefaultCategories)) state.removedDefaultCategories=[];
+  if(DEFAULT_CATEGORIES.includes(name) && !state.removedDefaultCategories.includes(name)){
+    state.removedDefaultCategories.push(name);
+  }
+}
 function ensureNewFields(){
   let changed=false;
   (state.boxes||[]).forEach(b=>{
@@ -5033,7 +5043,14 @@ function ensureNewFields(){
   if(!state.purchases) state.purchases=[];
   if(!state.uiTheme){ state.uiTheme='amber'; changed=true; }
   if(!Array.isArray(state.categories)) { state.categories=[...DEFAULT_CATEGORIES]; changed=true; }
-  else { const merged=[...state.categories]; DEFAULT_CATEGORIES.forEach(c=>{ if(!merged.includes(c)) merged.push(c); }); if(merged.length!==state.categories.length){ state.categories=merged; changed=true; } }
+  else {
+    // لا نعيد إضافة أي فئة افتراضية سبق للمستخدم حذفها عمدًا (مسجّلة في removedDefaultCategories)
+    if(!Array.isArray(state.removedDefaultCategories)) state.removedDefaultCategories=[];
+    const removedSet=new Set(state.removedDefaultCategories);
+    const merged=[...state.categories];
+    DEFAULT_CATEGORIES.forEach(c=>{ if(!merged.includes(c) && !removedSet.has(c)) merged.push(c); });
+    if(merged.length!==state.categories.length){ state.categories=merged; changed=true; }
+  }
   if(ensureCategorySchemas()) changed=true;
   if(changed) scheduleSave();
 }
@@ -5042,14 +5059,40 @@ function applyUiTheme(){
 }
 
 async function loadState(){
-  try{
-    const raw=await idbGet(STATE_KEY);
-    if(raw){ state=JSON.parse(raw); restoreRuntimeLocalStorageFromState(); migrateStateIfNeeded(); ensureNewFields(); ensureStoragePreferences(); applyPreferences(); applyUiTheme(); return; }
-  }catch(e){}
-  try{
-    const raw=localStorage.getItem(FALLBACK_KEY);
-    if(raw){ state=JSON.parse(raw); restoreRuntimeLocalStorageFromState(); migrateStateIfNeeded(); ensureNewFields(); ensureStoragePreferences(); applyPreferences(); applyUiTheme(); scheduleSave(); return; }
-  }catch(e){}
+  // نقرأ من المصدرين معًا (IndexedDB و localStorage) بدل الاعتماد على IndexedDB وحده.
+  // السبب: عند إغلاق التطبيق بسرعة بعد عملية مثل حذف فئة، كتابة IndexedDB (غير متزامنة)
+  // ممكن تتقطع قبل ما تكتمل، بينما localStorage (متزامن) بيتحفظ فورًا وبثقة.
+  // فلو اعتمدنا على IndexedDB وحده، ممكن نرجع نسخة قديمة (فيها الفئة اللي المفروض اتحذفت).
+  let idbRaw=null, lsRaw=null;
+  try{ idbRaw=await idbGet(STATE_KEY); }catch(e){}
+  try{ lsRaw=localStorage.getItem(FALLBACK_KEY); }catch(e){}
+  let idbState=null, lsState=null;
+  try{ if(idbRaw) idbState=JSON.parse(idbRaw); }catch(e){}
+  try{ if(lsRaw) lsState=JSON.parse(lsRaw); }catch(e){}
+
+  let chosen=null, needsResave=false;
+  if(idbState && lsState){
+    const idbTs=idbState.__savedAtTs||0, lsTs=lsState.__savedAtTs||0;
+    if(lsTs>idbTs){ chosen=lsState; needsResave=true; } // localStorage أحدث فعليًا: يبقى هو المرجع، ونعيد مزامنة IndexedDB به
+    else { chosen=idbState; }
+  } else if(idbState){
+    chosen=idbState;
+  } else if(lsState){
+    chosen=lsState; needsResave=true;
+  }
+
+  if(chosen){
+    state=chosen;
+    restoreRuntimeLocalStorageFromState();
+    migrateStateIfNeeded();
+    ensureNewFields();
+    ensureStoragePreferences();
+    applyPreferences();
+    applyUiTheme();
+    if(needsResave) scheduleSave();
+    return;
+  }
+
   state=seedState();
   ensureStoragePreferences();
   applyPreferences();
@@ -6785,12 +6828,13 @@ function renderCategories(){
       const msg=usedTotal?`حذف ${list.length} فئة؟ سيتم تحويل ${usedTotal} مكون مرتبط بها إلى «بدون فئة».`:`حذف ${list.length} فئة محددة؟`;
       if(!confirm(msg))return;
       state.components.forEach(c=>{if(list.includes(c.category))c.category='';});
-      list.forEach(cat=>{delete state.categorySchemas[cat];});
+      list.forEach(cat=>{delete state.categorySchemas[cat];markCategoryRemoved(cat);});
       state.categories=state.categories.filter(c=>!list.includes(c));
       selectedCats.clear();
       if(!state.categories.includes(selected))selected=state.categories[0]||null;
       ensureCategorySchemas();
       scheduleSave();
+      flushSaveNow();
       drawList(document.getElementById('catSearch').value);
       drawEditor();
       toast(`تم حذف ${list.length} فئة`);
@@ -6803,8 +6847,8 @@ function renderCategories(){
 اسم المواصفة الثانية
 ..."></textarea><div class="cat-autofill-row"><button type="button" class="btn small primary" id="catSpecBulkBtn">✨ تحويل إلى مواصفات</button><span class="cat-autofill-result" id="catSpecBulkResult"></span></div></div><div class="category-table-wrap"><table class="tbl category-spec-table"><thead><tr><th>اسم المواصفة</th><th>نوع الحقل</th><th>الوحدة</th><th>خيارات القائمة</th><th>إجراء</th></tr></thead><tbody id="categorySpecBody">${schema.specs.map(renderCategorySpecRow).join('')||'<tr><td colspan="5" class="category-no-specs">لا توجد مواصفات بعد — أضف أول مواصفة للفئة.</td></tr>'}</tbody></table></div><div class="category-spec-toolbar"><div><b>حقول بيانات المكون</b><span> · ${normalizeCategoryFields(schema).length} حقل</span></div><button class="btn primary small" id="catAddFieldBtn">＋ إضافة حقل</button></div><div class="category-table-wrap"><table class="tbl category-spec-table"><thead><tr><th>اسم الحقل</th><th>نوع الحقل</th><th>اختيارات جاهزة</th><th>قيمة افتراضية</th><th>إجراء</th></tr></thead><tbody id="categoryFieldBody">${normalizeCategoryFields(schema).map(renderCategoryFieldRow).join('')||'<tr><td colspan="5" class="category-no-specs">لا توجد حقول — أضف أول حقل للفئة.</td></tr>'}</tbody></table></div><div class="category-db-note"><b>مثال:</b> فئة «ترانزستورات» يمكن أن تحتوي على نوع = NPN / PNP / MOSFET / IGBT، مع الجهد والتيار والقدرة والتردد والحزمة. وكل فئة أخرى لها جدولها الخاص.</div>`;
     document.getElementById('catDescSave').onclick=()=>{schema.description=document.getElementById('catDescription').value.trim();scheduleSave();toast('تم حفظ وصف الفئة');};
-    document.getElementById('catRenameBtn').onclick=()=>{const next=prompt('اسم الفئة الجديد:',selected);if(next===null)return;const name=next.trim();if(!name||name===selected)return;if(state.categories.includes(name)){toast('هذه الفئة موجودة بالفعل');return;}const oldName=selected;state.categories[state.categories.indexOf(oldName)]=name;state.categorySchemas[name]=state.categorySchemas[oldName]||{id:categorySpecKey(name),description:'',specs:[]};delete state.categorySchemas[oldName];state.components.forEach(c=>{if(c.category===oldName)c.category=name;});selected=name;ensureCategorySchemas();scheduleSave();drawList(document.getElementById('catSearch').value);drawEditor();toast('تم تعديل اسم الفئة وتحديث المكونات المرتبطة بها');};
-    document.getElementById('catDeleteBtn').onclick=()=>{const used=state.components.filter(c=>c.category===selected).length;const msg=used?`الفئة «${selected}» مستخدمة في ${used} مكون. حذفها سيحوّل هذه المكونات إلى «بدون فئة». هل تريد المتابعة؟`:`حذف الفئة «${selected}» مع جدول مواصفاتها؟`;if(!confirm(msg))return;state.components.forEach(c=>{if(c.category===selected)c.category='';});delete state.categorySchemas[selected];state.categories=state.categories.filter(c=>c!==selected);selected=state.categories[0]||null;ensureCategorySchemas();scheduleSave();drawList(document.getElementById('catSearch').value);drawEditor();toast('تم حذف الفئة');};
+    document.getElementById('catRenameBtn').onclick=()=>{const next=prompt('اسم الفئة الجديد:',selected);if(next===null)return;const name=next.trim();if(!name||name===selected)return;if(state.categories.includes(name)){toast('هذه الفئة موجودة بالفعل');return;}const oldName=selected;state.categories[state.categories.indexOf(oldName)]=name;state.categorySchemas[name]=state.categorySchemas[oldName]||{id:categorySpecKey(name),description:'',specs:[]};delete state.categorySchemas[oldName];state.components.forEach(c=>{if(c.category===oldName)c.category=name;});selected=name;ensureCategorySchemas();scheduleSave();flushSaveNow();drawList(document.getElementById('catSearch').value);drawEditor();toast('تم تعديل اسم الفئة وتحديث المكونات المرتبطة بها');};
+    document.getElementById('catDeleteBtn').onclick=()=>{const used=state.components.filter(c=>c.category===selected).length;const msg=used?`الفئة «${selected}» مستخدمة في ${used} مكون. حذفها سيحوّل هذه المكونات إلى «بدون فئة». هل تريد المتابعة؟`:`حذف الفئة «${selected}» مع جدول مواصفاتها؟`;if(!confirm(msg))return;state.components.forEach(c=>{if(c.category===selected)c.category='';});delete state.categorySchemas[selected];markCategoryRemoved(selected);state.categories=state.categories.filter(c=>c!==selected);selected=state.categories[0]||null;ensureCategorySchemas();scheduleSave();flushSaveNow();drawList(document.getElementById('catSearch').value);drawEditor();toast('تم حذف الفئة');};
     document.getElementById('catAddSpecBtn').onclick=()=>{let key='spec_'+Date.now().toString(36),n=1;while(schema.specs.some(x=>x.key===key))key='spec_'+Date.now().toString(36)+'_'+(n++);schema.specs.push({key,label:'مواصفة جديدة',type:'text',unit:'',options:[]});scheduleSave();drawEditor();setTimeout(()=>{const el=editorEl.querySelector('[data-cat-spec-row="'+key+'"] [data-cs="label"]');if(el){el.focus();el.select();}},30);};
     document.getElementById('catSpecBulkBtn').onclick=()=>{
       const ta=document.getElementById('catSpecBulkInput'),resEl=document.getElementById('catSpecBulkResult');
@@ -7286,7 +7330,7 @@ function renderSettings(){
     else toast('تم مسح كل البيانات نهائيًا');
   };
 }
-function removeCategory(i){ state.categories.splice(i,1); scheduleSave(); renderSettings(); }
+function removeCategory(i){ markCategoryRemoved(state.categories[i]); state.categories.splice(i,1); scheduleSave(); flushSaveNow(); renderSettings(); }
 function setUiTheme(themeId){
   state.uiTheme=themeId;
   applyUiTheme();
