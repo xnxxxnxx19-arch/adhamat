@@ -5622,7 +5622,7 @@ async function renderItemDetail(c, itemId){
   `;
   document.getElementById("editItemBtn").onclick = ()=> openItemModal(it.id, it.folderId);
   document.getElementById("deleteItemBtn").onclick = ()=> confirmDeleteItem(it.id);
-  document.getElementById("csEmbedHolder").appendChild(buildCodeSectionEmbed(it));
+  nbMountNotebook(document.getElementById("csEmbedHolder"), it);
 
   if(it.mainImageId){
     getFileBlobURL(it.mainImageId).then(url=>{
@@ -6221,22 +6221,24 @@ async function exportProject(){
     const zip = new JSZip();
     const manifest = {
       app: "workshop-equipment-db",
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
-      counts: {folders: state.folders.length, items: state.items.length}
+      counts: {folders: state.folders.length, items: state.items.length, categories: state.categories.length}
     };
     zip.file("project/manifest.json", JSON.stringify(manifest, null, 2));
     zip.file("project/folders.json", JSON.stringify(state.folders, null, 2));
     zip.file("project/settings.json", JSON.stringify(state.settings, null, 2));
+    // نظام الفئات والمواصفات (مستقل عن المجلدات) — كان ناقصًا تمامًا من التصدير القديم
+    zip.file("project/categories.json", JSON.stringify({categories: state.categories, categorySchemas: state.categorySchemas}, null, 2));
 
     const itemsMeta = [];
     const allFiles = await idbGetAll("files");
     const fileMap = new Map(allFiles.map(f=>[f.id,f]));
-    // نسجّل أي صورة/مستند مرتبط بعنصر لكن ملفه الفعلي مش موجود في التخزين (مرجع يتيم) —
-    // عشان المستخدم يعرف إن نسخة التصدير مش هتحتوي هذا الملف، بدل ما يكتشف غيابه بعدين بصمت.
     const missingFiles = [];
 
-    for(const it of state.items){
+    // نجهّز كل عناصر عنصر واحد بالتوازي (قراءة الملفات من IndexedDB لا تحتاج تسلسل)،
+    // وده بيسرّع التصدير بشكل كبير في المشاريع الكبيرة (آلاف الصور/المستندات).
+    await Promise.all(state.items.map(async (it)=>{
       const clone = JSON.parse(JSON.stringify(it));
       const folder = zip.folder("equipment/" + it.id);
       const imageNames = [];
@@ -6256,17 +6258,29 @@ async function exportProject(){
         folder.folder("documents").file(fname, frec.blob);
         docNames.push({fileId: d.fileId, filename: "documents/"+fname, name: d.name});
       }
+      // صور دفتر الملاحظات التقني (منفصلة عن معرض صور العنصر الرئيسي) — لازم تُصدَّر كمان
+      const nbImageNames = [];
+      const nbImages = (it.notebookData && Array.isArray(it.notebookData.images)) ? it.notebookData.images : [];
+      for(const nimg of nbImages){
+        const frec = fileMap.get(nimg.id);
+        if(!frec){ missingFiles.push({item:it.name||it.id, type:"صورة دفتر ملاحظات", id:nimg.id}); continue; }
+        const ext = guessExt(frec.mime, frec.name);
+        const fname = nimg.id + ext;
+        folder.folder("notebook_images").file(fname, frec.blob);
+        nbImageNames.push({fileId: nimg.id, filename: "notebook_images/"+fname, caption: nimg.caption||''});
+      }
       clone._images = imageNames;
       clone._docs = docNames;
+      clone._notebookImages = nbImageNames;
       folder.file("data.json", JSON.stringify(clone, null, 2));
       itemsMeta.push({id: it.id, name: it.name, folderId: it.folderId});
-    }
+    }));
     zip.file("project/items_index.json", JSON.stringify(itemsMeta, null, 2));
     if(missingFiles.length){
       zip.file("project/export-warnings.json", JSON.stringify(missingFiles, null, 2));
     }
 
-    const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:6}});
+    const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:4}});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     const stamp = new Date().toISOString().slice(0,10);
@@ -6277,7 +6291,7 @@ async function exportProject(){
       console.warn("ملفات مفقودة أثناء التصدير:", missingFiles);
       toast(`تم التصدير مع تحذير: ${missingFiles.length} صورة/مستند لها مرجع بدون ملف فعلي، لم تُدرَج في الأرشيف.`, "err", 7000);
     }else{
-      toast("تم تصدير النسخة بنجاح", "ok");
+      toast("تم تصدير النسخة بنجاح (تشمل الفئات ودفاتر الملاحظات والرسم والخرائط الذهنية)", "ok");
     }
   }catch(err){
     console.error(err);
@@ -6308,11 +6322,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
 });
 async function importProject(file, mode){
   toast("جارٍ الاستيراد...");
-  // فلسفة الاستيراد: عنصر واحد تالف (JSON غير صالح، صورة مفقودة من الأرشيف) بيتسجّل
-  // كتحذير ويتخطى، ومايوقفش استيراد باقي العناصر. الاستبدال (mode=replace) بيتأخر لحد
-  // ما نتأكد إن الأرشيف فيه على الأقل folders.json و items_index.json صالحين، عشان
-  // بيانات المستخدم الحالية متتمسحش إلا لو فعلاً عندنا حاجة نستبدلها بيها.
-  const rep = {itemsRestored:0, itemsFailed:[], imagesRestored:0, imagesMissing:[], docsRestored:0, docsMissing:[]};
+  const rep = {itemsRestored:0, itemsFailed:[], imagesRestored:0, imagesMissing:[], docsRestored:0, docsMissing:[], notebookImagesRestored:0, notebookImagesMissing:[], categoriesRestored:0};
   try{
     let zip;
     try{ zip = await JSZip.loadAsync(file); }
@@ -6331,10 +6341,32 @@ async function importProject(file, mode){
     if(!Array.isArray(importedFolders)) importedFolders = [];
     if(!Array.isArray(itemsIndex)) itemsIndex = [];
 
+    // نظام الفئات والمواصفات (لو موجود في الأرشيف — أرشيفات قديمة قبل هذا الإصلاح مش هتحتويه)
+    let importedCategories=null, importedSchemas=null;
+    const catEntry = zip.file("project/categories.json");
+    if(catEntry){
+      try{
+        const catData = JSON.parse(await catEntry.async("string"));
+        importedCategories = Array.isArray(catData.categories) ? catData.categories : [];
+        importedSchemas = (catData.categorySchemas && typeof catData.categorySchemas==='object') ? catData.categorySchemas : {};
+      }catch(e){ console.warn('categories.json تالف، تم تجاهله', e); }
+    }
+
     if(mode==="replace"){
       await idbClear("folders"); await idbClear("items"); await idbClear("files");
       state.folders = []; state.items = [];
+      if(importedCategories){ state.categories=importedCategories; state.categorySchemas=importedSchemas; }
+    } else if(importedCategories){
+      // دمج: أي فئة مستوردة مش موجودة محليًا تتضاف بمخططها كامل؛ الفئات المشتركة بالاسم تفضل نسختها المحلية
+      importedCategories.forEach(catName=>{
+        if(!state.categories.includes(catName)){
+          state.categories.push(catName);
+          state.categorySchemas[catName] = importedSchemas[catName] || {description:'', specs:[]};
+          rep.categoriesRestored++;
+        }
+      });
     }
+    if(importedCategories) await saveCategoryMeta();
 
     const folderIdMap = {};
     for(const f of importedFolders){
@@ -6352,14 +6384,16 @@ async function importProject(file, mode){
       }catch(e){ rep.itemsFailed.push({item:"مجلد: "+(f.name||f.id), reason:String(e && e.message || e)}); }
     }
 
-    for(const meta of itemsIndex){
+    // نستورد كل عنصر بالتوازي (كل عنصر مستقل تمامًا عن غيره أثناء القراءة والتخزين)،
+    // وده بيسرّع الاستيراد بشكل كبير في الأرشيفات الكبيرة (آلاف الصور/المستندات).
+    await Promise.all(itemsIndex.map(async (meta)=>{
       try{
         const entryPath = "equipment/" + meta.id + "/data.json";
         const entry = zip.file(entryPath);
-        if(!entry){ rep.itemsFailed.push({item:meta.name||meta.id, reason:"data.json مفقود من الأرشيف لهذا العنصر"}); continue; }
+        if(!entry){ rep.itemsFailed.push({item:meta.name||meta.id, reason:"data.json مفقود من الأرشيف لهذا العنصر"}); return; }
         let data;
         try{ data = JSON.parse(await entry.async("string")); }
-        catch(e){ rep.itemsFailed.push({item:meta.name||meta.id, reason:"data.json تالف لهذا العنصر"}); continue; }
+        catch(e){ rep.itemsFailed.push({item:meta.name||meta.id, reason:"data.json تالف لهذا العنصر"}); return; }
 
         const newItemId = mode==="merge" ? uid("itm") : data.id;
         const newImageIds = [];
@@ -6384,27 +6418,42 @@ async function importProject(file, mode){
             newDocs.push({id: uid("doc"), name: d.name, fileId: fid}); rep.docsRestored++;
           }catch(e){ rep.docsMissing.push({item:meta.name||meta.id, name:d.name, reason:String(e && e.message || e)}); }
         }
+        // استعادة صور دفتر الملاحظات التقني وربطها بمعرفات ملفات جديدة صحيحة
+        const nbImages = [];
+        for(const nimg of (data._notebookImages||[])){
+          try{
+            const zf = zip.file("equipment/" + meta.id + "/" + nimg.filename);
+            if(!zf){ rep.notebookImagesMissing.push({item:meta.name||meta.id, filename:nimg.filename}); continue; }
+            const blob = await zf.async("blob");
+            const fid = await storeFile(blob, nimg.filename);
+            nbImages.push({id: fid, caption: nimg.caption||''});
+            rep.notebookImagesRestored++;
+          }catch(e){ rep.notebookImagesMissing.push({item:meta.name||meta.id, filename:nimg.filename, reason:String(e && e.message || e)}); }
+        }
+        const newNotebookData = data.notebookData ? Object.assign({}, data.notebookData, {images: nbImages}) : data.notebookData;
         const newItem = Object.assign({}, data, {
           id: newItemId,
           folderId: folderIdMap[data.folderId] || data.folderId,
           imageIds: newImageIds,
           mainImageId: newMainId || newImageIds[0] || null,
-          docs: newDocs
+          docs: newDocs,
+          notebookData: newNotebookData
         });
-        delete newItem._images; delete newItem._docs;
+        delete newItem._images; delete newItem._docs; delete newItem._notebookImages;
         await idbPut("items", newItem);
         state.items.push(newItem);
         rep.itemsRestored++;
       }catch(e){ rep.itemsFailed.push({item:meta.name||meta.id, reason:String(e && e.message || e)}); }
-    }
+    }));
 
     renderSidebarTree();
     navigateTo({type:"home"});
-    const summary = [`تم الاستيراد: ${rep.itemsRestored} عنصر، ${rep.imagesRestored} صورة، ${rep.docsRestored} مستند.`];
+    const summary = [`تم الاستيراد: ${rep.itemsRestored} عنصر، ${rep.imagesRestored} صورة، ${rep.docsRestored} مستند، ${rep.notebookImagesRestored} صورة دفتر ملاحظات${rep.categoriesRestored?`، ${rep.categoriesRestored} فئة جديدة`:''}.`];
     if(rep.itemsFailed.length) summary.push(`⚠️ ${rep.itemsFailed.length} عنصر فشل: `+rep.itemsFailed.slice(0,5).map(x=>x.item).join('، ')+(rep.itemsFailed.length>5?' …':''));
     if(rep.imagesMissing.length) summary.push(`⚠️ ${rep.imagesMissing.length} صورة مفقودة من الأرشيف.`);
     if(rep.docsMissing.length) summary.push(`⚠️ ${rep.docsMissing.length} مستند مفقود من الأرشيف.`);
-    if(rep.itemsFailed.length || rep.imagesMissing.length || rep.docsMissing.length){
+    if(rep.notebookImagesMissing.length) summary.push(`⚠️ ${rep.notebookImagesMissing.length} صورة دفتر ملاحظات مفقودة من الأرشيف.`);
+    if(rep.itemsFailed.length || rep.imagesMissing.length || rep.docsMissing.length || rep.notebookImagesMissing.length){
       console.warn("تفاصيل الاستيراد الناقصة:", rep);
       toast(summary.join('\n'), "err", 9000);
     }else{
@@ -6418,5 +6467,2453 @@ async function importProject(file, mode){
 
 window.addEventListener("DOMContentLoaded", boot);
 </script>
+
+<style id="cat-move-system-css">
+.adv-cat-search{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:16px;position:relative;}
+.adv-cat-search .acs-title{font-size:13px;font-weight:700;color:var(--amber);margin-bottom:12px;}
+.adv-cat-search .acs-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
+.adv-cat-search .acs-row:last-of-type{margin-bottom:0;}
+.adv-cat-search .acs-field-wrap{display:flex;flex-direction:column;gap:5px;flex:1;min-width:150px;}
+.adv-cat-search .acs-field-wrap label{font-size:11px;color:var(--dim);font-weight:600;}
+.adv-cat-search .acs-field-wrap label .opt{color:var(--dim2);font-weight:400;}
+.adv-cat-search select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px 10px;font-size:12.5px;width:100%;box-sizing:border-box;}
+.adv-cat-search .acs-query-wrap{position:relative;flex:1 1 100%;}
+.adv-cat-search .acs-query-wrap input{width:100%;box-sizing:border-box;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px 10px;font-size:12.5px;}
+.adv-cat-search .acs-actions{gap:8px;}
+.adv-cat-search .acs-actions .btn{flex:1;}
+
+#acsResultBox.acs-dropdown{
+  position:absolute; top:calc(100% + 6px); right:0; left:0;
+  background:var(--panel2); border:1px solid var(--border); border-radius:12px;
+  max-height:min(60vh,420px); overflow:auto; z-index:60;
+  box-shadow:0 18px 40px rgba(0,0,0,.5);
+  padding:10px;
+}
+#acsResultBox.acs-dropdown:empty{display:none; padding:0; border:none; box-shadow:none;}
+.acs-empty{padding:8px 4px;font-size:12.5px;color:var(--dim);}
+
+.acs-match-count{margin-bottom:10px;color:var(--text);font-weight:700;font-size:13px;padding-bottom:8px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel2);}
+.acs-match-row{display:flex;flex-direction:column;gap:8px;padding:12px 13px;border:1px solid var(--border-lt);border-right:3px solid var(--amber);border-radius:11px;margin-bottom:9px;cursor:pointer;background:var(--panel);transition:.15s;}
+.acs-match-row:last-child{margin-bottom:0;}
+.acs-match-row:hover{border-color:var(--amber);background:var(--panel3);transform:translateX(-2px);}
+.acs-match-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.acs-match-top b{font-size:13.5px;}
+.acs-match-top .p{color:var(--dim2);font-size:11px;white-space:nowrap;}
+.acs-match-badges{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;}
+.acs-val-chip{font-size:10.5px;font-family:var(--mono);padding:4px 9px;border-radius:8px;border:1px solid var(--chip-c,var(--amber));color:var(--chip-c,var(--amber));background:var(--panel3);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+@keyframes acsGlow{
+  0%,100%{ box-shadow:0 0 0 2px var(--amber), 0 0 16px 4px rgba(242,169,60,.5); }
+  50%{ box-shadow:0 0 0 2px var(--amber), 0 0 28px 9px rgba(242,169,60,.85); }
+}
+.item-card.search-highlight,.item-list-row.search-highlight{ animation:acsGlow 1.4s ease-in-out infinite; border-radius:12px; }
+
+.fp-list{max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:10px;}
+.fp-row{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;}
+.fp-row:last-child{border-bottom:none;}
+.fp-row:hover{background:var(--panel2);color:var(--amber);}
+.fp-cur{margin-right:auto;font-size:10.5px;color:var(--dim2);}
+
+.category-db-layout{display:grid;grid-template-columns:minmax(230px,290px) minmax(0,1fr);gap:16px;align-items:start;}
+.category-list-panel,.category-editor-panel{min-width:0;}
+.category-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.category-muted{display:block;color:var(--dim);font-size:10.5px;margin-top:3px;}
+.category-search-row{margin-bottom:10px;}
+.category-search-row input{width:100%;box-sizing:border-box;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px 10px;font-size:12.5px;}
+.category-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 11px;margin-bottom:6px;text-align:right;transition:.15s;cursor:pointer;font-family:inherit;}
+.category-row:hover{border-color:var(--amber);background:var(--panel3);}
+.category-row.active{border-color:var(--amber);background:var(--amber-dim);box-shadow:inset -3px 0 0 var(--amber);}
+.category-row-main{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.category-row-main b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.category-row-main small{color:var(--dim);font-size:9.5px;}
+.category-row-arrow{color:var(--amber);font-size:18px;}
+.category-row-wrap{display:flex;align-items:center;gap:6px;margin-bottom:6px;touch-action:pan-y;}
+.category-row-wrap.dragging{opacity:.55;}
+.category-row-wrap .category-row{margin-bottom:0;flex:1;min-width:0;}
+.cat-drag-handle{flex-shrink:0;width:28px;height:38px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:16px;cursor:grab;border-radius:6px;touch-action:none;user-select:none;}
+.cat-drag-handle:active{cursor:grabbing;color:var(--amber);background:var(--panel2);}
+.cat-select-check{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:22px;height:38px;cursor:pointer;}
+.cat-select-check input{width:16px;height:16px;accent-color:var(--amber);cursor:pointer;}
+.category-bulk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--amber-dim);border:1px solid var(--amber-border);border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;color:var(--text);}
+.category-bulk-bar.hidden{display:none;}
+.category-bulk-bar span{flex:1;min-width:60px;font-weight:700;}
+.category-editor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+.category-kicker{font-family:var(--mono);font-size:9px;color:var(--amber);letter-spacing:1px;}
+.category-editor-head h2{margin:3px 0 5px;font-size:20px;}
+.category-editor-head p{margin:0;color:var(--dim);font-size:11.5px;line-height:1.7;max-width:720px;}
+.category-editor-actions{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0;}
+.category-desc-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--border);}
+.category-desc-row label{font-size:11px;color:var(--dim);}
+.category-desc-row input{width:100%;box-sizing:border-box;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px 10px;font-size:12.5px;}
+.category-spec-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:15px 0 9px;}
+.category-spec-toolbar b{font-size:14px;}
+.category-spec-toolbar span{font-size:10px;color:var(--dim);}
+.tbl{width:100%;border-collapse:collapse;}
+.tbl th,.tbl td{padding:9px 10px;text-align:right;font-size:12px;border-bottom:1px solid var(--border);}
+.tbl th{background:var(--panel3);color:var(--dim);font-weight:700;}
+.category-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--panel2);}
+.category-spec-table{min-width:680px;margin:0;}
+.category-spec-table th{background:var(--panel3)!important;color:var(--dim)!important;position:sticky;top:0;z-index:1;}
+.category-spec-table td{vertical-align:middle;}
+.cat-spec-input{width:100%;min-width:100px;padding:7px 8px!important;font-size:11.5px!important;box-sizing:border-box;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;}
+.category-spec-table select.cat-spec-input{min-width:125px;}
+.category-no-specs{text-align:center;color:var(--dim);padding:28px!important;}
+.cat-autofill-box{margin-bottom:11px;padding:10px;border:1px dashed var(--amber-border);border-radius:9px;background:var(--amber-dim);}
+.cat-autofill-title{font-size:11.5px;font-weight:800;color:var(--amber);margin-bottom:3px;}
+.cat-autofill-sub{font-size:10px;color:var(--dim);line-height:1.6;margin-bottom:7px;}
+.cat-autofill-input{width:100%;min-height:90px;resize:vertical;font-family:var(--mono);font-size:11px;line-height:1.6;box-sizing:border-box;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;}
+.cat-autofill-row{display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap;}
+.cat-autofill-result{font-size:10.5px;color:var(--dim);flex:1;min-width:160px;}
+.empty-state .big{font-size:34px;margin-bottom:10px;}
+@media(max-width:900px){
+  .category-db-layout{grid-template-columns:1fr;}
+  .category-editor-head{flex-direction:column;}
+  .category-editor-actions{width:100%;}
+  .category-editor-actions .btn{flex:1;}
+  .category-desc-row{grid-template-columns:1fr;}
+  .category-desc-row .btn{width:100%;}
+}
+
+.cat-chip{display:inline-block;font-size:9.5px;font-family:var(--mono);background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-border);padding:2px 7px;border-radius:20px;margin-bottom:4px;}
+.cat-badge{display:inline-block;font-size:11px;font-family:var(--mono);background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-border);padding:3px 9px;border-radius:20px;margin:6px 0;}
+
+.item-card.dnd-dragging,.folder-card.dnd-dragging{opacity:.35;}
+.item-card.dnd-armed,.folder-card.dnd-armed{outline:2px solid var(--amber);outline-offset:2px;transform:scale(0.98);transition:transform .12s;}
+.folder-card.dnd-over,.tree-row.dnd-over{outline:2px dashed var(--amber);outline-offset:-2px;background:var(--amber-dim);}
+.dnd-ghost{position:fixed;pointer-events:none;z-index:9999;opacity:.9;transform:scale(0.97) rotate(-1deg);box-shadow:0 14px 34px rgba(0,0,0,.45);border-radius:14px;}
+body.dnd-active{cursor:grabbing;}
+body.dnd-active *{user-select:none !important;}
+</style>
+
+<script id="categories-and-move-system">
+(function(){
+"use strict";
+
+/* =========================================================
+   1) حالة الفئات + التخزين (Categories: مستقلة عن المجلدات)
+   ========================================================= */
+if(!Array.isArray(state.categories)) state.categories = [];
+if(!state.categorySchemas || typeof state.categorySchemas !== 'object') state.categorySchemas = {};
+
+const CAT_META_KEY = 'categoriesMeta';
+let _catMetaLoaded = false;
+
+async function loadCategoryMeta(){
+  try{
+    const row = await idbGet('meta', CAT_META_KEY);
+    if(row && row.value){
+      state.categories = Array.isArray(row.value.categories) ? row.value.categories : [];
+      state.categorySchemas = (row.value.categorySchemas && typeof row.value.categorySchemas === 'object') ? row.value.categorySchemas : {};
+    }
+  }catch(e){}
+}
+async function saveCategoryMeta(){
+  try{ await idbPut('meta', {key: CAT_META_KEY, value: {categories: state.categories, categorySchemas: state.categorySchemas}}); }catch(e){}
+}
+async function ensureCategoryMetaLoaded(){
+  if(_catMetaLoaded) return;
+  _catMetaLoaded = true;
+  await loadCategoryMeta();
+}
+// نضمن تحميل بيانات الفئات مرة واحدة قبل أول عرض فعلي، دون التأثير على تسلسل فتح قاعدة البيانات في boot()
+let pendingHighlightItemId = null;
+function isSameHighlightFolder(view){
+  if(view.type!=='folder') return false;
+  const it = state.items.find(i=>i.id===pendingHighlightItemId);
+  return !!(it && it.folderId===view.id);
+}
+const _origNavigateTo = navigateTo;
+navigateTo = function(view){
+  if(!_catMetaLoaded){
+    ensureCategoryMetaLoaded().then(()=> _origNavigateTo(view));
+    return;
+  }
+  if(pendingHighlightItemId){
+    if(view.type==='item' && view.id===pendingHighlightItemId) pendingHighlightItemId=null;
+    else if(!isSameHighlightFolder(view)) pendingHighlightItemId=null;
+  }
+  return _origNavigateTo(view);
+};
+
+function categorySpecKey(label){
+  return 'cs_'+String(label||'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0600-\u06ff-]/g,'_').slice(0,70);
+}
+function normalizeCategorySpecOptions(value){
+  if(Array.isArray(value)) return value.map(x=>String(x??'').trim()).filter(Boolean);
+  return String(value??'')
+    .replace(/،/g,',')
+    .replace(/[؛;]/g,',')
+    .split(',')
+    .map(x=>x.trim())
+    .filter(Boolean);
+}
+function ensureCategorySchemaObj(cat){
+  let schema = state.categorySchemas[cat];
+  if(!schema || Array.isArray(schema)){
+    // ترحيل من الصيغة القديمة (مصفوفة حقول بسيطة) إلى صيغة جدول الفئة الكاملة
+    const oldArr = Array.isArray(schema) ? schema : [];
+    schema = { description:'', specs: oldArr.map(f=>({
+      key: f.key || f.id || categorySpecKey(f.label),
+      label: f.label||'', type: f.type||'text', unit: f.unit||'', options: f.options||[]
+    })) };
+    state.categorySchemas[cat] = schema;
+  }
+  if(!Array.isArray(schema.specs)) schema.specs = [];
+  if(typeof schema.description !== 'string') schema.description = '';
+  return schema;
+}
+function getCategoryFields(categoryName){
+  if(!categoryName) return [];
+  const schema = state.categorySchemas[categoryName];
+  const specs = (schema && Array.isArray(schema.specs)) ? schema.specs : (Array.isArray(schema) ? schema : []);
+  return specs.map(f=>({ id: f.key||f.id, key: f.key||f.id, label: f.label, type: f.type||'text', unit: f.unit||'', options: f.options||[] }));
+}
+function getEffectiveItemFields(it){
+  const folderFields = getEffectiveFieldTemplate(it.folderId) || [];
+  const catFields = getCategoryFields(it.category) || [];
+  const seen = new Set(folderFields.map(f=>f.id));
+  const merged = folderFields.slice();
+  catFields.forEach(f=>{ if(!seen.has(f.id)){ merged.push(f); seen.add(f.id); } });
+  return merged;
+}
+function markCategoryUsageCount(name){ return state.items.filter(i=>i.category===name).length; }
+
+function renderCategorySpecRow(spec){
+  const options = Array.isArray(spec.options) ? spec.options.join(', ') : '';
+  return `<tr data-cat-spec-row="${esc(spec.key)}">
+    <td><input class="cat-spec-input" data-cs="label" value="${esc(spec.label||'')}" placeholder="اسم المواصفة"></td>
+    <td><select class="cat-spec-input" data-cs="type">
+      <option value="text" ${(spec.type||'text')==='text'?'selected':''}>نص / قيمة</option>
+      <option value="number" ${spec.type==='number'?'selected':''}>رقم</option>
+      <option value="select" ${spec.type==='select'?'selected':''}>قائمة اختيار</option>
+    </select></td>
+    <td><input class="cat-spec-input" data-cs="unit" value="${esc(spec.unit||'')}" placeholder="V / A / W"></td>
+    <td><input class="cat-spec-input" data-cs="options" value="${esc(options)}" placeholder="NPN, PNP, MOSFET"></td>
+    <td><button type="button" class="btn small danger" data-cat-del-spec="${esc(spec.key)}">🗑 حذف</button></td>
+  </tr>`;
+}
+
+/* =========================================================
+   3) دمج الفئة داخل مودال العنصر (بدون لمس الدالة الأصلية)
+   نعتمد خدعة: نضع صندوق مواصفات الفئة بنفس id="specFields"
+   عشان معالج الحفظ الأصلي (اللي بيقرأ document.querySelectorAll
+   "#specFields [data-fid]") يلتقط قيمها تلقائيًا ضمن it.fields.
+   ========================================================= */
+function normLabel(s){
+  return String(s??'')
+    .replace(/[\u064B-\u065F\u0670]/g,'')
+    .replace(/^[•\-–—*]+\s*/,'')
+    .replace(/[:：\-–—]+$/,'')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g,' ');
+}
+function insertItemAutofillBox(){
+  const basicPanel = document.querySelector('.mtab-panel[data-panel="basic"]');
+  if(!basicPanel || basicPanel.querySelector('#itemAutofillBox')) return;
+  const box = document.createElement('div');
+  box.id = 'itemAutofillBox';
+  box.className = 'cat-autofill-box';
+  box.innerHTML = `
+    <div class="cat-autofill-title">🪄 ملء تلقائي من نص ملصوق</div>
+    <div class="cat-autofill-sub">الصق البيانات — أي سطر يبدأ باسم حقل موجود فعلًا في هذا النموذج (متبوع بمسافة أو فاصلة أو نقطتين) هيتسجل تلقائيًا في حقله المناسب، بغض النظر عن ترتيبها. أي سطر مش مطابق يُتجاهل.</div>
+    <textarea class="cat-autofill-input" id="itemAutofillInput" placeholder="الصق البيانات هنا..."></textarea>
+    <div class="cat-autofill-row">
+      <button type="button" class="btn small primary" id="itemAutofillBtn">✨ تحليل وملء الحقول</button>
+      <span class="cat-autofill-result" id="itemAutofillResult"></span>
+    </div>
+  `;
+  basicPanel.insertBefore(box, basicPanel.firstChild);
+
+  document.getElementById('itemAutofillBtn').onclick = ()=>{
+    const ta = document.getElementById('itemAutofillInput');
+    const resultEl = document.getElementById('itemAutofillResult');
+    const raw = ta ? ta.value : '';
+    if(!raw || !raw.trim()){ if(resultEl) resultEl.textContent='⚠️ الصق البيانات في المربع أولًا.'; return; }
+
+    // نجمع كل الحقول المتاحة حاليًا في النموذج: الأساسية + الديناميكية (مجلد/فئة)
+    const candidates = [];
+    const seen = new Set();
+    function addCandidate(label, setter){
+      const t = String(label||'').trim();
+      if(!t) return;
+      const nk = normLabel(t);
+      if(seen.has(nk)) return;
+      seen.add(nk);
+      candidates.push({text:t, norm:nk, setter});
+    }
+    const BASIC_FIELDS = [
+      ['اسم العنصر','iName'], ['الاسم','iName'],
+      ['الموديل','iModel'],
+      ['الشركة المصنعة','iManufacturer'], ['الشركة','iManufacturer'],
+      ['الرقم التسلسلي','iSerial'],
+      ['رقم القطعة','iPartNumber'],
+      ['النوع','iType'],
+      ['الحالة','iStatus']
+    ];
+    BASIC_FIELDS.forEach(([label, elId])=>{
+      const el = document.getElementById(elId);
+      if(el) addCandidate(label, (val)=>{ el.value = val; });
+    });
+    document.querySelectorAll('#specFields [data-fid]').forEach(inp=>{
+      const row = inp.closest('.field');
+      const labelEl = row ? row.querySelector('label') : null;
+      let labelText = labelEl ? labelEl.textContent : '';
+      labelText = labelText.replace(/\s*\([^)]*\)\s*$/,''); // تجاهل الوحدة بين قوسين عند المطابقة
+      addCandidate(labelText, (val)=>{ inp.value = val; });
+    });
+
+    // الأطول أولًا، عشان "مدى القياس" تتطابق قبل "المدى" مثلًا
+    candidates.sort((a,b)=> b.text.length - a.text.length);
+
+    const stripValue = (v)=>{
+      let r = v.replace(/^\s+/, '');
+      r = r.replace(/^[,:：]+\s*/, '');
+      r = r.replace(/^[–—]+\s*/, '');
+      r = r.replace(/^-\s+/, '');
+      r = r.replace(/^\s+/, '');
+      return r.replace(/\s*,+\s*$/, '').trim();
+    };
+    const lines = raw.split(/\r?\n/).map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length);
+    const found = [];
+    let pendingSetter = null;
+    lines.forEach(line=>{
+      const hit = candidates.find(c=>{
+        if(!line.toLowerCase().startsWith(c.text.toLowerCase())) return false;
+        const rest = line.slice(c.text.length);
+        return rest==='' || /^[\s,:：\-–—(]/.test(rest);
+      });
+      if(hit){
+        const remainder = stripValue(line.slice(hit.text.length));
+        if(remainder){ found.push({setter:hit.setter, val:remainder}); pendingSetter=null; }
+        else { pendingSetter = hit.setter; }
+        return;
+      }
+      if(pendingSetter){
+        found.push({setter:pendingSetter, val: stripValue(line)});
+        pendingSetter = null;
+        return;
+      }
+      // أي سطر تاني غير مطابق ومفيش حقل مستنٍ قيمة → يُتجاهل نهائيًا
+    });
+    found.forEach(f=> f.setter(f.val));
+    if(resultEl){
+      resultEl.textContent = found.length
+        ? `✅ تم التعرف على ${found.length} حقل وملؤها.`
+        : '⚠️ لم يتم التعرف على أي حقل. تأكد أن أسماء الحقول في النص مطابقة لتسميات حقول هذا النموذج.';
+    }
+  };
+}
+
+function enhanceItemModalWithCategory(itemId){
+  const basicPanel = document.querySelector('.mtab-panel[data-panel="basic"]');
+  if(!basicPanel) return;
+  insertItemAutofillBox();
+  const existingItem = itemId ? state.items.find(i=>i.id===itemId) : null;
+  const currentCat = existingItem ? (existingItem.category||'') : '';
+  const beforeUpdatedAt = existingItem ? existingItem.updatedAt : null;
+
+  const catBox = document.createElement('div');
+  catBox.id = 'itemCategoryBox';
+  const options = '<option value="">— بدون فئة —</option>' + state.categories.map(c=>`<option value="${esc(c)}" ${c===currentCat?'selected':''}>${esc(c)}</option>`).join('');
+  catBox.innerHTML = `
+    <div class="field"><label>🏷️ الفئة (مستقلة عن المجلد — تُستخدم في البحث المتقدم)</label>
+      <select id="itemCategorySelect">${options}</select>
+    </div>
+    <div id="itemCategoryFieldsBox"></div>
+  `;
+  const folderSpecHead = basicPanel.querySelector('.sec-head');
+  if(folderSpecHead) basicPanel.insertBefore(catBox, folderSpecHead);
+  else basicPanel.appendChild(catBox);
+
+  function renderCatFields(catName){
+    const box = document.getElementById('itemCategoryFieldsBox');
+    const fields = getCategoryFields(catName);
+    if(!fields.length){ box.innerHTML=''; return; }
+    box.innerHTML = '<div class="sec-head" style="margin-top:10px"><h2>مواصفات الفئة</h2><div class="line"></div></div><div id="specFields"></div>';
+    const holder = box.querySelector('#specFields');
+    fields.forEach(f=>{
+      const row = document.createElement('div');
+      row.className = 'field';
+      const val = existingItem && existingItem.fields ? (existingItem.fields[f.id]||'') : '';
+      const labelHtml = `<label>${esc(f.label)}${f.unit? ' ('+esc(f.unit)+')':''}</label>`;
+      if(f.type==='select' && Array.isArray(f.options) && f.options.length){
+        const opts = '<option value="">— اختر —</option>' + f.options.map(o=>`<option value="${esc(o)}" ${o===val?'selected':''}>${esc(o)}</option>`).join('');
+        row.innerHTML = `${labelHtml}<select data-fid="${f.id}">${opts}</select>`;
+      } else {
+        const inputType = f.type==='number' ? 'number' : 'text';
+        row.innerHTML = `${labelHtml}<input type="${inputType}" data-fid="${f.id}" value="${esc(val)}">`;
+      }
+      holder.appendChild(row);
+    });
+  }
+  renderCatFields(currentCat);
+  document.getElementById('itemCategorySelect').onchange = (e)=> renderCatFields(e.target.value);
+
+  const saveBtn = document.getElementById('mSave');
+  if(saveBtn){
+    saveBtn.addEventListener('click', ()=>{
+      const chosenCat = document.getElementById('itemCategorySelect')?.value || '';
+      setTimeout(async ()=>{
+        const targetId = (state.view && state.view.type==='item') ? state.view.id : null;
+        if(!targetId) return; // فشل التحقق من الاسم أو أُلغيت العملية، لا نغيّر شيئًا
+        const saved = state.items.find(i=>i.id===targetId);
+        if(!saved) return;
+        const isNew = !itemId;
+        const wasActuallySaved = isNew ? true : (saved.updatedAt !== beforeUpdatedAt);
+        if(!wasActuallySaved) return;
+        if(saved.category !== chosenCat){
+          saved.category = chosenCat;
+          await saveAndFlag('items', saved);
+          render();
+        }
+      }, 150);
+    });
+  }
+}
+
+const _origOpenItemModal = openItemModal;
+openItemModal = function(itemId, folderId){
+  const ret = _origOpenItemModal(itemId, folderId);
+  enhanceItemModalWithCategory(itemId);
+  return ret;
+};
+
+/* =========================================================
+   4) إظهار الفئة/مواصفاتها في بطاقة العنصر وصفحة تفاصيله
+   ========================================================= */
+const _origRenderItemGallery = renderItemGallery;
+renderItemGallery = async function(holder, items){
+  await _origRenderItemGallery(holder, items);
+  const cards = holder.querySelectorAll('.item-card');
+  cards.forEach((card, idx)=>{
+    const it = items[idx];
+    if(!it) return;
+    card.dataset.id = it.id;
+    if(it.category){
+      const catFields = getCategoryFields(it.category);
+      let extra = '';
+      catFields.forEach(f=>{
+        const val = it.fields ? it.fields[f.id] : null;
+        if(val==null || val==='') return;
+        extra += `<div class="row"><span class="k">${esc(f.label)}</span><span class="v">${esc(val)}${f.unit?esc(f.unit):''}</span></div>`;
+      });
+      const fieldsBox = card.querySelector('.item-fields');
+      if(fieldsBox && extra) fieldsBox.insertAdjacentHTML('beforeend', extra);
+      const body = card.querySelector('.item-body');
+      const nameEl = body ? body.querySelector('.item-name') : null;
+      if(nameEl && !body.querySelector('.cat-chip')){
+        const chip = document.createElement('div');
+        chip.className = 'cat-chip';
+        chip.textContent = '🏷️ ' + it.category;
+        nameEl.after(chip);
+      }
+    }
+    if(pendingHighlightItemId && it.id===pendingHighlightItemId){
+      card.classList.add('search-highlight');
+      setTimeout(()=>{ card.scrollIntoView({behavior:'smooth', block:'center'}); }, 60);
+    }
+  });
+  enhanceDragAndDrop();
+};
+
+const _origRenderItemList = renderItemList;
+renderItemList = function(holder, items){
+  _origRenderItemList(holder, items);
+  const rows = holder.querySelectorAll('.item-list-row');
+  rows.forEach((row, idx)=>{
+    const it = items[idx];
+    if(!it) return;
+    row.dataset.id = it.id;
+    if(pendingHighlightItemId && it.id===pendingHighlightItemId){
+      row.classList.add('search-highlight');
+      setTimeout(()=>{ row.scrollIntoView({behavior:'smooth', block:'center'}); }, 60);
+    }
+  });
+};
+
+const _origRenderFolderGrid = renderFolderGrid;
+renderFolderGrid = function(container, folders, parentId){
+  _origRenderFolderGrid(container, folders, parentId);
+  const cards = container.querySelectorAll('.folder-card');
+  cards.forEach((card, idx)=>{ if(folders[idx]) card.dataset.id = folders[idx].id; });
+  enhanceDragAndDrop();
+};
+
+const _origRenderItemDetail = renderItemDetail;
+renderItemDetail = async function(c, itemId){
+  await _origRenderItemDetail(c, itemId);
+  const it = state.items.find(i=>i.id===itemId);
+  if(!it) return;
+
+  const actions = c.querySelector('.view-actions');
+  if(actions && !actions.querySelector('#moveItemBtn')){
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn small';
+    btn.id = 'moveItemBtn';
+    btn.textContent = '📦 نقل';
+    actions.insertBefore(btn, actions.firstChild);
+    btn.onclick = ()=> openItemMoveModal(itemId);
+  }
+
+  const infoBox = c.querySelector('.detail-info');
+  if(infoBox && it.category && !infoBox.querySelector('.cat-badge')){
+    const badge = document.createElement('div');
+    badge.className = 'cat-badge';
+    badge.textContent = '🏷️ ' + it.category;
+    const modelEl = infoBox.querySelector('.model');
+    if(modelEl) modelEl.after(badge); else infoBox.appendChild(badge);
+  }
+
+  const catFields = getCategoryFields(it.category);
+  if(catFields.length){
+    const table = c.querySelector('.spec-table');
+    if(table){
+      const emptyRow = table.querySelector('tr td[colspan]');
+      if(emptyRow) emptyRow.closest('tr').remove();
+      catFields.forEach(f=>{
+        const val = it.fields ? it.fields[f.id] : null;
+        if(val==null || val==='') return;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${esc(f.label)}</td><td>${esc(val)}${f.unit?esc(f.unit):''}</td>`;
+        table.appendChild(tr);
+      });
+    }
+  }
+};
+
+/* =========================================================
+   5) رابط سريع للفئات من صفحة الإعدادات (الصفحة الكاملة أدناه)
+   ========================================================= */
+const _origRenderSettingsView = renderSettingsView;
+renderSettingsView = async function(c){
+  await _origRenderSettingsView(c);
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  panel.id = 'categoriesPanel';
+  const count = state.categories.length;
+  panel.innerHTML = `
+    <h3>🏷️ الفئات والمواصفات</h3>
+    <div style="font-size:12.5px;color:var(--dim2);margin-bottom:10px;">${count} فئة مسجّلة، كل فئة لها جدول مواصفات مستقل تقدر تركّبه على أي عنصر.</div>
+    <button type="button" class="btn primary small" id="goCatPageBtn">فتح صفحة الفئات والمواصفات ←</button>
+  `;
+  const panels = Array.from(c.querySelectorAll('.panel'));
+  const dangerPanel = panels.find(p=> p.querySelector('h3') && p.querySelector('h3').textContent.includes('منطقة خطرة'));
+  if(dangerPanel) c.insertBefore(panel, dangerPanel);
+  else c.appendChild(panel);
+  panel.querySelector('#goCatPageBtn').onclick = ()=> navigateTo({type:'categories'});
+};
+
+/* =========================================================
+   5ب) صفحة مستقلة كاملة: الفئات والمواصفات (زي workshop بالظبط)
+   ========================================================= */
+function renderCategoriesPageView(c){
+  c.innerHTML = `
+    <div class="view-title"><h1>🏷️ الفئات والمواصفات</h1><span class="sub">قاعدة بيانات category الحالية: كل فئة لها جدول مواصفات مستقل يمكنك إضافته وتعديله وحذفه</span></div>
+    <div class="category-db-layout">
+      <section class="panel category-list-panel">
+        <div class="category-panel-head">
+          <div><h3 style="margin:0">🗂️ الفئات</h3><span class="category-muted">عدد الفئات: ${state.categories.length}</span></div>
+          <button type="button" class="btn primary small" id="catAddBtn">＋ فئة جديدة</button>
+        </div>
+        <div class="category-search-row"><input id="catSearch" placeholder="🔍 ابحث عن فئة..."></div>
+        <div id="categoryList"></div>
+      </section>
+      <section class="panel category-editor-panel">
+        <div id="categoryEditor"><div class="empty-state"><div class="big">🗃️</div>اختر فئة من الجدول لعرض مواصفاتها</div></div>
+      </section>
+    </div>
+  `;
+
+  let selected = state.categories[0] || null;
+  const listEl = document.getElementById('categoryList');
+  const editorEl = document.getElementById('categoryEditor');
+  const selectedCats = new Set();
+  let catDragWrap = null, catDragMoved = false;
+
+  function catDragMove(e){
+    if(!catDragWrap) return;
+    catDragMoved = true;
+    const rows = [...listEl.querySelectorAll('.category-row-wrap')];
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    for(const row of rows){
+      if(row===catDragWrap) continue;
+      const r = row.getBoundingClientRect();
+      if(y>r.top && y<r.bottom){
+        if(y<r.top+r.height/2) listEl.insertBefore(catDragWrap, row);
+        else listEl.insertBefore(catDragWrap, row.nextSibling);
+        break;
+      }
+    }
+    e.preventDefault();
+  }
+  function catDragEnd(){
+    if(!catDragWrap) return;
+    catDragWrap.classList.remove('dragging');
+    const wasMoved = catDragMoved;
+    const newOrder = [...listEl.querySelectorAll('.category-row-wrap')].map(w=>w.dataset.cat);
+    const rest = state.categories.filter(cc=>!newOrder.includes(cc));
+    state.categories = [...newOrder, ...rest];
+    catDragWrap=null; catDragMoved=false;
+    document.removeEventListener('pointermove', catDragMove);
+    document.removeEventListener('pointerup', catDragEnd);
+    document.removeEventListener('pointercancel', catDragEnd);
+    document.removeEventListener('touchmove', catDragMove);
+    document.removeEventListener('touchend', catDragEnd);
+    document.removeEventListener('touchcancel', catDragEnd);
+    if(wasMoved){ saveCategoryMeta(); drawList(document.getElementById('catSearch').value); }
+  }
+  function catDragStart(e){
+    if(catDragWrap) return;
+    const handle = e.target.closest('.cat-drag-handle');
+    if(!handle) return;
+    const wrap = handle.closest('.category-row-wrap');
+    if(!wrap) return;
+    catDragWrap = wrap; catDragMoved=false;
+    wrap.classList.add('dragging');
+    document.addEventListener('pointermove', catDragMove);
+    document.addEventListener('pointerup', catDragEnd);
+    document.addEventListener('pointercancel', catDragEnd);
+    document.addEventListener('touchmove', catDragMove, {passive:false});
+    document.addEventListener('touchend', catDragEnd);
+    document.addEventListener('touchcancel', catDragEnd);
+    e.preventDefault();
+  }
+  listEl.addEventListener('pointerdown', catDragStart);
+  listEl.addEventListener('touchstart', catDragStart, {passive:false});
+
+  function drawList(filter=''){
+    const f = String(filter||'').trim().toLowerCase(), filtering = !!f;
+    const cats = state.categories.filter(cc=>!f || cc.toLowerCase().includes(f));
+    const bulkBarHTML = `<div class="category-bulk-bar ${selectedCats.size?'':'hidden'}" id="catBulkBar"><span>${selectedCats.size} فئة محددة</span><button type="button" class="btn small" id="catSelectNoneBtn">إلغاء التحديد</button><button type="button" class="btn small danger" id="catBulkDeleteBtn">🗑 حذف المحدد</button></div>`;
+    listEl.innerHTML = bulkBarHTML + (cats.length ? cats.map(cat=>{
+      const schema = ensureCategorySchemaObj(cat);
+      const count = schema.specs.length;
+      const compCount = markCategoryUsageCount(cat);
+      const checked = selectedCats.has(cat);
+      return `<div class="category-row-wrap" data-cat="${esc(cat)}">${filtering?'':'<span class="cat-drag-handle" title="اسحب لإعادة الترتيب">⠿</span>'}<label class="cat-select-check"><input type="checkbox" data-cat-check="${esc(cat)}" ${checked?'checked':''}></label><button type="button" class="category-row ${cat===selected?'active':''}" data-cat="${esc(cat)}"><span class="category-row-main"><b>${esc(cat)}</b><small>${compCount} عنصر · ${count} مواصفة</small></span><span class="category-row-arrow">‹</span></button></div>`;
+    }).join('') : '<div class="empty-state" style="padding:25px 10px">لا توجد فئات مطابقة</div>');
+
+    listEl.querySelectorAll('.category-row[data-cat]').forEach(btn=> btn.onclick = ()=>{
+      selected = btn.dataset.cat;
+      drawList(document.getElementById('catSearch').value);
+      drawEditor();
+    });
+    listEl.querySelectorAll('[data-cat-check]').forEach(chk=>{
+      chk.addEventListener('change', ()=>{
+        const cat = chk.dataset.catCheck;
+        if(chk.checked) selectedCats.add(cat); else selectedCats.delete(cat);
+        drawList(document.getElementById('catSearch').value);
+      });
+    });
+    const noneBtn = document.getElementById('catSelectNoneBtn');
+    if(noneBtn) noneBtn.onclick = ()=>{ selectedCats.clear(); drawList(document.getElementById('catSearch').value); };
+    const bulkDelBtn = document.getElementById('catBulkDeleteBtn');
+    if(bulkDelBtn) bulkDelBtn.onclick = async ()=>{
+      const list=[...selectedCats];
+      if(!list.length) return;
+      const usedTotal = state.items.filter(i=>list.includes(i.category)).length;
+      const msg = usedTotal? `حذف ${list.length} فئة؟ سيتم إزالة تصنيف ${usedTotal} عنصر مرتبط بها (العناصر نفسها تبقى موجودة).` : `حذف ${list.length} فئة محددة؟`;
+      if(!confirm(msg)) return;
+      const affected = state.items.filter(i=>list.includes(i.category));
+      for(const it of affected){ it.category=''; await saveAndFlag('items', it); }
+      list.forEach(cat=> delete state.categorySchemas[cat]);
+      state.categories = state.categories.filter(cc=>!list.includes(cc));
+      selectedCats.clear();
+      if(!state.categories.includes(selected)) selected = state.categories[0]||null;
+      await saveCategoryMeta();
+      drawList(document.getElementById('catSearch').value);
+      drawEditor();
+      toast(`تم حذف ${list.length} فئة`, 'ok');
+    };
+  }
+
+  function drawEditor(){
+    if(!selected || !state.categories.includes(selected)){ editorEl.innerHTML='<div class="empty-state">اختر فئة لبدء العمل</div>'; return; }
+    const schema = ensureCategorySchemaObj(selected);
+    editorEl.innerHTML = `
+      <div class="category-editor-head">
+        <div>
+          <div class="category-kicker">CATEGORY TABLE</div>
+          <h2>${esc(selected)}</h2>
+          <p>هذه الفئة ليست نظامًا منفصلًا؛ إنها نفس حقل <b>category</b> الموجود بالعناصر، لكن إدارتها أصبحت في جدول مستقل.</p>
+        </div>
+        <div class="category-editor-actions">
+          <button type="button" class="btn small" id="catRenameBtn">✏️ تعديل اسم الفئة</button>
+          <button type="button" class="btn small danger" id="catDeleteBtn">🗑 حذف الفئة</button>
+        </div>
+      </div>
+      <div class="category-desc-row">
+        <label>وصف الفئة</label>
+        <input id="catDescription" value="${esc(schema.description||'')}" placeholder="مثال: جميع أجهزة القياس المستخدمة في الورشة">
+        <button type="button" class="btn small" id="catDescSave">حفظ</button>
+      </div>
+      <div class="category-spec-toolbar">
+        <div><b>مواصفات الفئة</b><span> · ${schema.specs.length} مواصفة</span></div>
+        <button type="button" class="btn primary small" id="catAddSpecBtn">＋ إضافة مواصفة</button>
+      </div>
+      <div class="cat-autofill-box">
+        <div class="cat-autofill-title">🪄 ملء تلقائي لأسماء المواصفات</div>
+        <div class="cat-autofill-sub">الصق قائمة أسماء المواصفات (اسم واحد في كل سطر) وسيتم إنشاء مواصفة نصية لكل اسم جديد، بنفس ترتيب اللصق. الأسماء المكررة (الموجودة بالفعل) تُتخطى تلقائيًا.</div>
+        <textarea class="cat-autofill-input" id="catSpecBulkInput" placeholder="اسم المواصفة الأولى
+اسم المواصفة الثانية
+..."></textarea>
+        <div class="cat-autofill-row"><button type="button" class="btn small primary" id="catSpecBulkBtn">✨ تحويل إلى مواصفات</button><span class="cat-autofill-result" id="catSpecBulkResult"></span></div>
+      </div>
+      <div class="category-table-wrap">
+        <table class="tbl category-spec-table">
+          <thead><tr><th>اسم المواصفة</th><th>نوع الحقل</th><th>الوحدة</th><th>خيارات القائمة</th><th>إجراء</th></tr></thead>
+          <tbody id="categorySpecBody">${schema.specs.map(renderCategorySpecRow).join('') || '<tr><td colspan="5" class="category-no-specs">لا توجد مواصفات بعد — أضف أول مواصفة للفئة.</td></tr>'}</tbody>
+        </table>
+      </div>
+    `;
+
+    document.getElementById('catDescSave').onclick = async ()=>{
+      schema.description = document.getElementById('catDescription').value.trim();
+      await saveCategoryMeta();
+      toast('تم حفظ وصف الفئة', 'ok');
+    };
+
+    document.getElementById('catRenameBtn').onclick = async ()=>{
+      const next = prompt('اسم الفئة الجديد:', selected);
+      if(next===null) return;
+      const name = next.trim();
+      if(!name || name===selected) return;
+      if(state.categories.includes(name)){ toast('هذه الفئة موجودة بالفعل', 'err'); return; }
+      const oldName = selected;
+      state.categories[state.categories.indexOf(oldName)] = name;
+      state.categorySchemas[name] = state.categorySchemas[oldName];
+      delete state.categorySchemas[oldName];
+      const affected = state.items.filter(i=>i.category===oldName);
+      for(const it of affected){ it.category=name; await saveAndFlag('items', it); }
+      selected = name;
+      await saveCategoryMeta();
+      drawList(document.getElementById('catSearch').value);
+      drawEditor();
+      toast('تم تعديل اسم الفئة وتحديث العناصر المرتبطة بها', 'ok');
+    };
+
+    document.getElementById('catDeleteBtn').onclick = async ()=>{
+      const used = markCategoryUsageCount(selected);
+      const msg = used? `الفئة «${selected}» مستخدمة في ${used} عنصر. حذفها سيزيل تصنيفها فقط (العناصر نفسها تبقى موجودة). هل تريد المتابعة؟` : `حذف الفئة «${selected}» مع جدول مواصفاتها؟`;
+      if(!confirm(msg)) return;
+      const affected = state.items.filter(i=>i.category===selected);
+      for(const it of affected){ it.category=''; await saveAndFlag('items', it); }
+      delete state.categorySchemas[selected];
+      state.categories = state.categories.filter(cc=>cc!==selected);
+      selected = state.categories[0]||null;
+      await saveCategoryMeta();
+      drawList(document.getElementById('catSearch').value);
+      drawEditor();
+      toast('تم حذف الفئة', 'ok');
+    };
+
+    document.getElementById('catAddSpecBtn').onclick = async ()=>{
+      let key='spec_'+Date.now().toString(36), n=1;
+      while(schema.specs.some(x=>x.key===key)) key='spec_'+Date.now().toString(36)+'_'+(n++);
+      schema.specs.push({key, label:'مواصفة جديدة', type:'text', unit:'', options:[]});
+      await saveCategoryMeta();
+      drawEditor();
+      setTimeout(()=>{ const el=editorEl.querySelector('[data-cat-spec-row="'+key+'"] [data-cs="label"]'); if(el){ el.focus(); el.select(); } }, 30);
+    };
+
+    document.getElementById('catSpecBulkBtn').onclick = async ()=>{
+      const ta=document.getElementById('catSpecBulkInput'), resEl=document.getElementById('catSpecBulkResult');
+      const raw = ta? ta.value : '';
+      if(!raw || !raw.trim()){ if(resEl) resEl.textContent='⚠️ الصق أسماء المواصفات في المربع أولًا.'; return; }
+      const lines = raw.split(/\r?\n/).map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length);
+      const existingLabels = new Set(schema.specs.map(s=>String(s.label||'').trim().toLowerCase()));
+      let added=0, skipped=0;
+      lines.forEach(line=>{
+        const norm=line.toLowerCase();
+        if(existingLabels.has(norm)){ skipped++; return; }
+        let key=categorySpecKey(line), n=1;
+        while(schema.specs.some(x=>x.key===key)) key=categorySpecKey(line)+'_'+(n++);
+        schema.specs.push({key, label:line, type:'text', unit:'', options:[]});
+        existingLabels.add(norm);
+        added++;
+      });
+      if(added){
+        await saveCategoryMeta();
+        drawEditor();
+        drawList(document.getElementById('catSearch').value);
+        toast(`تمت إضافة ${added} مواصفة جديدة${skipped?` (وتخطي ${skipped} مكررة)`:''}`, 'ok');
+      } else if(resEl){
+        resEl.textContent = skipped? `⚠️ كل الأسماء (${skipped}) موجودة بالفعل — لم تُضَف أي مواصفة جديدة.` : '⚠️ لم يتم العثور على أي اسم صالح في النص.';
+      }
+    };
+
+    editorEl.querySelectorAll('[data-cat-spec-row]').forEach(row=>{
+      const key=row.dataset.catSpecRow, spec=schema.specs.find(x=>x.key===key);
+      if(!spec) return;
+      row.querySelectorAll('[data-cs]').forEach(inp=>{
+        const saveField = async ()=>{
+          const field=inp.dataset.cs;
+          if(field==='options'){ spec.options=normalizeCategorySpecOptions(inp.value); if(spec.options.length) spec.type='select'; }
+          else spec[field]=inp.value.trim();
+          await saveCategoryMeta();
+          if(field==='label') drawList(document.getElementById('catSearch').value);
+        };
+        inp.addEventListener('change', saveField);
+        if(inp.dataset.cs==='options') inp.addEventListener('input', saveField);
+      });
+    });
+
+    editorEl.querySelectorAll('[data-cat-del-spec]').forEach(btn=> btn.onclick = async ()=>{
+      const key=btn.dataset.catDelSpec, spec=schema.specs.find(x=>x.key===key);
+      if(!confirm(`حذف المواصفة «${spec?.label||key}» من فئة «${selected}»؟`)) return;
+      schema.specs = schema.specs.filter(x=>x.key!==key);
+      await saveCategoryMeta();
+      drawEditor();
+      drawList(document.getElementById('catSearch').value);
+    });
+  }
+
+  document.getElementById('catSearch').addEventListener('input', e=> drawList(e.target.value));
+  document.getElementById('catAddBtn').onclick = async ()=>{
+    const name0 = prompt('اسم الفئة الجديدة:');
+    if(name0===null) return;
+    const cat = name0.trim();
+    if(!cat) return;
+    if(state.categories.includes(cat)){ toast('الفئة موجودة بالفعل', 'err'); return; }
+    state.categories.push(cat);
+    state.categorySchemas[cat] = {description:'', specs:[]};
+    selected = cat;
+    await saveCategoryMeta();
+    drawList();
+    drawEditor();
+    toast('تمت إضافة الفئة', 'ok');
+  };
+
+  drawList();
+  drawEditor();
+}
+
+/* إضافة زر "الفئات" في القائمة الجانبية + دعم الصفحة الجديدة في نظام التوجيه والمسار */
+(function setupCategoriesNav(){
+  const navlist = document.querySelector('.navlist');
+  if(navlist && !navlist.querySelector('[data-nav="categories"]')){
+    const btn = document.createElement('button');
+    btn.className = 'nav-item';
+    btn.dataset.nav = 'categories';
+    btn.innerHTML = '<span class="ico">🏷️</span><span class="lbl">الفئات والمواصفات</span>';
+    const settingsBtn = navlist.querySelector('[data-nav="settings"]');
+    if(settingsBtn) navlist.insertBefore(btn, settingsBtn);
+    else navlist.appendChild(btn);
+  }
+})();
+
+const _origUpdateBreadcrumb = updateBreadcrumb;
+updateBreadcrumb = function(){
+  if(state.view.type === 'categories'){
+    const el = document.getElementById('breadcrumb');
+    el.innerHTML = '<b data-go="home">🏠 الرئيسية</b><span class="sep">/</span><b>🏷️ الفئات والمواصفات</b>';
+    el.querySelectorAll('[data-go]').forEach(b=>{ b.onclick = ()=> navigateTo({type:'home'}); });
+    return;
+  }
+  return _origUpdateBreadcrumb();
+};
+
+
+/* =========================================================
+   6) شريط البحث المتقدم: فئة ← مواصفة ← قيمة (زي workshop بالظبط)
+   ========================================================= */
+let acsBarEl = null;
+
+function buildAcsBar(){
+  const bar = document.createElement('div');
+  bar.id = 'advCatSearchBar';
+  bar.className = 'adv-cat-search';
+  bar.innerHTML = `
+    <div class="acs-title">🔎 بحث متقدم بالفئة</div>
+    <div class="acs-row acs-row-selects">
+      <div class="acs-field-wrap">
+        <label>الفئة</label>
+        <select id="acsCat"><option value="">— اختر —</option></select>
+      </div>
+      <div class="acs-field-wrap">
+        <label>المواصفة <span class="opt">(اختياري)</span></label>
+        <select id="acsField"><option value="">— الكل —</option></select>
+      </div>
+    </div>
+    <div class="acs-row">
+      <div class="acs-field-wrap acs-query-wrap">
+        <label>القيمة <span class="opt">(اضغط هنا لعرض كل عناصر الفئة، أو اكتب للفلترة)</span></label>
+        <input id="acsVal" placeholder="اكتب قيمة المواصفة..." autocomplete="off">
+        <div id="acsResultBox" class="acs-dropdown"></div>
+      </div>
+    </div>
+    <div class="acs-row acs-actions">
+      <button type="button" class="btn small" id="acsClearBtn">مسح</button>
+    </div>
+  `;
+  function closeDropdown(){ bar.querySelector('#acsResultBox').innerHTML=''; }
+  bar.querySelector('#acsCat').addEventListener('change', ()=>{
+    populateAcsFields();
+    bar.querySelector('#acsVal').value='';
+    if(bar.querySelector('#acsCat').value) runAcsSearch();
+    else closeDropdown();
+  });
+  bar.querySelector('#acsField').addEventListener('change', ()=>{
+    if(bar.querySelector('#acsCat').value) runAcsSearch();
+  });
+  bar.querySelector('#acsClearBtn').addEventListener('click', ()=>{
+    bar.querySelector('#acsCat').value='';
+    populateAcsFields();
+    bar.querySelector('#acsVal').value='';
+    closeDropdown();
+  });
+  bar.querySelector('#acsVal').addEventListener('input', ()=>{
+    if(bar.querySelector('#acsCat').value) runAcsSearch();
+  });
+  bar.querySelector('#acsVal').addEventListener('focus', ()=>{
+    // أول ما يحدد فئة ويدوس على مربع القيمة، نعرضله كل عناصر الفئة فورًا كقائمة عائمة فوق الصفحة
+    if(bar.querySelector('#acsCat').value) runAcsSearch();
+  });
+  bar.querySelector('#acsVal').addEventListener('keydown', (e)=>{
+    if(e.key==='Enter'){ e.preventDefault(); runAcsSearch(); }
+    if(e.key==='Escape'){ closeDropdown(); bar.querySelector('#acsVal').blur(); }
+  });
+  document.addEventListener('click', (e)=>{
+    if(acsBarEl && !acsBarEl.contains(e.target)) closeDropdown();
+  });
+  return bar;
+}
+function populateAcsCategories(){
+  if(!acsBarEl) return;
+  const sel = acsBarEl.querySelector('#acsCat');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— اختر —</option>' + state.categories.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if(state.categories.includes(cur)) sel.value = cur;
+  populateAcsFields();
+}
+function populateAcsFields(){
+  if(!acsBarEl) return;
+  const cat = acsBarEl.querySelector('#acsCat').value;
+  const sel = acsBarEl.querySelector('#acsField');
+  const cur = sel.value;
+  const fields = getCategoryFields(cat);
+  sel.innerHTML = '<option value="">— الكل —</option>' + fields.map(f=>`<option value="${f.id}">${esc(f.label)}</option>`).join('');
+  if(fields.some(f=>f.id===cur)) sel.value = cur;
+}
+const ACS_CHIP_PALETTE = ['#f2a93c','#4da3ff','#3ddc84','#ff5d5d','#c77dff','#ffb703','#06d6a0','#f72585','#38bdf8','#fb923c'];
+function chipColorFor(fieldId){
+  let h=0;
+  for(let i=0;i<fieldId.length;i++) h=(h*31 + fieldId.charCodeAt(i))>>>0;
+  return ACS_CHIP_PALETTE[h % ACS_CHIP_PALETTE.length];
+}
+function goToItemLocation(itemId){
+  const it = state.items.find(i=>i.id===itemId);
+  if(!it) return;
+  pendingHighlightItemId = itemId;
+  acsBarEl.querySelector('#acsResultBox').innerHTML='';
+  navigateTo({type:'folder', id: it.folderId});
+}
+function runAcsSearch(){
+  const cat = acsBarEl.querySelector('#acsCat').value;
+  const fid = acsBarEl.querySelector('#acsField').value;
+  const q = acsBarEl.querySelector('#acsVal').value.trim();
+  const resultBox = acsBarEl.querySelector('#acsResultBox');
+  if(!cat){ resultBox.innerHTML=''; return; }
+
+  let matches = state.items.filter(it=> it.category===cat);
+  if(q){
+    const ql = q.toLowerCase();
+    if(fid){
+      // فلترة على مواصفة محددة بالذات
+      matches = matches.filter(it=> it.fields && String(it.fields[fid]||'').toLowerCase().includes(ql));
+    } else {
+      // فلترة عامة: اسم العنصر أو أي قيمة من مواصفاته
+      matches = matches.filter(it=>{
+        if(it.name && it.name.toLowerCase().includes(ql)) return true;
+        if(it.fields) return Object.values(it.fields).some(v=> v!=null && String(v).toLowerCase().includes(ql));
+        return false;
+      });
+    }
+  }
+  renderAcsMatches(matches, cat);
+}
+function renderAcsMatches(matches, cat){
+  const resultBox = acsBarEl.querySelector('#acsResultBox');
+  if(!matches.length){
+    resultBox.innerHTML = `<div class="acs-empty">لا توجد عناصر في فئة <b>${esc(cat)}</b> مطابقة لبحثك.</div>`;
+    return;
+  }
+  const fields = getCategoryFields(cat);
+  resultBox.innerHTML = `<div class="acs-match-count">${matches.length} عنصر في فئة «${esc(cat)}»:</div>` + matches.slice(0,60).map(it=>{
+    const path = getFolderPath(it.folderId).map(f=>f.name).join(' / ');
+    const badges = fields.map(f=>{
+      const val = it.fields ? it.fields[f.id] : null;
+      if(val==null || val==='') return '';
+      return `<span class="acs-val-chip" style="--chip-c:${chipColorFor(f.id)}">${esc(f.label)}: ${esc(val)}${f.unit?esc(f.unit):''}</span>`;
+    }).join('');
+    return `<div class="acs-match-row" data-id="${it.id}">
+      <div class="acs-match-top"><b>${esc(it.name)}</b><span class="p">📍 ${esc(path)}</span></div>
+      ${badges? `<div class="acs-match-badges">${badges}</div>` : ''}
+    </div>`;
+  }).join('');
+  resultBox.querySelectorAll('.acs-match-row[data-id]').forEach(row=>{
+    row.onclick = ()=> goToItemLocation(row.dataset.id);
+  });
+}
+function mountAdvancedSearchBar(){
+  const vc = document.getElementById('viewContainer');
+  if(!vc) return;
+  const applicable = ['home','folder','tags','search'].includes(state.view.type);
+  if(!applicable) return;
+  if(!acsBarEl) acsBarEl = buildAcsBar();
+  vc.insertBefore(acsBarEl, vc.firstChild);
+  populateAcsCategories();
+}
+
+const _origRender = render;
+render = function(){
+  if(state.view.type === 'categories'){
+    const c = document.getElementById('viewContainer');
+    if(c) renderCategoriesPageView(c);
+  } else {
+    _origRender();
+  }
+  mountAdvancedSearchBar();
+};
+
+/* =========================================================
+   7) نظام النقل الحر: عناصر ومجلدات (مودال + سحب وإفلات)
+   ========================================================= */
+function collectDescendantIds(folderId){
+  let ids = [];
+  getChildFolders(folderId).forEach(c=>{ ids.push(c.id); ids = ids.concat(collectDescendantIds(c.id)); });
+  return ids;
+}
+
+function openFolderPickerModal(opts){
+  const {title, excludeIds=[], currentId=null, allowRoot=false, onPick} = opts;
+  const rows = [];
+  function collect(parentId, depth){
+    getChildFolders(parentId).forEach(f=>{
+      if(!excludeIds.includes(f.id)){
+        rows.push({folder:f, depth});
+        collect(f.id, depth+1);
+      }
+    });
+  }
+  collect(null, 0);
+  let listHtml = '';
+  if(allowRoot){
+    listHtml += `<div class="fp-row" data-id="__root__">
+      <span class="fp-ico">🏠</span><span class="fp-name">(بدون مجلد أب — المستوى الرئيسي)</span>
+      ${currentId===null?'<span class="fp-cur">(الحالي)</span>':''}
+    </div>`;
+  }
+  listHtml += rows.map(r=>`
+    <div class="fp-row" data-id="${r.folder.id}" style="padding-right:${r.depth*18+12}px">
+      <span class="fp-ico">${esc(r.folder.icon||'📁')}</span>
+      <span class="fp-name">${esc(r.folder.name)}</span>
+      ${r.folder.id===currentId?'<span class="fp-cur">(الحالي)</span>':''}
+    </div>`).join('');
+  if(!listHtml) listHtml = '<div style="padding:14px;color:var(--dim2)">لا توجد مجلدات متاحة</div>';
+
+  openModalShell(`
+    <div class="modal-head"><h2>${esc(title)}</h2><button class="modal-close" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <input id="fpSearch" placeholder="ابحث عن مجلد..." style="margin-bottom:10px;width:100%;box-sizing:border-box;">
+      <div id="fpList" class="fp-list">${listHtml}</div>
+    </div>
+    <div class="modal-foot"><div class="left"></div><div class="right"><button class="btn" id="mCancel">إلغاء</button></div></div>
+  `, false);
+
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.querySelectorAll('.fp-row[data-id]').forEach(row=>{
+    row.onclick = ()=>{ const id=row.dataset.id; closeModal(); onPick(id==='__root__'? null : id); };
+  });
+  const searchInput = document.getElementById('fpSearch');
+  searchInput.addEventListener('input', ()=>{
+    const q = searchInput.value.trim().toLowerCase();
+    document.querySelectorAll('.fp-row[data-id]').forEach(row=>{
+      const nameEl = row.querySelector('.fp-name');
+      const name = nameEl ? nameEl.textContent.toLowerCase() : '';
+      row.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
+  });
+}
+
+async function moveItemToFolder(itemId, destFolderId){
+  const it = state.items.find(i=>i.id===itemId);
+  if(!it || !destFolderId) return;
+  if(it.folderId===destFolderId){ toast('العنصر موجود بالفعل في هذا المجلد'); return; }
+  it.folderId = destFolderId;
+  it.updatedAt = Date.now();
+  await saveAndFlag('items', it);
+  renderSidebarTree();
+  toast('تم نقل العنصر', 'ok');
+  render();
+}
+function openItemMoveModal(itemId){
+  const it = state.items.find(i=>i.id===itemId);
+  if(!it) return;
+  openFolderPickerModal({
+    title: '📦 نقل العنصر إلى مجلد آخر',
+    excludeIds: [],
+    currentId: it.folderId,
+    allowRoot: false,
+    onPick: (destId)=>{ if(destId) moveItemToFolder(itemId, destId); }
+  });
+}
+
+async function moveFolderToParent(folderId, newParentId){
+  const f = getFolder(folderId);
+  if(!f) return;
+  if(f.parentId===newParentId){ toast('المجلد موجود بالفعل في هذا المكان'); return; }
+  if(newParentId===folderId || (newParentId && isDescendantFolder(newParentId, folderId))){
+    toast('لا يمكن نقل المجلد داخل نفسه أو داخل أحد مجلداته الفرعية', 'err');
+    return;
+  }
+  f.parentId = newParentId;
+  await saveAndFlag('folders', f);
+  state.folders = state.folders.map(x=> x.id===f.id? f : x);
+  renderSidebarTree();
+  toast('تم نقل المجلد', 'ok');
+  render();
+}
+function openFolderMoveModal(folderId){
+  const f = getFolder(folderId);
+  if(!f) return;
+  const excludeIds = [folderId, ...collectDescendantIds(folderId)];
+  openFolderPickerModal({
+    title: '📂 نقل المجلد إلى مكان آخر',
+    excludeIds,
+    currentId: f.parentId,
+    allowRoot: true,
+    onPick: (destId)=> moveFolderToParent(folderId, destId)
+  });
+}
+
+const _origOpenFolderModal = openFolderModal;
+openFolderModal = function(folderId, parentId){
+  const ret = _origOpenFolderModal(folderId, parentId);
+  if(folderId){
+    const foot = document.querySelector('.modal-foot .left');
+    if(foot && !foot.querySelector('#moveFolderBtn')){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn small';
+      btn.id = 'moveFolderBtn';
+      btn.textContent = '📂 نقل المجلد';
+      foot.insertBefore(btn, foot.firstChild);
+      btn.onclick = ()=> openFolderMoveModal(folderId);
+    }
+  }
+  return ret;
+};
+
+/* =========================================================
+   سحب وإفلات حر يعمل باللمس والماوس معًا (اضغط مطوّلًا ثم اسحب)
+   لاحظ: نظام HTML5 Drag API التقليدي (dragstart/dragover/drop) لا يعمل
+   بشكل موثوق على شاشات اللمس، فاستبدلناه بالكامل بـ Pointer Events
+   مع اختبار "ماذا يوجد تحت الإصبع" يدويًا عبر document.elementFromPoint.
+   ========================================================= */
+const LONG_PRESS_MS = 380;
+const MOVE_CANCEL_PX = 10;
+
+function makeDraggable(card, getType, getId){
+  if(card.dataset.pdBound) return;
+  card.dataset.pdBound = '1';
+
+  // نلف onclick الأصلي عشان نمنع فتح العنصر/المجلد بالغلط لو المستخدم كان بيسحب فعلًا
+  const origClick = card.onclick;
+  card.onclick = function(e){
+    if(card._suppressClick){ card._suppressClick=false; return; }
+    if(origClick) return origClick.call(this, e);
+  };
+
+  card.addEventListener('pointerdown', (e)=>{
+    if(e.pointerType==='mouse' && e.button!==0) return;
+    const startX=e.clientX, startY=e.clientY;
+    const pointerId=e.pointerId;
+    let armed=false, dragging=false, ghost=null, cancelled=false;
+
+    const armTimer=setTimeout(()=>{
+      if(cancelled) return;
+      armed=true;
+      card.style.touchAction='none';
+      if(navigator.vibrate){ try{ navigator.vibrate(15); }catch(_e){} }
+      card.classList.add('dnd-armed');
+    }, LONG_PRESS_MS);
+
+    function cleanup(){
+      clearTimeout(armTimer);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onCancel);
+      card.classList.remove('dnd-armed','dnd-dragging');
+      card.style.touchAction='';
+      if(ghost){ ghost.remove(); ghost=null; }
+      document.querySelectorAll('.dnd-over').forEach(el=>el.classList.remove('dnd-over'));
+      document.body.classList.remove('dnd-active');
+    }
+
+    function onMove(ev){
+      if(ev.pointerId!==pointerId) return;
+      const dx=ev.clientX-startX, dy=ev.clientY-startY;
+      if(!armed){
+        // لو المستخدم حرك إصبعه قبل اكتمال الضغط المطوّل، يبقى قصده تمرير/سكرول عادي
+        if(Math.hypot(dx,dy) > MOVE_CANCEL_PX){ cancelled=true; cleanup(); }
+        return;
+      }
+      if(!dragging){
+        dragging=true;
+        try{ card.setPointerCapture(pointerId); }catch(_e){}
+        ghost=card.cloneNode(true);
+        ghost.classList.add('dnd-ghost');
+        ghost.style.width=card.offsetWidth+'px';
+        document.body.appendChild(ghost);
+        card.classList.add('dnd-dragging');
+        document.body.classList.add('dnd-active');
+      }
+      ev.preventDefault();
+      if(ghost){
+        ghost.style.left=(ev.clientX - ghost.offsetWidth/2)+'px';
+        ghost.style.top=(ev.clientY - 36)+'px';
+      }
+      document.querySelectorAll('.dnd-over').forEach(el=>el.classList.remove('dnd-over'));
+      const under=document.elementFromPoint(ev.clientX, ev.clientY);
+      const zone=under && under.closest('.folder-card[data-id], .tree-row[data-id]');
+      if(zone && zone!==card) zone.classList.add('dnd-over');
+    }
+
+    function finish(ev){
+      if(ev && ev.pointerId!==pointerId) return;
+      if(dragging && ev){
+        const under=document.elementFromPoint(ev.clientX, ev.clientY);
+        const zone=under && under.closest('.folder-card[data-id], .tree-row[data-id]');
+        if(zone && zone.dataset.id){
+          const destId=zone.dataset.id;
+          const type=getType(), id=getId();
+          if(type==='item') moveItemToFolder(id, destId);
+          else if(type==='folder' && destId!==id) moveFolderToParent(id, destId);
+        }
+        card._suppressClick=true;
+        setTimeout(()=>{ card._suppressClick=false; }, 350);
+      }
+      cleanup();
+    }
+    function onUp(ev){ finish(ev); }
+    function onCancel(){ cleanup(); }
+
+    document.addEventListener('pointermove', onMove, {passive:false});
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onCancel);
+  });
+}
+
+function enhanceDragAndDrop(){
+  document.querySelectorAll('.item-card[data-id]').forEach(card=>{
+    makeDraggable(card, ()=>'item', ()=>card.dataset.id);
+  });
+  document.querySelectorAll('.folder-card[data-id]').forEach(card=>{
+    makeDraggable(card, ()=>'folder', ()=>card.dataset.id);
+  });
+  // .tree-row بالسايدبار أهداف إفلات جاهزة تلقائيًا (عبر elementFromPoint) بدون أي ربط إضافي
+}
+const _origRenderSidebarTree = renderSidebarTree;
+renderSidebarTree = function(){
+  _origRenderSidebarTree();
+  enhanceDragAndDrop();
+};
+
+})();
+</script>
+
+
+<style id="native-notebook-css">
+.nb-scope{direction:rtl;width:100%;}
+.nb-box{border:1px solid var(--border);border-radius:14px;background:var(--panel2);overflow:hidden;}
+.nb-head{padding:14px;background:var(--panel3);border-bottom:1px solid var(--border);}
+.nb-title{width:100%;box-sizing:border-box;border:0;border-bottom:1px solid var(--border-lt);border-radius:0;background:transparent;color:var(--text);font:700 17px var(--sans);padding:6px 0;}
+.nb-title:focus{outline:none;border-bottom-color:var(--amber);}
+.nb-note{color:var(--dim2);font-size:11px;margin-top:6px;}
+.nb-tabs{display:flex;gap:6px;padding:10px;overflow-x:auto;background:var(--panel);border-bottom:1px solid var(--border);}
+.nb-tabs .btn{flex:0 0 auto;white-space:nowrap;}
+.nb-body{padding:14px;}
+.nb-help{color:var(--dim2);font-size:11.5px;line-height:1.7;margin-bottom:10px;}
+.nb-subhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 8px;}
+.nb-subhead b{font-size:13px;}
+.nb-editor{width:100%;box-sizing:border-box;min-height:170px;resize:vertical;padding:11px;border:1px solid var(--border-lt);border-radius:9px;background:var(--panel3);color:var(--text);font:13.5px/1.8 var(--sans);}
+.nb-preview{cursor:text;min-height:40px;}
+.nb-preview.explain-view{margin-top:0;}
+.explain-view .md-empty{color:var(--dim2);font-style:italic;}
+.explain-view h1.md-h1{font-size:22px;margin:16px 0 10px;padding-bottom:8px;border-bottom:2px solid var(--amber);color:var(--amber);font-weight:900;}
+.explain-view h2.md-h2{font-size:18px;margin:14px 0 8px;color:var(--amber);font-weight:800;}
+.explain-view h3.md-h3{font-size:15px;margin:12px 0 6px;color:var(--text);font-weight:700;border-right:3px solid var(--amber);padding-right:8px;}
+.explain-view h4.md-h4{font-size:13px;margin:10px 0 5px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.explain-view blockquote{margin:8px 0;padding:8px 12px;border-right:3px solid var(--amber);background:var(--panel3);border-radius:6px;color:var(--dim);}
+.md-callout{display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px 12px;border-radius:9px;font-size:13px;line-height:1.7;}
+.md-callout-ico{font-size:16px;flex-shrink:0;}
+.md-callout.md-tip{background:rgba(77,163,255,.12);border:1px solid rgba(77,163,255,.4);color:var(--text);}
+.md-callout.md-warn{background:rgba(255,93,93,.12);border:1px solid rgba(255,93,93,.45);color:var(--text);}
+.nb-md-table{border-collapse:collapse;width:100%;margin:8px 0;overflow:hidden;border-radius:8px;}
+.nb-md-table th{border:1px solid var(--border);padding:7px 9px;font-size:12px;background:var(--amber-dim);color:var(--amber);font-weight:800;text-align:right;}
+.nb-md-table td{border:1px solid var(--border);padding:6px 8px;font-size:12px;}
+.nb-md-table tbody tr:nth-child(even){background:var(--panel3);}
+.explain-view p{margin:0 0 9px;line-height:1.8;}
+.explain-view ul,.explain-view ol{margin:0 0 9px;padding-right:22px;}
+.explain-view hr{border:none;border-top:1px dashed var(--border);margin:12px 0;}
+.explain-view mark{background:var(--amber-dim);color:var(--amber);padding:1px 3px;border-radius:3px;}
+.explain-view code{background:var(--panel3);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:12px;}
+.nb-md-code{background:var(--panel3);border:1px solid var(--border);border-radius:8px;padding:10px;overflow:auto;font-family:var(--mono);font-size:12px;}
+.explain-view img.md-image,.nb-preview img{max-width:100%;border-radius:8px;margin:6px 0;}
+
+.fmt-toolbar-holder{margin-bottom:8px;}
+.fmt-toolbar{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;padding:6px;background:var(--panel3);border:1px solid var(--border);border-radius:8px;}
+.fmt-btn{background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;color:var(--text);line-height:1.6;}
+.fmt-btn:hover{border-color:var(--amber);color:var(--amber);}
+.fmt-sep{width:1px;align-self:stretch;background:var(--border);margin:0 2px;}
+
+.nb-explist{display:flex;flex-direction:column;gap:10px;margin-bottom:6px;}
+.nb-exbox{border:1px solid var(--border);border-radius:9px;padding:10px;background:var(--panel);}
+.nb-exbox-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.nb-exbox.is-collapsed .nb-exbox-body{display:none;}
+.nb-exbox.is-collapsed .nb-exbox-head{margin-bottom:0;}
+.nb-exbox-title{flex:1;font-size:13px;font-weight:700;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--panel2);color:var(--text);}
+
+.nb-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+.nb-photo{border:1px solid var(--border-lt);border-radius:10px;padding:8px;background:var(--panel);}
+.nb-photo img{display:block;width:100%;height:120px;object-fit:cover;border-radius:7px;cursor:zoom-in;background:var(--panel3);}
+.nb-photo textarea{width:100%;box-sizing:border-box;min-height:56px;margin-top:7px;padding:6px;resize:vertical;background:var(--panel3);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11.5px;}
+.nb-photo-actions{margin-top:6px;}
+.nb-photo-actions .btn{width:100%;}
+.nb-photo-add{display:flex;align-items:center;justify-content:center;min-height:118px;padding:10px;border:1px dashed var(--amber);border-radius:10px;background:var(--amber-dim);cursor:pointer;text-align:center;color:var(--amber);font-size:12px;}
+.nb-photo-add input{display:none;}
+
+.nb-codes-holder{display:flex;flex-direction:column;gap:12px;margin-bottom:10px;}
+.nb-codeblock{border:1.5px solid var(--border-lt);border-top:3px solid var(--amber);border-radius:9px;overflow:hidden;background:var(--panel);}
+.nb-codeblock-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px;background:var(--panel3);border-bottom:1px solid var(--border);}
+.nb-codeblock-head input.nb-code-label{flex:1;min-width:100px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;width:auto;}
+.nb-codeblock-head select.nb-code-lang{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;width:auto;}
+.nb-codearea{display:block;width:100%;box-sizing:border-box;min-height:140px;padding:12px;background:var(--panel3);color:var(--text);border:none;font-family:var(--mono);font-size:12.5px;line-height:1.6;resize:vertical;direction:ltr;text-align:left;}
+.nb-codearea:focus{outline:2px solid var(--amber);outline-offset:-2px;}
+
+.drawpanel{display:flex;flex-direction:column;gap:8px;}
+.draw-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;}
+.draw-toolbar select,.draw-toolbar input[type=color],.draw-toolbar input[type=range],.draw-toolbar input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 6px;font-size:11.5px;}
+.draw-toolbar .fill-toggle{color:var(--dim);}
+.draw-canvas-wrap{border:1px solid var(--border);border-radius:9px;overflow:hidden;background:#fff;}
+.draw-canvas{display:block;width:100%;touch-action:none;cursor:crosshair;}
+
+.nb-mindmap{display:flex;flex-direction:column;gap:8px;outline:none;}
+.mm-toolbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;}
+.mm-props{display:flex;align-items:center;gap:8px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;flex-wrap:wrap;}
+.mm-name-input{flex:1;min-width:140px;background:var(--panel2);color:var(--text);border:1px solid var(--amber);border-radius:7px;padding:7px 10px;font-size:13px;font-weight:700;}
+.mm-props-label{font-size:11px;color:var(--dim);}
+.mm-color-swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;}
+.mm-custom-color{width:32px;height:26px;padding:0;border:1px solid var(--border);border-radius:6px;background:var(--panel2);cursor:pointer;}
+.mm-stage-wrap{position:relative;border:1px solid var(--border);border-radius:10px;background:var(--panel);overflow:hidden;height:420px;touch-action:none;}
+.mm-stage-wrap svg{width:100%;height:100%;cursor:grab;touch-action:none;}
+.mm-stage-wrap svg.panning{cursor:grabbing;}
+.mm-status{font-size:10.5px;color:var(--dim2);text-align:left;}
+.mm-node-box{width:100%;height:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;padding:6px 10px;border:2px solid var(--amber);border-radius:12px;background:var(--panel2);color:var(--text);font-size:12px;font-weight:700;cursor:grab;user-select:none;overflow:hidden;}
+.mm-node-box.mm-selected{box-shadow:0 0 0 3px rgba(242,169,60,.35);background:var(--panel3);}
+.mm-node-box[contenteditable="true"]{cursor:text;user-select:text;background:var(--panel);}
+.mm-collapse-btn{width:18px;height:18px;border-radius:50%;background:var(--amber);color:var(--amber-ink);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;cursor:pointer;}
+
+.nb-viewer-overlay{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;}
+.nb-viewer-stage{position:relative;flex:1 1 auto;width:100%;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none;cursor:grab;}
+.nb-viewer-stage.dragging{cursor:grabbing;}
+.nb-viewer-img{position:absolute;top:0;left:0;max-width:none;max-height:none;user-select:none;-webkit-user-drag:none;border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.5);transform-origin:0 0;touch-action:none;}
+.nb-viewer-caption{flex:0 0 auto;width:min(900px,94vw);max-height:22vh;overflow:auto;margin:10px 0;padding:9px 14px;border-radius:9px;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.18);color:#fff;font-size:12.5px;}
+.nb-viewer-toolbar{position:absolute;top:14px;right:70px;left:70px;display:flex;align-items:center;justify-content:center;gap:8px;z-index:2;}
+.nb-viewer-zbtn{background:#fff;color:#111;border:none;border-radius:8px;min-width:36px;height:36px;padding:0 8px;font-size:16px;font-weight:900;cursor:pointer;}
+.nb-viewer-zlevel{color:#fff;font-size:12.5px;min-width:44px;text-align:center;font-weight:700;}
+.nb-viewer-close{position:absolute;top:14px;left:14px;width:40px;height:40px;border-radius:50%;background:#fff;border:none;font-size:18px;cursor:pointer;color:#111;font-weight:900;z-index:3;}
+</style>
+
+<script id="native-technical-notebook">
+(function(){
+"use strict";
+
+/* =========================================================
+   دفتر ملاحظات تقني أصلي (بدون iframe) — منقول من نظام التوثيق
+   لكل خلية في workshop_inventory.html بنفس المشهد والعناصر:
+   عنوان + تبويبات (الشرح والصور / الأكواد / الرسم / الخريطة الذهنية).
+   ملاحظة: خريطة ذهنية مبسّطة (شكل شجري) بدل اللوحة الحرة الكاملة،
+   وكتل الكود بدون تلوين نحوي، للحفاظ على حجم الإضافة معقولًا.
+   ========================================================= */
+
+let _nbSaveTimers = {};
+function nbScheduleSave(item){
+  clearTimeout(_nbSaveTimers[item.id]);
+  _nbSaveTimers[item.id] = setTimeout(()=>{ saveAndFlag('items', item); }, 500);
+}
+function ensureNotebookData(item){
+  if(!item.notebookData || typeof item.notebookData !== 'object' || Array.isArray(item.notebookData)){
+    item.notebookData = {title:'', explanation:'', explanations:[], codes:[], images:[], drawing:{shapes:[]}, mindmap:null};
+  }
+  const s = item.notebookData;
+  if(!Array.isArray(s.explanations)) s.explanations = [];
+  if(!Array.isArray(s.codes)) s.codes = [];
+  if(!Array.isArray(s.images)) s.images = [];
+  if(!s.drawing || !Array.isArray(s.drawing.shapes)) s.drawing = {shapes:[]};
+  if(typeof s.explanation !== 'string') s.explanation = '';
+  if(typeof s.title !== 'string') s.title = '';
+  return s;
+}
+const MM_COLORS = ["#f2a93c","#4da3ff","#3ddc84","#ff5d5d","#c77dff","#ffb703"];
+const MM_BASE_W = 132, MM_BASE_H = 46;
+function svgEl(tag, attrs){
+  const el=document.createElementNS('http://www.w3.org/2000/svg', tag);
+  if(attrs) for(const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+function ensureMindmapData(s){
+  if(!s.mindmap || !s.mindmap.nodes || !Object.keys(s.mindmap.nodes).length){
+    const rootId='m_root';
+    s.mindmap = { nodes: { [rootId]: {id:rootId, text:'الفكرة الرئيسية', parentId:null, x:0, y:0, color:MM_COLORS[0], collapsed:false, orderIndex:0} }, rootId };
+  }
+  return s.mindmap;
+}
+
+function nbArmConfirm(btn, label){
+  if(btn.dataset.armed === '1'){
+    btn.dataset.armed = '0';
+    btn.textContent = btn.dataset.original || btn.textContent;
+    return true;
+  }
+  btn.dataset.original = btn.textContent;
+  btn.dataset.armed = '1';
+  btn.textContent = label || 'اضغط تاني للتأكيد';
+  clearTimeout(Number(btn.dataset.armTimer) || 0);
+  const timer = setTimeout(()=>{ btn.dataset.armed='0'; btn.textContent=btn.dataset.original; }, 3000);
+  btn.dataset.armTimer = timer;
+  return false;
+}
+
+function nbWrapSelection(textarea, before, after, placeholder){
+  const start=textarea.selectionStart, end=textarea.selectionEnd;
+  const val=textarea.value;
+  const hasSelection = end>start;
+  const selected = hasSelection ? val.slice(start,end) : (placeholder||'');
+  textarea.value = val.slice(0,start) + before + selected + after + val.slice(end);
+  const selStart = start+before.length, selEnd = selStart+selected.length;
+  textarea.focus(); textarea.setSelectionRange(selStart, selEnd);
+  textarea.dispatchEvent(new Event('input', {bubbles:true}));
+}
+function nbInsertLinePrefix(textarea, prefix){
+  const start=textarea.selectionStart, val=textarea.value;
+  const lineStart = val.lastIndexOf('\n', start-1)+1;
+  textarea.value = val.slice(0,lineStart) + prefix + val.slice(lineStart);
+  const newPos = start+prefix.length;
+  textarea.focus(); textarea.setSelectionRange(newPos, newPos);
+  textarea.dispatchEvent(new Event('input', {bubbles:true}));
+}
+function nbInsertAtCursor(textarea, text){
+  const start=textarea.selectionStart, end=textarea.selectionEnd, val=textarea.value;
+  textarea.value = val.slice(0,start) + text + val.slice(end);
+  const pos = start+text.length;
+  textarea.focus(); textarea.setSelectionRange(pos,pos);
+  textarea.dispatchEvent(new Event('input', {bubbles:true}));
+}
+function nbBuildFormatToolbar(getTextarea){
+  const bar=document.createElement('div');
+  bar.className='fmt-toolbar';
+  function btn(label,title,handler,extraStyle){
+    const b=document.createElement('button');
+    b.type='button'; b.className='fmt-btn'; b.textContent=label; b.title=title||'';
+    if(extraStyle) b.style.cssText=extraStyle;
+    b.addEventListener('click',(e)=>{ e.preventDefault(); const ta=getTextarea(); if(ta) handler(ta); });
+    bar.appendChild(b);
+    return b;
+  }
+  function sep(){ const s=document.createElement('span'); s.className='fmt-sep'; bar.appendChild(s); }
+  btn('B','عريض',ta=>nbWrapSelection(ta,'**','**','نص عريض'),'font-weight:900;');
+  btn('I','مائل',ta=>nbWrapSelection(ta,'*','*','نص مائل'),'font-style:italic;');
+  btn('U','تسطير',ta=>nbWrapSelection(ta,'<u>','</u>','نص مسطّر'),'text-decoration:underline;');
+  btn('S','يتوسطه خط',ta=>nbWrapSelection(ta,'~~','~~','نص'),'text-decoration:line-through;');
+  btn('==','تمييز',ta=>nbWrapSelection(ta,'==','==','نص مميز'));
+  sep();
+  btn('H1','عنوان كبير',ta=>nbInsertLinePrefix(ta,'# '));
+  btn('H2','عنوان متوسط',ta=>nbInsertLinePrefix(ta,'## '));
+  btn('H3','عنوان صغير',ta=>nbInsertLinePrefix(ta,'### '));
+  sep();
+  btn('•','قائمة نقطية',ta=>nbInsertLinePrefix(ta,'- '));
+  btn('1.','قائمة مرقّمة',ta=>nbInsertLinePrefix(ta,'1. '));
+  btn('❝','اقتباس',ta=>nbInsertLinePrefix(ta,'> '));
+  sep();
+  btn('</>','كود مضمّن',ta=>nbWrapSelection(ta,'`','`','code'));
+  btn('{ }','كتلة كود',ta=>nbInsertAtCursor(ta,'\n```\nكود هنا\n```\n'));
+  btn('🔗','رابط',ta=>{ const url=prompt('رابط URL:','https://'); if(url) nbWrapSelection(ta,'[','](' + url + ')','نص الرابط'); });
+  btn('▦','جدول',ta=>nbInsertAtCursor(ta,'\n| عمود 1 | عمود 2 |\n| --- | --- |\n| قيمة | قيمة |\n'));
+  btn('―','خط فاصل',ta=>nbInsertAtCursor(ta,'\n---\n'));
+  sep();
+  btn('💡','تنبيه',ta=>nbInsertLinePrefix(ta,'> 💡 '));
+  btn('⚠️','تحذير',ta=>nbInsertLinePrefix(ta,'> ⚠️ '));
+  return bar;
+}
+
+/* ===== ماركداون خفيف بدون أي مكتبات خارجية ===== */
+function nbRenderMarkdown(raw){
+  if(!raw || !raw.trim()) return '<span class="md-empty">(لا يوجد شرح — اضغط هنا للإضافة)</span>';
+  const codeBlocks=[];
+  let text = esc(raw).replace(/\r\n/g,'\n').replace(/```([\s\S]*?)```/g,(m,code)=>{ codeBlocks.push(code); return '\u0001'+(codeBlocks.length-1)+'\u0001'; });
+  function inline(s){
+    s = s.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+    s = s.replace(/(^|[^*])\*([^*]+?)\*([^*]|$)/g,'$1<i>$2</i>$3');
+    s = s.replace(/&lt;u&gt;([\s\S]+?)&lt;\/u&gt;/g,'<u>$1</u>');
+    s = s.replace(/~~(.+?)~~/g,'<s>$1</s>');
+    s = s.replace(/==(.+?)==/g,'<mark>$1</mark>');
+    s = s.replace(/`([^`]+?)`/g,'<code>$1</code>');
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return s;
+  }
+  const lines = text.split('\n');
+  let html=''; let listType=null; let listItems=[];
+  function flushList(){
+    if(listType){ html += `<${listType}>` + listItems.map(li=>`<li>${inline(li)}</li>`).join('') + `</${listType}>`; listType=null; listItems=[]; }
+  }
+  let i=0;
+  while(i<lines.length){
+    const t = lines[i].trim();
+    if(!t){ flushList(); i++; continue; }
+    if(/^\|.*\|$/.test(t)){
+      const rows=[];
+      while(i<lines.length && /^\|.*\|$/.test(lines[i].trim())){
+        const cells=lines[i].trim().slice(1,-1).split('|').map(c=>c.trim());
+        if(!/^:?-{2,}:?$/.test(cells.join(''))) rows.push(cells);
+        i++;
+      }
+      if(rows.length){
+        flushList();
+        const [headRow, ...bodyRows] = rows;
+        html += '<table class="nb-md-table"><thead><tr>'+headRow.map(c=>`<th>${inline(c)}</th>`).join('')+'</tr></thead>';
+        if(bodyRows.length) html += '<tbody>'+bodyRows.map(r=>'<tr>'+r.map(c=>`<td>${inline(c)}</td>`).join('')+'</tr>').join('')+'</tbody>';
+        html += '</table>';
+      }
+      continue;
+    }
+    if(/^(-{3,}|_{3,}|\*{3,})$/.test(t)){ flushList(); html+='<hr>'; i++; continue; }
+    let m;
+    if((m=t.match(/^(#{1,4})\s+(.+)$/))){
+      flushList();
+      const lvl=m[1].length; // # عنوان رئيسي كبير، ## عنوان فرعي، ### وهكذا أصغر
+      html += `<h${lvl} class="md-h${lvl}">${inline(m[2])}</h${lvl}>`;
+      i++; continue;
+    }
+    if((m=t.match(/^&gt;\s?(💡|⚠️)?\s*(.*)$/))){
+      flushList();
+      if(m[1]==='💡') html += `<div class="md-callout md-tip"><span class="md-callout-ico">💡</span><div>${inline(m[2])}</div></div>`;
+      else if(m[1]==='⚠️') html += `<div class="md-callout md-warn"><span class="md-callout-ico">⚠️</span><div>${inline(m[2])}</div></div>`;
+      else html += `<blockquote>${inline(m[2])}</blockquote>`;
+      i++; continue;
+    }
+    if((m=t.match(/^[-*]\s+(.+)$/))){ if(listType!=='ul'){flushList();listType='ul';} listItems.push(m[1]); i++; continue; }
+    if((m=t.match(/^\d+\.\s+(.+)$/))){ if(listType!=='ol'){flushList();listType='ol';} listItems.push(m[1]); i++; continue; }
+    flushList();
+    html += `<p>${inline(t)}</p>`;
+    i++;
+  }
+  flushList();
+  html = html.replace(/\u0001(\d+)\u0001/g,(m,idx)=>`<pre class="nb-md-code"><code>${codeBlocks[idx]}</code></pre>`);
+  return html;
+}
+function nbEnhanceMarkdownView(container){
+  if(!container) return;
+  container.querySelectorAll('img').forEach(img=>{
+    img.classList.add('md-image');
+    img.style.cursor='zoom-in';
+    if(!img.dataset.nbViewerBound){
+      img.dataset.nbViewerBound='1';
+      img.addEventListener('click',(e)=>{ e.preventDefault(); e.stopPropagation(); const src=img.currentSrc||img.src; if(src) nbOpenImageViewer(src,''); });
+    }
+  });
+}
+function ptDist(p1,p2){ return Math.hypot(p1.x-p2.x, p1.y-p2.y); }
+function ptMid(p1,p2){ return {x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2}; }
+
+function nbOpenImageViewer(url, caption){
+  const MIN_ZOOM=0.5, MAX_ZOOM=6;
+  let imgNaturalW=0, imgNaturalH=0, imgBaseScale=1, imgZoomFactor=1, imgTx=0, imgTy=0;
+  const activePointers=new Map();
+  let dragStart=null, dragMoved=false, pinchStartDist=null, pinchStartZoom=null;
+
+  const overlay=document.createElement('div');
+  overlay.className='nb-viewer-overlay';
+  overlay.innerHTML = `
+    <button type="button" class="nb-viewer-close">✕</button>
+    <div class="nb-viewer-toolbar">
+      <button type="button" class="nb-viewer-zbtn" data-act="zout">−</button>
+      <span class="nb-viewer-zlevel">100%</span>
+      <button type="button" class="nb-viewer-zbtn" data-act="zin">+</button>
+      <button type="button" class="nb-viewer-zbtn" data-act="zreset" title="إعادة ضبط الحجم">⤢</button>
+    </div>
+    <div class="nb-viewer-stage">
+      <img src="${esc(url)}" class="nb-viewer-img" draggable="false">
+    </div>
+    ${caption? `<div class="nb-viewer-caption">${esc(caption)}</div>` : ''}
+  `;
+  document.body.appendChild(overlay);
+
+  const stage=overlay.querySelector('.nb-viewer-stage');
+  const img=overlay.querySelector('.nb-viewer-img');
+  const zlevelEl=overlay.querySelector('.nb-viewer-zlevel');
+
+  function computeBaseScaleAndCenter(){
+    const rect=stage.getBoundingClientRect();
+    if(!imgNaturalW || !imgNaturalH || !rect.width){ imgBaseScale=1; }
+    else{
+      const availW=rect.width*0.94, availH=rect.height*0.9;
+      imgBaseScale=Math.min(availW/imgNaturalW, availH/imgNaturalH, 1);
+    }
+    const dispW=imgNaturalW*imgBaseScale*imgZoomFactor, dispH=imgNaturalH*imgBaseScale*imgZoomFactor;
+    imgTx=(rect.width-dispW)/2; imgTy=(rect.height-dispH)/2;
+  }
+  function applyImgTransform(){
+    const s=imgBaseScale*imgZoomFactor;
+    img.style.transform=`translate(${imgTx}px, ${imgTy}px) scale(${s})`;
+    zlevelEl.textContent=Math.round(imgZoomFactor*100)+'%';
+    stage.classList.toggle('zoomed', imgZoomFactor>1.001);
+  }
+  function zoomBy(factor, clientX, clientY){
+    const rect=stage.getBoundingClientRect();
+    const cx = clientX!=null ? clientX-rect.left : rect.width/2;
+    const cy = clientY!=null ? clientY-rect.top : rect.height/2;
+    const oldScale=imgBaseScale*imgZoomFactor;
+    let newZoom=Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, imgZoomFactor*factor));
+    const newScale=imgBaseScale*newZoom;
+    imgTx = cx - (cx-imgTx)*(newScale/oldScale);
+    imgTy = cy - (cy-imgTy)*(newScale/oldScale);
+    imgZoomFactor=newZoom;
+    applyImgTransform();
+  }
+  img.addEventListener('load', ()=>{
+    imgNaturalW=img.naturalWidth; imgNaturalH=img.naturalHeight; imgZoomFactor=1;
+    computeBaseScaleAndCenter(); applyImgTransform();
+  });
+  img.addEventListener('dblclick',(e)=>{
+    e.stopPropagation();
+    if(imgZoomFactor>1.05){ imgZoomFactor=1; computeBaseScaleAndCenter(); }
+    else zoomBy(2.2, e.clientX, e.clientY);
+    applyImgTransform();
+  });
+  stage.addEventListener('wheel',(e)=>{ e.preventDefault(); zoomBy(e.deltaY<0?1.15:1/1.15, e.clientX, e.clientY); }, {passive:false});
+  overlay.querySelector('[data-act="zin"]').onclick=()=>zoomBy(1.4);
+  overlay.querySelector('[data-act="zout"]').onclick=()=>zoomBy(1/1.4);
+  overlay.querySelector('[data-act="zreset"]').onclick=()=>{ imgZoomFactor=1; computeBaseScaleAndCenter(); applyImgTransform(); };
+
+  function releasePointer(e){
+    activePointers.delete(e.pointerId);
+    stage.classList.remove('dragging');
+    dragStart=null; pinchStartDist=null;
+    if(activePointers.size===1){
+      const entry=Array.from(activePointers.entries())[0];
+      dragStart={x:entry[1].x, y:entry[1].y, tx:imgTx, ty:imgTy};
+    }
+  }
+  stage.addEventListener('pointerdown',(e)=>{
+    stage.setPointerCapture(e.pointerId);
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    dragMoved=false;
+    if(activePointers.size===1){
+      dragStart={x:e.clientX, y:e.clientY, tx:imgTx, ty:imgTy};
+      stage.classList.add('dragging');
+    } else if(activePointers.size===2){
+      dragStart=null;
+      const pts=Array.from(activePointers.values());
+      pinchStartDist=ptDist(pts[0],pts[1]);
+      pinchStartZoom=imgZoomFactor;
+    }
+  });
+  stage.addEventListener('pointermove',(e)=>{
+    if(!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(activePointers.size===1 && dragStart){
+      const dx=e.clientX-dragStart.x, dy=e.clientY-dragStart.y;
+      if(Math.abs(dx)+Math.abs(dy)>6) dragMoved=true;
+      imgTx=dragStart.tx+dx; imgTy=dragStart.ty+dy;
+      applyImgTransform();
+    } else if(activePointers.size===2 && pinchStartDist){
+      dragMoved=true;
+      const pts=Array.from(activePointers.values());
+      const dist=ptDist(pts[0],pts[1]);
+      const mid=ptMid(pts[0],pts[1]);
+      const rect=stage.getBoundingClientRect();
+      const oldScale=imgBaseScale*imgZoomFactor;
+      let newZoom=Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchStartZoom*(dist/pinchStartDist)));
+      const newScale=imgBaseScale*newZoom;
+      const cx=mid.x-rect.left, cy=mid.y-rect.top;
+      imgTx = cx - (cx-imgTx)*(newScale/oldScale);
+      imgTy = cy - (cy-imgTy)*(newScale/oldScale);
+      imgZoomFactor=newZoom;
+      applyImgTransform();
+    }
+  });
+  stage.addEventListener('pointerup', releasePointer);
+  stage.addEventListener('pointercancel', releasePointer);
+  stage.addEventListener('pointerleave',(e)=>{ if(activePointers.has(e.pointerId)) releasePointer(e); });
+
+  function close(){ overlay.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); }
+  function onKey(e){ if(e.key==='Escape') close(); }
+  function onResize(){ if(imgNaturalW){ computeBaseScaleAndCenter(); applyImgTransform(); } }
+  document.addEventListener('keydown', onKey);
+  window.addEventListener('resize', onResize);
+  stage.addEventListener('click',(e)=>{
+    if(dragMoved){ dragMoved=false; return; }
+    if(e.target===stage) close();
+  });
+  overlay.querySelector('.nb-viewer-close').onclick = close;
+}
+
+/* ===== صندوق شرح إضافي ===== */
+function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
+  const wrap=document.createElement('div');
+  wrap.className='nb-exbox';
+  wrap.innerHTML = `
+    <div class="nb-exbox-head">
+      <input class="nb-exbox-title" value="${esc(boxData.title||'')}" placeholder="عنوان الصندوق (اختياري)">
+      <button type="button" class="btn small" data-act="collapse">⌃</button>
+      <button type="button" class="btn small danger" data-act="delete">🗑</button>
+    </div>
+    <div class="nb-exbox-body">
+      <div class="explain-view" data-act="view">${nbRenderMarkdown(boxData.content)}</div>
+      <div class="fmt-toolbar-holder" data-act="toolbar" style="display:none;"></div>
+      <textarea class="nb-editor" data-act="text" style="display:none;">${esc(boxData.content||'')}</textarea>
+    </div>
+  `;
+  const titleEl=wrap.querySelector('.nb-exbox-title');
+  const viewEl=wrap.querySelector('[data-act="view"]');
+  const taEl=wrap.querySelector('[data-act="text"]');
+  const toolbarHolder=wrap.querySelector('[data-act="toolbar"]');
+  toolbarHolder.appendChild(nbBuildFormatToolbar(()=>taEl));
+  nbEnhanceMarkdownView(viewEl);
+
+  wrap.querySelector('[data-act="collapse"]').onclick=(e)=>{
+    const collapsed=wrap.classList.toggle('is-collapsed');
+    e.currentTarget.textContent=collapsed?'⌄':'⌃';
+  };
+  titleEl.oninput=(e)=>{ boxData.title=e.target.value; nbScheduleSave(item); };
+  taEl.addEventListener('input',(e)=>{ boxData.content=e.target.value; nbScheduleSave(item); });
+  viewEl.addEventListener('click',()=>{ viewEl.style.display='none'; toolbarHolder.style.display='flex'; taEl.style.display='block'; taEl.focus(); });
+  taEl.addEventListener('blur',()=>{
+    viewEl.innerHTML=nbRenderMarkdown(boxData.content);
+    nbEnhanceMarkdownView(viewEl);
+    taEl.style.display='none'; toolbarHolder.style.display='none'; viewEl.style.display='block';
+  });
+  wrap.querySelector('[data-act="delete"]').onclick=(e)=>{
+    if(!nbArmConfirm(e.currentTarget,'حذف الصندوق؟')) return;
+    s.explanations.splice(index,1);
+    nbScheduleSave(item);
+    rerenderList();
+  };
+  return wrap;
+}
+
+/* ===== تبويب الشرح والصور ===== */
+function nbTextPanel(body, s, item){
+  const help=document.createElement('div');
+  help.className='nb-help';
+  help.textContent='أضف صورًا بلا حد، واكتب وصفًا أسفل كل صورة. اضغط الصورة لمشاهدتها بالحجم الأصلي.';
+  body.appendChild(help);
+
+  const preview=document.createElement('div');
+  preview.className='explain-view nb-preview';
+  const toolbarHolder=document.createElement('div');
+  toolbarHolder.className='fmt-toolbar-holder';
+  toolbarHolder.style.display='none';
+  toolbarHolder.appendChild(nbBuildFormatToolbar(()=>editor));
+  const editor=document.createElement('textarea');
+  editor.className='nb-editor';
+  editor.placeholder='اكتب الشرح...';
+  editor.value=s.explanation;
+  editor.style.display='none';
+
+  const paint=()=>{ preview.innerHTML=nbRenderMarkdown(s.explanation); nbEnhanceMarkdownView(preview); };
+  preview.addEventListener('click',()=>{ preview.style.display='none'; toolbarHolder.style.display='flex'; editor.style.display='block'; editor.focus(); });
+  editor.addEventListener('input',()=>{ s.explanation=editor.value; nbScheduleSave(item); });
+  editor.addEventListener('blur',()=>{ paint(); editor.style.display='none'; toolbarHolder.style.display='none'; preview.style.display='block'; });
+  body.append(preview, toolbarHolder, editor);
+  paint();
+
+  const exHead=document.createElement('div');
+  exHead.className='nb-subhead';
+  exHead.innerHTML='<b>مقاطع شرح إضافية</b>';
+  const addExBtn=document.createElement('button');
+  addExBtn.type='button'; addExBtn.className='btn small'; addExBtn.textContent='+ إضافة مقطع شرح';
+  exHead.appendChild(addExBtn);
+  body.appendChild(exHead);
+  const exList=document.createElement('div');
+  exList.className='nb-explist';
+  body.appendChild(exList);
+  function renderExList(){
+    exList.innerHTML='';
+    s.explanations.forEach((boxData, idx)=> exList.appendChild(nbBuildExtraExplainBox(s, boxData, idx, item, renderExList)));
+  }
+  addExBtn.onclick=()=>{ s.explanations.push({id:uid('nbex'), title:'', content:''}); nbScheduleSave(item); renderExList(); };
+  renderExList();
+
+  const galHead=document.createElement('div');
+  galHead.className='nb-subhead';
+  galHead.innerHTML='<b>📷 صور توضيحية</b>';
+  body.appendChild(galHead);
+  const gallery=document.createElement('div');
+  gallery.className='nb-gallery';
+  body.appendChild(gallery);
+  function renderGallery(){
+    gallery.innerHTML='';
+    s.images.forEach((entry,i)=>{
+      const card=document.createElement('div');
+      card.className='nb-photo';
+      const img=document.createElement('img');
+      img.alt='صورة توضيحية';
+      getFileBlobURL(entry.id).then(u=>{ if(u) img.src=u; });
+      const cap=document.createElement('textarea');
+      cap.placeholder='وصف الصورة...';
+      cap.value=entry.caption||'';
+      img.onclick=()=> nbOpenImageViewer(img.src, cap.value);
+      cap.oninput=()=>{ entry.caption=cap.value; nbScheduleSave(item); };
+      const acts=document.createElement('div');
+      acts.className='nb-photo-actions';
+      const delBtn=document.createElement('button');
+      delBtn.type='button'; delBtn.className='btn small danger'; delBtn.textContent='🗑 حذف';
+      delBtn.onclick=()=>{ s.images.splice(i,1); nbScheduleSave(item); renderGallery(); };
+      acts.appendChild(delBtn);
+      card.append(img, cap, acts);
+      gallery.appendChild(card);
+    });
+    const addCard=document.createElement('label');
+    addCard.className='nb-photo-add';
+    addCard.textContent='＋ أضف صورًا من الجهاز';
+    const pick=document.createElement('input');
+    pick.type='file'; pick.accept='image/*'; pick.multiple=true;
+    pick.onchange=async ()=>{
+      const files=[...(pick.files||[])];
+      if(!files.length) return;
+      addCard.textContent='جارٍ حفظ الصور...';
+      for(const f of files){ const id=await storeFile(f, f.name, f.type); s.images.push({id, caption:''}); }
+      nbScheduleSave(item);
+      renderGallery();
+    };
+    addCard.appendChild(pick);
+    gallery.appendChild(addCard);
+  }
+  renderGallery();
+}
+
+/* ===== تبويب الأكواد ===== */
+const NB_LANGS=[['text','نص عادي'],['js','JavaScript'],['python','Python'],['c','C / C++'],['asm','Assembly'],['html','HTML'],['css','CSS'],['json','JSON'],['bash','Bash/Shell'],['sql','SQL']];
+function nbBuildCodeBlock(section, c, index, item, rerender){
+  const box=document.createElement('div');
+  box.className='nb-codeblock';
+  box.innerHTML = `
+    <div class="nb-codeblock-head">
+      <input class="nb-code-label" value="${esc(c.label||'')}" placeholder="عنوان الكود">
+      <select class="nb-code-lang">${NB_LANGS.map(([v,l])=>`<option value="${v}" ${v===c.lang?'selected':''}>${l}</option>`).join('')}</select>
+      <button type="button" class="btn small" data-act="copy">📋 نسخ</button>
+      <button type="button" class="btn small danger" data-act="remove">🗑</button>
+    </div>
+    <textarea class="nb-codearea" spellcheck="false" placeholder="اكتب الكود هنا...">${esc(c.code||'')}</textarea>
+  `;
+  const ta=box.querySelector('.nb-codearea');
+  function autoGrow(){ ta.style.height='auto'; ta.style.height=Math.min(520, Math.max(140, ta.scrollHeight+6))+'px'; }
+  box.querySelector('.nb-code-label').oninput=(e)=>{ c.label=e.target.value; nbScheduleSave(item); };
+  box.querySelector('.nb-code-lang').onchange=(e)=>{ c.lang=e.target.value; nbScheduleSave(item); };
+  ta.addEventListener('input', ()=>{ c.code=ta.value; nbScheduleSave(item); autoGrow(); });
+  requestAnimationFrame(autoGrow);
+  box.querySelector('[data-act="copy"]').onclick=async ()=>{
+    try{ await navigator.clipboard.writeText(c.code||''); toast('تم نسخ الكود','ok'); }
+    catch(err){ toast('تعذّر النسخ التلقائي — انسخه يدويًا من المربع','err'); }
+  };
+  box.querySelector('[data-act="remove"]').onclick=(e)=>{
+    if(!nbArmConfirm(e.currentTarget,'اضغط تاني للحذف')) return;
+    section.codes.splice(index,1);
+    nbScheduleSave(item);
+    rerender();
+  };
+  return box;
+}
+function nbCodePanel(body, s, item, rerender){
+  const h=document.createElement('div'); h.className='nb-subhead'; h.innerHTML='<b>💻 كتل الأكواد</b>';
+  body.appendChild(h);
+  const holder=document.createElement('div'); holder.className='nb-codes-holder';
+  s.codes.forEach((c,i)=> holder.appendChild(nbBuildCodeBlock(s,c,i,item,rerender)));
+  body.appendChild(holder);
+  const add=document.createElement('button');
+  add.type='button'; add.className='btn small primary'; add.textContent='＋ إضافة كتلة كود';
+  add.onclick=()=>{ s.codes.push({lang:'text', label:'كود جديد', code:''}); nbScheduleSave(item); rerender(); };
+  body.appendChild(add);
+}
+
+/* ===== تبويب الرسم (منقول من نظام الرسم في workshop) ===== */
+function nbResizeDrawCanvas(canvas, dstate){
+  if(!canvas || !dstate) return;
+  const rect=canvas.parentElement.getBoundingClientRect();
+  const cssW=Math.max(280, rect.width);
+  const cssH=dstate.cssHeight||340;
+  const dpr=Math.min(window.devicePixelRatio||1,3);
+  canvas.style.width=cssW+'px'; canvas.style.height=cssH+'px';
+  canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
+  dstate.cssWidth=cssW; dstate.cssHeight=cssH; dstate.dpr=dpr;
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  dstate.redraw();
+}
+function nbShapeRefPoints(sh){
+  if(sh.type==='freehand') return sh.points||[];
+  if(sh.type==='text') return [{x:sh.x,y:sh.y}];
+  if(sh.type==='curve') return [{x:sh.x1,y:sh.y1},{x:sh.x2,y:sh.y2},{x:sh.cx,y:sh.cy}];
+  if('x1' in sh) return [{x:sh.x1,y:sh.y1},{x:sh.x2,y:sh.y2},{x:(sh.x1+sh.x2)/2,y:(sh.y1+sh.y2)/2}];
+  return [];
+}
+function nbBuildLiveShape(tool,start,end,color,width,filled){
+  const base={x1:start.x,y1:start.y,x2:end.x,y2:end.y,color,width,filled:!!filled};
+  if(tool==='dotted') return Object.assign({type:'line',dashed:true}, base);
+  if(tool==='arrow') return Object.assign({type:'arrow'}, base);
+  if(tool==='curve'){
+    const mx=(start.x+end.x)/2, my=(start.y+end.y)/2;
+    const dx=end.x-start.x, dy=end.y-start.y;
+    const len=Math.hypot(dx,dy)||1;
+    const nx=-dy/len, ny=dx/len;
+    const bulge=Math.min(len*0.35,60);
+    return Object.assign({type:'curve',cx:mx+nx*bulge,cy:my+ny*bulge}, base);
+  }
+  if(tool==='zigzag') return Object.assign({type:'zigzag'}, base);
+  if(tool==='rect') return Object.assign({type:'rect'}, base);
+  if(tool==='triangle') return Object.assign({type:'triangle'}, base);
+  if(tool==='circle') return Object.assign({type:'circle'}, base);
+  return Object.assign({type:'line'}, base);
+}
+function nbDrawShape(ctx, sh){
+  ctx.save();
+  ctx.strokeStyle=sh.color||'#1e2519'; ctx.fillStyle=sh.color||'#1e2519';
+  ctx.lineWidth=sh.width||2; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.setLineDash(sh.dashed?[(sh.width||2)*2+4,(sh.width||2)*2+4]:[]);
+  if(sh.type==='freehand'){
+    if(!sh.points||sh.points.length<2){ ctx.restore(); return; }
+    ctx.beginPath(); ctx.moveTo(sh.points[0].x, sh.points[0].y);
+    for(let i=1;i<sh.points.length;i++) ctx.lineTo(sh.points[i].x, sh.points[i].y);
+    ctx.stroke();
+  } else if(sh.type==='line'){
+    ctx.beginPath(); ctx.moveTo(sh.x1,sh.y1); ctx.lineTo(sh.x2,sh.y2); ctx.stroke();
+  } else if(sh.type==='arrow'){
+    ctx.beginPath(); ctx.moveTo(sh.x1,sh.y1); ctx.lineTo(sh.x2,sh.y2); ctx.stroke();
+    const angle=Math.atan2(sh.y2-sh.y1, sh.x2-sh.x1);
+    const headLen=8+(sh.width||2)*2.2;
+    ctx.beginPath(); ctx.moveTo(sh.x2,sh.y2);
+    ctx.lineTo(sh.x2-headLen*Math.cos(angle-Math.PI/7), sh.y2-headLen*Math.sin(angle-Math.PI/7));
+    ctx.lineTo(sh.x2-headLen*Math.cos(angle+Math.PI/7), sh.y2-headLen*Math.sin(angle+Math.PI/7));
+    ctx.closePath(); ctx.fill();
+  } else if(sh.type==='curve'){
+    ctx.beginPath(); ctx.moveTo(sh.x1,sh.y1); ctx.quadraticCurveTo(sh.cx,sh.cy,sh.x2,sh.y2); ctx.stroke();
+  } else if(sh.type==='zigzag'){
+    const segs=8; const dx=(sh.x2-sh.x1)/segs, dy=(sh.y2-sh.y1)/segs;
+    const len=Math.hypot(sh.x2-sh.x1, sh.y2-sh.y1)||1;
+    const nx=-(sh.y2-sh.y1)/len, ny=(sh.x2-sh.x1)/len; const amp=10;
+    ctx.beginPath(); ctx.moveTo(sh.x1,sh.y1);
+    for(let i=1;i<segs;i++){ const sign=(i%2===0)?1:-1; ctx.lineTo(sh.x1+dx*i+nx*amp*sign, sh.y1+dy*i+ny*amp*sign); }
+    ctx.lineTo(sh.x2,sh.y2); ctx.stroke();
+  } else if(sh.type==='rect'){
+    const x=Math.min(sh.x1,sh.x2), y=Math.min(sh.y1,sh.y2), w=Math.abs(sh.x2-sh.x1), h=Math.abs(sh.y2-sh.y1);
+    if(sh.filled) ctx.fillRect(x,y,w,h); else ctx.strokeRect(x,y,w,h);
+  } else if(sh.type==='triangle'){
+    const x1=Math.min(sh.x1,sh.x2), x2=Math.max(sh.x1,sh.x2), y1=Math.min(sh.y1,sh.y2), y2=Math.max(sh.y1,sh.y2);
+    ctx.beginPath(); ctx.moveTo((x1+x2)/2,y1); ctx.lineTo(x1,y2); ctx.lineTo(x2,y2); ctx.closePath();
+    if(sh.filled) ctx.fill(); else ctx.stroke();
+  } else if(sh.type==='circle'){
+    const cx=(sh.x1+sh.x2)/2, cy=(sh.y1+sh.y2)/2, rx=Math.abs(sh.x2-sh.x1)/2, ry=Math.abs(sh.y2-sh.y1)/2;
+    ctx.beginPath(); ctx.ellipse(cx,cy,rx||1,ry||1,0,0,Math.PI*2);
+    if(sh.filled) ctx.fill(); else ctx.stroke();
+  } else if(sh.type==='text'){
+    ctx.font=(sh.fontSize||16)+'px Tahoma, Arial, sans-serif'; ctx.textBaseline='top'; ctx.fillText(sh.text, sh.x, sh.y);
+  }
+  ctx.restore();
+}
+function nbBuildDrawingPanel(section, item){
+  if(!section.drawing) section.drawing={shapes:[]};
+  const wrap=document.createElement('div');
+  wrap.className='drawpanel';
+  wrap.innerHTML = `
+    <div class="draw-toolbar">
+      <select class="draw-tool" title="الأداة">
+        <option value="pen">✏️ رسم حر</option>
+        <option value="line">📏 خط مستقيم</option>
+        <option value="arrow">➡️ سهم</option>
+        <option value="dotted">┄ خط منقط</option>
+        <option value="curve">〰️ خط منحني</option>
+        <option value="zigzag">⚡ خط متعرج</option>
+        <option value="rect">▭ مستطيل</option>
+        <option value="triangle">▲ مثلث</option>
+        <option value="circle">◯ دائرة / بيضاوي</option>
+        <option value="text">🔤 نص</option>
+        <option value="eraser">🧹 ممحاة</option>
+      </select>
+      <input type="color" class="draw-color" value="#1e2519" title="اللون">
+      <input type="range" class="draw-width" min="1" max="14" value="2" title="سُمك الخط">
+      <input type="number" class="draw-fontsize" min="8" max="60" value="16" title="حجم الخط (للنص)" style="width:52px;">
+      <label class="fill-toggle" style="display:flex;align-items:center;gap:3px;font-size:11.5px;">
+        <input type="checkbox" class="draw-fill"> تعبئة
+      </label>
+      <button type="button" class="btn small draw-undo" title="تراجع عن آخر شكل">↩️ تراجع</button>
+      <button type="button" class="btn small danger draw-clear" title="مسح كل الرسم">🗑 مسح الكل</button>
+    </div>
+    <div class="draw-canvas-wrap"><canvas class="draw-canvas"></canvas></div>
+  `;
+  const canvas=wrap.querySelector('.draw-canvas');
+  const canvasWrap=wrap.querySelector('.draw-canvas-wrap');
+  const ctx=canvas.getContext('2d');
+  const toolSel=wrap.querySelector('.draw-tool');
+  const colorInput=wrap.querySelector('.draw-color');
+  const widthInput=wrap.querySelector('.draw-width');
+  const fontInput=wrap.querySelector('.draw-fontsize');
+  const fillInput=wrap.querySelector('.draw-fill');
+  const dstate={cssWidth:640, cssHeight:340, dpr:1, redraw};
+  function redraw(){ ctx.clearRect(0,0,dstate.cssWidth,dstate.cssHeight); section.drawing.shapes.forEach(sh=>nbDrawShape(ctx,sh)); }
+  if(window.ResizeObserver) new ResizeObserver(()=>nbResizeDrawCanvas(canvas,dstate)).observe(canvasWrap);
+  requestAnimationFrame(()=>nbResizeDrawCanvas(canvas,dstate));
+
+  let dragging=false, startPt=null, penPoints=null;
+  function getPos(e){
+    const rect=canvas.getBoundingClientRect();
+    const t=e.touches&&e.touches[0];
+    const clientX=t?t.clientX:e.clientX, clientY=t?t.clientY:e.clientY;
+    return { x:(clientX-rect.left)*(dstate.cssWidth/rect.width), y:(clientY-rect.top)*(dstate.cssHeight/rect.height) };
+  }
+  function commitShape(shape){ section.drawing.shapes.push(shape); nbScheduleSave(item); redraw(); }
+  function askInlineText(pos, onDone){
+    const input=document.createElement('input');
+    input.type='text'; input.placeholder='اكتب النص واضغط Enter…';
+    const r=canvas.getBoundingClientRect();
+    input.style.cssText=`position:absolute;left:${pos.x*(r.width/dstate.cssWidth)}px;top:${pos.y*(r.height/dstate.cssHeight)}px;z-index:5;font-size:13px;padding:3px 6px;border:1.5px solid var(--amber);border-radius:5px;min-width:120px;`;
+    canvasWrap.style.position='relative';
+    canvasWrap.appendChild(input); input.focus();
+    function finish(commit){ const val=input.value.trim(); input.remove(); if(commit&&val) onDone(val); }
+    input.addEventListener('keydown',(e)=>{ if(e.key==='Enter') finish(true); if(e.key==='Escape') finish(false); });
+    input.addEventListener('blur',()=>finish(true));
+  }
+  function eraseNear(pos){
+    let bestIdx=-1, bestDist=26;
+    section.drawing.shapes.forEach((sh,i)=>{
+      nbShapeRefPoints(sh).forEach(p=>{ const d=Math.hypot(p.x-pos.x,p.y-pos.y); if(d<bestDist){ bestDist=d; bestIdx=i; } });
+    });
+    if(bestIdx!==-1){ section.drawing.shapes.splice(bestIdx,1); nbScheduleSave(item); redraw(); }
+  }
+  function startDraw(e){
+    e.preventDefault();
+    const tool=toolSel.value, pos=getPos(e);
+    if(tool==='text'){ askInlineText(pos,(txt)=>commitShape({type:'text',x:pos.x,y:pos.y,text:txt,color:colorInput.value,fontSize:parseInt(fontInput.value,10)||16})); return; }
+    if(tool==='eraser'){ dragging=true; eraseNear(pos); return; }
+    dragging=true; startPt=pos;
+    if(tool==='pen') penPoints=[pos];
+  }
+  function moveDraw(e){
+    if(!dragging) return;
+    e.preventDefault();
+    const tool=toolSel.value, pos=getPos(e), width=parseInt(widthInput.value,10)||2;
+    if(tool==='eraser'){ eraseNear(pos); return; }
+    redraw();
+    if(tool==='pen'){ penPoints.push(pos); nbDrawShape(ctx,{type:'freehand',points:penPoints,color:colorInput.value,width}); }
+    else nbDrawShape(ctx, nbBuildLiveShape(tool,startPt,pos,colorInput.value,width,fillInput.checked));
+  }
+  function endDraw(e){
+    if(!dragging) return;
+    dragging=false;
+    const tool=toolSel.value;
+    if(tool==='eraser') return;
+    const width=parseInt(widthInput.value,10)||2;
+    const t=e.changedTouches&&e.changedTouches[0];
+    const pos=getPos(t?{clientX:t.clientX,clientY:t.clientY}:e);
+    if(tool==='pen'){
+      if(penPoints&&penPoints.length>1) commitShape({type:'freehand',points:penPoints,color:colorInput.value,width});
+      else redraw();
+      penPoints=null;
+    } else {
+      const shape=nbBuildLiveShape(tool,startPt,pos,colorInput.value,width,fillInput.checked);
+      if(Math.abs(shape.x2-shape.x1)>2 || Math.abs(shape.y2-shape.y1)>2) commitShape(shape);
+      else redraw();
+    }
+    startPt=null;
+  }
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', moveDraw);
+  window.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('touchstart', startDraw, {passive:false});
+  canvas.addEventListener('touchmove', moveDraw, {passive:false});
+  canvas.addEventListener('touchend', endDraw);
+  wrap.querySelector('.draw-undo').onclick=()=>{ section.drawing.shapes.pop(); nbScheduleSave(item); redraw(); };
+  wrap.querySelector('.draw-clear').onclick=(e)=>{
+    if(!section.drawing.shapes.length) return;
+    if(!nbArmConfirm(e.currentTarget,'اضغط تاني لمسح كل الرسم')) return;
+    section.drawing.shapes=[]; nbScheduleSave(item); redraw();
+    toast('تم مسح الرسم','ok');
+  };
+  return wrap;
+}
+function nbDrawTab(body, s, item){
+  const h=document.createElement('div'); h.className='nb-subhead'; h.innerHTML='<b>📐 الرسم التوضيحي</b>';
+  body.appendChild(h);
+  body.appendChild(nbBuildDrawingPanel(s, item));
+}
+
+/* ===== تبويب الخريطة الذهنية (نسخة مبسّطة شجرية بدل اللوحة الحرة الكاملة) ===== */
+function nbBuildMindMapPanel(s, item){
+  const mm = ensureMindmapData(s);
+  const wrap=document.createElement('div');
+  wrap.className='nb-mindmap';
+  wrap.tabIndex=0;
+  wrap.innerHTML = `
+    <div class="mm-toolbar">
+      <button type="button" class="btn small" data-act="add-child" title="Tab">➕ تابع</button>
+      <button type="button" class="btn small" data-act="add-sibling" title="Enter">➕ شقيق</button>
+      <button type="button" class="btn small" data-act="add-parent">➕ أب</button>
+      <button type="button" class="btn small" data-act="dup">⧉ تكرار</button>
+      <button type="button" class="btn small danger" data-act="del" title="Delete">🗑 حذف</button>
+      <button type="button" class="btn small" data-act="undo" title="Ctrl+Z">↩️</button>
+      <button type="button" class="btn small" data-act="redo" title="Ctrl+Y">↪️</button>
+      <button type="button" class="btn small" data-act="collapse-toggle">⊟ طيّ الفرع</button>
+      <button type="button" class="btn small" data-act="zoom-in">🔍+</button>
+      <button type="button" class="btn small" data-act="zoom-out">🔍−</button>
+      <button type="button" class="btn small" data-act="zoom-reset">⤢ ملائمة</button>
+    </div>
+    <div class="mm-props" style="display:none;"></div>
+    <div class="mm-stage-wrap"><svg></svg></div>
+    <div class="mm-status"></div>
+  `;
+  const propsBar=wrap.querySelector('.mm-props');
+  const stageWrap=wrap.querySelector('.mm-stage-wrap');
+  const svg=wrap.querySelector('svg');
+  const statusEl=wrap.querySelector('.mm-status');
+
+  const st = { scale:1, tx:0, ty:0, selectedIds:new Set([mm.rootId]), history:[], future:[] };
+
+  function childrenOf(id){ return Object.values(mm.nodes).filter(n=>n.parentId===id).sort((a,b)=>a.orderIndex-b.orderIndex); }
+  function descendantsOf(id){ const out=[]; childrenOf(id).forEach(c=>{ out.push(c.id); out.push(...descendantsOf(c.id)); }); return out; }
+  function isCollapsedAncestor(id){ let n=mm.nodes[id]; while(n && n.parentId){ n=mm.nodes[n.parentId]; if(n && n.collapsed) return true; } return false; }
+  function snapshot(){ return JSON.stringify(mm); }
+  function pushHistory(){ st.history.push(snapshot()); if(st.history.length>60) st.history.shift(); st.future=[]; nbScheduleSave(item); }
+  function undo(){
+    if(!st.history.length){ toast('مفيش خطوات للتراجع','err'); return; }
+    st.future.push(snapshot());
+    Object.assign(mm, JSON.parse(st.history.pop()));
+    normalizeSelection(); nbScheduleSave(item); render();
+  }
+  function redo(){
+    if(!st.future.length){ toast('مفيش خطوات لإعادتها','err'); return; }
+    st.history.push(snapshot());
+    Object.assign(mm, JSON.parse(st.future.pop()));
+    normalizeSelection(); nbScheduleSave(item); render();
+  }
+  function normalizeSelection(){
+    st.selectedIds.forEach(id=>{ if(!mm.nodes[id]) st.selectedIds.delete(id); });
+    if(!st.selectedIds.size) st.selectedIds.add(mm.rootId);
+  }
+  function makeNode(text, parentId){
+    const id='m'+Math.random().toString(36).slice(2,9);
+    const sibs = parentId ? childrenOf(parentId) : [];
+    const orderIndex = sibs.length ? Math.max(...sibs.map(x=>x.orderIndex))+1 : 0;
+    const parent = parentId ? mm.nodes[parentId] : null;
+    return { id, text, parentId, x: parent? parent.x-190 : 0, y: parent? parent.y+sibs.length*60 : 0, color: MM_COLORS[Object.keys(mm.nodes).length % MM_COLORS.length], collapsed:false, orderIndex };
+  }
+  function selectedSingle(){ const ids=[...st.selectedIds]; return ids.length? mm.nodes[ids[ids.length-1]] : mm.nodes[mm.rootId]; }
+  function addChild(){ pushHistory(); const p=selectedSingle(); const node=makeNode('فكرة جديدة', p.id); mm.nodes[node.id]=node; st.selectedIds=new Set([node.id]); nbScheduleSave(item); render(); startEdit(node.id); }
+  function addSibling(){ const cur=selectedSingle(); if(cur.id===mm.rootId){ addChild(); return; } pushHistory(); const node=makeNode('فكرة جديدة', cur.parentId); mm.nodes[node.id]=node; st.selectedIds=new Set([node.id]); nbScheduleSave(item); render(); startEdit(node.id); }
+  function addParent(){
+    pushHistory();
+    const cur=selectedSingle(); const oldParentId=cur.parentId;
+    const node=makeNode('فكرة جديدة', oldParentId);
+    node.x=cur.x+190; node.y=cur.y;
+    mm.nodes[node.id]=node; cur.parentId=node.id;
+    if(cur.id===mm.rootId) mm.rootId=node.id;
+    st.selectedIds=new Set([node.id]); nbScheduleSave(item); render(); startEdit(node.id);
+  }
+  function duplicateSelected(){
+    pushHistory();
+    const cur=selectedSingle();
+    function cloneSub(id, newParentId){
+      const src=mm.nodes[id]; const nid='m'+Math.random().toString(36).slice(2,9);
+      mm.nodes[nid]=Object.assign({}, src, {id:nid, parentId:newParentId});
+      childrenOf(id).forEach(c=>cloneSub(c.id, nid));
+      return nid;
+    }
+    const sibs=childrenOf(cur.parentId||null);
+    const newId=cloneSub(cur.id, cur.parentId);
+    mm.nodes[newId].orderIndex=(sibs.length? Math.max(...sibs.map(x=>x.orderIndex)) : 0)+1;
+    mm.nodes[newId].x+=24; mm.nodes[newId].y+=24;
+    st.selectedIds=new Set([newId]); nbScheduleSave(item); render();
+    toast('تم تكرار العقدة وفروعها','ok');
+  }
+  function deleteSelected(){
+    const ids=[...st.selectedIds].filter(id=>id!==mm.rootId);
+    if(!ids.length){ toast('لا يمكن حذف العقدة الجذر','err'); return; }
+    pushHistory();
+    ids.forEach(id=>{ descendantsOf(id).forEach(d=>delete mm.nodes[d]); delete mm.nodes[id]; });
+    st.selectedIds=new Set([mm.rootId]); nbScheduleSave(item); render();
+  }
+  function toggleCollapse(id){ pushHistory(); mm.nodes[id].collapsed=!mm.nodes[id].collapsed; nbScheduleSave(item); render(); }
+
+  function applyTransform(){ gLines.setAttribute('transform', `translate(${st.tx},${st.ty}) scale(${st.scale})`); gNodes.setAttribute('transform', `translate(${st.tx},${st.ty}) scale(${st.scale})`); }
+  function zoomAt(sx, sy, newScale){
+    newScale=Math.max(0.25, Math.min(3, newScale));
+    const wx=(sx-st.tx)/st.scale, wy=(sy-st.ty)/st.scale;
+    st.scale=newScale; st.tx=sx-wx*newScale; st.ty=sy-wy*newScale;
+    applyTransform();
+  }
+  function fitToScreen(){
+    const nodes=Object.values(mm.nodes);
+    if(!nodes.length) return;
+    const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
+    const minX=Math.min(...xs)-MM_BASE_W, maxX=Math.max(...xs)+MM_BASE_W;
+    const minY=Math.min(...ys)-MM_BASE_H, maxY=Math.max(...ys)+MM_BASE_H;
+    const rect=stageWrap.getBoundingClientRect();
+    const w=Math.max(1,rect.width), h=Math.max(1,rect.height);
+    const scale=Math.max(0.3, Math.min(1.6, Math.min(w/(maxX-minX||1), h/(maxY-minY||1))*0.92));
+    st.scale=scale; st.tx=w/2-(minX+maxX)/2*scale; st.ty=h/2-(minY+maxY)/2*scale;
+    applyTransform();
+  }
+
+  svg.innerHTML='';
+  const gLines=svgEl('g'), gNodes=svgEl('g');
+  svg.appendChild(gLines); svg.appendChild(gNodes);
+
+  function renderStage(){
+    gLines.innerHTML=''; gNodes.innerHTML='';
+    nodeEls={}; lineEls={}; collapseEls={};
+    const visible=Object.values(mm.nodes).filter(n=>!isCollapsedAncestor(n.id));
+    visible.forEach(n=>{
+      if(!n.parentId) return;
+      const p=mm.nodes[n.parentId];
+      if(!p || isCollapsedAncestor(p.id)) return;
+      const mx=(p.x+n.x)/2;
+      const pathEl=svgEl('path',{ d:`M ${p.x} ${p.y} C ${mx} ${p.y}, ${mx} ${n.y}, ${n.x} ${n.y}`, stroke:'var(--border-lt)', 'stroke-width':2, fill:'none' });
+      lineEls[n.id]=pathEl;
+      gLines.appendChild(pathEl);
+    });
+    visible.forEach(n=>{
+      const w=MM_BASE_W, h=MM_BASE_H;
+      const fo=svgEl('foreignObject',{x:n.x-w/2, y:n.y-h/2, width:w, height:h, style:'overflow:visible;'});
+      const div=document.createElement('div');
+      div.className='mm-node-box'+(st.selectedIds.has(n.id)?' mm-selected':'');
+      div.style.borderColor=n.color; div.style.color=n.color;
+      div.textContent=n.text; div.dataset.id=n.id; div.setAttribute('spellcheck','false');
+      fo.appendChild(div); gNodes.appendChild(fo);
+      nodeEls[n.id]={fo, div};
+      div.addEventListener('mousedown',(e)=>onNodeDown(e,n.id));
+      div.addEventListener('touchstart',(e)=>onNodeDown(e,n.id),{passive:false});
+      div.addEventListener('dblclick',(e)=>{ e.stopPropagation(); startEdit(n.id); });
+      div.addEventListener('blur',()=>commitEdit(n.id, div));
+      div.addEventListener('keydown',(e)=>{ if(e.key==='Enter' && div.isContentEditable){ e.preventDefault(); div.blur(); } e.stopPropagation(); });
+      const kids=childrenOf(n.id);
+      if(kids.length){
+        const btn=svgEl('foreignObject',{x:n.x-w/2-18, y:n.y-9, width:18, height:18});
+        const b=document.createElement('div');
+        b.className='mm-collapse-btn'; b.textContent=n.collapsed?'+':'−';
+        b.addEventListener('mousedown',(e)=>e.stopPropagation());
+        b.addEventListener('click',(e)=>{ e.stopPropagation(); toggleCollapse(n.id); });
+        btn.appendChild(b); gNodes.appendChild(btn);
+        collapseEls[n.id]=btn;
+      }
+    });
+    applyTransform();
+    statusEl.textContent = Object.keys(mm.nodes).length+' عقدة'+(st.selectedIds.size>1?' — محدد: '+st.selectedIds.size:'');
+  }
+  function updateNodePositions(ids){
+    const w=MM_BASE_W, h=MM_BASE_H;
+    ids.forEach(id=>{
+      const n=mm.nodes[id]; if(!n) return;
+      const ref=nodeEls[id];
+      if(ref){ ref.fo.setAttribute('x', n.x-w/2); ref.fo.setAttribute('y', n.y-h/2); }
+      const btn=collapseEls[id];
+      if(btn){ btn.setAttribute('x', n.x-w/2-18); btn.setAttribute('y', n.y-9); }
+      const ownLine=lineEls[id];
+      if(ownLine && n.parentId){
+        const p=mm.nodes[n.parentId]; const mx=(p.x+n.x)/2;
+        ownLine.setAttribute('d', `M ${p.x} ${p.y} C ${mx} ${p.y}, ${mx} ${n.y}, ${n.x} ${n.y}`);
+      }
+      childrenOf(id).forEach(child=>{
+        const cl=lineEls[child.id];
+        if(cl){ const mx=(n.x+child.x)/2; cl.setAttribute('d', `M ${n.x} ${n.y} C ${mx} ${n.y}, ${mx} ${child.y}, ${child.x} ${child.y}`); }
+      });
+    });
+  }
+  function render(){ renderStage(); renderProps(); }
+  function renderProps(){
+    if(st.selectedIds.size!==1){ propsBar.style.display='none'; return; }
+    const n=mm.nodes[[...st.selectedIds][0]];
+    if(!n){ propsBar.style.display='none'; return; }
+    propsBar.style.display='flex';
+    propsBar.innerHTML = `
+      <input type="text" class="mm-name-input" value="${esc(n.text)}" placeholder="اسم العقدة">
+      <span class="mm-props-label">اللون:</span>
+      ` + MM_COLORS.map(c=>`<button type="button" class="mm-color-swatch" data-color="${c}" style="background:${c};border-color:${n.color===c?'#fff':'transparent'}"></button>`).join('') + `<input type="color" class="mm-custom-color" value="${n.color}" title="لون مخصص">`;
+    const nameInput=propsBar.querySelector('.mm-name-input');
+    nameInput.addEventListener('input', ()=>{ n.text=nameInput.value; nbScheduleSave(item); const ref=nodeEls[n.id]; if(ref) ref.div.textContent=n.text; });
+    nameInput.addEventListener('keydown',(e)=> e.stopPropagation());
+    propsBar.querySelectorAll('[data-color]').forEach(btn=> btn.onclick=()=>{ pushHistory(); n.color=btn.dataset.color; nbScheduleSave(item); render(); });
+    propsBar.querySelector('.mm-custom-color').oninput=(e)=>{ n.color=e.target.value; nbScheduleSave(item); const ref=nodeEls[n.id]; if(ref){ ref.div.style.borderColor=n.color; ref.div.style.color=n.color; } };
+  }
+  function startEdit(id){
+    render();
+    requestAnimationFrame(()=>{
+      const div=gNodes.querySelector(`[data-id="${id}"]`);
+      if(!div) return;
+      pushHistory();
+      div.contentEditable='true'; div.focus();
+      document.execCommand && document.execCommand('selectAll', false, null);
+    });
+  }
+  function commitEdit(id, div){
+    if(div.isContentEditable){
+      div.contentEditable='false';
+      const val=div.textContent.trim()||'بدون عنوان';
+      if(mm.nodes[id]) mm.nodes[id].text=val;
+      nbScheduleSave(item);
+      renderProps();
+    }
+  }
+
+  let nodeEls={}, lineEls={}, collapseEls={};
+  let dragMode=null, dragStart=null, dragOrigins=null, dragDistance=0, clickToEditId=null;
+  function onNodeDown(e,id){
+    const div=e.currentTarget;
+    if(div.isContentEditable){ e.stopPropagation(); return; }
+    e.stopPropagation(); e.preventDefault();
+    wrap.focus();
+    const additive=e.shiftKey||e.ctrlKey||e.metaKey;
+    const wasSoleSelected=!additive && st.selectedIds.size===1 && st.selectedIds.has(id);
+    let selectionChanged=false;
+    if(additive){ if(st.selectedIds.has(id)) st.selectedIds.delete(id); else st.selectedIds.add(id); selectionChanged=true; }
+    else if(!st.selectedIds.has(id)){ st.selectedIds=new Set([id]); selectionChanged=true; }
+    if(selectionChanged) render(); else renderProps();
+    dragMode='node'; dragDistance=0; clickToEditId = wasSoleSelected? id : null;
+    const t=e.touches? e.touches[0] : e;
+    dragStart={x:t.clientX, y:t.clientY};
+    dragOrigins={};
+    st.selectedIds.forEach(sid=>{ const n=mm.nodes[sid]; dragOrigins[sid]={x:n.x,y:n.y}; });
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', onDragEnd);
+    window.addEventListener('touchmove', onDragMove, {passive:false});
+    window.addEventListener('touchend', onDragEnd);
+  }
+  function onStageDown(e){
+    if(e.target.closest('.mm-node-box') || e.target.closest('.mm-collapse-btn')) return;
+    wrap.focus();
+    dragMode='pan'; svg.classList.add('panning');
+    const t=e.touches? e.touches[0] : e;
+    dragStart={x:t.clientX, y:t.clientY, tx:st.tx, ty:st.ty};
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', onDragEnd);
+    window.addEventListener('touchmove', onDragMove, {passive:false});
+    window.addEventListener('touchend', onDragEnd);
+  }
+  function onDragMove(e){
+    if(!dragMode) return;
+    if(e.cancelable) e.preventDefault();
+    const t=e.touches? e.touches[0] : e;
+    const dx=t.clientX-dragStart.x, dy=t.clientY-dragStart.y;
+    dragDistance=Math.max(dragDistance, Math.hypot(dx,dy));
+    if(dragMode==='pan'){ st.tx=dragStart.tx+dx; st.ty=dragStart.ty+dy; applyTransform(); }
+    else if(dragMode==='node'){
+      const wdx=dx/st.scale, wdy=dy/st.scale;
+      const movedIds=[];
+      st.selectedIds.forEach(id=>{ const n=mm.nodes[id]; const o=dragOrigins[id]; if(n&&o){ n.x=o.x+wdx; n.y=o.y+wdy; movedIds.push(id); } });
+      updateNodePositions(movedIds);
+    }
+  }
+  function onDragEnd(){
+    const wasNodeDrag=dragMode==='node', editId=clickToEditId, moved=dragDistance;
+    dragMode=null; svg.classList.remove('panning'); clickToEditId=null;
+    window.removeEventListener('mousemove', onDragMove);
+    window.removeEventListener('mouseup', onDragEnd);
+    window.removeEventListener('touchmove', onDragMove);
+    window.removeEventListener('touchend', onDragEnd);
+    if(wasNodeDrag){
+      nbScheduleSave(item);
+      if(editId && moved<4) startEdit(editId);
+    }
+  }
+  svg.addEventListener('mousedown', onStageDown);
+  svg.addEventListener('touchstart', onStageDown, {passive:false});
+  svg.addEventListener('wheel',(e)=>{ e.preventDefault(); const rect=svg.getBoundingClientRect(); zoomAt(e.clientX-rect.left, e.clientY-rect.top, st.scale*(e.deltaY<0?1.12:0.89)); }, {passive:false});
+
+  wrap.addEventListener('keydown',(e)=>{
+    const editing = document.activeElement && document.activeElement.isContentEditable;
+    if(e.key==='Tab' && !editing){ e.preventDefault(); addChild(); }
+    else if(e.key==='Enter' && !editing){ e.preventDefault(); addSibling(); }
+    else if(e.key==='F2'){ e.preventDefault(); startEdit(selectedSingle().id); }
+    else if(e.key==='Delete' && !editing){ e.preventDefault(); deleteSelected(); }
+    else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
+    else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
+  });
+
+  wrap.querySelector('[data-act="add-child"]').onclick=addChild;
+  wrap.querySelector('[data-act="add-sibling"]').onclick=addSibling;
+  wrap.querySelector('[data-act="add-parent"]').onclick=addParent;
+  wrap.querySelector('[data-act="dup"]').onclick=duplicateSelected;
+  wrap.querySelector('[data-act="del"]').onclick=deleteSelected;
+  wrap.querySelector('[data-act="undo"]').onclick=undo;
+  wrap.querySelector('[data-act="redo"]').onclick=redo;
+  wrap.querySelector('[data-act="collapse-toggle"]').onclick=()=>toggleCollapse(selectedSingle().id);
+  wrap.querySelector('[data-act="zoom-in"]').onclick=()=>{ const r=stageWrap.getBoundingClientRect(); zoomAt(r.width/2, r.height/2, st.scale*1.2); };
+  wrap.querySelector('[data-act="zoom-out"]').onclick=()=>{ const r=stageWrap.getBoundingClientRect(); zoomAt(r.width/2, r.height/2, st.scale/1.2); };
+  wrap.querySelector('[data-act="zoom-reset"]').onclick=fitToScreen;
+
+  if(window.ResizeObserver) new ResizeObserver(()=>applyTransform()).observe(stageWrap);
+  requestAnimationFrame(fitToScreen);
+  render();
+  return wrap;
+}
+function nbMapTab(body, s, item){
+  const h=document.createElement('div'); h.className='nb-subhead'; h.innerHTML='<b>🧠 الخريطة الذهنية</b><span style="font-size:10.5px;color:var(--dim2);font-weight:400;">اسحب لتحريك أي فكرة · دبل كليك للتعديل · Tab لإضافة تابع · Enter لإضافة شقيق</span>';
+  body.appendChild(h);
+  body.appendChild(nbBuildMindMapPanel(s, item));
+}
+
+/* ===== الحاوية الرئيسية ===== */
+function nbMountNotebook(holder, item){
+  const s = ensureNotebookData(item);
+  let tab = 'text';
+  function render(){
+    holder.innerHTML='';
+    holder.className='nb-scope';
+    const box=document.createElement('div');
+    box.className='nb-box';
+    const head=document.createElement('div');
+    head.className='nb-head';
+    const titleInput=document.createElement('input');
+    titleInput.className='nb-title';
+    titleInput.placeholder='عنوان التوثيق التقني';
+    titleInput.value=s.title;
+    titleInput.oninput=()=>{ s.title=titleInput.value; nbScheduleSave(item); };
+    const note=document.createElement('div');
+    note.className='nb-note';
+    note.textContent='الحفظ تلقائي';
+    head.append(titleInput, note);
+    box.appendChild(head);
+
+    const nav=document.createElement('div');
+    nav.className='nb-tabs';
+    [['text','📝 الشرح والصور'],['code','💻 الأكواد'],['draw','📐 الرسم'],['map','🧠 الخريطة']].forEach(([id,label])=>{
+      const b=document.createElement('button');
+      b.type='button'; b.className='btn small'+(id===tab?' primary':'');
+      b.textContent=label;
+      b.onclick=()=>{ tab=id; render(); };
+      nav.appendChild(b);
+    });
+    box.appendChild(nav);
+
+    const body=document.createElement('div');
+    body.className='nb-body';
+    box.appendChild(body);
+    holder.appendChild(box);
+
+    if(tab==='text') nbTextPanel(body, s, item);
+    else if(tab==='code') nbCodePanel(body, s, item, render);
+    else if(tab==='draw') nbDrawTab(body, s, item);
+    else nbMapTab(body, s, item);
+  }
+  render();
+}
+window.nbMountNotebook = nbMountNotebook;
+
+})();
+</script>
+
 </body>
 </html>
