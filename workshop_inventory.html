@@ -18,6 +18,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root, [data-theme="amber"]{
   --bg:#0b0f14; --panel:#12181f; --panel2:#1a2330; --panel3:#212c3b;
@@ -4218,6 +4219,7 @@ table.tbl tr:hover td{background:var(--panel2);}
       <button class="nav-item" data-view="storage"><span class="ico">🗄️</span><span class="lbl">التخزين المرئي</span></button>
       <button class="nav-item" data-view="map"><span class="ico">🗺️</span><span class="lbl">خريطة الورشة</span></button>
       <button class="nav-item" data-view="components"><span class="ico">🔩</span><span class="lbl">المكونات</span></button>
+      <button class="nav-item" data-view="bomimport"><span class="ico">🧾</span><span class="lbl">استيراد BOM من صورة</span></button>
       <button class="nav-item" data-view="categories"><span class="ico">🗂️</span><span class="lbl">الفئات والمواصفات</span></button>
       <button class="nav-item" data-view="lowstock"><span class="ico">⚠️</span><span class="lbl">نقص المخزون</span></button>
       <button class="nav-item" data-view="purchases"><span class="ico">🛒</span><span class="lbl">المشتريات</span></button>
@@ -5144,7 +5146,7 @@ let currentView='dashboard';
 function showView(v){
   currentView=v;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
-  const map={dashboard:renderDashboard,storage:renderStorage,map:renderMap,components:renderComponents,categories:renderCategories,lowstock:renderLowStock,purchases:renderPurchases,checklist:renderChecklist,history:renderHistory,projects:renderProjects,experiments:renderExperiments,stats:renderStats,settings:renderSettings};
+  const map={dashboard:renderDashboard,storage:renderStorage,map:renderMap,components:renderComponents,bomimport:renderBomImport,categories:renderCategories,lowstock:renderLowStock,purchases:renderPurchases,checklist:renderChecklist,history:renderHistory,projects:renderProjects,experiments:renderExperiments,stats:renderStats,settings:renderSettings};
   (map[v]||renderDashboard)();
 }
 document.getElementById('navlist').addEventListener('click',e=>{
@@ -6946,6 +6948,564 @@ function deleteComponent(compId){
   closeModal();
   showView('components');
   toast('تم حذف المكون');
+}
+
+/* ============================= استيراد BOM من صورة (لصق يدوي) ============================= */
+function bomNormalizeStr(s){
+  return String(s||'').toLowerCase()
+    .replace(/[+\-±%°μµ]/g,' ')
+    .replace(/[^\w\u0600-\u06ff.]+/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+function bomTokenSet(s){ return new Set(bomNormalizeStr(s).split(' ').filter(Boolean)); }
+function bomJaccard(a,b){
+  if(!a.size||!b.size) return 0;
+  let inter=0; a.forEach(x=>{ if(b.has(x)) inter++; });
+  return inter/(a.size+b.size-inter);
+}
+function bomComponentSearchStr(c){ return [c.name,c.value,c.package,c.partNumber].filter(Boolean).join(' '); }
+
+/* ---- التعرف على تقارير Excel/CSV من نوع تصدير BOM من برامج EDA (Altium/KiCad/EasyEDA) ---- */
+const BOM_DESIGNATOR_CATEGORY_MAP={
+  RN:'شبكة مقاومات (Resistor Network)', RV:'مقاومة متغيرة (Varistor)', RY:'ريليه (Relay)',
+  FB:'حبة فيرايت (Ferrite Bead)', LED:'LED', CON:'موصل (Connector)', BAT:'بطارية (Battery)',
+  TR:'محول (Transformer)', TP:'نقطة اختبار (Test Point)', MH:'ثقب تثبيت (Mounting Hole)',
+  IC:'دائرة متكاملة (IC)', SW:'مفتاح (Switch)',
+  C:'مكثف (Capacitor)', R:'مقاومة (Resistor)', L:'ملف/محاثة (Inductor)', D:'دايود (Diode)',
+  Q:'ترانزستور (Transistor)', U:'دائرة متكاملة (IC)', J:'موصل (Connector)', P:'موصل (Connector)',
+  Y:'كريستال/رنان (Crystal/Oscillator)', X:'كريستال (Crystal)', F:'فيوز (Fuse)', K:'ريليه (Relay)',
+  T:'محول (Transformer)', S:'مفتاح (Switch)', BT:'بطارية (Battery)'
+};
+function bomCategoryFromDesignator(designator){
+  if(!designator) return null;
+  const first=String(designator).split(',')[0].trim();
+  const m=first.match(/^([A-Za-z]+)/);
+  if(!m) return null;
+  const prefix=m[1].toUpperCase();
+  const keys=Object.keys(BOM_DESIGNATOR_CATEGORY_MAP).sort((a,b)=>b.length-a.length);
+  for(const k of keys){ if(prefix.startsWith(k)) return {label:BOM_DESIGNATOR_CATEGORY_MAP[k],code:k}; }
+  return null;
+}
+function bomNormUnit(u){
+  const map={pf:'pF',nf:'nF',uf:'µF','µf':'µF',mf:'mF',f:'F',ph:'pH',nh:'nH',uh:'µH','µh':'µH',mh:'mH',h:'H'};
+  return map[String(u).toLowerCase()]||u;
+}
+function bomParseValueUnit(raw){
+  if(!raw) return null;
+  const s=String(raw).trim();
+  if(!s) return null;
+  let m=s.match(/^([\d]*\.?[\d]+)\s*(pF|nF|uF|µF|mF|F|pH|nH|uH|µH|mH|H)$/i);
+  if(m) return {value:parseFloat(m[1]),unit:bomNormUnit(m[2])};
+  m=s.match(/^([\d]+)([RrKkMm])([\d]+)?$/);
+  if(m){
+    const whole=m[1],mult=m[2].toUpperCase(),frac=m[3]||'';
+    const numStr=frac?(whole+'.'+frac):whole;
+    const unitMap={R:'Ω',K:'kΩ',M:'MΩ'};
+    return {value:parseFloat(numStr),unit:unitMap[mult]};
+  }
+  m=s.match(/^([\d]*\.?[\d]+)\s*(ohm|Ω)$/i);
+  if(m) return {value:parseFloat(m[1]),unit:'Ω'};
+  return null;
+}
+const BOM_SHEET_HEADER_KEYWORDS={
+  qty:['quantity','qty','qnty','count','عدد','كمية'],
+  designator:['designator','reference','refdes','ref des','references','رمز','الرمز'],
+  value:['comment','value','قيمة'],
+  description:['description','desc','وصف'],
+  footprint:['footprint','package','land pattern','باكدج','حجم'],
+  partref:['libref','part number','mpn','manufacturer part','part no','supplier part','lib ref']
+};
+function bomDetectSheetHeader(aoa){
+  for(let i=0;i<Math.min(aoa.length,6);i++){
+    const cols=(aoa[i]||[]).map(c=>String(c==null?'':c).toLowerCase().trim());
+    const found={};
+    cols.forEach((c,idx)=>{
+      for(const key in BOM_SHEET_HEADER_KEYWORDS){
+        if(found[key]==null && BOM_SHEET_HEADER_KEYWORDS[key].some(kw=>c.includes(kw))) found[key]=idx;
+      }
+    });
+    if(found.qty!=null && (found.designator!=null||found.value!=null)) return {headerIdx:i,colMap:found};
+  }
+  return null;
+}
+function bomParseSpreadsheetRows(aoa){
+  const det=bomDetectSheetHeader(aoa);
+  if(!det) return [];
+  const {headerIdx,colMap}=det;
+  const dataRows=aoa.slice(headerIdx+1);
+  const out=[];
+  dataRows.forEach((cols,idx)=>{
+    if(!cols||!cols.length) return;
+    const get=key=>colMap[key]!=null?(cols[colMap[key]]!=null?String(cols[colMap[key]]).trim():''):'';
+    const qty=parseInt(String(get('qty')).replace(/[^\d.-]/g,''),10);
+    if(!qty||qty<=0) return;
+    const designator=get('designator');
+    const rawValue=get('value');
+    const description=get('description');
+    const footprint=get('footprint');
+    const partRef=get('partref');
+    if(!designator && !rawValue && !description) return;
+    const catInfo=bomCategoryFromDesignator(designator);
+    const vu=bomParseValueUnit(rawValue);
+    const displayValue=(vu && vu.value!=null)?(vu.value+(vu.unit||'')):(rawValue||description);
+    const name=[catInfo?catInfo.label:'',displayValue,footprint].filter(Boolean).join(' ')||('صنف '+(idx+1));
+    const row=bomBuildRow({
+      name,designator,qty,
+      category:catInfo?catInfo.label:'',
+      value:(vu&&vu.value!=null)?vu.value:null,
+      unit:(vu&&vu.unit)?vu.unit:'',
+      footprint,partRef,rawValue,description
+    },idx+1);
+    if(row) out.push(row);
+  });
+  return out;
+}
+function bomScoreMatch(bomName,comp){
+  const a=bomTokenSet(bomName), b=bomTokenSet(bomComponentSearchStr(comp));
+  let score=bomJaccard(a,b);
+  const na=bomNormalizeStr(bomName), nb=bomNormalizeStr(comp.name);
+  if(na && nb && (na.includes(nb)||nb.includes(na))) score=Math.max(score,0.6);
+  return score;
+}
+function bomFindMatches(bomName){
+  return state.components
+    .map(c=>({compId:c.id,score:bomScoreMatch(bomName,c)}))
+    .filter(x=>x.score>0.12)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,6);
+}
+const BOM_HEADER_KEYWORDS={
+  designator:['designator','ref','reference','رمز','الرمز','موضع'],
+  name:['name','component','part','description','value','اسم','الاسم','المكون','الوصف','القيمة'],
+  qty:['qty','quantity','count','عدد','الكمية','كمية']
+};
+function bomBuildRow(fields,lineNo){
+  const name=(fields.name||'').trim();
+  const qty=Number(fields.qty)||0;
+  if(!name||!qty||qty<=0) return null;
+  const row={
+    id:uid('bomrow'),lineNo,designator:(fields.designator||'').trim(),name,qty,
+    status:'pending',matchedCompId:null,suggestions:[],usedCellId:null,deductedQty:0,
+    category:fields.category||'',value:(fields.value!=null?fields.value:null),unit:fields.unit||'',
+    footprint:fields.footprint||'',partRef:fields.partRef||'',rawValue:fields.rawValue||'',description:fields.description||''
+  };
+  row.suggestions=bomFindMatches(row.name);
+  if(row.suggestions.length && row.suggestions[0].score>=0.55) row.matchedCompId=row.suggestions[0].compId;
+  return row;
+}
+function bomMakeRow(name,designator,qtyRaw,lineNo){
+  const qty=parseInt(String(qtyRaw||'').replace(/[^\d]/g,''),10);
+  return bomBuildRow({name,designator,qty},lineNo);
+}
+function bomParseText(raw){
+  const lines=String(raw||'').split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length);
+  if(!lines.length) return [];
+
+  const hasPipe=lines.some(l=>l.includes('|'));
+  const hasTab=lines.some(l=>l.includes('\t'));
+
+  // فى وجود فاصل صريح لا لبس فيه (Markdown | أو تاب) نثق فى التقسيم بالأعمدة مباشرة.
+  if(hasPipe||hasTab) return bomParseDelimited(lines);
+
+  // من غير فاصل صريح، الغالب إن النص ملصوق من جدول مُعرَّض حيث كل خلية فى سطر مستقل
+  // بدون أى فاصل (مشكلة شائعة عند نسخ جدول HTML/Markdown كنص). التقسيم بالفاصلة ","
+  // غير موثوق هنا لأنها تظهر بشكل طبيعى جدًا داخل خانة الرمز (Designator) زى
+  // "C33, C34, C35"، فنعتمد أولًا على اكتشاف طول العنوان وتجميع الأسطر، ولا نلجأ
+  // للتقسيم بالفاصلة إلا لو فشل هذا الأسلوب تمامًا.
+  const flat=bomParseFlatLines(lines);
+  if(flat.length) return flat;
+  return bomParseDelimited(lines);
+}
+function bomParseDelimited(lines){
+  let rows=lines.map(l=>{
+    if(l.includes('|')) return l.replace(/^\||\|$/g,'').split('|').map(s=>s.trim());
+    if(l.includes('\t')) return l.split('\t').map(s=>s.trim());
+    if(/\s{2,}/.test(l)) return l.split(/\s{2,}/).map(s=>s.trim());
+    if((l.match(/,/g)||[]).length>=2) return l.split(',').map(s=>s.trim());
+    return [l];
+  });
+  rows=rows.filter(cols=>!(cols.length && cols.every(c=>/^:?-{2,}:?$/.test(c))));
+  if(!rows.length) return [];
+
+  let headerIdx=-1, colMap={};
+  for(let i=0;i<Math.min(rows.length,3);i++){
+    const cols=rows[i].map(c=>c.toLowerCase());
+    const found={};
+    cols.forEach((c,idx)=>{
+      for(const key in BOM_HEADER_KEYWORDS){ if(BOM_HEADER_KEYWORDS[key].some(kw=>c.includes(kw))) found[key]=idx; }
+    });
+    if(found.name!=null && found.qty!=null){ headerIdx=i; colMap=found; break; }
+  }
+  let dataRows=headerIdx>=0? rows.slice(headerIdx+1): rows.slice(0);
+  if(headerIdx<0){
+    const numCols=dataRows[0]?dataRows[0].length:0;
+    if(numCols>=4) colMap={designator:1,name:2,qty:3};
+    else if(numCols===3) colMap={designator:0,name:1,qty:2};
+    else if(numCols===2) colMap={name:0,qty:1};
+    else colMap={name:0,qty:0};
+  }
+  const out=[];
+  dataRows.forEach((cols,idx)=>{
+    if(!cols||!cols.length) return;
+    let name=colMap.name!=null?(cols[colMap.name]||''):'';
+    let designator=colMap.designator!=null?(cols[colMap.designator]||''):'';
+    let qtyRaw=colMap.qty!=null?(cols[colMap.qty]||''):'';
+    if(!name && cols.length===1){
+      const m=cols[0].match(/^(.*\D)\s+(\d+)$/);
+      if(m){ name=m[1].trim(); qtyRaw=m[2]; }
+    }
+    const row=bomMakeRow(name,designator,qtyRaw,idx+1);
+    if(row) out.push(row);
+  });
+  return out;
+}
+// اكتشاف تلقائى لعدد الأعمدة عندما يكون كل سطر = خلية واحدة (نسخ من جدول HTML/Markdown مُعرَّض)
+function bomParseFlatLines(lines){
+  let headerLen=-1, colMap={};
+  const scanLimit=Math.min(lines.length,8);
+  const found={};
+  for(let i=0;i<scanLimit;i++){
+    const c=lines[i].toLowerCase();
+    for(const key in BOM_HEADER_KEYWORDS){
+      if(found[key]==null && BOM_HEADER_KEYWORDS[key].some(kw=>c.includes(kw))) found[key]=i;
+    }
+    if(found.qty!=null){ headerLen=i+1; colMap=found; break; }
+  }
+  if(headerLen<0){
+    // لم يتم العثور على سطر عنوان يحتوى "الكمية/Quantity" — افتراضى شائع: رمز/اسم/كمية
+    headerLen=3; colMap={designator:0,name:1,qty:2};
+  }
+  const dataLines=lines.slice(headerLen);
+  const N=headerLen;
+  if(N<=0 || dataLines.length<N) return [];
+  const out=[];
+  let rowIdx=0;
+  for(let i=0;i+N<=dataLines.length;i+=N){
+    const chunk=dataLines.slice(i,i+N);
+    rowIdx++;
+    const name=colMap.name!=null?chunk[colMap.name]:'';
+    const designator=colMap.designator!=null?chunk[colMap.designator]:'';
+    const qtyRaw=colMap.qty!=null?chunk[colMap.qty]:'';
+    const row=bomMakeRow(name,designator,qtyRaw,rowIdx);
+    if(row) out.push(row);
+  }
+  return out;
+}
+function bomRowStatusInfo(row){
+  if(row.status==='done') return {label:'✅ تم الخصم',cls:'green'};
+  if(row.status==='skipped') return {label:'⏭️ تم التخطي',cls:'gray'};
+  if(row.matchedCompId){
+    const comp=findComponent(row.matchedCompId);
+    if(!comp) return {label:'❓ غير مربوط',cls:'gray'};
+    const total=totalQtyOfComponent(comp.id);
+    if(total<=0) return {label:'⛔ موجود لكن غير مخزّن',cls:'red'};
+    if(total<row.qty) return {label:`⚠️ نقص (متاح ${total})`,cls:'yellow'};
+    return {label:'✔️ متوفر',cls:'green'};
+  }
+  if(row.suggestions && row.suggestions.length) return {label:'🔎 يحتاج اختيار',cls:'yellow'};
+  return {label:'❌ غير موجود بالمكتبة',cls:'red'};
+}
+/* ---- تقارير BOM محفوظة: كل تقرير = ملف مستقل بأصنافه + توثيقه (شرح/صور/رسم/خريطة ذهنية) ---- */
+function ensureBomReports(){ if(!Array.isArray(state.bomReports)) state.bomReports=[]; return state.bomReports; }
+function findBomReport(id){ return ensureBomReports().find(r=>r.id===id); }
+function currentBomReport(){ return window.__bomActiveReportId? findBomReport(window.__bomActiveReportId): null; }
+function bomFindRow(rowId){ const rep=currentBomReport(); return rep? (rep.rows||[]).find(r=>r.id===rowId): null; }
+
+function renderBomImport(){
+  const report=currentBomReport();
+  if(report) renderBomReportDetail(report);
+  else renderBomReportsList();
+}
+function renderBomReportsList(){
+  const vc=document.getElementById('viewContainer');
+  const reports=ensureBomReports().slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  vc.innerHTML=viewHeader('تقارير BOM من صورة','كل تقرير مكونات تستورده من صورة يُحفظ كملف مستقل: أصنافه، حالة الربط والخصم، وتوثيقه الخاص (شرح، صور، رسم، خريطة ذهنية).')+`
+    <div class="bom-files-grid" id="bomReportsGrid">
+      <div class="bom-file-tile bom-file-new" onclick="openBomPasteModal(null)">
+        <div class="bom-file-icon">＋</div>
+        <div class="bom-file-name">تقرير جديد</div>
+      </div>
+      ${reports.map(r=>bomReportCardHTML(r)).join('')}
+    </div>
+  `;
+}
+function bomFileIconSVG(color){
+  return `<svg viewBox="0 0 64 80" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 3h32l16 16v56a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z" fill="var(--panel2)" stroke="var(--rule)" stroke-width="1.5"/>
+    <path d="M40 3v14a2 2 0 0 0 2 2h14" fill="none" stroke="var(--rule)" stroke-width="1.5"/>
+    <rect x="13" y="34" width="38" height="4.5" rx="2.2" fill="${color}"/>
+    <rect x="13" y="45" width="38" height="4.5" rx="2.2" fill="${color}" opacity=".55"/>
+    <rect x="13" y="56" width="24" height="4.5" rx="2.2" fill="${color}" opacity=".3"/>
+  </svg>`;
+}
+function bomReportCardHTML(r){
+  const rows=r.rows||[];
+  const done=rows.filter(x=>x.status==='done').length;
+  const skipped=rows.filter(x=>x.status==='skipped').length;
+  const total=rows.length;
+  const finished=total>0 && (done+skipped)>=total;
+  const color=!total?'var(--dim2)':finished?'var(--green)':'var(--amber)';
+  const hasImages=r.section && Array.isArray(r.section.images) && r.section.images.length>0;
+  const hasDoc=r.section && ((r.section.explanation||'').trim() || (Array.isArray(r.section.explanations)&&r.section.explanations.length));
+  const tags=(hasDoc?'<span title="يحتوى توثيق">📄</span>':'')+(hasImages?'<span title="يحتوى صور">🖼️</span>':'');
+  return `<div class="bom-file-tile" onclick="openBomReportDetailById('${r.id}')">
+    <span class="bom-file-del" title="حذف التقرير" onclick="event.stopPropagation();bomDeleteReport('${r.id}')">✕</span>
+    <div class="bom-file-icon">
+      ${bomFileIconSVG(color)}
+      ${total?`<span class="bom-file-badge">${done}/${total}</span>`:''}
+      ${tags?`<div class="bom-file-tags">${tags}</div>`:''}
+    </div>
+    <div class="bom-file-name">${r.title||'تقرير بدون عنوان'}</div>
+    <div class="bom-file-meta">${fmtDate(r.createdAt)}</div>
+  </div>`;
+}
+function openBomReportDetailById(id){ window.__bomActiveReportId=id; window.__bomDetailTab='rows'; showView('bomimport'); }
+function bomDeleteReport(id){
+  if(!confirm('سيتم حذف هذا التقرير نهائيًا (بدون التأثير على الكميات التي سبق خصمها فعليًا من المخزون). هل أنت متأكد؟')) return;
+  state.bomReports=ensureBomReports().filter(x=>x.id!==id);
+  if(window.__bomActiveReportId===id) window.__bomActiveReportId=null;
+  scheduleSave(); showView('bomimport'); toast('تم حذف التقرير');
+}
+function bomCommitParsedRows(parsed,isAppend,appendReportId,title){
+  if(!parsed.length){ toast('لم أتمكن من فهم أي صفوف من الملف/النص'); return; }
+  if(isAppend){
+    const rep=findBomReport(appendReportId); if(!rep) return;
+    rep.rows=(rep.rows||[]).concat(parsed);
+  }else{
+    const rep={id:uid('bomrep'),title:(title||'').trim(),createdAt:nowISO(),sourceText:'',rows:parsed,section:{}};
+    ensureBomReports().unshift(rep);
+    window.__bomActiveReportId=rep.id;
+    window.__bomDetailTab='rows';
+  }
+  scheduleSave();
+  closeModal();
+  showView('bomimport');
+  toast(`تم تحليل ${parsed.length} صنف`);
+}
+function openBomPasteModal(appendReportId){
+  const isAppend=!!appendReportId;
+  openModal(isAppend?'إضافة أصناف لهذا التقرير':'تقرير BOM جديد',`
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <button class="btn" id="bomOpenClaude">💬 فتح شات كلود لتحليل الصورة</button>
+    </div>
+    <p style="color:var(--dim);font-size:11.5px;margin-top:0;">افتح الرابط، ألصق صورة تقرير المكونات، اطلب من كلود جدول (اسم المكون + الكمية)، وانسخ الناتج والصقه بالأسفل.</p>
+    ${isAppend?'':`<div class="field-row full"><div class="field"><label>عنوان التقرير (اختياري)</label><input id="bomNewTitle" placeholder="مثال: لوحة تحكم موتور - الوجه العلوي"></div></div>`}
+    <div class="field-row full"><div class="field"><label>الصق جدول المكونات هنا</label><textarea id="bomPasteArea" rows="8" placeholder="مثال:\nC33, C34, C35 | Capacitor 10nF 50V 0402 | 3\nC7 | Capacitor 47µF 6.3V 0805 | 1"></textarea></div></div>
+    <div style="display:flex;align-items:center;gap:10px;margin:10px 0;color:var(--dim);font-size:11px;">— أو —</div>
+    <div class="field-row full"><div class="field">
+      <label>ارفع ملف تقرير Excel/CSV (مثل تصدير BOM من Altium/KiCad/EasyEDA بأعمدة Comment/Designator/Footprint/Quantity)</label>
+      <input type="file" id="bomFileInput" accept=".xlsx,.xls,.csv">
+    </div></div>
+  `,`<button class="btn" id="bomCancelPaste">إلغاء</button><button class="btn primary" id="bomParseBtn">🔍 ${isAppend?'تحليل وإضافة':'تحليل وإنشاء التقرير'}</button>`);
+  document.getElementById('bomOpenClaude').onclick=()=>window.open('https://claude.ai/new','_blank');
+  document.getElementById('bomCancelPaste').onclick=closeModal;
+  document.getElementById('bomParseBtn').onclick=()=>{
+    const raw=document.getElementById('bomPasteArea').value;
+    const parsed=bomParseText(raw);
+    const title=document.getElementById('bomNewTitle')?.value||'';
+    bomCommitParsedRows(parsed,isAppend,appendReportId,title);
+  };
+  document.getElementById('bomFileInput').addEventListener('change',function(e){
+    const file=e.target.files && e.target.files[0]; if(!file) return;
+    if(typeof XLSX==='undefined'){ toast('تعذّر تحميل مكتبة قراءة الإكسل — تأكد من الاتصال بالإنترنت وحاول تاني'); return; }
+    const isCSV=/\.csv$/i.test(file.name);
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        const wb=isCSV? XLSX.read(ev.target.result,{type:'string'}) : XLSX.read(ev.target.result,{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        const parsed=bomParseSpreadsheetRows(aoa);
+        if(!parsed.length){ toast('لم أتمكن من التعرف على أعمدة الملف (Designator/Comment/Quantity)'); return; }
+        const titleEl=document.getElementById('bomNewTitle');
+        const title=(titleEl && titleEl.value.trim()) || file.name.replace(/\.[^.]+$/,'');
+        bomCommitParsedRows(parsed,isAppend,appendReportId,title);
+      }catch(err){
+        toast('تعذّرت قراءة الملف: '+(err&&err.message?err.message:'خطأ غير معروف'));
+      }
+    };
+    if(isCSV) reader.readAsText(file,'utf-8'); else reader.readAsArrayBuffer(file);
+  });
+}
+function renderBomReportDetail(report){
+  const vc=document.getElementById('viewContainer');
+  const rows=report.rows||[];
+  const tab=window.__bomDetailTab==='doc'?'doc':'rows';
+  vc.innerHTML=`
+    <div class="view-title"><h1>${report.title||'تقرير بدون عنوان'}</h1><span class="sub">${fmtDate(report.createdAt)}</span></div>
+    <div class="toolbar" style="margin-bottom:10px;gap:8px;">
+      <button class="btn small" id="bomBackToList">→ كل التقارير</button>
+      <button class="btn small" id="bomAppendBtn">＋ إضافة أصناف</button>
+      <button class="btn small danger" id="bomDeleteReportBtn">🗑 حذف التقرير</button>
+    </div>
+    <div class="field-row full"><div class="field"><label>عنوان التقرير</label><input id="bomTitleInput" value="${report.title||''}"></div></div>
+    <div class="modal-tabs" style="margin:12px 0 0 0;">
+      <button class="mtab ${tab==='rows'?'active':''}" id="bomTabRows">📋 الأصناف (${rows.length})</button>
+      <button class="mtab ${tab==='doc'?'active':''}" id="bomTabDoc">📄 التوثيق والملاحظات</button>
+    </div>
+    <div id="bomDetailBody" style="padding-top:12px;"></div>
+  `;
+  document.getElementById('bomBackToList').onclick=()=>{ window.__bomActiveReportId=null; showView('bomimport'); };
+  document.getElementById('bomAppendBtn').onclick=()=>openBomPasteModal(report.id);
+  document.getElementById('bomDeleteReportBtn').onclick=()=>bomDeleteReport(report.id);
+  document.getElementById('bomTitleInput').addEventListener('input',e=>{ report.title=e.target.value; scheduleSave(); });
+  document.getElementById('bomTabRows').onclick=()=>{ window.__bomDetailTab='rows'; renderBomReportDetail(report); };
+  document.getElementById('bomTabDoc').onclick=()=>{ window.__bomDetailTab='doc'; renderBomReportDetail(report); };
+  const bodyEl=document.getElementById('bomDetailBody');
+  if(tab==='doc'){
+    bodyEl.innerHTML=`<div id="bomSecMount"></div>`;
+    const mountEl=document.getElementById('bomSecMount');
+    if(mountEl && window.mountCellSection) window.mountCellSection(mountEl, report);
+  }else{
+    renderBomRowsPanel(bodyEl,report);
+  }
+}
+function renderBomRowsPanel(area,report){
+  const rows=report.rows||[];
+  if(!rows.length){ area.innerHTML='<div class="empty-state">لا توجد أصناف — استخدم زر «إضافة أصناف»</div>'; return; }
+  const doneCount=rows.filter(r=>r.status==='done').length;
+  const skippedCount=rows.filter(r=>r.status==='skipped').length;
+  const pct=Math.round(((doneCount+skippedCount)/rows.length)*100);
+  area.innerHTML=`
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:5px;">
+        <span>التقدّم: ${doneCount} تم خصمهم${skippedCount?(' · '+skippedCount+' تم تخطيهم'):''} من ${rows.length}</span>
+        <span>${pct}%</span>
+      </div>
+      <div style="height:7px;border-radius:5px;background:var(--panel3);overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:var(--green);transition:.25s;"></div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--rule);border-radius:10px;">
+    <table class="tbl" style="min-width:600px;">
+      <thead><tr>
+        <th style="width:32px;">#</th>
+        <th>المكوّن</th>
+        <th style="width:60px;">الكمية</th>
+        <th style="width:120px;">الحالة</th>
+        <th style="width:110px;"></th>
+      </tr></thead>
+      <tbody>
+      ${rows.map((r,i)=>{
+        const st=bomRowStatusInfo(r);
+        const metaBits=[r.category,(r.value!=null?(r.value+(r.unit||'')):''),r.footprint].filter(Boolean).join(' · ');
+        const doneExtra=r.status==='done'?`<div class="sub" style="font-size:10px;margin-top:2px;">📍 ${locationLabel(r.usedCellId)} · خُصم ${r.deductedQty}</div>`:'';
+        const actionBtn=r.status==='done'?'<span class="pill green">✔️</span>':
+          r.status==='skipped'?`<button class="btn small" onclick="bomRestoreRow('${r.id}')">🔁 استعادة</button>`:
+          `<button class="btn small primary" onclick="openBomRowLink('${r.id}')">🔗 ربط</button>`;
+        return `<tr style="${r.status==='done'?'opacity:.75;':''}${r.status==='skipped'?'opacity:.6;':''}">
+          <td style="color:var(--dim);font-family:var(--mono);">${i+1}</td>
+          <td>
+            <div style="font-weight:700;">${r.name}</div>
+            ${r.designator?`<div class="sub" style="font-family:var(--mono);font-size:10px;">${r.designator}</div>`:''}
+            ${metaBits?`<div class="sub" style="font-size:10px;">${metaBits}</div>`:''}
+            ${doneExtra}
+          </td>
+          <td><b>${r.qty}</b></td>
+          <td><span class="pill ${st.cls}">${st.label}</span></td>
+          <td>${actionBtn}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>
+  `;
+}
+function bomRestoreRow(rowId){
+  const row=bomFindRow(rowId); if(!row) return;
+  row.status='pending';
+  scheduleSave();
+  showView('bomimport');
+}
+function openBomRowLink(rowId){
+  const row=bomFindRow(rowId); if(!row) return;
+  const comp=row.matchedCompId?findComponent(row.matchedCompId):null;
+  if(comp) bomShowCellPickStep(rowId);
+  else bomShowComponentPickStep(rowId);
+}
+function bomShowComponentPickStep(rowId){
+  const row=bomFindRow(rowId); if(!row) return;
+  const compOptions=state.components.map(c=>`<option value="${c.id}">${c.name}${c.partNumber?(' — '+c.partNumber):''}</option>`).join('');
+  const sugHTML=(row.suggestions||[]).length? row.suggestions.map(s=>{
+    const c=findComponent(s.compId); if(!c) return '';
+    return `<div class="card" style="margin-bottom:8px;" onclick="bomPickComponentForRow('${row.id}','${c.id}')">
+      <div style="display:flex;justify-content:space-between;"><b>${c.name}</b><span class="pill ${s.score>=0.4?'yellow':'gray'}">${Math.round(s.score*100)}%</span></div>
+      <div class="sub">${c.category||''} ${c.value?(' · '+c.value):''} ${c.package?(' · '+c.package):''}</div>
+    </div>`;
+  }).join(''): '<div class="empty-state">لا توجد اقتراحات تلقائية قريبة</div>';
+  openModal(`ربط صنف: ${row.name}`,`
+    <p style="color:var(--dim);font-size:12px;margin-top:0;">الكمية المطلوبة: <b>${row.qty}</b>${row.designator?(' · الموضع: '+row.designator):''}</p>
+    <h3 style="font-size:12.5px;">أقرب المكونات المتشابهة بالاسم</h3>
+    ${sugHTML}
+    <h3 style="font-size:12.5px;margin-top:12px;">أو اختر مكوّنًا يدويًا من كل المكتبة</h3>
+    <div class="field-row full"><div class="field"><select id="bomManualSelect"><option value="">— اختر —</option>${compOptions}</select></div></div>
+  `,`<button class="btn" id="bomSkipBtn">⏭️ تخطي هذا الصنف</button><button class="btn primary" id="bomManualPickBtn">استخدام المكوّن المختار</button>`);
+  document.getElementById('bomSkipBtn').onclick=()=>{ row.status='skipped'; scheduleSave(); closeModal(); showView('bomimport'); toast('تم تخطي الصنف'); };
+  document.getElementById('bomManualPickBtn').onclick=()=>{
+    const v=document.getElementById('bomManualSelect').value;
+    if(!v){ toast('اختر مكوّنًا أولًا'); return; }
+    bomPickComponentForRow(row.id,v);
+  };
+}
+function bomPickComponentForRow(rowId,compId){
+  const row=bomFindRow(rowId); if(!row) return;
+  const comp=findComponent(compId); if(!comp) return;
+  row.matchedCompId=compId;
+  scheduleSave();
+  closeModal();
+  bomShowCellPickStep(rowId);
+}
+function bomShowCellPickStep(rowId){
+  const row=bomFindRow(rowId); if(!row) return;
+  const comp=findComponent(row.matchedCompId); if(!comp) return;
+  const cells=containerOfComponent(comp.id);
+  const cellsHTML=cells.length? cells.map(ct=>{
+    const box=findBox(ct.boxId);
+    return `<div class="card" style="margin-bottom:8px;" onclick="bomPickCellForRow('${row.id}','${ct.id}')">
+      <div style="display:flex;justify-content:space-between;"><b>${box?box.label:'—'}</b><span class="pill ${ct.quantity>=row.qty?'green':(ct.quantity>0?'yellow':'red')}">${ct.quantity}</span></div>
+      <div class="sub">${locationLabel(ct.id)}</div>
+    </div>`;
+  }).join(''): '<div class="empty-state">هذا المكوّن غير مخزّن فى أى خلية حاليًا</div>';
+  openModal(`اختر الخلية: ${comp.name}`,`
+    <p style="color:var(--dim);font-size:12px;margin-top:0;">الكمية المطلوبة: <b>${row.qty}</b> · إجمالي المتاح فى كل المواقع: <b>${totalQtyOfComponent(comp.id)}</b></p>
+    ${cellsHTML}
+  `,`<button class="btn" id="bomBackToComp">↩️ اختيار مكوّن آخر</button><button class="btn" id="bomSkipBtn2">⏭️ تخطي هذا الصنف</button>`);
+  document.getElementById('bomBackToComp').onclick=()=>{ row.matchedCompId=null; scheduleSave(); closeModal(); bomShowComponentPickStep(rowId); };
+  document.getElementById('bomSkipBtn2').onclick=()=>{ row.status='skipped'; scheduleSave(); closeModal(); showView('bomimport'); toast('تم تخطي الصنف'); };
+}
+function bomPickCellForRow(rowId,cellId){
+  const row=bomFindRow(rowId); if(!row) return;
+  const comp=findComponent(row.matchedCompId); if(!comp) return;
+  const cell=findContainer(cellId); if(!cell) return;
+  closeModal();
+  revealAndFlash(cellId);
+  setTimeout(()=>bomOpenDeductConfirm(rowId,cellId),900);
+}
+function bomOpenDeductConfirm(rowId,cellId){
+  const row=bomFindRow(rowId); if(!row) return;
+  const comp=findComponent(row.matchedCompId); if(!comp) return;
+  const cell=findContainer(cellId); if(!cell) return;
+  const defaultQty=Math.max(1,Math.min(row.qty,cell.quantity||0));
+  const warn=row.qty>cell.quantity? `<p style="color:var(--red);font-size:11.5px;">⚠️ الكمية المطلوبة (${row.qty}) أكبر من المتاح بهذه الخلية (${cell.quantity})</p>`:'';
+  openModal(`تأكيد الخصم — ${comp.name}`,`
+    <p style="color:var(--dim);font-size:12px;margin-top:0;">الموقع: <b>${locationLabel(cell.id)}</b></p>
+    <div class="field-row"><div class="field"><label>الكمية المتاحة بالخلية</label><input value="${cell.quantity}" readonly></div>
+    <div class="field"><label>الكمية المطلوبة لهذا الصنف</label><input value="${row.qty}" readonly></div></div>
+    <div class="field-row full"><div class="field"><label>الكمية التي سيتم خصمها</label><input type="number" id="bomDeductQty" value="${defaultQty}" min="1" max="${cell.quantity}"></div></div>
+    ${warn}
+  `,`<button class="btn" id="bomCancelDeduct">إلغاء</button><button class="btn primary" id="bomConfirmDeduct">✅ خصم والانتقال للصنف التالى</button>`);
+  document.getElementById('bomCancelDeduct').onclick=()=>{ closeModal(); showView('bomimport'); };
+  document.getElementById('bomConfirmDeduct').onclick=()=>{
+    const q=Number(document.getElementById('bomDeductQty').value||0);
+    if(q<=0||q>cell.quantity){ toast('كمية غير صالحة'); return; }
+    cell.quantity-=q;
+    state.usageHistory.unshift({id:uid('h'),date:nowISO(),componentId:comp.id,type:'use',qtyChange:-q,project:'',purpose:'استيراد BOM من صورة',notes:`صنف من الصورة: ${row.name}${row.designator?(' — '+row.designator):''}`,fromLocation:cell.id,toLocation:''});
+    row.status='done'; row.linkedCompId=comp.id; row.usedCellId=cell.id; row.deductedQty=q;
+    scheduleSave();
+    closeModal();
+    showView('bomimport');
+    toast(`تم خصم ${q} من ${comp.name} — تابع للصنف التالى`);
+  };
 }
 
 function renderLowStock(){
@@ -13299,6 +13859,21 @@ window.ensureVisual=ensureVisual;
   });
 })();
 </script>
+
+<style id="bom-files-ui">
+.bom-files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:16px 10px;}
+.bom-file-tile{display:flex;flex-direction:column;align-items:center;text-align:center;cursor:pointer;position:relative;padding:8px 4px;border-radius:12px;}
+.bom-file-tile:active{background:var(--panel3);}
+.bom-file-icon{width:62px;height:78px;position:relative;margin-bottom:6px;}
+.bom-file-icon svg{width:100%;height:100%;display:block;filter:drop-shadow(0 2px 4px rgba(0,0,0,.25));}
+.bom-file-name{font-size:11.5px;line-height:1.35;font-weight:600;max-width:104px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;color:var(--text);}
+.bom-file-meta{font-size:9.5px;color:var(--dim);margin-top:3px;}
+.bom-file-badge{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:1px 6px;font-size:9.5px;font-weight:700;white-space:nowrap;}
+.bom-file-tags{position:absolute;top:4px;right:2px;display:flex;flex-direction:column;gap:2px;font-size:10px;}
+.bom-file-del{position:absolute;top:-2px;left:-2px;width:20px;height:20px;border-radius:50%;background:var(--panel2);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;border:1px solid var(--rule);z-index:2;}
+.bom-file-new{border:2px dashed var(--rule);}
+.bom-file-new .bom-file-icon{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--dim);}
+</style>
 
 </body>
 </html>
