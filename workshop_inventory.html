@@ -7920,15 +7920,37 @@ function backupValidateManifest(m){
   m.__legacyNoExportId = (v<7 && !m.exportId);
   return m;
 }
-async function backupCollectReferencedAssetIds(root){
-  const ids=new Set(),seen=new WeakSet();
+function backupTryParseJSONBlob(v){
+  /* بعض أجزاء الحالة (خصوصًا state.__runtimePersistence.localStorage، اللي بينسخ كل مفاتيح
+     localStorage كنصوص كما هي) تحتوي كائنات JSON مُرمَّزة داخل نص (string) وليس ككائن حقيقي —
+     مثل ملاحظة عنصر فيها صور مرفقة. الفحص القديم كان يتعامل مع أي قيمة نصية كوحدة مقفولة،
+     فأي مرجع idbimg_ داخل نص كهذا كان يختفي عن كل فحوصات "الصور المُستخدمة" و"الصور المفقودة"،
+     ويؤدي لعدم تصديرها أبدًا رغم أنها صور حقيقية مرفقة بالمشروع. هنا نحاول فك أي نص يبدو كـ
+     JSON (يبدأ بـ { أو [) لنكمل البحث بداخله، بأمان وبدون تكلفة على النصوص العادية (شرح، أسماء
+     …) لأنها لن تبدأ بهذين الحرفين غالبًا فلا نحاول فكها أصلًا. */
+  if(typeof v!=='string') return null;
+  const t=v.trim();
+  if(t.length<2||(t[0]!=='{'&&t[0]!=='[')) return null;
+  try{ const p=JSON.parse(t); return (p&&typeof p==='object')?p:null; }catch(e){ return null; }
+}
+function backupWalkForIdbRefs(root,onRef){
+  const seen=new WeakSet();
   (function walk(v){
     if(!v)return;
-    if(typeof v==='string'){if(isIdbImageRef(v))ids.add(v);return;}
+    if(typeof v==='string'){
+      if(isIdbImageRef(v)){ onRef(v); return; }
+      const parsed=backupTryParseJSONBlob(v);
+      if(parsed) walk(parsed);
+      return;
+    }
     if(typeof v!=='object'||seen.has(v))return;seen.add(v);
     if(Array.isArray(v)){v.forEach(walk);return;}
     Object.keys(v).forEach(k=>{if(k!=='history'&&k!=='future')walk(v[k]);});
   })(root);
+}
+async function backupCollectReferencedAssetIds(root){
+  const ids=new Set();
+  backupWalkForIdbRefs(root,ref=>ids.add(ref));
   return [...ids];
 }
 function backupValidateStateShape(st){
@@ -8352,15 +8374,7 @@ async function importPlainJSONFile(file,rep){
 async function scanForMissingAssetRefs(){
   const stored=new Set((await listStoredAssetIds()).map(String));
   const missing=new Set();
-  const seen=new WeakSet();
-  (function walk(v){
-    if(!v) return;
-    if(typeof v==='string'){ if(isIdbImageRef(v) && !stored.has(v)) missing.add(v); return; }
-    if(typeof v!=='object') return;
-    if(seen.has(v)) return; seen.add(v);
-    if(Array.isArray(v)){ v.forEach(walk); return; }
-    Object.keys(v).forEach(k=>{ if(k!=='history'&&k!=='future') walk(v[k]); });
-  })(state);
+  backupWalkForIdbRefs(state,ref=>{ if(!stored.has(ref)) missing.add(ref); });
   return [...missing];
 }
 function renderImportReport(rep,missingRefs){
