@@ -7900,8 +7900,54 @@ function setUiTheme(themeId){
 }
 
 /* ============================= FULL PROJECT IMPORT / EXPORT ============================= */
-const FULL_BACKUP_VERSION=6;
+const FULL_BACKUP_VERSION=7;
 const STREAM_EXPORT_THRESHOLD=100*1024*1024;
+const FULL_BACKUP_FORMAT='Workshop Inventory Full Project';
+const BACKUP_REQUIRED_FILES=['project/state.json','project/manifest.json'];
+
+/* معرف فريد يربط كل ملفات النسخة ببعضها ويمنع تكوين مشروع هجين من ملفات نسخ مختلفة. */
+function backupExportId(){ return 'exp_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10); }
+function backupProjectId(st){ return String(st?.projectId||st?.id||st?.meta?.projectId||'default-project'); }
+function backupValidateManifest(m){
+  if(!m||typeof m!=='object') throw new Error('manifest.json غير صالح');
+  if(m.format!==FULL_BACKUP_FORMAT) throw new Error('صيغة النسخة الاحتياطية غير معروفة');
+  const v=Number(m.version);
+  if(!Number.isInteger(v)||v<1) throw new Error('رقم إصدار النسخة الاحتياطية غير صالح');
+  if(v>FULL_BACKUP_VERSION) throw new Error('هذه النسخة صادرة من إصدار أحدث وغير مدعوم حاليًا؛ لن يتم الاستيراد لتجنب فقد البيانات.');
+  /* exportId أُضيف بدءًا من الإصدار 7. النسخ الأقدم (v<7) لا تحتوي عليه أصلاً، وهذا متوقع وليس عطبًا —
+     تُقبل في "وضع توافق" بدل رفضها بالكامل. أما نسخة v7+ بدون exportId فهذا يدل فعليًا على حزمة تالفة/معدَّلة. */
+  if(v>=7 && !m.exportId) throw new Error('manifest.json لا يحتوي exportId رغم أن رقم إصداره يتطلبه؛ الحزمة على الأغلب تالفة أو مُعدَّلة يدويًا.');
+  m.__legacyNoExportId = (v<7 && !m.exportId);
+  return m;
+}
+async function backupCollectReferencedAssetIds(root){
+  const ids=new Set(),seen=new WeakSet();
+  (function walk(v){
+    if(!v)return;
+    if(typeof v==='string'){if(isIdbImageRef(v))ids.add(v);return;}
+    if(typeof v!=='object'||seen.has(v))return;seen.add(v);
+    if(Array.isArray(v)){v.forEach(walk);return;}
+    Object.keys(v).forEach(k=>{if(k!=='history'&&k!=='future')walk(v[k]);});
+  })(root);
+  return [...ids];
+}
+function backupValidateStateShape(st){
+  if(!st||typeof st!=='object'||Array.isArray(st)) throw new Error('حالة المشروع غير صالحة');
+  const arrays=['categories','components','shelves','drawers','columns','boxes','containers'];
+  const bad=arrays.filter(k=>st[k]!=null&&!Array.isArray(st[k]));
+  if(bad.length) throw new Error('بنية المشروع غير صالحة: '+bad.join(', '));
+}
+function backupValidateRelationships(st){
+  const issues=[]; const ids=a=>new Set((Array.isArray(a)?a:[]).map(x=>String(x?.id)).filter(Boolean));
+  const shelfIds=ids(st.shelves),drawerIds=ids(st.drawers),columnIds=ids(st.columns),boxIds=ids(st.boxes),containerIds=ids(st.containers),componentIds=ids(st.components);
+  const check=(arr,parentKeys,set,label)=>{for(const x of (Array.isArray(arr)?arr:[])){for(const k of parentKeys){if(x&&x[k]!=null&&String(x[k])!==''&&!set.has(String(x[k])))issues.push(`${label} ${x.id||'?'} يشير إلى ${k} غير موجود: ${x[k]}`);}}};
+  check(st.drawers,['shelfId','rackId'],shelfIds,'Drawer');
+  check(st.columns,['drawerId'],drawerIds,'Column');
+  check(st.boxes,['columnId'],columnIds,'Box');
+  check(st.containers,['boxId','columnId'],new Set([...boxIds,...columnIds]),'Container');
+  check(st.components,['containerId'],containerIds,'Component');
+  return issues;
+}
 function backupSafeName(name,fallback='item'){return String(name||fallback).replace(/[\\/:*?"<>|\u0000-\u001F]/g,'_').replace(/\s+/g,' ').trim().slice(0,120)||fallback;}
 function backupUtf8(s){return new TextEncoder().encode(String(s));}
 function backupConcat(parts){let n=0;parts.forEach(x=>n+=x.length);const out=new Uint8Array(n);let o=0;parts.forEach(x=>{out.set(x,o);o+=x.length});return out;}
@@ -7923,26 +7969,18 @@ function backupCsv(t){const cols=(t.columns||[]).map(c=>c.label||c.name||c.id),e
  * localStorage الخاصة بالتطبيق معًا، مع إبقاء المفاتيح الحساسة/الخاصة بالمتصفح خارج الحزمة.
  */
 const BACKUP_LS_EXCLUDE_PREFIXES=['__'];
-function getPortableLocalStorage(){
-  const out={};
-  try{
-    for(let i=0;i<localStorage.length;i++){
-      const k=localStorage.key(i); if(!k) continue;
-      if(BACKUP_LS_EXCLUDE_PREFIXES.some(p=>k.startsWith(p))) continue;
-      const v=localStorage.getItem(k);
-      if(v!==null) out[k]=v;
-    }
-  }catch(e){}
-  return out;
-}
+const BACKUP_LS_ALLOWED_PREFIXES=['workshop_','inventory_','wi_'];
+const BACKUP_LS_ALLOWED_KEYS=new Set(['theme','uiTheme']);
+function backupIsPortableLocalStorageKey(k){k=String(k||'');return BACKUP_LS_ALLOWED_KEYS.has(k)||BACKUP_LS_ALLOWED_PREFIXES.some(p=>k.startsWith(p));}
+function getPortableLocalStorage(){const out={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||BACKUP_LS_EXCLUDE_PREFIXES.some(p=>k.startsWith(p))||!backupIsPortableLocalStorageKey(k))continue;const v=localStorage.getItem(k);if(v!==null)out[k]=v;}}catch(e){}return out;}
 function clearPortableLocalStorageExcept(data){
   const keep=new Set(Object.keys(data||{}));
-  try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&!k.startsWith('__'))keys.push(k);}keys.forEach(k=>{if(!keep.has(k))try{localStorage.removeItem(k);}catch(_e){}});}catch(_e){}
+  try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&backupIsPortableLocalStorageKey(k))keys.push(k);}keys.forEach(k=>{if(!keep.has(k))try{localStorage.removeItem(k);}catch(_e){}});}catch(_e){}
 }
 function restorePortableLocalStorage(data,rep){
   if(!data||typeof data!=='object') return;
   for(const [k,v] of Object.entries(data)){
-    if(BACKUP_LS_EXCLUDE_PREFIXES.some(p=>String(k).startsWith(p))) continue;
+    if(BACKUP_LS_EXCLUDE_PREFIXES.some(p=>String(k).startsWith(p))||!backupIsPortableLocalStorageKey(k)) continue;
     try{localStorage.setItem(k,String(v));}
     catch(e){if(rep)rep.warnings.push('تعذر استعادة إعداد التخزين المحلي: '+k);}
   }
@@ -8034,7 +8072,7 @@ async function collectBackupEntries(){
   add('project/preferences.json',backupUtf8(JSON.stringify(exportState.preferences||{},null,2)),'application/json');
 
   const refs=backupFindTables(exportState);
-  const meta={format:'Workshop Inventory Full Project',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),theme:exportState.uiTheme||'amber',
+  const exportId=backupExportId(); const meta={format:FULL_BACKUP_FORMAT,version:FULL_BACKUP_VERSION,exportId,projectId:backupProjectId(exportState),createdAt:new Date().toISOString(),hashAlgorithm:'SHA-256',theme:exportState.uiTheme||'amber',
     counts:{categories:(exportState.categories||[]).length,components:(exportState.components||[]).length,categorySchemas:Object.keys(exportState.categorySchemas||{}).length,
       shelves:(exportState.shelves||[]).length,drawers:(exportState.drawers||[]).length,columns:(exportState.columns||[]).length,boxes:(exportState.boxes||[]).length,cells:(exportState.containers||[]).length,
       usageHistory:(exportState.usageHistory||[]).length,auditHistory:(exportState.auditHistory||[]).length,undoHistory:(exportState.history||[]).length,redoHistory:(exportState.future||[]).length,
@@ -8043,8 +8081,10 @@ async function collectBackupEntries(){
     storage:{database:'IndexedDB',largeFiles:'OPFS when available',largeFileThreshold:LARGE_ASSET_THRESHOLD}};
   refs.forEach((x,i)=>{const b=`tables/${String(i+1).padStart(3,'0')}_${backupSafeName(x.table.title||'جدول')}`;add(b+'.json',backupUtf8(JSON.stringify(x.table,null,2)),'application/json');add(b+'.csv',backupUtf8(backupCsv(x.table)),'text/csv');});
   const assetManifest={};let assetCount=0,totalAssetBytes=0;
+  const referencedAssetIds=new Set(await backupCollectReferencedAssetIds(exportState));
   try{
     for(const key of await backupAllImageKeys()){
+      if(!referencedAssetIds.has(String(key))) continue;
       const blob=await idbGetImage(key);if(!blob)continue;
       const meta0=await getAssetMeta(key)||{};
       const ext=(meta0.name||'').includes('.')?backupSafeName(meta0.name).split('.').pop():((blob.type||'bin').split('/')[1]||'bin').replace(/[^a-z0-9]/gi,'');
@@ -8060,10 +8100,20 @@ async function collectBackupEntries(){
       const n='assets/opfs-orphans/'+backupSafeName(item.name);
       if(seen.has(n))continue;
       add(n,item.file,item.file.type||'application/octet-stream',item.file.size||0);
+      assetManifest[n]={id:'opfs:'+String(item.name),mime:item.file.type||'application/octet-stream',size:item.file.size||0,name:item.name,backend:'opfs-orphan'};
+      assetCount++; totalAssetBytes+=Number(item.file.size||0);
     }
   }catch(_e){}
   meta.assetCount=assetCount;meta.assetBytes=totalAssetBytes;meta.assets=assetManifest;meta.fileCount=entries.length+1;
   add('project/asset-manifest.json',backupUtf8(JSON.stringify(assetManifest,null,2)),'application/json');
+  // بصمات كل ملفات الحزمة قبل manifest نفسه؛ manifest يصف المحتويات ولا يدخل في بصمته لتجنب مرجع دائري.
+  meta.files={};
+  for(const e of entries){
+    let bytes;
+    if(e.data instanceof Uint8Array) bytes=e.data;
+    else bytes=new Uint8Array(await e.data.arrayBuffer());
+    meta.files[e.name]={size:bytes.length,sha256:await backupSHA256(bytes)};
+  }
   meta.fileCount=entries.length+1;
   add('project/manifest.json',backupUtf8(JSON.stringify(meta,null,2)),'application/json');
   return entries;
@@ -8090,7 +8140,25 @@ async function writeStoredZipStream(entries,handle,onProgress){
     await writable.close();return offset;
   }catch(e){try{await writable.abort();}catch(_e){}throw e;}
 }
+/* قفل بسيط يمنع تشغيل تصدير/استيراد أثناء عملية أخرى جارية بالفعل، ويعطّل الأزرار المرتبطة،
+   ويحذّر المستخدم قبل إغلاق الصفحة أو الانتقال منها أثناء عملية طويلة (خصوصًا الاستيراد/التصدير
+   المتدفق للمشاريع الكبيرة)، لأن مغادرة الصفحة وقتها قد تترك عملية كتابة غير مكتملة. */
+let backupOpInProgress=false;
+function backupBeforeUnloadGuard(e){ e.preventDefault(); e.returnValue=''; return ''; }
+function backupBeginOp(){
+  if(backupOpInProgress){ toast('عملية نسخ احتياطي أخرى قيد التنفيذ بالفعل — انتظر حتى تنتهي.'); return false; }
+  backupOpInProgress=true;
+  window.addEventListener('beforeunload',backupBeforeUnloadGuard);
+  ['exportFullBtn','exportJsonBtn','importFullFile'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=true;});
+  return true;
+}
+function backupEndOp(){
+  backupOpInProgress=false;
+  window.removeEventListener('beforeunload',backupBeforeUnloadGuard);
+  ['exportFullBtn','exportJsonBtn','importFullFile'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=false;});
+}
 async function exportFullProject(){
+  if(!backupBeginOp()) return;
   const st=document.getElementById('backupStatus');if(st)st.textContent='⏳ جارٍ تجهيز المشروع وحساب الملفات الكبيرة…';
   try{
     captureRuntimeLocalStorageIntoState();
@@ -8111,8 +8179,15 @@ async function exportFullProject(){
     }
     if(r!=='cancel'){if(st)st.textContent=`✅ تم التصدير بنجاح — ${entries.length} عنصر، ${formatFileSize(total)}`;toast('تم تصدير المشروع بالكامل');}
   }catch(e){console.error(e);if(st)st.textContent='❌ فشل التصدير: '+(e.message||e);toast('فشل التصدير');}
+  finally{ backupEndOp(); }
 }
-async function exportPlainJSON(){captureRuntimeLocalStorageIntoState();saveDirty=true;await flushSaveForBackup();const persisted=await verifyPersistedStateForBackup();const payload={format:'Workshop Inventory Full Project JSON',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),state:persisted,localStorage:getPortableLocalStorage()};await backupSaveFile(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),`workshop_inventory_${new Date().toISOString().slice(0,10)}.json`);toast('تم تصدير JSON الكامل');}
+async function exportPlainJSON(){
+  if(!backupBeginOp()) return;
+  try{
+    captureRuntimeLocalStorageIntoState();saveDirty=true;await flushSaveForBackup();const persisted=await verifyPersistedStateForBackup();const payload={format:'Workshop Inventory Data Only JSON',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),state:persisted,localStorage:getPortableLocalStorage()};await backupSaveFile(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),`workshop_inventory_${new Date().toISOString().slice(0,10)}.json`);toast('تم تصدير بيانات المشروع فقط (بدون ضمان تضمين الملفات المرفقة)');
+  }catch(e){console.error(e);toast('فشل تصدير JSON: '+(e.message||e));}
+  finally{ backupEndOp(); }
+}
 async function readZipHeader(file,pos){const b=new Uint8Array(await file.slice(pos,pos+30).arrayBuffer());if(b.length<30)throw new Error('ZIP ناقص أو تالف');return {sig:backupReadU32(b,0),flags:backupReadU16(b,6),method:backupReadU16(b,8),crc:backupReadU32(b,14),csize:backupReadU32(b,18),usize:backupReadU32(b,22),nlen:backupReadU16(b,26),xlen:backupReadU16(b,28)};}
 function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))return'image/png';if(x.endsWith('.jpg')||x.endsWith('.jpeg'))return'image/jpeg';if(x.endsWith('.gif'))return'image/gif';if(x.endsWith('.webp'))return'image/webp';if(x.endsWith('.svg'))return'image/svg+xml';if(x.endsWith('.pdf'))return'application/pdf';if(x.endsWith('.mp4'))return'video/mp4';if(x.endsWith('.webm'))return'video/webm';return'application/octet-stream';}
 /* ============================= IMPORT: قراءة متسامحة (resilient) ============================= */
@@ -8121,45 +8196,77 @@ function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))retu
    مشروع نستورده أصلاً. هذا يجعل الاستيراد "يتحلل بسهولة": حتى حزمة جزئية أو من نسخة أقدم
    تُستعاد بأقصى ما يمكن استعادته، مع تقرير واضح بما نجح وما فشل وليه. */
 function importReport(){ return {restoredAssets:0, failedAssets:[], skippedEntries:[], warnings:[], legacyEmbeddedConverted:0}; }
-async function importStoredZipStream(file,st,rep){
-  let pos=0,stateBytes=null,manifestBytes=null,assetManifestBytes=null,localStorageBytes=null,indexedDbExtraBytes=null,explicit={},assets=[];const total=file.size;
-  while(pos+4<=total){
-    let h,name,dataStart,dataEnd,sig;
-    try{
-      const sigBytes=new Uint8Array(await file.slice(pos,pos+4).arrayBuffer());sig=backupReadU32(sigBytes,0);
-      if(sig===0x02014b50||sig===0x06054b50)break; // central directory / end — انتهت السجلات المحلية
-      if(sig!==0x04034b50){ rep.warnings.push(`توقيف القراءة عند موضع ${pos}: توقيع غير معروف (الملف قد يحتوي بيانات زائدة بعد الأرشيف).`); break; }
-      h=await readZipHeader(file,pos);
-      if(h.flags&8){ rep.warnings.push('تنسيق Data Descriptor غير مدعوم — تم إيقاف قراءة الأرشيف عند هذا السجل.'); break; }
-      if(h.method!==0){ rep.warnings.push('عثرنا على مدخل مضغوط (compressed) غير مدعوم داخل الأرشيف — تم تخطيه.'); pos=pos+30+h.nlen+h.xlen+h.csize; continue; }
-      const nameBytes=new Uint8Array(await file.slice(pos+30,pos+30+h.nlen).arrayBuffer());
-      name=new TextDecoder().decode(nameBytes);
-      dataStart=pos+30+h.nlen+h.xlen;dataEnd=dataStart+h.csize;
-      if(dataEnd>total){ rep.warnings.push('الأرشيف يبدو مقطوعًا/تالفًا عند: '+name+' — تم إيقاف القراءة هنا، وسنكمل بما استطعنا استخراجه فعليًا قبل هذه النقطة.'); break; }
-    }catch(e){ rep.warnings.push('تعذّرت قراءة سجل داخل الأرشيف عند موضع '+pos+': '+(e?.message||e)); break; }
-    try{
-      if(name==='project/state.json') stateBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-      else if(name==='project/manifest.json') manifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-      else if(name==='project/asset-manifest.json') assetManifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-      else if(name==='project/local-storage.json') localStorageBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-      else if(name==='project/indexeddb-extra.json') indexedDbExtraBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-      else if(name==='project/image-db-extra.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-      else if(/^project\/(categories|category-schemas|components|storage-layout|history|audit-history|audit-history-meta|undo-history|maps|projects|experiments|purchases|checklist|preferences)\.json$/.test(name)) explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-      else if(name==='project/emergency-fallback.json' || name==='project/backup-runtime.json' || name==='project/ui-state.json' || name==='project/state-meta.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-      // نتعرّف على أي مجلد أصول محتمل (assets/…) وليس فقط المسارين الحاليين، حتى تبقى الحزم
-      // القديمة/المستقبلية بأسماء مجلدات مختلفة قابلة للاستيراد بدل تجاهلها بصمت.
-      else if(/^assets\//.test(name)) assets.push({name,start:dataStart,end:dataEnd,crc:h.crc});
+/* سجل التراجع/الإعادة (history/future) يُصدَّر ويُستورد كما هو، لكن الصور/المرفقات المشار إليها
+   منه فقط (وليس من الحالة الحالية) لا تُضمَّن بالضرورة في حزمة الأصول عند التصدير. الضغط على
+   "تراجع" بعد استيراد كهذا قد يرجع لحالة قديمة تشير لصورة غير موجودة فعليًا داخل المشروع المستورد.
+   لتفادي هذا العطل الصامت، نمسح سجل التراجع/الإعادة فور نجاح أي استيراد كامل. */
+function clearUndoRedoAfterImport(rep){
+  const had=(Array.isArray(state.history)&&state.history.length)||(Array.isArray(state.future)&&state.future.length);
+  state.history=[]; state.future=[];
+  if(had && rep) rep.warnings.push('تم مسح سجل التراجع/الإعادة (Undo/Redo) بعد الاستيراد؛ قد يشير لصور غير مضمّنة بالضرورة في هذه الحزمة.');
+}
+async function importStoredZipStream(file,st,rep,preParsed){
+  let stateBytes=null,manifestBytes=null,assetManifestBytes=null,localStorageBytes=null,indexedDbExtraBytes=null,explicit={},assets=[];
+  if(preParsed){
+    /* الحزمة كانت أُفكِّكت وتحققت من سلامتها بالكامل (SHA-256 لكل ملف) في backupPreflightZip
+       بالفعل — نعيد استخدام نفس البايتات من الذاكرة بدل إعادة فتح وقراءة نفس الملف وحساب CRC
+       من جديد لكل عنصر، وهو ما كان يحدث سابقًا مرتين لكل استيراد صغير/متوسط الحجم. */
+    const entries=preParsed.entries;
+    const classify=(name)=>{
+      if(name==='project/state.json') stateBytes=entries.get(name);
+      else if(name==='project/manifest.json') manifestBytes=entries.get(name);
+      else if(name==='project/asset-manifest.json') assetManifestBytes=entries.get(name);
+      else if(name==='project/local-storage.json') localStorageBytes=entries.get(name);
+      else if(name==='project/indexeddb-extra.json') indexedDbExtraBytes=entries.get(name);
+      else if(name==='project/image-db-extra.json') explicit[name]=entries.get(name);
+      else if(/^project\/(categories|category-schemas|components|storage-layout|history|audit-history|audit-history-meta|undo-history|maps|projects|experiments|purchases|checklist|preferences)\.json$/.test(name)) explicit[name]=entries.get(name);
+      else if(name==='project/emergency-fallback.json' || name==='project/backup-runtime.json' || name==='project/ui-state.json' || name==='project/state-meta.json') explicit[name]=entries.get(name);
+      else if(/^assets\//.test(name)) assets.push({name,bytes:entries.get(name)});
       else rep.skippedEntries.push(name);
-    }catch(e){ rep.warnings.push('فشل استخراج: '+name+' — '+(e?.message||e)); }
-    pos=dataEnd;if(st)st.textContent=`⏳ استيراد الحزمة… ${Math.min(100,Math.round(pos/total*100))}%`;
+    };
+    for(const name of entries.keys()) classify(name);
+    if(st) st.textContent='⏳ استيراد الحزمة… 100%';
+  }else{
+    let pos=0;const total=file.size;
+    while(pos+4<=total){
+      let h,name,dataStart,dataEnd,sig;
+      try{
+        const sigBytes=new Uint8Array(await file.slice(pos,pos+4).arrayBuffer());sig=backupReadU32(sigBytes,0);
+        if(sig===0x02014b50||sig===0x06054b50)break; // central directory / end — انتهت السجلات المحلية
+        if(sig!==0x04034b50){ rep.warnings.push(`توقيف القراءة عند موضع ${pos}: توقيع غير معروف (الملف قد يحتوي بيانات زائدة بعد الأرشيف).`); break; }
+        h=await readZipHeader(file,pos);
+        const nameBytes=new Uint8Array(await file.slice(pos+30,pos+30+h.nlen).arrayBuffer());
+        name=new TextDecoder().decode(nameBytes);
+        if(h.flags&8){ rep.warnings.push('تنسيق Data Descriptor غير مدعوم — تم إيقاف قراءة الأرشيف عند: '+name); break; }
+        if(h.method!==0){ rep.compressedEntrySeen=true; rep.warnings.push('مدخل مضغوط (compressed) غير مدعوم — تم تخطيه: '+name); pos=pos+30+h.nlen+h.xlen+h.csize; continue; }
+        dataStart=pos+30+h.nlen+h.xlen;dataEnd=dataStart+h.csize;
+        if(dataEnd>total){ rep.warnings.push('الأرشيف يبدو مقطوعًا/تالفًا عند: '+name+' — تم إيقاف القراءة هنا، وسنكمل بما استطعنا استخراجه فعليًا قبل هذه النقطة.'); break; }
+      }catch(e){ rep.warnings.push('تعذّرت قراءة سجل داخل الأرشيف عند موضع '+pos+': '+(e?.message||e)); break; }
+      try{
+        if(name==='project/state.json') stateBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+        else if(name==='project/manifest.json') manifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+        else if(name==='project/asset-manifest.json') assetManifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+        else if(name==='project/local-storage.json') localStorageBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+        else if(name==='project/indexeddb-extra.json') indexedDbExtraBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+        else if(name==='project/image-db-extra.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+        else if(/^project\/(categories|category-schemas|components|storage-layout|history|audit-history|audit-history-meta|undo-history|maps|projects|experiments|purchases|checklist|preferences)\.json$/.test(name)) explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+        else if(name==='project/emergency-fallback.json' || name==='project/backup-runtime.json' || name==='project/ui-state.json' || name==='project/state-meta.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+        // نتعرّف على أي مجلد أصول محتمل (assets/…) وليس فقط المسارين الحاليين، حتى تبقى الحزم
+        // القديمة/المستقبلية بأسماء مجلدات مختلفة قابلة للاستيراد بدل تجاهلها بصمت.
+        else if(/^assets\//.test(name)) assets.push({name,start:dataStart,end:dataEnd,crc:h.crc});
+        else rep.skippedEntries.push(name);
+      }catch(e){ rep.warnings.push('فشل استخراج: '+name+' — '+(e?.message||e)); }
+      pos=dataEnd;if(st)st.textContent=`⏳ استيراد الحزمة… ${Math.min(100,Math.round(pos/total*100))}%`;
+    }
   }
-  if(!stateBytes) throw new Error('الحزمة لا تحتوي project/state.json — لا يوجد مشروع يمكن استعادته من هذا الملف.');
-  if(!manifestBytes) rep.warnings.push('لا يوجد manifest.json داخل الحزمة (حزمة قديمة أو غير مكتملة) — تم المتابعة بدونه.');
+  if(!stateBytes){
+    if(rep.compressedEntrySeen) throw new Error('يبدو أن هذا الملف أُعيد ضغطه بأداة خارجية (7-Zip/برنامج ضغط آخر) بطريقة ضغط غير مدعومة. استورد ملف الـ ZIP الأصلي الذي صدّره التطبيق مباشرة، بدون فك ضغطه أو إعادة ضغطه.');
+    throw new Error('الحزمة لا تحتوي project/state.json — لا يوجد مشروع يمكن استعادته من هذا الملف.');
+  }
+  if(!manifestBytes) throw new Error('لا يوجد manifest.json داخل الحزمة؛ استخدم ملف JSON القديم فقط للاستعادة التوافقية.');
   else{
-    try{
-      const m=JSON.parse(new TextDecoder().decode(manifestBytes));
-      if(m.format!=='Workshop Inventory Full Project') rep.warnings.push('توقيع الحزمة غير معروف ("'+(m.format||'?')+'")؛ تمت محاولة الاستيراد كحزمة توافقية على أي حال.');
-    }catch(e){ rep.warnings.push('manifest.json تالف/غير قابل للقراءة — تم تجاهله والمتابعة.'); }
+    const m=backupValidateManifest(JSON.parse(new TextDecoder().decode(manifestBytes)));
+    if(m.__legacyNoExportId) rep.warnings.push('هذه نسخة قديمة (إصدار '+m.version+') بدون معرف تصدير فريد (exportId) — تم قبولها في وضع التوافق. راجع النتيجة بعد الاستيراد.');
   }
   try{ state=JSON.parse(new TextDecoder().decode(stateBytes)); }
   catch(e){ throw new Error('project/state.json تالف ولا يمكن تحليله (JSON غير صالح): '+(e?.message||e)); }
@@ -8189,19 +8296,35 @@ async function importStoredZipStream(file,st,rep){
   migrateStateIfNeeded();ensureNewFields();ensureStoragePreferences();
   let amap={};
   if(assetManifestBytes){ try{ amap=JSON.parse(new TextDecoder().decode(assetManifestBytes))||{}; }catch(e){ rep.warnings.push('asset-manifest.json تالف — سيتم استنتاج معرّفات الملفات من أسمائها مباشرة.'); } }
+  const restoredOrphanIds=[];
   for(const a of assets){
     try{
       const info=amap[a.name]||{};
       const id=String(info.id||backupSafeName(a.name.split('/').pop().split('.')[0]));
-      const blob=file.slice(a.start,a.end,{type:info.mime||guessMimeFromName(a.name)});
-      const check=await streamBlobCRC(blob);
-      if(check.size!==a.end-a.start||check.crc!==a.crc){
-        rep.failedAssets.push({name:a.name,reason:'فشل فحص السلامة (CRC/الحجم) — الملف على الأغلب تلف أثناء النقل'});
-        continue; // لا نوقف باقي الاستيراد بسبب ملف واحد تالف
+      let blob;
+      if(a.bytes){
+        // مصدر الحزمة الصغيرة/المتوسطة: بايتات جُلبت وتحقّقت SHA-256 منها بالفعل في backupPreflightZip.
+        blob=new Blob([a.bytes],{type:info.mime||guessMimeFromName(a.name)});
+      }else{
+        blob=file.slice(a.start,a.end,{type:info.mime||guessMimeFromName(a.name)});
+        const check=await streamBlobCRC(blob);
+        if(check.size!==a.end-a.start||check.crc!==a.crc){
+          rep.failedAssets.push({name:a.name,reason:'فشل فحص السلامة (CRC/الحجم) — الملف على الأغلب تلف أثناء النقل'});
+          continue; // لا نوقف باقي الاستيراد بسبب ملف واحد تالف
+        }
       }
       await idbPutImage(id,blob,{name:info.name||a.name.split('/').pop(),mime:info.mime||blob.type,size:blob.size});
       rep.restoredAssets++;
+      // ملفات OPFS اليتيمة (بلا مرجع داخل state) تُصدَّر عمدًا حتى لا تضيع، لكنها بلا مرجع
+      // بحكم تعريفها — فحص "المراجع المستخدمة" وحده سيعتبرها غير مستخدمة ويحذفها في نفس
+      // اللحظة عبر backupPruneUnreferencedAssets. نسجّلها هنا صراحةً لتُستثنى من ذلك التنظيف.
+      if(info.backend==='opfs-orphan') restoredOrphanIds.push(id);
     }catch(e){ rep.failedAssets.push({name:a.name,reason:String(e?.message||e)}); }
+  }
+  if(restoredOrphanIds.length){
+    const existing=Array.isArray(state.__keepOrphanAssetIds)?state.__keepOrphanAssetIds.map(String):[];
+    state.__keepOrphanAssetIds=[...new Set([...existing,...restoredOrphanIds])];
+    rep.warnings.push('تم الحفاظ على '+restoredOrphanIds.length+' ملف OPFS يتيم (بلا مرجع في المشروع) من الحذف التلقائي بعد الاستيراد.');
   }
   // بعد الاستيراد: نحوّل أي صور/ملفات ما زالت مضمّنة كـ data: URL داخل الحالة (من نسخ قديمة جدًا)
   // إلى أصول مخزّنة، بنفس آلية الترقية المستخدمة عند التصدير.
@@ -8248,36 +8371,128 @@ function renderImportReport(rep,missingRefs){
   if(rep.warnings.length) lines.push('ملاحظات: '+rep.warnings.slice(0,6).join(' | '));
   return lines.join('\n');
 }
+async function backupSnapshotCurrentProject(){
+  captureRuntimeLocalStorageIntoState(); await flushSaveForBackup();
+  const persisted=await verifyPersistedStateForBackup();
+  /* لا نحمّل محتوى الصور/المرفقات نفسه في الذاكرة هنا (قد يكون غيغابايتات لمشروع كبير) —
+     نكتفي بقائمة المعرّفات الموجودة فعليًا الآن. الاستيراد الحالي لا يحذف أي أصل قديم إلا بعد
+     نجاحه الكامل (backupPruneUnreferencedAssets)، فإذا فشل الاستيراد تبقى كل أصول المشروع
+     الحالي سليمة كما هي في IndexedDB/OPFS، ولا حاجة لإعادة كتابتها من نسخة في الذاكرة. */
+  const existingAssetIds=new Set((await listStoredAssetIds()).map(String));
+  return {state:structuredClone(persisted),localStorage:getPortableLocalStorage(),existingAssetIds};
+}
+async function backupRestoreSnapshot(snap){
+  if(!snap) return;
+  state=structuredClone(snap.state);
+  clearPortableLocalStorageExcept(snap.localStorage);
+  restorePortableLocalStorage(snap.localStorage,{warnings:[]});
+  // أصول المشروع القديم لم تُحذف أصلاً (الحذف يحدث فقط بعد نجاح الاستيراد) — كل ما يلزم هو
+  // حذف أي أصل جديد أُضيف أثناء محاولة الاستيراد الفاشلة، حتى لا يتراكم في التخزين بلا داعي.
+  const keep=snap.existingAssetIds||new Set();
+  for(const id of await listStoredAssetIds()){ if(!keep.has(String(id))){ try{await idbDeleteImage(id);}catch(e){} } }
+  restoreRuntimeLocalStorageFromState();
+  captureRuntimeLocalStorageIntoState();
+  saveDirty=true; await flushSaveForBackup();
+}
+async function backupPruneUnreferencedAssets(){
+  const keep=new Set(await backupCollectReferencedAssetIds(state));
+  if(Array.isArray(state.__keepOrphanAssetIds)) state.__keepOrphanAssetIds.forEach(id=>keep.add(String(id)));
+  const all=await listStoredAssetIds();
+  const removed=[];
+  for(const id of all){ if(!keep.has(String(id))){ try{await idbDeleteImage(id);removed.push(id);}catch(e){} } }
+  return removed;
+}
+async function backupSHA256(data){if(!globalThis.crypto?.subtle)return null;const b=data instanceof Uint8Array?data:data instanceof ArrayBuffer?new Uint8Array(data):backupUtf8(data);const hash=await crypto.subtle.digest('SHA-256',b);return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function backupVerifyChecksums(entries,manifest){const files=manifest?.files;if(!files||typeof files!=='object')return;for(const [name,meta] of Object.entries(files)){if(!entries.has(name))throw new Error('ملف مذكور في checksums مفقود: '+name);const data=entries.get(name);if(meta.size!=null&&Number(meta.size)!==data.length)throw new Error('حجم غير مطابق: '+name);if(meta.sha256){const h=await backupSHA256(data);if(h&&h!==String(meta.sha256).toLowerCase())throw new Error('فشل SHA-256: '+name);}}}
+async function backupValidateEntries(entries,manifest,incoming){
+  // التحقق من أن ملفات المشروع الإلزامية موجودة وأن قائمة الأصول متسقة مع الحالة.
+  for(const n of BACKUP_REQUIRED_FILES) if(!entries.has(n)) throw new Error('الحزمة ناقصة: '+n);
+  const referenced=new Set(await backupCollectReferencedAssetIds(incoming));
+  let amap={};
+  if(entries.has('project/asset-manifest.json')){
+    try{amap=JSON.parse(new TextDecoder().decode(entries.get('project/asset-manifest.json')))||{};}catch(e){throw new Error('asset-manifest.json تالف');}
+  }
+  const packageIds=new Set();
+  for(const [path,info] of Object.entries(amap)){
+    if(!entries.has(path)) throw new Error('ملف أصل مذكور في manifest لكنه مفقود: '+path);
+    if(info&&info.id) packageIds.add(String(info.id));
+  }
+  const missing=[...referenced].filter(id=>!packageIds.has(id));
+  if(missing.length) throw new Error('الحزمة لا تحتوي كل الملفات المشار إليها في المشروع: '+missing.slice(0,5).join(', ')+(missing.length>5?' …':''));
+  if(Number.isFinite(Number(manifest.assetCount)) && Number(manifest.assetCount)!==packageIds.size)
+    throw new Error('عدد الأصول في manifest ('+manifest.assetCount+') لا يطابق قائمة الأصول الفعلية في الحزمة ('+packageIds.size+')');
+}
+async function backupPreflightZip(file){
+  const rep=importReport(); const st=null;
+  // الحزم الكبيرة لا نحملها كاملة في الذاكرة؛ ننتقل إلى مسار الاستيراد المتدفق مع Snapshot/Rollback.
+  if(file.size>STREAM_EXPORT_THRESHOLD) return {mode:'streaming',rep};
+  const buf=await file.arrayBuffer(); const entries=parseStoredZip(buf);
+  for(const n of BACKUP_REQUIRED_FILES) if(!entries.has(n)) throw new Error('الحزمة ناقصة: '+n);
+  const manifest=backupValidateManifest(JSON.parse(new TextDecoder().decode(entries.get('project/manifest.json'))));
+  const incoming=JSON.parse(new TextDecoder().decode(entries.get('project/state.json')));
+  if(manifest.projectId&&backupProjectId(incoming)!==String(manifest.projectId)) throw new Error('projectId في state لا يطابق manifest؛ تم رفض الحزمة لمنع خلط نسختين.');
+  backupValidateStateShape(incoming);
+  const issues=backupValidateRelationships(incoming);
+  if(issues.length) throw new Error('فشل فحص علاقات المشروع: '+issues.slice(0,5).join(' | ')+(issues.length>5?' …':''));
+  await backupValidateEntries(entries,manifest,incoming);
+  await backupVerifyChecksums(entries,manifest);
+  return {mode:'validated-buffer',rep,entries,manifest,incoming};
+}
 async function importFullProject(file){
-  if(!confirm('سيتم استبدال بيانات التطبيق الحالية واستعادة المشروع والملفات المرفقة. هل تريد المتابعة؟'))return;
-  const st=document.getElementById('backupStatus');if(st)st.textContent='⏳ جارٍ فحص الحزمة…';
-  const rep=importReport();
+  if(!confirm('سيتم استبدال بيانات التطبيق الحالية بعد فحص الحزمة. لن تُحذف الملفات القديمة إلا بعد نجاح الاستيراد النهائي، ويمكن التراجع تلقائيًا عند حدوث خطأ. هل تريد المتابعة؟'))return;
+  if(!backupBeginOp()) return;
+  const status=document.getElementById('backupStatus'); if(status)status.textContent='⏳ جارٍ فحص الحزمة بالكامل قبل أي تغيير…';
+  let snapshot=null,importSucceeded=false;
   try{
-    // نتعرّف على نوع الملف من محتواه الفعلي (توقيع البايتات) وليس فقط امتداد الاسم،
-    // حتى لو أعاد المستخدم تسمية الملف أو جاء من مصدر آخر.
+    snapshot=await backupSnapshotCurrentProject();
     const head=new Uint8Array(await file.slice(0,4).arrayBuffer());
-    const isZip = head[0]===0x50 && head[1]===0x4b;
+    const isZip=head[0]===0x50&&head[1]===0x4b&&(head[2]===3||head[2]===5||head[2]===7);
     if(isZip){
-      await importStoredZipStream(file,st,rep);
+      const pre=await backupPreflightZip(file);
+      if(pre.mode==='validated-buffer'){
+        if(status)status.textContent='⏳ الفحص نجح، جارٍ الاستيراد…';
+        // نُعيد استخدام الملفات المفكوكة والمتحقَّق من سلامتها (SHA-256) في backupPreflightZip
+        // بدل إعادة فتح الملف وقراءته وحساب CRC لكل عنصر فيه من جديد.
+        const rep=importReport(); await importStoredZipStream(file,status,rep,{entries:pre.entries});
+        const missingRefs=await scanForMissingAssetRefs();
+        const relIssues=backupValidateRelationships(state);
+        if(relIssues.length) throw new Error('تم اكتشاف علاقات مكسورة بعد الاستيراد: '+relIssues.slice(0,5).join(' | '));
+        if(missingRefs.length||rep.failedAssets.length) throw new Error('لم تكتمل استعادة جميع الملفات، تم إلغاء اعتماد الاستيراد لحماية المشروع الحالي.');
+        clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
+        importSucceeded=true;
+        const removed=await backupPruneUnreferencedAssets();
+        showView('dashboard');
+        if(status){status.textContent=renderImportReport(rep,missingRefs)+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف قديم/يتيم.':'');status.style.whiteSpace='pre-line';}
+        toast('تم استيراد المشروع بالكامل بعد اجتياز فحص السلامة');
+      }else{
+        // الحزم الكبيرة تُفحص وتُستورد بالتدفق؛ تبقى لقطة الأمان فعالة حتى نهاية العملية.
+        if(status)status.textContent='⏳ الحزمة كبيرة، جارٍ الاستيراد مع حماية التراجع…';
+        const rep=importReport(); await importStoredZipStream(file,status,rep);
+        const missingRefs=await scanForMissingAssetRefs(); const relIssues=backupValidateRelationships(state);
+        if(relIssues.length||missingRefs.length||rep.failedAssets.length) throw new Error('فشل التحقق النهائي للحزمة الكبيرة؛ سيتم الرجوع تلقائيًا للمشروع السابق.');
+        clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
+        importSucceeded=true; const removed=await backupPruneUnreferencedAssets(); showView('dashboard');
+        if(status){status.textContent=renderImportReport(rep,missingRefs)+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف قديم/يتيم.':'');status.style.whiteSpace='pre-line';}
+        toast('تم استيراد المشروع الكبير بنجاح');
+      }
     }else{
-      // ليس ZIP — نحاول قراءته كنص JSON (يدعم ملفات "JSON فقط" المُصدَّرة، أو أي state.json مفرد).
-      await importPlainJSONFile(file,rep);
+      const rep=importReport(); await importPlainJSONFile(file,rep);
+      backupValidateStateShape(state); const relIssues=backupValidateRelationships(state); if(relIssues.length)throw new Error('فشل فحص علاقات JSON: '+relIssues.slice(0,5).join(' | '));
+      clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
+      importSucceeded=true; const removed=await backupPruneUnreferencedAssets(); showView('dashboard');
+      if(status){status.textContent=renderImportReport(rep,await scanForMissingAssetRefs())+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف يتيم.':'');status.style.whiteSpace='pre-line';}
+      toast('تم استيراد بيانات JSON');
     }
-    const missingRefs=await scanForMissingAssetRefs();
-    restoreRuntimeLocalStorageFromState();
-    captureRuntimeLocalStorageIntoState();
-    resetAuditTracker();
-    scheduleSave();
-    await flushSaveForBackup();
-    showView('dashboard');
-    if(st){ st.textContent=renderImportReport(rep,missingRefs); st.style.whiteSpace='pre-line'; }
-    toast(rep.failedAssets.length||missingRefs.length?'تم الاستيراد مع بعض التحذيرات — راجع التفاصيل':'تم استيراد المشروع بالكامل');
   }catch(e){
     console.error(e);
-    if(st){ st.textContent='❌ فشل الاستيراد: '+(e.message||e); st.style.whiteSpace='pre-line'; }
-    toast('تعذّر استيراد هذا الملف');
+    if(!importSucceeded&&snapshot){ try{await backupRestoreSnapshot(snapshot);}catch(re){console.error('rollback failed',re);} }
+    if(status){status.textContent='❌ فشل الاستيراد: '+(e.message||e)+(snapshot?'\n↩️ تم الرجوع تلقائيًا إلى المشروع السابق.':'');status.style.whiteSpace='pre-line';}
+    toast('تعذّر استيراد هذا الملف — تم الرجوع للمشروع السابق');
   }
+  finally{ backupEndOp(); }
 }
+
+
 /* ============================= SEARCH ============================= */
 /* البحث يشمل: اسم المكون، اسم العبوة، اسم الرف، اسم العمود، ورقم الخلية (عبر locationLabel) */
 const searchInput=document.getElementById('searchInput');
@@ -13806,14 +14021,14 @@ window.ensureVisual=ensureVisual;
 
 
 <!-- BOX FLASH ON CELL SEARCH PATCH -->
-<style id="box-flash-search-patch">
+<style id="box-flash-search-patch-style">
 @keyframes boxSearchFlash{
   0%,100%{outline:0 solid transparent;box-shadow:none;filter:none}
   50%{outline:3px solid var(--amber);outline-offset:3px;box-shadow:0 0 0 6px var(--amber-dim),0 0 30px rgba(var(--amber-rgb),.75);filter:brightness(1.12)}
 }
 .box-search-flash{animation:boxSearchFlash .6s ease-in-out 3!important;position:relative;z-index:30}
 </style>
-<script id="box-flash-search-patch">
+<script id="box-flash-search-patch-script">
 (function(){
   function flashBoxEverywhere(boxId){
     if(!boxId) return;
