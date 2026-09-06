@@ -1046,6 +1046,45 @@ table.tbl tr:hover td{background:var(--panel2);}
 #newCompFields > .field-row:has(#fPartNumber),#newCompFields > .field-row:has(#fPackage),#newCompFields > .field-row:has(#fValue),#newCompFields > .field-row:has(#fWarn),#newCompFields > .field-row:has(#fTarget){display:none!important}
 #editCategoryManagedFields ~ .field-row:has(#ecPart),#editCategoryManagedFields ~ .field-row:has(#ecPkg),#editCategoryManagedFields ~ .field-row:has(#ecVolt),#editCategoryManagedFields ~ .field-row:has(#ecSupplier),#editCategoryManagedFields ~ .field-row:has(#ecPower){display:none!important}
 #editCategoryManagedFields + #editCompSpecs{margin-top:8px}
+/* ============================= لوحة صحة الحفظ والنظام ============================= */
+.save-health{padding:4px 2px 40px}
+.sh-head h2{margin:0 0 4px;font-size:20px}
+.sh-sub{color:var(--dim);font-size:13px;margin-bottom:16px}
+.sh-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sh-card{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:14px}
+.sh-card h3{margin:0 0 10px;font-size:14px;color:var(--text)}
+.sh-wide{grid-column:1/-1}
+.sh-row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px}
+.sh-row.small{font-size:11.5px;color:var(--dim)}
+.sh-row span:first-child{color:var(--dim)}
+.sh-row b{font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%}
+.sh-empty{color:var(--dim2);font-size:12.5px;padding:8px 0;text-align:center}
+.sh-details{margin-top:8px;font-size:12px}
+.sh-details summary{cursor:pointer;color:var(--dim)}
+.sh-bar{height:7px;background:var(--panel3);border-radius:5px;overflow:hidden;margin:4px 0 10px}
+.sh-bar-fill{height:100%;background:linear-gradient(90deg,var(--amber),var(--blue));border-radius:5px}
+.sh-subsection{margin-bottom:14px}
+.sh-subsection>b{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px}
+.sh-note{font-size:11px;color:var(--dim2);line-height:1.6;margin-top:4px}
+.sh-table{width:100%;border-collapse:collapse;font-size:12px}
+.sh-table th{text-align:right;color:var(--dim);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border-lt);position:sticky;top:0;background:var(--panel2)}
+.sh-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+.sh-table tbody tr:hover{background:var(--panel3)}
+.sh-fail-row{background:var(--red-dim)}
+.sh-err-inline{color:var(--red);font-size:11px}
+.sh-error-item{padding:8px 10px;border-radius:8px;background:var(--panel3);border:1px solid var(--border);margin-bottom:8px}
+.sh-error-head{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:4px}
+.sh-error-cat{background:var(--amber-dim);color:var(--amber);border-radius:5px;padding:1px 8px;font-size:10.5px}
+.sh-error-msg{font-size:13px}
+.sh-error-detail{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px;word-break:break-all}
+.muted{color:var(--dim2)}
+.sh-io-item{background:var(--panel3);border:1px solid var(--border);border-radius:10px;padding:2px 12px;margin-bottom:8px}
+.sh-io-item summary{display:flex;justify-content:space-between;gap:10px;padding:10px 0;cursor:pointer;font-size:12.5px;list-style:none}
+.sh-io-item summary::-webkit-details-marker{display:none}
+.sh-io-item summary span:nth-child(2){flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
+.sh-io-fail{border-color:var(--red)}
+.sh-io-body{padding:4px 0 12px;border-top:1px dashed var(--border)}
+@media (max-width:760px){ .sh-grid{grid-template-columns:1fr} .sh-row b{max-width:50%} }
 </style>
 <style>
 
@@ -4228,6 +4267,7 @@ table.tbl tr:hover td{background:var(--panel2);}
       <button class="nav-item" data-view="projects"><span class="ico">📁</span><span class="lbl">المشاريع</span></button>
       <button class="nav-item" data-view="experiments"><span class="ico">🧪</span><span class="lbl">التجارب</span></button>
       <button class="nav-item" data-view="stats"><span class="ico">📊</span><span class="lbl">الإحصائيات</span></button>
+      <button class="nav-item" data-view="savehealth"><span class="ico">🩺</span><span class="lbl">صحة الحفظ والنظام</span></button>
       <button class="nav-item" data-view="settings"><span class="ico">⚙️</span><span class="lbl">الإعدادات</span></button>
     </nav>
     <div class="save-badge" id="saveBadge">🟢 محفوظ</div>
@@ -4920,6 +4960,95 @@ function startRuntimePersistenceWatcher(){
   setInterval(()=>{const fp=runtimeLocalStorageFingerprintNow();if(fp!==runtimeLocalStorageFingerprint){runtimeLocalStorageFingerprint=fp;try{scheduleSave();}catch(_e){}}},1500);
 }
 
+/* ============================= لوحة صحة الحفظ: البنية التحتية للتسجيل ============================= */
+/* هذه السجلات في الذاكرة فقط (غير محفوظة ضمن state) لأنها تشخيصية بطبيعتها ولا داعي لتضخيم
+   حجم كل نسخة احتياطية بها. تُفرَّغ تلقائيًا عند إعادة تحميل الصفحة، وهذا متوقع ومقصود. */
+const APP_VERSION='2026.09.06-zip64-1'; // ارفع هذا الرقم يدويًا مع كل تعديل حقيقي على كود التطبيق
+const SAVE_LOG_MAX=300, ERROR_LOG_MAX=300, CHANGE_QUEUE_MAX=200;
+let saveEventLog=[], errorLog=[], pendingChangeDescriptors=[];
+let saveDashboardOpen=false;
+function refreshSaveDashboardIfOpen(){ if(saveDashboardOpen && currentView==='savehealth') try{ renderSaveDashboard(); }catch(e){} }
+function logError(category,message,detail){
+  errorLog.push({ts:Date.now(),category:String(category||'عام'),message:String(message||'خطأ غير معروف'),detail:detail?String(detail):''});
+  if(errorLog.length>ERROR_LOG_MAX) errorLog.splice(0,errorLog.length-ERROR_LOG_MAX);
+  refreshSaveDashboardIfOpen();
+}
+/* يمكن استدعاؤها من أي نقطة تعديل فعلية (تغيير محتوى خلية، إضافة/حذف/تعديل مكوّن أو فئة...)
+   قبل استدعاء scheduleSave، لتسجيل "ماذا تغيّر" فعليًا بدل الاكتفاء بمعرفة أن حفظًا ما قد حدث.
+   كل استدعاء لـ doSave يلتقط كل ما تجمّع هنا منذ آخر حفظ وينسبه لتلك العملية. */
+function logSaveEvent(type,id,action){
+  pendingChangeDescriptors.push({type:String(type||'?'),id:String(id??''),action:String(action||'update'),ts:Date.now()});
+  if(pendingChangeDescriptors.length>CHANGE_QUEUE_MAX) pendingChangeDescriptors.shift();
+}
+function recordSaveEvent(ev){
+  saveEventLog.push(ev);
+  if(saveEventLog.length>SAVE_LOG_MAX) saveEventLog.splice(0,saveEventLog.length-SAVE_LOG_MAX);
+  refreshSaveDashboardIfOpen();
+}
+const BACKUP_HISTORY_MAX=20;
+function recordBackupHistory(name,bytes){
+  if(!Array.isArray(state.__backupHistory)) state.__backupHistory=[];
+  state.__backupHistory.push({name,bytes,ts:Date.now()});
+  if(state.__backupHistory.length>BACKUP_HISTORY_MAX) state.__backupHistory.splice(0,state.__backupHistory.length-BACKUP_HISTORY_MAX);
+  refreshSaveDashboardIfOpen();
+}
+/* ===================== سجل تفصيلي للتصدير والاستيراد ===================== */
+/* يُحفظ في مفتاح IndexedDB منفصل تمامًا عن state الرئيسي (نفس مبدأ state_meta) حتى لا يُحمَّل
+   هذا السجل التشخيصي على كل حفظ/تصدير عادي لبيانات المشروع. يُحمَّل مرة واحدة عند أول فتح
+   للوحة صحة الحفظ، ثم يبقى في الذاكرة ويُكتب فورًا بعد كل عملية تصدير/استيراد فعلية. */
+const IO_HISTORY_MAX=30;
+let ioHistoryLog=null; // null = لم يُحمَّل بعد
+async function ensureIoHistoryLoaded(){
+  if(ioHistoryLog) return ioHistoryLog;
+  try{ ioHistoryLog=await idbGet('io_history'); }catch(e){ ioHistoryLog=null; }
+  if(!ioHistoryLog||typeof ioHistoryLog!=='object') ioHistoryLog={exports:[],imports:[]};
+  if(!Array.isArray(ioHistoryLog.exports)) ioHistoryLog.exports=[];
+  if(!Array.isArray(ioHistoryLog.imports)) ioHistoryLog.imports=[];
+  return ioHistoryLog;
+}
+async function persistIoHistory(){
+  try{ await idbSet('io_history',ioHistoryLog); }catch(e){ logError('save','فشل حفظ سجل التصدير/الاستيراد التفصيلي',String(e?.message||e)); }
+}
+async function recordExportDetail(rec){
+  await ensureIoHistoryLoaded();
+  ioHistoryLog.exports.push(rec);
+  if(ioHistoryLog.exports.length>IO_HISTORY_MAX) ioHistoryLog.exports.splice(0,ioHistoryLog.exports.length-IO_HISTORY_MAX);
+  await persistIoHistory();
+  refreshSaveDashboardIfOpen();
+}
+async function recordImportDetail(rec){
+  await ensureIoHistoryLoaded();
+  ioHistoryLog.imports.push(rec);
+  if(ioHistoryLog.imports.length>IO_HISTORY_MAX) ioHistoryLog.imports.splice(0,ioHistoryLog.imports.length-IO_HISTORY_MAX);
+  await persistIoHistory();
+  refreshSaveDashboardIfOpen();
+}
+/* لا توجد أي واجهة برمجية في المتصفح تعطي "نسبة استخدام المعالج" الحقيقية — هذا قيد من
+   المتصفح نفسه وليس نقصًا في هذا الكود، ولا يمكن لأي تطبيق ويب قراءتها مباشرة. البديل
+   القياسي والمعتمد هو رصد "Long Tasks" (مهام حجبت الواجهة أكثر من 50ms) عبر PerformanceObserver،
+   وهو المؤشر الفعلي لضغط المعالج المتاح فعلًا على الويب. */
+let longTaskTimestamps=[];
+try{
+  const _po=new PerformanceObserver(list=>{ const now=Date.now(); list.getEntries().forEach(()=>longTaskTimestamps.push(now)); if(longTaskTimestamps.length>1000) longTaskTimestamps.splice(0,longTaskTimestamps.length-1000); });
+  _po.observe({type:'longtask',buffered:true});
+}catch(e){}
+function getLongTaskCountLastMinute(){ const cutoff=Date.now()-60000; return longTaskTimestamps.filter(t=>t>=cutoff).length; }
+async function getResourceSnapshot(){
+  const out={};
+  if(performance.memory) out.ram={supported:true,used:performance.memory.usedJSHeapSize,total:performance.memory.totalJSHeapSize,limit:performance.memory.jsHeapSizeLimit};
+  else out.ram={supported:false};
+  try{
+    if(navigator.storage&&navigator.storage.estimate){ const est=await navigator.storage.estimate(); out.storage={supported:true,usage:est.usage||0,quota:est.quota||0}; }
+    else out.storage={supported:false};
+  }catch(e){ out.storage={supported:false}; }
+  const lastOk=[...saveEventLog].reverse().find(e=>e.ok);
+  out.cpu={longTasksLastMinute:getLongTaskCountLastMinute(),lastSaveDurationMs:lastOk?lastOk.durationMs:null};
+  return out;
+}
+/* شبكة أمان عامة: أي خطأ JS غير ملتقَط أو Promise مرفوض بلا معالجة يُسجَّل هنا تلقائيًا،
+   حتى الأخطاء التي لا علاقة مباشرة لها بالحفظ نفسه — لأن أثرها غالبًا ما ينتهي بفقدان تعديل. */
+window.addEventListener('error',e=>logError('runtime',e.message||'خطأ JavaScript غير معروف',e.filename?`${e.filename}:${e.lineno}`:''));
+window.addEventListener('unhandledrejection',e=>logError('promise',(e.reason&&e.reason.message)||String(e.reason||'وعد مرفوض بلا معالجة'),''));
 function scheduleSave(){
   try{captureRuntimeLocalStorageIntoState();}catch(_e){}
   auditCaptureChanges();
@@ -4936,6 +5065,8 @@ let saveQueued = false;
 async function doSave(){
   if(saveInFlight){ saveQueued=true; return; }
   saveInFlight=true;
+  const __t0=performance.now();
+  const __changes=pendingChangeDescriptors.splice(0,pendingChangeDescriptors.length);
   try{
     captureRuntimeLocalStorageIntoState();
     state.__savedAtTs=Date.now();
@@ -4950,6 +5081,7 @@ async function doSave(){
     }
     saveDirty=false;
     setSaveBadge('saved');
+    recordSaveEvent({ts:Date.now(),revision,ok:true,bytes:json.length,durationMs:Math.round(performance.now()-__t0),changes:__changes});
   }catch(e){
     // محاولة أخيرة للنسخة المحلية الصغيرة فقط.
     try{
@@ -4957,6 +5089,8 @@ async function doSave(){
       if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){ localStorage.setItem(FALLBACK_KEY,json); setSaveBadge('saved'); }
       else setSaveBadge('fail','تعذر الحفظ في IndexedDB؛ والحالة أكبر من مساحة النسخة الاحتياطية المحلية.');
     }catch(e2){ setSaveBadge('fail',String(e2?.message||e?.message||e)); }
+    logError('save','فشلت عملية حفظ الحالة الأساسية (IndexedDB)',String(e?.message||e));
+    recordSaveEvent({ts:Date.now(),revision:saveRevision,ok:false,bytes:0,durationMs:Math.round(performance.now()-__t0),changes:__changes,error:String(e?.message||e)});
   }finally{
     saveInFlight=false;
     if(saveQueued){ saveQueued=false; scheduleSave(); }
@@ -4987,8 +5121,8 @@ function flushSaveNow(){
     state.__savedAtTs=Date.now();
     const json=JSON.stringify(state);
     if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){ try{ localStorage.setItem(FALLBACK_KEY,json); }catch(e){} }
-    try{ idbSet(STATE_KEY,json).catch(()=>{}); }catch(e){}
-  }catch(e){}
+    try{ idbSet(STATE_KEY,json).catch(err=>logError('save','فشل حفظ الطوارئ عند إغلاق/إخفاء الصفحة (لا يمكن ضمان اكتماله)',String(err?.message||err))); }catch(e){}
+  }catch(e){ logError('save','فشل عام في flushSaveNow',String(e?.message||e)); }
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSaveNow(); });
 window.addEventListener('pagehide',flushSaveNow);
@@ -5143,10 +5277,147 @@ function statusLabelAr(s){ return {green:'طبيعي',yellow:'تحذير',red:'�
 
 /* ============================= ROUTER ============================= */
 let currentView='dashboard';
+/* ============================= لوحة صحة الحفظ والنظام ============================= */
+let saveDashboardInterval=null;
+function formatTs(ts){ if(!ts)return'—'; return new Date(ts).toLocaleString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit',day:'2-digit',month:'2-digit'}); }
+function saveHealthShellHTML(){
+  return `<div class="save-health">
+    <div class="sh-head">
+      <h2>🩺 صحة الحفظ والنظام</h2>
+      <div class="sh-sub">إصدار التطبيق: <b>${APP_VERSION}</b> · مراجعة الحفظ الحالية: <b>#${saveRevision}</b> · الحالة: <b>${saveDirty?'⏳ تغييرات لم تُحفظ بعد':'✅ محفوظ بالكامل'}</b></div>
+    </div>
+    <div class="sh-grid">
+      <section class="sh-card" id="shResources"><h3>📟 استهلاك موارد الجهاز الآن</h3><div class="sh-body">جارٍ القياس…</div></section>
+      <section class="sh-card"><h3>💾 آخر نسخة احتياطية</h3><div class="sh-body">${backupHistoryHTML()}</div></section>
+      <section class="sh-card sh-wide"><h3>📝 سجل عمليات الحفظ الأخيرة (${saveEventLog.length})</h3><div class="sh-body">${saveLogHTML()}</div></section>
+      <section class="sh-card sh-wide" id="shExportDetail"><h3>📦 مراجعة شاملة لعمليات التصدير</h3><div class="sh-body">جارٍ التحميل…</div></section>
+      <section class="sh-card sh-wide" id="shImportDetail"><h3>📥 مراجعة شاملة لعمليات الاستيراد</h3><div class="sh-body">جارٍ التحميل…</div></section>
+      <section class="sh-card sh-wide"><h3>⚠️ سجل الأخطاء والتنبيهات (${errorLog.length})</h3><div class="sh-body">${errorLogHTML()}</div></section>
+    </div>
+  </div>`;
+}
+function ioCountsRowsHTML(counts){
+  if(!counts) return '';
+  const labels={categories:'الفئات',components:'المكوّنات',categorySchemas:'مخططات الفئات',shelves:'الأرفف',drawers:'الأدراج',columns:'الأعمدة',boxes:'الصناديق',cells:'الحاويات/الخلايا',usageHistory:'سجل الاستخدام',auditHistory:'سجل التدقيق',undoHistory:'سجل التراجع',redoHistory:'سجل الإعادة',maps:'الخرائط',projects:'المشاريع',experiments:'التجارب',checklist:'قوائم المهام'};
+  return Object.entries(counts).filter(([k,v])=>v>0||['categories','components','cells'].includes(k)).map(([k,v])=>`<div class="sh-row small"><span>${labels[k]||k}</span><b>${v}</b></div>`).join('');
+}
+function ioFilesListHTML(files){
+  if(!files||!files.length) return '<div class="sh-empty">لا توجد قائمة ملفات محفوظة لهذه العملية.</div>';
+  const cap=200;
+  const rows=files.slice(0,cap).map(f=>`<div class="sh-row small"><span title="${f.name}">${f.name}</span><b>${formatFileSize(f.size)}</b></div>`).join('');
+  return rows+(files.length>cap?`<div class="sh-note">…و${files.length-cap} ملف آخر لم يُعرض (القائمة الكاملة داخل الحزمة نفسها).</div>`:'');
+}
+function exportDetailHTML(){
+  const list=(ioHistoryLog&&ioHistoryLog.exports)||[];
+  if(!list.length) return '<div class="sh-empty">لا توجد عمليات تصدير مسجَّلة بعد.</div>';
+  return list.slice().reverse().map(r=>{
+    const imgCount=r.assetCount!=null?r.assetCount:'—';
+    return `<details class="sh-io-item">
+      <summary><span>${formatTs(r.ts)}</span><span title="${r.name}">${r.name}</span><b>${formatFileSize(r.bytes)}</b></summary>
+      <div class="sh-io-body">
+        <div class="sh-row"><span>معرّف التصدير (exportId)</span><b>${r.exportId||'—'}</b></div>
+        <div class="sh-row"><span>إصدار التطبيق وقت التصدير</span><b>${r.appVersion||'—'}</b></div>
+        <div class="sh-row"><span>عدد الصور/المرفقات المُصدَّرة</span><b>${imgCount}</b> <span class="muted">(${formatFileSize(r.assetBytes||0)})</span></div>
+        <div class="sh-row"><span>عدد الملفات داخل الحزمة</span><b>${(r.files||[]).length}</b></div>
+        ${r.danglingRemoved>0?`<div class="sh-row"><span>مراجع صور تالفة حُذفت تلقائيًا</span><b>${r.danglingRemoved}</b></div><div class="sh-note">المعرّفات: ${(r.danglingIds||[]).join('، ')}</div>`:''}
+        <details class="sh-details"><summary>تفاصيل العناصر (${Object.values(r.counts||{}).reduce((a,b)=>a+b,0)} إجمالاً)</summary>${ioCountsRowsHTML(r.counts)}</details>
+        <details class="sh-details"><summary>قائمة كل الملفات (${(r.files||[]).length})</summary>${ioFilesListHTML(r.files)}</details>
+      </div>
+    </details>`;
+  }).join('');
+}
+function importDetailHTML(){
+  const list=(ioHistoryLog&&ioHistoryLog.imports)||[];
+  if(!list.length) return '<div class="sh-empty">لا توجد عمليات استيراد مسجَّلة بعد.</div>';
+  return list.slice().reverse().map(r=>{
+    const okBadge=r.result==='success'?'🟢 نجح':'🔴 فشل';
+    return `<details class="sh-io-item ${r.result==='failed'?'sh-io-fail':''}">
+      <summary><span>${formatTs(r.ts)}</span><span title="${r.sourceFileName}">${r.sourceFileName}</span><b>${okBadge}</b></summary>
+      <div class="sh-io-body">
+        <div class="sh-row"><span>حجم الملف المستورَد</span><b>${formatFileSize(r.sourceFileBytes)}</b></div>
+        <div class="sh-row"><span>طريقة الاستيراد</span><b>${({'zip-small':'ZIP (صغير/متوسط)','zip-large':'ZIP (كبير، بالتدفق)',json:'JSON'})[r.mode]||r.mode||'—'}</b></div>
+        <div class="sh-row"><span>معرّف الحزمة المصدرية (exportId)</span><b>${r.sourceExportId||'غير معروف (نسخة قديمة أو JSON)'}</b></div>
+        <div class="sh-row"><span>تاريخ إنشاء الحزمة المصدرية</span><b>${r.sourceCreatedAt?formatTs(new Date(r.sourceCreatedAt).getTime()):'غير معروف'}</b></div>
+        <div class="sh-row"><span>إصدار التطبيق الذي صدّرها</span><b>${r.sourceAppVersion||'غير معروف (أقدم من هذا الإصلاح)'}</b></div>
+        ${r.result==='failed'?`<div class="sh-row"><span>المرحلة التي حدث فيها الفشل بالتحديد</span><b>${r.stage||'غير محددة'}</b></div><div class="sh-error-detail">${r.error||''}</div>`:''}
+        <div class="sh-row"><span>ملفات مرفقة استُعيدت بنجاح</span><b>${r.restoredAssets}</b></div>
+        ${r.failedAssets&&r.failedAssets.length?`<details class="sh-details"><summary>⚠️ ملفات فشلت استعادتها (${r.failedAssets.length})</summary>`+r.failedAssets.map(f=>`<div class="sh-row small"><span>${f.name}</span><b>${f.reason||''}</b></div>`).join('')+`</details>`:''}
+        ${r.missingRefsCount?`<details class="sh-details"><summary>⚠️ مراجع صور بلا ملف مطابق (${r.missingRefsCount})</summary>`+r.missingRefs.map(id=>`<div class="sh-row small"><span>${id}</span></div>`).join('')+`</details>`:''}
+        ${r.warnings&&r.warnings.length?`<details class="sh-details"><summary>ملاحظات (${r.warnings.length})</summary>`+r.warnings.map(w=>`<div class="sh-row small"><span>${w}</span></div>`).join('')+`</details>`:''}
+        ${r.beforeCounts?`<details class="sh-details"><summary>عدد العناصر قبل الاستيراد</summary>${ioCountsRowsHTML(r.beforeCounts)}</details>`:''}
+        ${r.afterCounts?`<details class="sh-details"><summary>عدد العناصر بعد الاستيراد</summary>${ioCountsRowsHTML(r.afterCounts)}</details>`:''}
+        <details class="sh-details"><summary>كل الملفات المكتشَفة داخل الحزمة (${(r.files||[]).length})</summary>${ioFilesListHTML(r.files)}</details>
+      </div>
+    </details>`;
+  }).join('');
+}
+function backupHistoryHTML(){
+  const hist=Array.isArray(state.__backupHistory)?state.__backupHistory:[];
+  const last=hist[hist.length-1];
+  const nextName=`workshop_project_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.zip`;
+  let html='';
+  if(last) html+=`<div class="sh-row"><span>اسم آخر نسخة</span><b title="${last.name}">${last.name}</b></div>
+    <div class="sh-row"><span>حجمها</span><b>${formatFileSize(last.bytes)}</b></div>
+    <div class="sh-row"><span>تاريخها</span><b>${formatTs(last.ts)}</b></div>`;
+  else html+=`<div class="sh-empty">لا توجد نسخة احتياطية مُصدَّرة في هذه الجلسة بعد.</div>`;
+  html+=`<div class="sh-row"><span>الاسم المقترح للنسخة القادمة</span><b>${nextName}</b></div>`;
+  if(hist.length>1){
+    html+=`<details class="sh-details"><summary>سجل آخر ${hist.length} نسخة</summary>`+
+      hist.slice().reverse().map(h=>`<div class="sh-row small"><span>${formatTs(h.ts)}</span><span>${h.name}</span><b>${formatFileSize(h.bytes)}</b></div>`).join('')+
+      `</details>`;
+  }
+  return html;
+}
+function saveLogHTML(){
+  if(!saveEventLog.length) return `<div class="sh-empty">لا توجد عمليات حفظ مسجَّلة في هذه الجلسة بعد.</div>`;
+  return `<table class="sh-table"><thead><tr><th>الوقت</th><th>#</th><th>الحالة</th><th>الحجم</th><th>المدة</th><th>ما تغيّر</th></tr></thead><tbody>`+
+    saveEventLog.slice().reverse().slice(0,80).map(e=>{
+      const changesTxt=e.changes&&e.changes.length?e.changes.map(c=>`${c.type}:${c.id}(${c.action})`).slice(0,6).join('، ')+(e.changes.length>6?` …+${e.changes.length-6}`:''):'<span class="muted">حفظ عام للحالة</span>';
+      return `<tr class="${e.ok?'':'sh-fail-row'}"><td>${formatTs(e.ts)}</td><td>#${e.revision}</td><td>${e.ok?'🟢 نجح':'🔴 فشل'}</td><td>${formatFileSize(e.bytes||0)}</td><td>${e.durationMs}ms</td><td>${changesTxt}${e.error?`<br><span class="sh-err-inline">${e.error}</span>`:''}</td></tr>`;
+    }).join('')+`</tbody></table>`;
+}
+function errorLogHTML(){
+  if(!errorLog.length) return `<div class="sh-empty">لا توجد أخطاء أو تنبيهات مسجَّلة في هذه الجلسة. 🎉</div>`;
+  return errorLog.slice().reverse().slice(0,100).map(er=>
+    `<div class="sh-error-item"><div class="sh-error-head"><span class="sh-error-cat">${er.category}</span><span>${formatTs(er.ts)}</span></div><div class="sh-error-msg">${er.message}</div>${er.detail?`<div class="sh-error-detail">${er.detail}</div>`:''}</div>`
+  ).join('');
+}
+function resourcePanelHTML(res){
+  const ramHTML=res.ram.supported
+    ? `<div class="sh-row"><span>ذاكرة JS المستخدمة (RAM)</span><b>${formatFileSize(res.ram.used)} / ${formatFileSize(res.ram.limit)}</b></div>
+       <div class="sh-bar"><div class="sh-bar-fill" style="width:${Math.min(100,res.ram.used/res.ram.limit*100).toFixed(1)}%"></div></div>`
+    : `<div class="sh-empty">قياس الذاكرة غير متاح في هذا المتصفح (مدعوم فقط في Chrome/Edge).</div>`;
+  const stHTML=res.storage.supported
+    ? `<div class="sh-row"><span>مساحة التخزين المستخدمة (ROM)</span><b>${formatFileSize(res.storage.usage)} / ${formatFileSize(res.storage.quota)}</b></div>
+       <div class="sh-bar"><div class="sh-bar-fill" style="width:${(res.storage.quota?res.storage.usage/res.storage.quota*100:0).toFixed(1)}%"></div></div>`
+    : `<div class="sh-empty">قياس مساحة التخزين غير متاح في هذا المتصفح.</div>`;
+  const cpuHTML=`<div class="sh-row"><span>مهام أبطأت الواجهة (آخر دقيقة)</span><b>${res.cpu.longTasksLastMinute}</b></div>
+    <div class="sh-row"><span>مدة آخر حفظ فعلي</span><b>${res.cpu.lastSaveDurationMs!=null?res.cpu.lastSaveDurationMs+'ms':'—'}</b></div>
+    <div class="sh-note">⚠️ المتصفح لا يوفّر أي واجهة لقراءة "نسبة استخدام المعالج" الفعلية — هذا قيد من المتصفح نفسه. المؤشر أعلاه (Long Tasks) هو البديل المعياري المتاح فعليًا على الويب لرصد ضغط المعالج.</div>`;
+  return `<div class="sh-subsection"><b>الذاكرة (RAM)</b>${ramHTML}</div>
+    <div class="sh-subsection"><b>التخزين (ROM)</b>${stHTML}</div>
+    <div class="sh-subsection"><b>المعالج (CPU)</b>${cpuHTML}</div>`;
+}
+function renderSaveDashboard(){
+  const vc=document.getElementById('viewContainer');
+  vc.innerHTML=saveHealthShellHTML();
+  getResourceSnapshot().then(res=>{
+    const el=document.getElementById('shResources');
+    if(el) el.querySelector('.sh-body').innerHTML=resourcePanelHTML(res);
+  });
+  ensureIoHistoryLoaded().then(()=>{
+    const ex=document.getElementById('shExportDetail'), im=document.getElementById('shImportDetail');
+    if(ex) ex.querySelector('.sh-body').innerHTML=exportDetailHTML();
+    if(im) im.querySelector('.sh-body').innerHTML=importDetailHTML();
+  });
+  clearInterval(saveDashboardInterval);
+  saveDashboardInterval=setInterval(()=>{ if(currentView==='savehealth') renderSaveDashboard(); else clearInterval(saveDashboardInterval); },5000);
+}
 function showView(v){
   currentView=v;
+  saveDashboardOpen=(v==='savehealth');
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
-  const map={dashboard:renderDashboard,storage:renderStorage,map:renderMap,components:renderComponents,bomimport:renderBomImport,categories:renderCategories,lowstock:renderLowStock,purchases:renderPurchases,checklist:renderChecklist,history:renderHistory,projects:renderProjects,experiments:renderExperiments,stats:renderStats,settings:renderSettings};
+  const map={dashboard:renderDashboard,storage:renderStorage,map:renderMap,components:renderComponents,bomimport:renderBomImport,categories:renderCategories,lowstock:renderLowStock,purchases:renderPurchases,checklist:renderChecklist,history:renderHistory,projects:renderProjects,experiments:renderExperiments,stats:renderStats,settings:renderSettings,savehealth:renderSaveDashboard};
   (map[v]||renderDashboard)();
 }
 document.getElementById('navlist').addEventListener('click',e=>{
@@ -7953,6 +8224,28 @@ async function backupCollectReferencedAssetIds(root){
   backupWalkForIdbRefs(root,ref=>ids.add(ref));
   return [...ids];
 }
+/* مراجع الأصول الحرجة للاستيراد: لا نعتبر النسخ التاريخية/المؤقتة داخل
+   __runtimePersistence سببًا لإلغاء استيراد المشروع. تبقى هذه المراجع قابلة
+   للاكتشاف بواسطة scanForMissingAssetRefs() كتحذير بعد الاستيراد. */
+async function backupCollectCriticalReferencedAssetIds(root){
+  const ids=new Set(),seen=new WeakSet();
+  (function walk(v){
+    if(v==null)return;
+    if(typeof v==='string'){
+      if(isIdbImageRef(v)) ids.add(v);
+      else { const parsed=backupTryParseJSONBlob(v); if(parsed) walk(parsed); }
+      return;
+    }
+    if(typeof v!=='object'||seen.has(v))return;
+    seen.add(v);
+    if(Array.isArray(v)){v.forEach(walk);return;}
+    for(const [k,x] of Object.entries(v)){
+      if(k==='history'||k==='future'||k==='__runtimePersistence')continue;
+      walk(x);
+    }
+  })(root);
+  return [...ids];
+}
 function backupValidateStateShape(st){
   if(!st||typeof st!=='object'||Array.isArray(st)) throw new Error('حالة المشروع غير صالحة');
   const arrays=['categories','components','shelves','drawers','columns','boxes','containers'];
@@ -7979,9 +8272,92 @@ const BACKUP_CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++)
 function backupCRC32(data){let c=0xffffffff;for(let i=0;i<data.length;i++)c=BACKUP_CRC_TABLE[(c^data[i])&255]^(c>>>8);return (c^0xffffffff)>>>0;}
 function backupCRC32Update(c,data){for(let i=0;i<data.length;i++)c=BACKUP_CRC_TABLE[(c^data[i])&255]^(c>>>8);return c>>>0;}
 function backupDosTime(){const d=new Date();return {time:(d.getHours()<<11)|(d.getMinutes()<<5)|Math.floor(d.getSeconds()/2),date:((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate()};}
-function makeStoredZip(files){const locals=[],centrals=[];let offset=0;const td=backupDosTime();files.forEach(file=>{const name=backupUtf8(file.name),data=file.data instanceof Uint8Array?file.data:new Uint8Array(file.data),crc=backupCRC32(data);if(data.length>0xffffffff||offset>0xffffffff)throw new Error('حجم المشروع يتجاوز حد ZIP التقليدي؛ استخدم التصدير المباشر.');const local=backupConcat([new Uint8Array([0x50,0x4b,0x03,0x04]),backupU16(20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(data.length),backupU32(data.length),backupU16(name.length),backupU16(0),name,data]);locals.push(local);centrals.push(backupConcat([new Uint8Array([0x50,0x4b,0x01,0x02]),backupU16(20),backupU16(20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(data.length),backupU32(data.length),backupU16(name.length),backupU16(0),backupU16(0),backupU16(0),backupU16(0),backupU32(0),backupU32(offset),name]));offset+=local.length;});const body=backupConcat(locals),cd=backupConcat(centrals);return backupConcat([body,cd,new Uint8Array([0x50,0x4b,0x05,0x06]),backupU16(0),backupU16(0),backupU16(files.length),backupU16(files.length),backupU32(cd.length),backupU32(body.length),backupU16(0)]);}
+function makeStoredZip(files){
+  const locals=[],cdParts=[];let offset=0;const td=backupDosTime();
+  files.forEach(file=>{
+    const name=backupUtf8(file.name);
+    const data=file.data instanceof Uint8Array?file.data:new Uint8Array(file.data);
+    const crc=backupCRC32(data),size=data.length,entryStart=offset;
+    const need64=size>=ZIP64_MARK;
+    const sizeField=need64?ZIP64_MARK:size;
+    const extra=need64?zip64ExtraLocal(size):new Uint8Array(0);
+    const local=backupConcat([new Uint8Array([0x50,0x4b,0x03,0x04]),backupU16(need64?45:20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(sizeField),backupU32(sizeField),backupU16(name.length),backupU16(extra.length),name,extra,data]);
+    locals.push(local);offset+=local.length;
+    const cneed64=size>=ZIP64_MARK||entryStart>=ZIP64_MARK;
+    const csizeField=cneed64?ZIP64_MARK:size,coffField=cneed64?ZIP64_MARK:entryStart;
+    const cextra=cneed64?zip64ExtraCentral(size,entryStart):new Uint8Array(0);
+    cdParts.push(backupConcat([new Uint8Array([0x50,0x4b,0x01,0x02]),backupU16(cneed64?45:20),backupU16(cneed64?45:20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(csizeField),backupU32(csizeField),backupU16(name.length),backupU16(cextra.length),backupU16(0),backupU16(0),backupU16(0),backupU32(0),backupU32(coffField),name,cextra]));
+  });
+  const body=backupConcat(locals),cd=backupConcat(cdParts);
+  const need64EOCD=files.length>ZIP64_MARK16||cd.length>=ZIP64_MARK||body.length>=ZIP64_MARK;
+  const tail=[];
+  if(need64EOCD){
+    const zip64EocdStart=body.length+cd.length;
+    tail.push(backupConcat([new Uint8Array([0x50,0x4b,0x06,0x06]),backupU64(44),backupU16(45),backupU16(45),backupU32(0),backupU32(0),backupU64(files.length),backupU64(files.length),backupU64(cd.length),backupU64(body.length)]));
+    tail.push(backupConcat([new Uint8Array([0x50,0x4b,0x06,0x07]),backupU32(0),backupU64(zip64EocdStart),backupU32(1)]));
+  }
+  const eocdCount=files.length>ZIP64_MARK16?ZIP64_MARK16:files.length;
+  const eocdCdSize=cd.length>=ZIP64_MARK?ZIP64_MARK:cd.length;
+  const eocdCdStart=body.length>=ZIP64_MARK?ZIP64_MARK:body.length;
+  tail.push(backupConcat([new Uint8Array([0x50,0x4b,0x05,0x06]),backupU16(0),backupU16(0),backupU16(eocdCount),backupU16(eocdCount),backupU32(eocdCdSize),backupU32(eocdCdStart),backupU16(0)]));
+  return backupConcat([body,cd,...tail]);
+}
 function backupReadU16(a,o){return a[o]|(a[o+1]<<8)} function backupReadU32(a,o){return (a[o]|(a[o+1]<<8)|(a[o+2]<<16)|(a[o+3]<<24))>>>0}
-function parseStoredZip(buf){const a=new Uint8Array(buf),out=new Map();let pos=0;while(pos+4<=a.length){const sig=backupReadU32(a,pos);if(sig===0x04034b50){const flags=backupReadU16(a,pos+6),method=backupReadU16(a,pos+8),csize=backupReadU32(a,pos+18),usize=backupReadU32(a,pos+22),nlen=backupReadU16(a,pos+26),xlen=backupReadU16(a,pos+28);if(flags&8)throw new Error('ZIP يستخدم Data Descriptor غير مدعوم');if(method!==0)throw new Error('ZIP مضغوط غير مدعوم؛ استخدم ملفًا صادرًا من التطبيق');const name=new TextDecoder().decode(a.subarray(pos+30,pos+30+nlen)),start=pos+30+nlen+xlen;if(start+csize>a.length)throw new Error('ZIP تالف');const data=a.slice(start,start+csize);if(data.length!==usize||backupCRC32(data)!==backupReadU32(a,pos+14))throw new Error('فشل فحص سلامة: '+name);out.set(name,data);pos=start+csize;}else if(sig===0x02014b50||sig===0x06054b50)break;else throw new Error('ملف ZIP غير صالح');}return out;}
+/* ===================== دعم ZIP64 (لإزالة سقف 4GB / 65535 ملف) =====================
+   نستخدم صيغة تخزين بلا ضغط (STORE) فقط، لذلك الحجم المضغوط == الحجم الأصلي دائمًا، وهذا يبسّط
+   إضافة ZIP64: كل ما نحتاجه هو تمثيل 64-بت للحجم والإزاحة (offset) وعدد الملفات، بدل حقول 32-بت
+   التقليدية التي تفيض عند 4GB أو 65535 ملف. القيم هنا آمنة حتى ~9 بيتابايت (Number.MAX_SAFE_INTEGER)
+   وهو أكبر من أي مشروع واقعي بمراحل. */
+const ZIP64_MARK=0xffffffff, ZIP64_MARK16=0xffff;
+function backupU64(n){ n=Math.max(0,Math.floor(n)); const lo=n>>>0, hi=Math.floor(n/4294967296)>>>0; return new Uint8Array([lo&255,(lo>>>8)&255,(lo>>>16)&255,(lo>>>24)&255,hi&255,(hi>>>8)&255,(hi>>>16)&255,(hi>>>24)&255]); }
+function backupReadU64(a,o){ return backupReadU32(a,o+4)*4294967296+backupReadU32(a,o); }
+function zip64ExtraLocal(size){ return backupConcat([backupU16(0x0001),backupU16(16),backupU64(size),backupU64(size)]); }
+function zip64ExtraCentral(size,offset){ return backupConcat([backupU16(0x0001),backupU16(24),backupU64(size),backupU64(size),backupU64(offset)]); }
+/* يفحص كل حقول extra field (قد يوجد أكثر من واحد) بحثًا عن حقل ZIP64 (tag=0x0001) ويرجع
+   أي قيم 64-بت وُجدت بداخله. الترتيب القياسي: original size, compressed size, offset, disk start —
+   لكن الحقل قد يحتوي أقل من ذلك (مثلًا سجل محلي عادة فيه original+compressed فقط)، لذلك نقرأ
+   بقدر طول الحقل المعلن فعليًا لا أكثر. */
+function parseZip64Extra(extra){
+  const out={};let i=0;
+  while(i+4<=extra.length){
+    const id=backupReadU16(extra,i),sz=backupReadU16(extra,i+2),end=i+4+sz;
+    if(id===0x0001){
+      let p=i+4;
+      if(p+8<=end){ out.usize=backupReadU64(extra,p); p+=8; }
+      if(p+8<=end){ out.csize=backupReadU64(extra,p); p+=8; }
+      if(p+8<=end){ out.offset=backupReadU64(extra,p); p+=8; }
+      break;
+    }
+    i=end;
+  }
+  return out;
+}
+function parseStoredZip(buf){
+  const a=new Uint8Array(buf),out=new Map();let pos=0;
+  while(pos+4<=a.length){
+    const sig=backupReadU32(a,pos);
+    if(sig===0x04034b50){
+      const flags=backupReadU16(a,pos+6),method=backupReadU16(a,pos+8);
+      let csize=backupReadU32(a,pos+18),usize=backupReadU32(a,pos+22);
+      const nlen=backupReadU16(a,pos+26),xlen=backupReadU16(a,pos+28);
+      if(flags&8)throw new Error('ZIP يستخدم Data Descriptor غير مدعوم');
+      if(method!==0)throw new Error('ZIP مضغوط غير مدعوم؛ استخدم ملفًا صادرًا من التطبيق');
+      const name=new TextDecoder().decode(a.subarray(pos+30,pos+30+nlen));
+      const extraStart=pos+30+nlen;
+      if((csize===ZIP64_MARK||usize===ZIP64_MARK)&&xlen>0){
+        const z=parseZip64Extra(a.subarray(extraStart,extraStart+xlen));
+        if(z.csize!=null)csize=z.csize; if(z.usize!=null)usize=z.usize;
+      }
+      const start=extraStart+xlen;
+      if(start+csize>a.length)throw new Error('ZIP تالف');
+      const data=a.slice(start,start+csize);
+      if(data.length!==usize||backupCRC32(data)!==backupReadU32(a,pos+14))throw new Error('فشل فحص سلامة: '+name);
+      out.set(name,data);pos=start+csize;
+    }else if(sig===0x02014b50||sig===0x06054b50||sig===0x06064b50||sig===0x07064b50)break;
+    else throw new Error('ملف ZIP غير صالح');
+  }
+  return out;
+}
 async function backupAllImageKeys(){return await listStoredAssetIds();}
 function backupFindTables(v,path='root',out=[]){if(!v||typeof v!=='object')return out;if(Array.isArray(v)){v.forEach((x,i)=>backupFindTables(x,`${path}[${i}]`,out));return out;}if(Array.isArray(v.columns)&&Array.isArray(v.rows))out.push({table:v,path});Object.keys(v).forEach(k=>{if(k!=='history'&&k!=='future')backupFindTables(v[k],`${path}.${k}`,out)});return out;}
 function backupCsv(t){const cols=(t.columns||[]).map(c=>c.label||c.name||c.id),esc=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};const rows=[cols];(t.rows||[]).forEach(r=>rows.push((t.columns||[]).map(c=>r.values?.[c.id]??r[c.id]??'')));return '\ufeff'+rows.map(r=>r.map(esc).join(',')).join('\r\n');}
@@ -8058,12 +8434,58 @@ async function restoreImageDbExtra(data,rep){
 async function collectAllOPFSFiles(){
   const out=[];try{const root=await getOPFSRoot();if(!root)return out;for await(const [name,handle] of root.entries()){if(handle.kind==='file'){try{const file=await handle.getFile();out.push({name,file});}catch(_e){}}}}catch(_e){}return out;
 }
+function backupStripDanglingAssetRefs(root,existingIds,stats){
+  /* تنظيف استباقي: أي مرجع idbimg_ داخل نسخة التصدير (سواء مباشر في مصفوفة/حقل، أو متداخل جوه
+     نص JSON مُرمَّز مثل ملاحظات العناصر) لا يقابله ملف موجود فعليًا في التخزين — يُحذف من نسخة
+     التصدير فقط (الحالة الحية للتطبيق لا تُمس إطلاقًا). هذا يضمن أن أي نسخة تُصدَّر ستكون قابلة
+     للاستيراد دائمًا بذاتها، بدل انتظار حدوث هذا التعارض عند الاستيراد على جهاز آخر لاحقًا.
+     ملاحظة: هذا لا يتعارض مع تساهل التحقق عند الاستيراد (backupCollectCriticalReferencedAssetIds) —
+     بالعكس، الاثنان يكملان بعض: هذا يمنع حدوث الفجوة من الأساس عند التصدير، وذاك يضمن ألا تُرفض
+     عملية استيراد كاملة بسبب فجوة قديمة لم يعد بالإمكان تفاديها (نسخة صدرت قبل هذا الإصلاح مثلاً). */
+  const seen=new WeakSet();
+  function walk(v){
+    if(!v||typeof v!=='object'||seen.has(v))return;seen.add(v);
+    if(Array.isArray(v)){
+      for(let i=v.length-1;i>=0;i--){
+        const item=v[i];
+        if(typeof item==='string'){
+          if(isIdbImageRef(item)){ if(!existingIds.has(item)){ v.splice(i,1); stats.removed++; stats.ids.push(item); } continue; }
+          const parsed=backupTryParseJSONBlob(item);
+          if(parsed){ walk(parsed); v[i]=JSON.stringify(parsed); }
+          continue;
+        }
+        if(item&&typeof item==='object'){
+          if(item.id&&typeof item.id==='string'&&isIdbImageRef(item.id)&&!existingIds.has(item.id)){ v.splice(i,1); stats.removed++; stats.ids.push(item.id); continue; }
+          walk(item);
+        }
+      }
+      return;
+    }
+    Object.keys(v).forEach(k=>{
+      if(k==='history'||k==='future')return; // يُصفَّى بالكامل بعد أي استيراد لاحقًا، لا نعبث فيه هنا
+      const val=v[k];
+      if(typeof val==='string'){
+        if(isIdbImageRef(val)){ if(!existingIds.has(val)){ delete v[k]; stats.removed++; stats.ids.push(val); } return; }
+        const parsed=backupTryParseJSONBlob(val);
+        if(parsed){ walk(parsed); v[k]=JSON.stringify(parsed); }
+        return;
+      }
+      if(val&&typeof val==='object') walk(val);
+    });
+  }
+  walk(root);
+}
 async function collectBackupEntries(){
   const entries=[],seen=new Set();
   const add=(name,data,mime='application/octet-stream',size)=>{name=name.replace(/^\/+/, '');if(seen.has(name))return;seen.add(name);entries.push({name,data,mime,size:size!=null?size:(data instanceof Uint8Array?data.length:data?.size||0)});};
   /* نأخذ نسخة مستقلة من الحالة بعد التحقق من آخر نسخة محفوظة فعليًا. */
   const persistedState=await verifyPersistedStateForBackup();
-  const exportState=persistedState && typeof persistedState==='object' ? persistedState : state;
+  const exportState=structuredClone(persistedState&&typeof persistedState==='object'?persistedState:state);
+  const danglingStats={removed:0,ids:[]};
+  try{
+    const existingAssetIds=new Set((await listStoredAssetIds()).map(String));
+    backupStripDanglingAssetRefs(exportState,existingAssetIds,danglingStats);
+  }catch(e){}
   const stateJson=JSON.stringify(exportState,null,2);
   add('project/state.json',backupUtf8(stateJson),'application/json');
   const portableLS=getPortableLocalStorage();
@@ -8094,7 +8516,7 @@ async function collectBackupEntries(){
   add('project/preferences.json',backupUtf8(JSON.stringify(exportState.preferences||{},null,2)),'application/json');
 
   const refs=backupFindTables(exportState);
-  const exportId=backupExportId(); const meta={format:FULL_BACKUP_FORMAT,version:FULL_BACKUP_VERSION,exportId,projectId:backupProjectId(exportState),createdAt:new Date().toISOString(),hashAlgorithm:'SHA-256',theme:exportState.uiTheme||'amber',
+  const exportId=backupExportId(); const meta={format:FULL_BACKUP_FORMAT,version:FULL_BACKUP_VERSION,exportId,projectId:backupProjectId(exportState),createdAt:new Date().toISOString(),hashAlgorithm:'SHA-256',theme:exportState.uiTheme||'amber',appVersion:APP_VERSION,
     counts:{categories:(exportState.categories||[]).length,components:(exportState.components||[]).length,categorySchemas:Object.keys(exportState.categorySchemas||{}).length,
       shelves:(exportState.shelves||[]).length,drawers:(exportState.drawers||[]).length,columns:(exportState.columns||[]).length,boxes:(exportState.boxes||[]).length,cells:(exportState.containers||[]).length,
       usageHistory:(exportState.usageHistory||[]).length,auditHistory:(exportState.auditHistory||[]).length,undoHistory:(exportState.history||[]).length,redoHistory:(exportState.future||[]).length,
@@ -8138,7 +8560,7 @@ async function collectBackupEntries(){
   }
   meta.fileCount=entries.length+1;
   add('project/manifest.json',backupUtf8(JSON.stringify(meta,null,2)),'application/json');
-  return entries;
+  return {entries,danglingRemoved:danglingStats.removed,danglingIds:danglingStats.ids,meta};
 }
 async function backupSaveFile(blob,filename){if(window.showSaveFilePicker){try{const h=await window.showSaveFilePicker({suggestedName:filename,types:[{description:'Workshop Project ZIP',accept:{'application/zip':['.zip']}}]});const w=await h.createWritable();await w.write(blob);await w.close();return'saved';}catch(e){if(e?.name==='AbortError')return'cancel';}}const a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);return'download';}
 async function streamBlobCRC(blob){let c=0xffffffff,total=0;for await(const chunk of blob.stream()){const u=chunk instanceof Uint8Array?chunk:new Uint8Array(chunk);c=backupCRC32Update(c,u);total+=u.length;}return {crc:(c^0xffffffff)>>>0,size:total};}
@@ -8149,16 +8571,37 @@ async function writeStoredZipStream(entries,handle,onProgress){
       const e=entries[i],name=backupUtf8(e.name),data=e.data instanceof Uint8Array?e.data:e.data;
       let crc,size;
       if(data instanceof Uint8Array){crc=backupCRC32(data);size=data.length;}else{const r=await streamBlobCRC(data);crc=r.crc;size=r.size;}
-      if(size>0xffffffff||offset>0xffffffff)throw new Error('حجم التصدير تجاوز 4GB؛ ZIP64 غير مدعوم في هذه النسخة.');
-      const local=backupConcat([new Uint8Array([0x50,0x4b,0x03,0x04]),backupU16(20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(size),backupU32(size),backupU16(name.length),backupU16(0),name]);
+      const entryStart=offset;
+      const need64=size>=ZIP64_MARK;
+      const sizeField=need64?ZIP64_MARK:size;
+      const extra=need64?zip64ExtraLocal(size):new Uint8Array(0);
+      const local=backupConcat([new Uint8Array([0x50,0x4b,0x03,0x04]),backupU16(need64?45:20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(sizeField),backupU32(sizeField),backupU16(name.length),backupU16(extra.length),name,extra]);
       await writable.write(local);offset+=local.length;
       if(data instanceof Uint8Array){await writable.write(data);offset+=data.length;}else{for await(const chunk of data.stream()){const u=chunk instanceof Uint8Array?chunk:new Uint8Array(chunk);await writable.write(u);offset+=u.length;}}
-      central.push({name,crc,size,offset:offset-(size+local.length)});
+      central.push({name,crc,size,offset:entryStart});
       if(onProgress)onProgress(i+1,entries.length,size);
     }
-    const cdStart=offset;for(const c of central){const h=backupConcat([new Uint8Array([0x50,0x4b,0x01,0x02]),backupU16(20),backupU16(20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(c.crc),backupU32(c.size),backupU32(c.size),backupU16(c.name.length),backupU16(0),backupU16(0),backupU16(0),backupU16(0),backupU32(0),backupU32(c.offset),c.name]);await writable.write(h);offset+=h.length;}
-    const cdSize=offset-cdStart;if(cdSize>0xffffffff||cdStart>0xffffffff||central.length>0xffff)throw new Error('حجم/عدد ملفات التصدير تجاوز حدود ZIP التقليدي.');
-    await writable.write(backupConcat([new Uint8Array([0x50,0x4b,0x05,0x06]),backupU16(0),backupU16(0),backupU16(central.length),backupU16(central.length),backupU32(cdSize),backupU32(cdStart),backupU16(0)]));
+    const cdStart=offset;
+    for(const c of central){
+      const cneed64=c.size>=ZIP64_MARK||c.offset>=ZIP64_MARK;
+      const csizeField=cneed64?ZIP64_MARK:c.size,coffField=cneed64?ZIP64_MARK:c.offset;
+      const cextra=cneed64?zip64ExtraCentral(c.size,c.offset):new Uint8Array(0);
+      const h=backupConcat([new Uint8Array([0x50,0x4b,0x01,0x02]),backupU16(cneed64?45:20),backupU16(cneed64?45:20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(c.crc),backupU32(csizeField),backupU32(csizeField),backupU16(c.name.length),backupU16(cextra.length),backupU16(0),backupU16(0),backupU16(0),backupU32(0),backupU32(coffField),c.name,cextra]);
+      await writable.write(h);offset+=h.length;
+    }
+    const cdSize=offset-cdStart;
+    const need64EOCD=central.length>ZIP64_MARK16||cdSize>=ZIP64_MARK||cdStart>=ZIP64_MARK;
+    if(need64EOCD){
+      const zip64EocdStart=offset;
+      const zip64Eocd=backupConcat([new Uint8Array([0x50,0x4b,0x06,0x06]),backupU64(44),backupU16(45),backupU16(45),backupU32(0),backupU32(0),backupU64(central.length),backupU64(central.length),backupU64(cdSize),backupU64(cdStart)]);
+      await writable.write(zip64Eocd);offset+=zip64Eocd.length;
+      const zip64Locator=backupConcat([new Uint8Array([0x50,0x4b,0x06,0x07]),backupU32(0),backupU64(zip64EocdStart),backupU32(1)]);
+      await writable.write(zip64Locator);offset+=zip64Locator.length;
+    }
+    const eocdCount=central.length>ZIP64_MARK16?ZIP64_MARK16:central.length;
+    const eocdCdSize=cdSize>=ZIP64_MARK?ZIP64_MARK:cdSize;
+    const eocdCdStart=cdStart>=ZIP64_MARK?ZIP64_MARK:cdStart;
+    await writable.write(backupConcat([new Uint8Array([0x50,0x4b,0x05,0x06]),backupU16(0),backupU16(0),backupU16(eocdCount),backupU16(eocdCount),backupU32(eocdCdSize),backupU32(eocdCdStart),backupU16(0)]));
     await writable.close();return offset;
   }catch(e){try{await writable.abort();}catch(_e){}throw e;}
 }
@@ -8188,7 +8631,7 @@ async function exportFullProject(){
     await flushSaveForBackup();
     await migrateLegacyDataUrlsToAssets();
     await flushSaveForBackup();
-    const entries=await collectBackupEntries();const total=entries.reduce((n,e)=>n+Number(e.size||0),0);const name=`workshop_project_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.zip`;
+    const {entries,danglingRemoved,danglingIds,meta}=await collectBackupEntries();const total=entries.reduce((n,e)=>n+Number(e.size||0),0);const name=`workshop_project_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.zip`;
     let r='';
     if(total>=STREAM_EXPORT_THRESHOLD && window.showSaveFilePicker){
       const h=await window.showSaveFilePicker({suggestedName:name,types:[{description:'Workshop Project ZIP',accept:{'application/zip':['.zip']}}]});
@@ -8199,8 +8642,15 @@ async function exportFullProject(){
       const small=[];for(const e of entries){small.push({name:e.name,data:e.data instanceof Uint8Array?e.data:new Uint8Array(await e.data.arrayBuffer()),mime:e.mime});}
       const zip=makeStoredZip(small);r=await backupSaveFile(new Blob([zip],{type:'application/zip'}),name);
     }
-    if(r!=='cancel'){if(st)st.textContent=`✅ تم التصدير بنجاح — ${entries.length} عنصر، ${formatFileSize(total)}`;toast('تم تصدير المشروع بالكامل');}
-  }catch(e){console.error(e);if(st)st.textContent='❌ فشل التصدير: '+(e.message||e);toast('فشل التصدير');}
+    if(r!=='cancel'){
+      const cleanNote=danglingRemoved>0?` (تم تلقائيًا حذف ${danglingRemoved} مرجع صورة تالف/غير موجود من هذه النسخة)`:'';
+      if(st)st.textContent=`✅ تم التصدير بنجاح — ${entries.length} عنصر، ${formatFileSize(total)}${cleanNote}`;
+      toast('تم تصدير المشروع بالكامل'+cleanNote);
+      recordBackupHistory(name,total);
+      await recordExportDetail({ts:Date.now(),name,bytes:total,exportId:meta.exportId,appVersion:meta.appVersion,counts:meta.counts,assetCount:meta.assetCount,assetBytes:meta.assetBytes,danglingRemoved,danglingIds,files:entries.map(e=>({name:e.name,size:Number(e.size||0)}))});
+      if(danglingRemoved>0) logError('backup','تم حذف '+danglingRemoved+' مرجع صورة تالف تلقائيًا من نسخة التصدير (الملفات كانت مفقودة أصلًا من التخزين قبل التصدير): '+danglingIds.slice(0,10).join('، ')+(danglingIds.length>10?' …':''),'');
+    }
+  }catch(e){console.error(e);if(st)st.textContent='❌ فشل التصدير: '+(e.message||e);toast('فشل التصدير');logError('backup','فشل تصدير المشروع الكامل',String(e?.message||e));}
   finally{ backupEndOp(); }
 }
 async function exportPlainJSON(){
@@ -8217,7 +8667,7 @@ function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))retu
    ولا يوقف بقية الاستيراد. الاستثناء الوحيد القاتل هو غياب state.json نفسه — بدونه لا يوجد
    مشروع نستورده أصلاً. هذا يجعل الاستيراد "يتحلل بسهولة": حتى حزمة جزئية أو من نسخة أقدم
    تُستعاد بأقصى ما يمكن استعادته، مع تقرير واضح بما نجح وما فشل وليه. */
-function importReport(){ return {restoredAssets:0, failedAssets:[], skippedEntries:[], warnings:[], legacyEmbeddedConverted:0}; }
+function importReport(){ return {restoredAssets:0, failedAssets:[], skippedEntries:[], warnings:[], legacyEmbeddedConverted:0, allEntries:[], sourceManifest:null}; }
 /* سجل التراجع/الإعادة (history/future) يُصدَّر ويُستورد كما هو، لكن الصور/المرفقات المشار إليها
    منه فقط (وليس من الحالة الحالية) لا تُضمَّن بالضرورة في حزمة الأصول عند التصدير. الضغط على
    "تراجع" بعد استيراد كهذا قد يرجع لحالة قديمة تشير لصورة غير موجودة فعليًا داخل المشروع المستورد.
@@ -8247,6 +8697,7 @@ async function importStoredZipStream(file,st,rep,preParsed){
       else rep.skippedEntries.push(name);
     };
     for(const name of entries.keys()) classify(name);
+    rep.allEntries=[...entries.keys()].map(name=>({name,size:(entries.get(name)||new Uint8Array(0)).length}));
     if(st) st.textContent='⏳ استيراد الحزمة… 100%';
   }else{
     let pos=0;const total=file.size;
@@ -8254,15 +8705,22 @@ async function importStoredZipStream(file,st,rep,preParsed){
       let h,name,dataStart,dataEnd,sig;
       try{
         const sigBytes=new Uint8Array(await file.slice(pos,pos+4).arrayBuffer());sig=backupReadU32(sigBytes,0);
-        if(sig===0x02014b50||sig===0x06054b50)break; // central directory / end — انتهت السجلات المحلية
+        if(sig===0x02014b50||sig===0x06054b50||sig===0x06064b50||sig===0x07064b50)break; // central directory / end — انتهت السجلات المحلية
         if(sig!==0x04034b50){ rep.warnings.push(`توقيف القراءة عند موضع ${pos}: توقيع غير معروف (الملف قد يحتوي بيانات زائدة بعد الأرشيف).`); break; }
         h=await readZipHeader(file,pos);
         const nameBytes=new Uint8Array(await file.slice(pos+30,pos+30+h.nlen).arrayBuffer());
         name=new TextDecoder().decode(nameBytes);
         if(h.flags&8){ rep.warnings.push('تنسيق Data Descriptor غير مدعوم — تم إيقاف قراءة الأرشيف عند: '+name); break; }
         if(h.method!==0){ rep.compressedEntrySeen=true; rep.warnings.push('مدخل مضغوط (compressed) غير مدعوم — تم تخطيه: '+name); pos=pos+30+h.nlen+h.xlen+h.csize; continue; }
-        dataStart=pos+30+h.nlen+h.xlen;dataEnd=dataStart+h.csize;
+        let csize=h.csize,usize=h.usize;
+        if((csize===ZIP64_MARK||usize===ZIP64_MARK)&&h.xlen>0){
+          const extraBytes=new Uint8Array(await file.slice(pos+30+h.nlen,pos+30+h.nlen+h.xlen).arrayBuffer());
+          const z=parseZip64Extra(extraBytes);
+          if(z.csize!=null)csize=z.csize; if(z.usize!=null)usize=z.usize;
+        }
+        dataStart=pos+30+h.nlen+h.xlen;dataEnd=dataStart+csize;
         if(dataEnd>total){ rep.warnings.push('الأرشيف يبدو مقطوعًا/تالفًا عند: '+name+' — تم إيقاف القراءة هنا، وسنكمل بما استطعنا استخراجه فعليًا قبل هذه النقطة.'); break; }
+        rep.allEntries.push({name,size:csize});
       }catch(e){ rep.warnings.push('تعذّرت قراءة سجل داخل الأرشيف عند موضع '+pos+': '+(e?.message||e)); break; }
       try{
         if(name==='project/state.json') stateBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
@@ -8289,6 +8747,7 @@ async function importStoredZipStream(file,st,rep,preParsed){
   else{
     const m=backupValidateManifest(JSON.parse(new TextDecoder().decode(manifestBytes)));
     if(m.__legacyNoExportId) rep.warnings.push('هذه نسخة قديمة (إصدار '+m.version+') بدون معرف تصدير فريد (exportId) — تم قبولها في وضع التوافق. راجع النتيجة بعد الاستيراد.');
+    rep.sourceManifest=m;
   }
   try{ state=JSON.parse(new TextDecoder().decode(stateBytes)); }
   catch(e){ throw new Error('project/state.json تالف ولا يمكن تحليله (JSON غير صالح): '+(e?.message||e)); }
@@ -8357,11 +8816,13 @@ async function importPlainJSONFile(file,rep){
   const text=await file.text();
   let parsed;
   try{ parsed=JSON.parse(text); }catch(e){ throw new Error('الملف JSON غير صالح ولا يمكن تحليله: '+(e?.message||e)); }
+  rep.allEntries=[{name:file.name,size:file.size}];
   // يدعم كل من: ملف JSON خام لحالة التطبيق، أو ملف مغلّف بمفتاح "state"/"data" من مصادر أخرى.
   if(parsed && typeof parsed==='object' && !Array.isArray(parsed) && (parsed.columns||parsed.boxes||parsed.containers)){
     state=parsed;
   }else if(parsed && typeof parsed==='object' && parsed.state && typeof parsed.state==='object'){
     state=parsed.state; if(parsed.localStorage) restorePortableLocalStorage(parsed.localStorage,rep); rep.warnings.push('تم استخراج بيانات المشروع من مفتاح "state" داخل الملف.');
+    if(parsed.version||parsed.createdAt) rep.sourceManifest={version:parsed.version,createdAt:parsed.createdAt,format:parsed.format,appVersion:parsed.appVersion};
   }else{
     throw new Error('لا يمكن التعرّف على بنية بيانات المخزن داخل هذا الملف JSON.');
   }
@@ -8421,7 +8882,7 @@ async function backupVerifyChecksums(entries,manifest){const files=manifest?.fil
 async function backupValidateEntries(entries,manifest,incoming){
   // التحقق من أن ملفات المشروع الإلزامية موجودة وأن قائمة الأصول متسقة مع الحالة.
   for(const n of BACKUP_REQUIRED_FILES) if(!entries.has(n)) throw new Error('الحزمة ناقصة: '+n);
-  const referenced=new Set(await backupCollectReferencedAssetIds(incoming));
+  const referenced=new Set(await backupCollectCriticalReferencedAssetIds(incoming));
   let amap={};
   if(entries.has('project/asset-manifest.json')){
     try{amap=JSON.parse(new TextDecoder().decode(entries.get('project/asset-manifest.json')))||{};}catch(e){throw new Error('asset-manifest.json تالف');}
@@ -8452,58 +8913,103 @@ async function backupPreflightZip(file){
   await backupVerifyChecksums(entries,manifest);
   return {mode:'validated-buffer',rep,entries,manifest,incoming};
 }
+function computeStateCounts(st){
+  st=st||{};
+  return {categories:(st.categories||[]).length,components:(st.components||[]).length,categorySchemas:Object.keys(st.categorySchemas||{}).length,
+    shelves:(st.shelves||[]).length,drawers:(st.drawers||[]).length,columns:(st.columns||[]).length,boxes:(st.boxes||[]).length,cells:(st.containers||[]).length,
+    usageHistory:(st.usageHistory||[]).length,auditHistory:(st.auditHistory||[]).length,undoHistory:(st.history||[]).length,redoHistory:(st.future||[]).length,
+    maps:(st.workshopMap||[]).length,projects:(st.projects||[]).length,experiments:(st.experiments||[]).length,checklist:(st.checklist||[]).length};
+}
 async function importFullProject(file){
   if(!confirm('سيتم استبدال بيانات التطبيق الحالية بعد فحص الحزمة. لن تُحذف الملفات القديمة إلا بعد نجاح الاستيراد النهائي، ويمكن التراجع تلقائيًا عند حدوث خطأ. هل تريد المتابعة؟'))return;
   if(!backupBeginOp()) return;
   const status=document.getElementById('backupStatus'); if(status)status.textContent='⏳ جارٍ فحص الحزمة بالكامل قبل أي تغيير…';
-  let snapshot=null,importSucceeded=false;
+  let snapshot=null,importSucceeded=false,rep=null,stage='بدء العملية';
+  const beforeCounts=computeStateCounts(state);
   try{
+    stage='أخذ لقطة أمان للمشروع الحالي';
     snapshot=await backupSnapshotCurrentProject();
+    stage='التعرّف على نوع الملف';
     const head=new Uint8Array(await file.slice(0,4).arrayBuffer());
     const isZip=head[0]===0x50&&head[1]===0x4b&&(head[2]===3||head[2]===5||head[2]===7);
     if(isZip){
+      stage='الفحص المبدئي للحزمة (manifest + السلامة)';
       const pre=await backupPreflightZip(file);
       if(pre.mode==='validated-buffer'){
         if(status)status.textContent='⏳ الفحص نجح، جارٍ الاستيراد…';
+        stage='استيراد محتوى الحزمة (نسخة صغيرة/متوسطة)';
         // نُعيد استخدام الملفات المفكوكة والمتحقَّق من سلامتها (SHA-256) في backupPreflightZip
         // بدل إعادة فتح الملف وقراءته وحساب CRC لكل عنصر فيه من جديد.
-        const rep=importReport(); await importStoredZipStream(file,status,rep,{entries:pre.entries});
+        rep=importReport(); await importStoredZipStream(file,status,rep,{entries:pre.entries});
+        stage='التحقق من العلاقات والمراجع بعد الاستيراد';
         const missingRefs=await scanForMissingAssetRefs();
         const relIssues=backupValidateRelationships(state);
         if(relIssues.length) throw new Error('تم اكتشاف علاقات مكسورة بعد الاستيراد: '+relIssues.slice(0,5).join(' | '));
-        if(missingRefs.length||rep.failedAssets.length) throw new Error('لم تكتمل استعادة جميع الملفات، تم إلغاء اعتماد الاستيراد لحماية المشروع الحالي.');
+        if(rep.failedAssets.length) throw new Error('لم تكتمل استعادة بعض الملفات المرفقة، تم إلغاء اعتماد الاستيراد لحماية المشروع الحالي: '+rep.failedAssets.slice(0,5).map(f=>f.name+' ('+f.reason+')').join(' | '));
+        stage='حفظ الحالة الجديدة نهائيًا';
         clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
         importSucceeded=true;
         const removed=await backupPruneUnreferencedAssets();
         showView('dashboard');
         if(status){status.textContent=renderImportReport(rep,missingRefs)+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف قديم/يتيم.':'');status.style.whiteSpace='pre-line';}
         toast('تم استيراد المشروع بالكامل بعد اجتياز فحص السلامة');
+        await recordImportDetail(buildImportRecord({file,rep,missingRefs,result:'success',stage:null,error:null,mode:'zip-small',beforeCounts}));
       }else{
         // الحزم الكبيرة تُفحص وتُستورد بالتدفق؛ تبقى لقطة الأمان فعالة حتى نهاية العملية.
         if(status)status.textContent='⏳ الحزمة كبيرة، جارٍ الاستيراد مع حماية التراجع…';
-        const rep=importReport(); await importStoredZipStream(file,status,rep);
+        stage='استيراد محتوى الحزمة (نسخة كبيرة، بالتدفق)';
+        rep=importReport(); await importStoredZipStream(file,status,rep);
+        stage='التحقق من العلاقات والمراجع بعد الاستيراد';
         const missingRefs=await scanForMissingAssetRefs(); const relIssues=backupValidateRelationships(state);
-        if(relIssues.length||missingRefs.length||rep.failedAssets.length) throw new Error('فشل التحقق النهائي للحزمة الكبيرة؛ سيتم الرجوع تلقائيًا للمشروع السابق.');
+        if(relIssues.length||rep.failedAssets.length) throw new Error('فشل التحقق النهائي للحزمة الكبيرة؛ سيتم الرجوع تلقائيًا للمشروع السابق.'+(rep.failedAssets.length?' ملفات فشلت: '+rep.failedAssets.slice(0,5).map(f=>f.name).join('، '):''));
+        stage='حفظ الحالة الجديدة نهائيًا';
         clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
         importSucceeded=true; const removed=await backupPruneUnreferencedAssets(); showView('dashboard');
         if(status){status.textContent=renderImportReport(rep,missingRefs)+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف قديم/يتيم.':'');status.style.whiteSpace='pre-line';}
         toast('تم استيراد المشروع الكبير بنجاح');
+        await recordImportDetail(buildImportRecord({file,rep,missingRefs,result:'success',stage:null,error:null,mode:'zip-large',beforeCounts}));
       }
     }else{
-      const rep=importReport(); await importPlainJSONFile(file,rep);
+      stage='استيراد ملف JSON';
+      rep=importReport(); await importPlainJSONFile(file,rep);
+      stage='التحقق من بنية وعلاقات JSON';
       backupValidateStateShape(state); const relIssues=backupValidateRelationships(state); if(relIssues.length)throw new Error('فشل فحص علاقات JSON: '+relIssues.slice(0,5).join(' | '));
+      stage='حفظ الحالة الجديدة نهائيًا';
       clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
       importSucceeded=true; const removed=await backupPruneUnreferencedAssets(); showView('dashboard');
-      if(status){status.textContent=renderImportReport(rep,await scanForMissingAssetRefs())+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف يتيم.':'');status.style.whiteSpace='pre-line';}
+      const missingRefs=await scanForMissingAssetRefs();
+      if(status){status.textContent=renderImportReport(rep,missingRefs)+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف يتيم.':'');status.style.whiteSpace='pre-line';}
       toast('تم استيراد بيانات JSON');
+      await recordImportDetail(buildImportRecord({file,rep,missingRefs,result:'success',stage:null,error:null,mode:'json',beforeCounts}));
     }
   }catch(e){
     console.error(e);
     if(!importSucceeded&&snapshot){ try{await backupRestoreSnapshot(snapshot);}catch(re){console.error('rollback failed',re);} }
-    if(status){status.textContent='❌ فشل الاستيراد: '+(e.message||e)+(snapshot?'\n↩️ تم الرجوع تلقائيًا إلى المشروع السابق.':'');status.style.whiteSpace='pre-line';}
+    if(status){status.textContent='❌ فشل الاستيراد أثناء مرحلة: '+stage+'\nالسبب: '+(e.message||e)+(snapshot?'\n↩️ تم الرجوع تلقائيًا إلى المشروع السابق.':'');status.style.whiteSpace='pre-line';}
     toast('تعذّر استيراد هذا الملف — تم الرجوع للمشروع السابق');
+    logError('backup','فشل استيراد المشروع أثناء مرحلة: '+stage,String(e?.message||e));
+    await recordImportDetail(buildImportRecord({file,rep,missingRefs:null,result:'failed',stage,error:String(e?.message||e),mode:null,beforeCounts}));
   }
   finally{ backupEndOp(); }
+}
+/* يبني سجل استيراد موحّد الشكل بغض النظر عن نجاح العملية أو فشلها أو مسارها (ZIP صغير/كبير/JSON)،
+   يشمل: من أين جاءت الحزمة (exportId/تاريخ إنشائها/إصدار التطبيق الذي صدّرها إن وُجد)، وكل ملف
+   بداخلها بالاسم والحجم، وكل ملف فشل أو نقص بالتحديد، والمرحلة التي حدث فيها الفشل إن وُجد. */
+function buildImportRecord({file,rep,missingRefs,result,stage,error,mode,beforeCounts}){
+  const sm=rep&&rep.sourceManifest;
+  return {
+    ts:Date.now(), result, stage:stage||null, error:error||null, mode,
+    sourceFileName:file?.name||'غير معروف', sourceFileBytes:file?.size||0,
+    sourceExportId:sm?.exportId||null, sourceCreatedAt:sm?.createdAt||null, sourceAppVersion:sm?.appVersion||null,
+    restoredAssets:rep?rep.restoredAssets:0,
+    failedAssets:rep?rep.failedAssets.slice(0,50):[],
+    missingRefs:missingRefs?missingRefs.slice(0,50):[],
+    missingRefsCount:missingRefs?missingRefs.length:0,
+    warnings:rep?rep.warnings.slice(0,30):[],
+    skippedEntries:rep?rep.skippedEntries.slice(0,50):[],
+    files:rep&&rep.allEntries?rep.allEntries:[],
+    beforeCounts, afterCounts:result==='success'?computeStateCounts(state):null,
+  };
 }
 
 
@@ -11404,8 +11910,15 @@ async function wipeAllAppData(){
       }
     }
   }catch(e){ errors.push('opfs: '+(e?.message||e)); }
-  // 4) مسح كل مفاتيح localStorage الخاصة بالتطبيق (نفس منطق الاستيراد الكامل: كل شيء عدا مفاتيح __ المحجوزة)
-  try{ clearPortableLocalStorageExcept({}); }catch(e){ errors.push('localStorage: '+(e?.message||e)); }
+  // 4) مسح كل مفاتيح localStorage الخاصة بالتطبيق فعليًا — بلا استثناء لأي ميزة (ملاحظات، سجلات
+  // مصطلحات، أو أي شيء آخر يخزّن بياناته في localStorage تحت أي اسم مفتاح). المسح الكامل معناه
+  // فعلاً "كل شيء"، ولا يجوز حصره في القائمة الضيقة المخصّصة لإعدادات النسخ الاحتياطي المحمولة
+  // (workshop_/inventory_/wi_) لأن أي ميزة لا تتبع هذا النمط كانت تنجو من "المسح الكامل" بصمت.
+  try{
+    const keys=[];
+    for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && !BACKUP_LS_EXCLUDE_PREFIXES.some(p=>k.startsWith(p))) keys.push(k); }
+    keys.forEach(k=>{ try{ localStorage.removeItem(k); }catch(_e){} });
+  }catch(e){ errors.push('localStorage: '+(e?.message||e)); }
   return errors;
 }
 async function migrateLegacyDataUrlsToAssets(){
