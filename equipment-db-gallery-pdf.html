@@ -6269,9 +6269,28 @@ async function exportProject(){
         folder.folder("notebook_images").file(fname, frec.blob);
         nbImageNames.push({fileId: nimg.id, filename: "notebook_images/"+fname, caption: nimg.caption||''});
       }
+      // صور "تتبع الأعطال": صور الصفحات نفسها + الصور المرفقة داخل محتوى كل نقطة تفاعلية
+      const ftImageNames = [];
+      const ftPages = (it.notebookData && it.notebookData.faultTracking && Array.isArray(it.notebookData.faultTracking.pages)) ? it.notebookData.faultTracking.pages : [];
+      const ftFileIds = [];
+      ftPages.forEach(p=>{
+        if(p.imageId) ftFileIds.push(p.imageId);
+        (p.hotspots||[]).forEach(h=>{
+          ((h.content&&h.content.images)||[]).forEach(im=> ftFileIds.push(im.id));
+        });
+      });
+      for(const fid of ftFileIds){
+        const frec = fileMap.get(fid);
+        if(!frec){ missingFiles.push({item:it.name||it.id, type:"صورة تتبع أعطال", id:fid}); continue; }
+        const ext = guessExt(frec.mime, frec.name);
+        const fname = fid + ext;
+        folder.folder("fault_images").file(fname, frec.blob);
+        ftImageNames.push({fileId: fid, filename: "fault_images/"+fname});
+      }
       clone._images = imageNames;
       clone._docs = docNames;
       clone._notebookImages = nbImageNames;
+      clone._faultImages = ftImageNames;
       folder.file("data.json", JSON.stringify(clone, null, 2));
       itemsMeta.push({id: it.id, name: it.name, folderId: it.folderId});
     }));
@@ -6430,7 +6449,30 @@ async function importProject(file, mode){
             rep.notebookImagesRestored++;
           }catch(e){ rep.notebookImagesMissing.push({item:meta.name||meta.id, filename:nimg.filename, reason:String(e && e.message || e)}); }
         }
-        const newNotebookData = data.notebookData ? Object.assign({}, data.notebookData, {images: nbImages}) : data.notebookData;
+        // استعادة صور "تتبع الأعطال" (صور الصفحات + الصور المرفقة بالنقاط التفاعلية) وربطها بمعرفات ملفات جديدة صحيحة
+        const ftIdMap = {};
+        for(const fimg of (data._faultImages||[])){
+          try{
+            const zf = zip.file("equipment/" + meta.id + "/" + fimg.filename);
+            if(!zf){ rep.notebookImagesMissing.push({item:meta.name||meta.id, filename:fimg.filename}); continue; }
+            const blob = await zf.async("blob");
+            const fid = await storeFile(blob, fimg.filename);
+            ftIdMap[fimg.fileId] = fid;
+            rep.notebookImagesRestored++;
+          }catch(e){ rep.notebookImagesMissing.push({item:meta.name||meta.id, filename:fimg.filename, reason:String(e && e.message || e)}); }
+        }
+        let newFaultTracking = (data.notebookData && data.notebookData.faultTracking) ? JSON.parse(JSON.stringify(data.notebookData.faultTracking)) : {pages:[], activePageId:null};
+        if(Array.isArray(newFaultTracking.pages)){
+          newFaultTracking.pages.forEach(p=>{
+            if(p.imageId) p.imageId = ftIdMap[p.imageId] || null;
+            (p.hotspots||[]).forEach(h=>{
+              if(h.content && Array.isArray(h.content.images)){
+                h.content.images = h.content.images.map(im=> Object.assign({}, im, {id: ftIdMap[im.id] || im.id})).filter(im=> im.id);
+              }
+            });
+          });
+        }
+        const newNotebookData = data.notebookData ? Object.assign({}, data.notebookData, {images: nbImages, faultTracking: newFaultTracking}) : data.notebookData;
         const newItem = Object.assign({}, data, {
           id: newItemId,
           folderId: folderIdMap[data.folderId] || data.folderId,
@@ -6439,7 +6481,7 @@ async function importProject(file, mode){
           docs: newDocs,
           notebookData: newNotebookData
         });
-        delete newItem._images; delete newItem._docs; delete newItem._notebookImages;
+        delete newItem._images; delete newItem._docs; delete newItem._notebookImages; delete newItem._faultImages;
         await idbPut("items", newItem);
         state.items.push(newItem);
         rep.itemsRestored++;
@@ -7827,11 +7869,84 @@ renderSidebarTree = function(){
 .nb-viewer-zbtn{background:#fff;color:#111;border:none;border-radius:8px;min-width:36px;height:36px;padding:0 8px;font-size:16px;font-weight:900;cursor:pointer;}
 .nb-viewer-zlevel{color:#fff;font-size:12.5px;min-width:44px;text-align:center;font-weight:700;}
 .nb-viewer-close{position:absolute;top:14px;left:14px;width:40px;height:40px;border-radius:50%;background:#fff;border:none;font-size:18px;cursor:pointer;color:#111;font-weight:900;z-index:3;}
+
+/* ===== تتبع الأعطال ===== */
+.ft-wrap{display:flex;flex-direction:column;gap:10px;}
+.ft-pages-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 8px;}
+.ft-page-thumb{flex:0 0 auto;width:84px;cursor:pointer;border:2px solid var(--border);border-radius:9px;overflow:hidden;background:var(--panel);display:flex;flex-direction:column;}
+.ft-page-thumb.active{border-color:var(--amber);}
+.ft-page-thumb img{width:100%;height:56px;object-fit:cover;background:var(--panel3);display:block;}
+.ft-page-thumb span{font-size:10px;padding:4px 5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ft-page-add{flex:0 0 auto;width:84px;height:82px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10.5px;color:var(--amber);border:1px dashed var(--amber);border-radius:9px;background:var(--amber-dim);cursor:pointer;padding:4px;}
+.ft-page-add input{display:none;}
+.ft-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;}
+.ft-page-name{flex:1;min-width:140px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12.5px;}
+.ft-mode-switch{display:flex;gap:6px;}
+.ft-edit-hint{font-size:11px;color:var(--dim2);padding:2px 2px 0;}
+
+/* شريط الطبقات (كل دائرة/نقطة = طبقة مستقلة) */
+.ft-layers-bar{display:flex;gap:8px;overflow-x:auto;padding:4px 2px;align-items:center;}
+.ft-layer-add{flex:0 0 auto;font-size:11.5px;}
+.ft-layer-chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:20px;border:1.5px solid var(--border-lt);background:var(--panel);cursor:pointer;max-width:180px;}
+.ft-layer-chip.active{border-color:var(--ft-color,var(--amber));box-shadow:0 0 0 2px color-mix(in srgb, var(--ft-color,var(--amber)) 35%, transparent);}
+.ft-layer-chip.hidden-layer{opacity:.45;}
+.ft-layer-swatch{width:14px;height:14px;border-radius:50%;flex:0 0 auto;background:var(--ft-color,var(--amber));border:1px solid rgba(0,0,0,.3);}
+.ft-layer-name{font-size:11.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px;}
+.ft-layer-btn{flex:0 0 auto;background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:0 1px;}
+.ft-layer-btn:hover{color:var(--text);}
+.ft-layer-btn.danger:hover{color:var(--red);}
+
+/* لوحة أدوات الرسم مباشرة على الصورة */
+.ft-draw-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;}
+.ft-draw-toolbar select,.ft-draw-toolbar input[type=color],.ft-draw-toolbar input[type=range],.ft-draw-toolbar input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 6px;font-size:11.5px;}
+.ft-draw-toolbar .fill-toggle{color:var(--dim);font-size:11px;display:flex;align-items:center;gap:3px;}
+.ft-nolayer-note{font-size:11.5px;color:var(--dim2);padding:8px;background:var(--panel3);border:1px dashed var(--border);border-radius:9px;}
+
+/* منصة الصورة: تكبير/تصغير وتحريك باللمس أو الفأرة */
+.ft-stage-viewport{position:relative;border:1px solid var(--border);border-radius:10px;background:var(--panel);overflow:hidden;height:min(64vh,560px);touch-action:none;}
+.ft-stage-world{position:absolute;top:0;left:0;transform-origin:0 0;}
+.ft-world-img{display:block;user-select:none;-webkit-user-drag:none;position:absolute;top:0;left:0;}
+.ft-world-canvas{position:absolute;top:0;left:0;}
+.ft-markers-layer{position:absolute;top:0;left:0;}
+.ft-zoom-controls{position:absolute;top:10px;left:10px;z-index:3;display:flex;gap:5px;background:rgba(0,0,0,.5);border-radius:9px;padding:4px;}
+.ft-zbtn{background:#fff;color:#111;border:none;border-radius:6px;min-width:30px;height:28px;padding:0 6px;font-size:14px;font-weight:900;cursor:pointer;}
+.ft-zlevel{color:#fff;font-size:11px;min-width:38px;text-align:center;align-self:center;font-weight:700;}
+
+.ft-marker{position:absolute;box-sizing:border-box;pointer-events:auto;}
+.ft-marker.shape-circle{border-radius:50%;}
+.ft-marker.shape-rect{border-radius:6px;}
+.ft-marker.mode-view{background:transparent;border:2px solid transparent;cursor:default;transition:background .15s,box-shadow .15s;}
+.ft-marker.mode-view.has-content{cursor:pointer;}
+.ft-marker.mode-view.has-content:hover{box-shadow:0 0 0 2px var(--ft-color,var(--amber)) inset;}
+.ft-marker.mode-view.revealed{box-shadow:0 0 0 2px var(--ft-color,var(--amber)) inset;}
+.ft-marker-dot{position:absolute;top:50%;left:50%;width:15px;height:15px;margin:-8.5px 0 0 -8.5px;border-radius:50%;background:var(--ft-color,var(--amber));border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.55);pointer-events:none;transition:transform .15s;}
+.ft-marker-dot.empty{opacity:.5;}
+.ft-marker.mode-view.revealed .ft-marker-dot{transform:scale(1.35);box-shadow:0 0 0 4px color-mix(in srgb, var(--ft-color,var(--amber)) 45%, transparent), 0 1px 5px rgba(0,0,0,.55);}
+.ft-marker.mode-edit{background:color-mix(in srgb, var(--ft-color,var(--amber)) 22%, transparent);border:2px dashed var(--ft-color,var(--amber));cursor:move;}
+.ft-marker.mode-edit.active-layer{box-shadow:0 0 0 2px var(--ft-color,var(--amber));border-style:solid;}
+.ft-marker.mode-edit.has-content::after{content:'●';position:absolute;top:1px;left:1px;font-size:7px;color:var(--ft-color,var(--amber));}
+.ft-marker-handle{position:absolute;width:13px;height:13px;right:-7px;bottom:-7px;background:var(--ft-color,var(--amber));border:2px solid #fff;border-radius:50%;cursor:nwse-resize;touch-action:none;}
+.ft-marker-del{position:absolute;top:-9px;left:-9px;width:17px;height:17px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;line-height:1;cursor:pointer;padding:0;}
+.ft-inline-text-input{position:absolute;z-index:5;font-size:13px;padding:3px 6px;border:1.5px solid var(--amber);border-radius:5px;min-width:120px;background:#fff;color:#111;}
+.ft-text-layer{position:absolute;top:0;left:0;pointer-events:none;}
+.ft-text-label{position:absolute;background:transparent;white-space:nowrap;line-height:1.25;padding:1px 3px;user-select:none;pointer-events:none;}
+.ft-text-label.editable{pointer-events:auto;cursor:move;outline:1px dashed color-mix(in srgb, currentColor 55%, transparent);border-radius:4px;touch-action:none;}
+.ft-text-del{position:absolute;top:-9px;left:-9px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;line-height:1;cursor:pointer;padding:0;}
+
+.ft-modal-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:16px;}
+.ft-modal-box{width:min(640px,100%);max-height:88vh;overflow:auto;background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.ft-modal-box.wide{width:min(880px,100%);}
+.ft-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.ft-view-title{margin:0;font-size:15px;color:var(--amber);}
+.ft-view-caption{font-size:11px;color:var(--dim);margin-top:5px;}
+.ft-draw-preview-wrap{border:1px solid var(--border);border-radius:9px;overflow:hidden;background:#fff;}
+.ft-draw-preview-wrap canvas{display:block;width:100%;}
 </style>
 
 <script id="native-technical-notebook">
 (function(){
 "use strict";
+
 
 /* =========================================================
    دفتر ملاحظات تقني أصلي (بدون iframe) — منقول من نظام التوثيق
@@ -7848,7 +7963,7 @@ function nbScheduleSave(item){
 }
 function ensureNotebookData(item){
   if(!item.notebookData || typeof item.notebookData !== 'object' || Array.isArray(item.notebookData)){
-    item.notebookData = {title:'', explanation:'', explanations:[], codes:[], images:[], drawing:{shapes:[]}, mindmap:null};
+    item.notebookData = {title:'', explanation:'', explanations:[], codes:[], images:[], drawing:{shapes:[]}, mindmap:null, faultTracking:{pages:[], activePageId:null}};
   }
   const s = item.notebookData;
   if(!Array.isArray(s.explanations)) s.explanations = [];
@@ -7857,7 +7972,36 @@ function ensureNotebookData(item){
   if(!s.drawing || !Array.isArray(s.drawing.shapes)) s.drawing = {shapes:[]};
   if(typeof s.explanation !== 'string') s.explanation = '';
   if(typeof s.title !== 'string') s.title = '';
+  ensureFaultTrackingData(s);
   return s;
+}
+/* بيانات "تتبع الأعطال": صفحات (كل صفحة = صورة) وكل صفحة تحتوي نقاطًا تفاعلية غير محدودة العدد */
+function ensureFaultTrackingData(s){
+  if(!s.faultTracking || typeof s.faultTracking !== 'object' || Array.isArray(s.faultTracking)){
+    s.faultTracking = {pages:[], activePageId:null};
+  }
+  const ft = s.faultTracking;
+  if(!Array.isArray(ft.pages)) ft.pages = [];
+  ft.pages.forEach((p,pidx)=>{
+    if(typeof p.name !== 'string') p.name = '';
+    if(!Array.isArray(p.hotspots)) p.hotspots = [];
+    p.hotspots.forEach((h,hidx)=>{
+      if(typeof h.x !== 'number') h.x = 0.4;
+      if(typeof h.y !== 'number') h.y = 0.4;
+      if(typeof h.w !== 'number') h.w = 0.06;
+      if(typeof h.h !== 'number') h.h = 0.06;
+      if(h.shape !== 'rect' && h.shape !== 'circle') h.shape = 'circle';
+      if(typeof h.color !== 'string') h.color = FT_LAYER_COLORS[hidx % FT_LAYER_COLORS.length];
+      if(typeof h.visible !== 'boolean') h.visible = true;
+      if(typeof h.name !== 'string' || !h.name) h.name = 'طبقة '+(hidx+1);
+      if(!h.content || typeof h.content !== 'object' || Array.isArray(h.content)) h.content = {};
+      if(typeof h.content.title !== 'string') h.content.title = '';
+      if(typeof h.content.note !== 'string') h.content.note = '';
+      if(!Array.isArray(h.content.images)) h.content.images = [];
+      if(!h.content.drawing || !Array.isArray(h.content.drawing.shapes)) h.content.drawing = {shapes:[]};
+    });
+  });
+  return ft;
 }
 const MM_COLORS = ["#f2a93c","#4da3ff","#3ddc84","#ff5d5d","#c77dff","#ffb703"];
 const MM_BASE_W = 132, MM_BASE_H = 46;
@@ -8865,6 +9009,679 @@ function nbMapTab(body, s, item){
   body.appendChild(nbBuildMindMapPanel(s, item));
 }
 
+/* ===== تبويب تتبع الأعطال (نظام طبقات + رسم مباشر على الصورة + تكبير باللمس) ===== */
+const FT_LAYER_COLORS = ["#f2a93c","#4da3ff","#3ddc84","#ff5d5d","#c77dff","#ffb703","#2ec4b6","#e07be0"];
+function nbFtHasContent(h){
+  const c=h.content||{};
+  return !!((c.title&&c.title.trim())||(c.note&&c.note.trim())||(c.images&&c.images.length)||(c.drawing&&c.drawing.shapes&&c.drawing.shapes.length));
+}
+function nbFtCloseOnEsc(overlay, close){
+  function onKey(e){ if(e.key==='Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('mousedown', e=>{ if(e.target===overlay) close(); });
+  return onKey;
+}
+function nbFtRenderContentReadonly(container, content){
+  container.innerHTML='';
+  if(content.title && content.title.trim()){
+    const h=document.createElement('h3'); h.className='ft-view-title'; h.textContent=content.title;
+    container.appendChild(h);
+  }
+  if(content.note && content.note.trim()){
+    const d=document.createElement('div'); d.className='explain-view';
+    d.innerHTML=nbRenderMarkdown(content.note);
+    container.appendChild(d); nbEnhanceMarkdownView(d);
+  }
+  if(content.images && content.images.length){
+    const gal=document.createElement('div'); gal.className='nb-gallery ft-view-gallery';
+    content.images.forEach(entry=>{
+      const card=document.createElement('div'); card.className='nb-photo';
+      const img=document.createElement('img'); img.alt=entry.caption||'صورة';
+      getFileBlobURL(entry.id).then(u=>{ if(u) img.src=u; });
+      img.onclick=()=>nbOpenImageViewer(img.src, entry.caption||'');
+      card.appendChild(img);
+      if(entry.caption){ const cap=document.createElement('div'); cap.className='ft-view-caption'; cap.textContent=entry.caption; card.appendChild(cap); }
+      gal.appendChild(card);
+    });
+    container.appendChild(gal);
+  }
+  if(content.drawing && content.drawing.shapes && content.drawing.shapes.length){
+    const note=document.createElement('div'); note.style.cssText='color:var(--dim2);font-size:11px;';
+    note.textContent='📐 تحتوي هذه الطبقة على رسم مباشر فوق الصورة — شاهده في وضع العرض على الصورة نفسها.';
+    container.appendChild(note);
+  }
+  if(!container.children.length){
+    const p=document.createElement('div'); p.style.cssText='color:var(--dim2);font-size:12.5px;';
+    p.textContent='لا يوجد محتوى نصي مضاف بعد لهذه الطبقة.';
+    container.appendChild(p);
+  }
+}
+function nbFtOpenViewer(hotspot){
+  const overlay=document.createElement('div'); overlay.className='ft-modal-overlay';
+  overlay.innerHTML=`<div class="ft-modal-box">
+    <div class="ft-modal-head"><b>👁 ${esc(hotspot.content.title||hotspot.name||'تفاصيل الطبقة')}</b><button type="button" class="btn small ft-modal-close">✕ إغلاق</button></div>
+    <div class="ft-modal-body"></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  nbFtRenderContentReadonly(overlay.querySelector('.ft-modal-body'), hotspot.content);
+  function close(){ overlay.remove(); document.removeEventListener('keydown', onKey); }
+  const onKey=nbFtCloseOnEsc(overlay, close);
+  overlay.querySelector('.ft-modal-close').onclick=close;
+}
+function nbFtOpenEditor(hotspot, item, onChange){
+  const overlay=document.createElement('div'); overlay.className='ft-modal-overlay';
+  overlay.innerHTML=`<div class="ft-modal-box wide">
+    <div class="ft-modal-head"><b>✏️ خصائص الطبقة</b><button type="button" class="btn small ft-modal-close">✕ إغلاق</button></div>
+    <div class="ft-modal-body"></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const bodyEl=overlay.querySelector('.ft-modal-body');
+
+  const nameInput=document.createElement('input');
+  nameInput.className='nb-title'; nameInput.placeholder='اسم الطبقة (مثال: تسريب زيت)';
+  nameInput.value=hotspot.name||'';
+  nameInput.oninput=()=>{ hotspot.name=nameInput.value; nbScheduleSave(item); onChange&&onChange(); };
+  bodyEl.appendChild(nameInput);
+
+  const titleInput=document.createElement('input');
+  titleInput.className='nb-title'; titleInput.placeholder='عنوان يظهر عند فتح الطبقة (اختياري)';
+  titleInput.value=hotspot.content.title||'';
+  titleInput.oninput=()=>{ hotspot.content.title=titleInput.value; nbScheduleSave(item); onChange&&onChange(); };
+  bodyEl.appendChild(titleInput);
+
+  const shapeRow=document.createElement('div'); shapeRow.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+  const colorInput=document.createElement('input'); colorInput.type='color'; colorInput.value=hotspot.color||'#f2a93c';
+  colorInput.title='لون الطبقة';
+  colorInput.oninput=()=>{ hotspot.color=colorInput.value; nbScheduleSave(item); onChange&&onChange(); };
+  const shapeSel=document.createElement('select'); shapeSel.className='draw-tool';
+  shapeSel.innerHTML='<option value="circle">⚪ دائرة</option><option value="rect">▭ مستطيل</option>';
+  shapeSel.value=hotspot.shape||'circle';
+  shapeSel.onchange=()=>{ hotspot.shape=shapeSel.value; nbScheduleSave(item); onChange&&onChange(); };
+  shapeRow.append(colorInput, shapeSel);
+  bodyEl.appendChild(shapeRow);
+
+  const noteHead=document.createElement('div'); noteHead.className='nb-subhead'; noteHead.innerHTML='<b>ملاحظة / تشخيص</b>';
+  bodyEl.appendChild(noteHead);
+  const toolbarHolder=document.createElement('div'); toolbarHolder.className='fmt-toolbar-holder';
+  toolbarHolder.appendChild(nbBuildFormatToolbar(()=>editor));
+  const editor=document.createElement('textarea'); editor.className='nb-editor'; editor.style.minHeight='110px';
+  editor.placeholder='اكتب وصف العطل أو خطوات التشخيص...'; editor.value=hotspot.content.note||'';
+  editor.oninput=()=>{ hotspot.content.note=editor.value; nbScheduleSave(item); };
+  bodyEl.append(toolbarHolder, editor);
+
+  const hint=document.createElement('div'); hint.className='ft-nolayer-note';
+  hint.textContent='💡 الرسم بالأسهم والخطوط والمسارات يتم مباشرة فوق الصورة نفسها من شريط أدوات الرسم في وضع التحرير، بعد اختيار هذه الطبقة.';
+  bodyEl.appendChild(hint);
+
+  const galHead=document.createElement('div'); galHead.className='nb-subhead'; galHead.innerHTML='<b>📷 صور مرفقة</b>';
+  bodyEl.appendChild(galHead);
+  const gallery=document.createElement('div'); gallery.className='nb-gallery'; bodyEl.appendChild(gallery);
+  function renderGallery(){
+    gallery.innerHTML='';
+    (hotspot.content.images||[]).forEach((entry,i)=>{
+      const card=document.createElement('div'); card.className='nb-photo';
+      const img=document.createElement('img'); img.alt='صورة مرفقة';
+      getFileBlobURL(entry.id).then(u=>{ if(u) img.src=u; });
+      const cap=document.createElement('textarea'); cap.placeholder='وصف...'; cap.value=entry.caption||'';
+      img.onclick=()=>nbOpenImageViewer(img.src, cap.value);
+      cap.oninput=()=>{ entry.caption=cap.value; nbScheduleSave(item); };
+      const acts=document.createElement('div'); acts.className='nb-photo-actions';
+      const del=document.createElement('button'); del.type='button'; del.className='btn small danger'; del.textContent='🗑 حذف';
+      del.onclick=()=>{ hotspot.content.images.splice(i,1); nbScheduleSave(item); renderGallery(); };
+      acts.appendChild(del);
+      card.append(img,cap,acts); gallery.appendChild(card);
+    });
+    const addCard=document.createElement('label'); addCard.className='nb-photo-add'; addCard.textContent='＋ أضف صورة';
+    const pick=document.createElement('input'); pick.type='file'; pick.accept='image/*'; pick.multiple=true;
+    pick.onchange=async()=>{
+      const files=[...(pick.files||[])]; if(!files.length) return;
+      for(const f of files){ const id=await storeFile(f, f.name, f.type); hotspot.content.images.push({id, caption:''}); }
+      nbScheduleSave(item); renderGallery();
+    };
+    addCard.appendChild(pick); gallery.appendChild(addCard);
+  }
+  renderGallery();
+
+  function close(){ overlay.remove(); document.removeEventListener('keydown', onKey); onChange&&onChange(); }
+  const onKey=nbFtCloseOnEsc(overlay, close);
+  overlay.querySelector('.ft-modal-close').onclick=close;
+}
+
+function nbFaultPanel(body, s, item){
+  const ft = ensureFaultTrackingData(s);
+  let mode='view';
+  let activeId = (ft.activePageId && ft.pages.some(p=>p.id===ft.activePageId)) ? ft.activePageId : (ft.pages[0]?ft.pages[0].id:null);
+  let activeLayerId=null;
+  let currentTool='pen';
+
+  const help=document.createElement('div'); help.className='nb-help';
+  help.textContent='أضف صورًا للجهاز، وأنشئ طبقة لكل نقطة عطل (دائرة قابلة للتحريك)، وارسم أسهمًا/خطوطًا/مسارات ونصوصًا مباشرة فوق الصورة داخل الطبقة المختارة. في وضع العرض تكون كل الطبقات مخفية، واضغط على نقطة محددة لإظهار محتواها فقط. كبّر وصغّر الصورة بإصبعين (Pinch) أو بعجلة الفأرة.';
+  body.appendChild(help);
+
+  const root=document.createElement('div'); root.className='ft-wrap';
+  body.appendChild(root);
+
+  function currentPage(){ return ft.pages.find(p=>p.id===activeId) || null; }
+
+  function render(){
+    root.innerHTML='';
+    let revealedLayerId=null;
+
+    /* شريط الصفحات */
+    const pagesBar=document.createElement('div'); pagesBar.className='ft-pages-strip';
+    ft.pages.forEach((p,idx)=>{
+      const thumb=document.createElement('div');
+      thumb.className='ft-page-thumb'+(p.id===activeId?' active':'');
+      const img=document.createElement('img');
+      if(p.imageId) getFileBlobURL(p.imageId).then(u=>{ if(u) img.src=u; });
+      const lbl=document.createElement('span'); lbl.textContent=p.name || ('صفحة '+(idx+1));
+      thumb.append(img,lbl);
+      thumb.onclick=()=>{ activeId=p.id; ft.activePageId=p.id; activeLayerId=null; mode='view'; nbScheduleSave(item); render(); };
+      pagesBar.appendChild(thumb);
+    });
+    const addPage=document.createElement('label'); addPage.className='ft-page-add'; addPage.textContent='＋ صفحة جديدة';
+    const pagePick=document.createElement('input'); pagePick.type='file'; pagePick.accept='image/*'; pagePick.multiple=true;
+    pagePick.onchange=async()=>{
+      const files=[...(pagePick.files||[])]; if(!files.length) return;
+      addPage.textContent='جارٍ الحفظ...';
+      for(const f of files){
+        const id=await storeFile(f, f.name, f.type);
+        const pg={id:uid('ftpg'), name:'صفحة '+(ft.pages.length+1), imageId:id, hotspots:[]};
+        ft.pages.push(pg);
+        if(!activeId) activeId=pg.id;
+      }
+      ft.activePageId=activeId;
+      nbScheduleSave(item); render();
+    };
+    addPage.appendChild(pagePick); pagesBar.appendChild(addPage);
+    root.appendChild(pagesBar);
+
+    const page=currentPage();
+    if(!page){
+      const empty=document.createElement('div'); empty.style.cssText='padding:26px;text-align:center;color:var(--dim2);font-size:12.5px;';
+      empty.textContent='لا توجد صفحات بعد — أضف صورة لبدء تتبع الأعطال.';
+      root.appendChild(empty);
+      return;
+    }
+    if(!page.hotspots.some(h=>h.id===activeLayerId)) activeLayerId = page.hotspots[0] ? page.hotspots[0].id : null;
+
+    /* شريط أدوات الصفحة */
+    const toolbar=document.createElement('div'); toolbar.className='ft-toolbar';
+    const nameInput=document.createElement('input'); nameInput.className='ft-page-name'; nameInput.value=page.name||''; nameInput.placeholder='اسم الصفحة';
+    nameInput.oninput=()=>{ page.name=nameInput.value; nbScheduleSave(item); };
+    const modeBtns=document.createElement('div'); modeBtns.className='ft-mode-switch';
+    const viewBtn=document.createElement('button'); viewBtn.type='button'; viewBtn.className='btn small'+(mode==='view'?' primary':''); viewBtn.textContent='👁 عرض';
+    const editBtn=document.createElement('button'); editBtn.type='button'; editBtn.className='btn small'+(mode==='edit'?' primary':''); editBtn.textContent='✏️ تحرير';
+    viewBtn.onclick=()=>{ mode='view'; render(); };
+    editBtn.onclick=()=>{ mode='edit'; render(); };
+    modeBtns.append(viewBtn, editBtn);
+    const delPageBtn=document.createElement('button'); delPageBtn.type='button'; delPageBtn.className='btn small danger'; delPageBtn.textContent='🗑 حذف الصفحة';
+    delPageBtn.onclick=(e)=>{
+      if(!nbArmConfirm(e.currentTarget,'اضغط تاني لتأكيد الحذف')) return;
+      const idx=ft.pages.findIndex(p=>p.id===page.id);
+      if(idx!==-1) ft.pages.splice(idx,1);
+      activeId = ft.pages[0] ? ft.pages[0].id : null;
+      ft.activePageId=activeId; activeLayerId=null;
+      nbScheduleSave(item); render();
+    };
+    toolbar.append(nameInput, modeBtns, delPageBtn);
+    root.appendChild(toolbar);
+
+    /* شريط الطبقات */
+    const layersBar=document.createElement('div'); layersBar.className='ft-layers-bar';
+    root.appendChild(layersBar);
+
+    /* شريط أدوات الرسم (وضع التحرير فقط) */
+    let drawToolbar=null, toolSel=null, colorInput=null, widthInput=null, fontInput=null, fillInput=null;
+    if(mode==='edit'){
+      drawToolbar=document.createElement('div'); drawToolbar.className='ft-draw-toolbar';
+      drawToolbar.innerHTML=`
+        <select class="draw-tool" title="الأداة">
+          <option value="pen">✏️ رسم حر</option>
+          <option value="line">📏 خط مستقيم</option>
+          <option value="arrow">➡️ سهم</option>
+          <option value="dotted">┄ خط منقط</option>
+          <option value="curve">〰️ خط منحني (مسار)</option>
+          <option value="zigzag">⚡ خط متعرج</option>
+          <option value="rect">▭ مستطيل</option>
+          <option value="triangle">▲ مثلث</option>
+          <option value="circle">◯ دائرة</option>
+          <option value="text">🔤 كتابة</option>
+          <option value="eraser">🧹 ممحاة</option>
+          <option value="pan">🖐 تحريك فقط</option>
+        </select>
+        <input type="color" class="draw-color" value="#1e2519" title="لون الرسم">
+        <input type="range" class="draw-width" min="1" max="14" value="3" title="سُمك الخط">
+        <input type="number" class="draw-fontsize" min="8" max="60" value="18" title="حجم الخط" style="width:52px;">
+        <label class="fill-toggle"><input type="checkbox" class="draw-fill"> تعبئة</label>
+        <button type="button" class="btn small ft-undo-btn" title="تراجع عن آخر شكل في الطبقة">↩️ تراجع</button>
+        <button type="button" class="btn small ft-redo-btn" title="إعادة آخر شكل تم التراجع عنه">↪️ إعادة</button>
+        <button type="button" class="btn small danger ft-clear-btn" title="مسح رسم الطبقة الحالية">🗑 مسح رسم الطبقة</button>
+      `;
+      root.appendChild(drawToolbar);
+      toolSel=drawToolbar.querySelector('.draw-tool');
+      colorInput=drawToolbar.querySelector('.draw-color');
+      widthInput=drawToolbar.querySelector('.draw-width');
+      fontInput=drawToolbar.querySelector('.draw-fontsize');
+      fillInput=drawToolbar.querySelector('.draw-fill');
+      toolSel.value=currentTool;
+      toolSel.onchange=()=>{ currentTool=toolSel.value; };
+      const hint=document.createElement('div'); hint.className='ft-edit-hint';
+      hint.textContent='إصبع واحد: يرسم على الطبقة المختارة (أو يحرّك الصورة مع أداة 🖐) · إصبعان: تكبير/تصغير وتحريك دائمًا · اسحب دائرة الطبقة لنقلها في أي وقت، والمقبض الملوّن لتغيير حجم منطقة اللمس، ودبل كليك لفتح خصائصها · مربعات الكتابة يمكن سحبها لتحريكها بعد كتابتها.';
+      root.appendChild(hint);
+    }
+
+    /* منصة الصورة القابلة للتكبير */
+    const viewport=document.createElement('div'); viewport.className='ft-stage-viewport';
+    const zoomCtrls=document.createElement('div'); zoomCtrls.className='ft-zoom-controls';
+    zoomCtrls.innerHTML=`<button type="button" class="ft-zbtn" data-act="zout">−</button><span class="ft-zlevel">100%</span><button type="button" class="ft-zbtn" data-act="zin">+</button><button type="button" class="ft-zbtn" data-act="zreset" title="إعادة الضبط">⤢</button>`;
+    viewport.appendChild(zoomCtrls);
+    const world=document.createElement('div'); world.className='ft-stage-world';
+    const worldImg=document.createElement('img'); worldImg.className='ft-world-img'; worldImg.draggable=false; worldImg.alt='صورة تتبع الأعطال';
+    const canvas=document.createElement('canvas'); canvas.className='ft-world-canvas';
+    const textLayer=document.createElement('div'); textLayer.className='ft-text-layer';
+    const markersLayer=document.createElement('div'); markersLayer.className='ft-markers-layer';
+    world.append(worldImg, canvas, textLayer, markersLayer);
+    viewport.appendChild(world);
+    root.appendChild(viewport);
+    if(page.imageId) getFileBlobURL(page.imageId).then(u=>{ if(u) worldImg.src=u; });
+
+    const MIN_ZOOM=0.4, MAX_ZOOM=8;
+    let natW=0, natH=0, baseScale=1, zoomFactor=1, tx=0, ty=0;
+    const zlevelEl=zoomCtrls.querySelector('.ft-zlevel');
+    const ctx=canvas.getContext('2d');
+    const redoStacks=new Map();
+    function clearRedo(layerId){ redoStacks.delete(layerId); }
+
+    function computeBaseScaleAndCenter(){
+      const rect=viewport.getBoundingClientRect();
+      if(!natW || !natH || !rect.width){ baseScale=1; }
+      else{
+        baseScale=Math.min((rect.width*0.98)/natW, (rect.height*0.98)/natH, 1);
+      }
+      const dispW=natW*baseScale*zoomFactor, dispH=natH*baseScale*zoomFactor;
+      tx=(rect.width-dispW)/2; ty=(rect.height-dispH)/2;
+    }
+    function applyTransform(){
+      const scale=baseScale*zoomFactor;
+      world.style.transform=`translate(${tx}px, ${ty}px) scale(${scale})`;
+      zlevelEl.textContent=Math.round(zoomFactor*100)+'%';
+    }
+    function currentScale(){ return baseScale*zoomFactor; }
+    function zoomBy(factor, clientX, clientY){
+      const rect=viewport.getBoundingClientRect();
+      const cx = clientX!=null ? clientX-rect.left : rect.width/2;
+      const cy = clientY!=null ? clientY-rect.top : rect.height/2;
+      const oldScale=currentScale();
+      let newZoom=Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomFactor*factor));
+      const newScale=baseScale*newZoom;
+      tx = cx - (cx-tx)*(newScale/oldScale);
+      ty = cy - (cy-ty)*(newScale/oldScale);
+      zoomFactor=newZoom;
+      applyTransform();
+    }
+    zoomCtrls.querySelector('[data-act="zin"]').onclick=()=>zoomBy(1.35);
+    zoomCtrls.querySelector('[data-act="zout"]').onclick=()=>zoomBy(1/1.35);
+    zoomCtrls.querySelector('[data-act="zreset"]').onclick=()=>{ zoomFactor=1; computeBaseScaleAndCenter(); applyTransform(); };
+    viewport.addEventListener('wheel',(e)=>{ e.preventDefault(); zoomBy(e.deltaY<0?1.15:1/1.15, e.clientX, e.clientY); }, {passive:false});
+
+    function screenToNatural(clientX, clientY){
+      const rect=world.getBoundingClientRect();
+      const s=currentScale();
+      return { x:(clientX-rect.left)/s, y:(clientY-rect.top)/s };
+    }
+
+    /* في وضع العرض: الطبقات مخفية افتراضيًا، ولا يظهر رسم أو نص إلا للطبقة التي ضُغط عليها */
+    function layerIsShown(h){
+      if(h.visible===false) return false;
+      if(mode==='view') return h.id===revealedLayerId;
+      return true;
+    }
+
+    function redrawCanvas(){
+      if(!natW || !natH) return;
+      ctx.clearRect(0,0,natW,natH);
+      page.hotspots.forEach(h=>{
+        if(!layerIsShown(h)) return;
+        (h.content.drawing.shapes||[]).forEach(sh=>{ if(sh.type!=='text') nbDrawShape(ctx,sh); });
+      });
+    }
+
+    function renderTextLabels(){
+      textLayer.innerHTML='';
+      page.hotspots.forEach(h=>{
+        if(!layerIsShown(h)) return;
+        (h.content.drawing.shapes||[]).forEach(sh=>{
+          if(sh.type!=='text') return;
+          const lbl=document.createElement('div');
+          lbl.className='ft-text-label'+(mode==='edit'?' editable':'');
+          lbl.textContent=sh.text;
+          lbl.style.left=sh.x+'px'; lbl.style.top=sh.y+'px';
+          lbl.style.color=sh.color||'#1e2519';
+          lbl.style.fontSize=(sh.fontSize||18)+'px';
+          if(mode==='edit'){
+            const del=document.createElement('button'); del.type='button'; del.className='ft-text-del'; del.textContent='✕';
+            del.onclick=(e)=>{
+              e.stopPropagation();
+              const shapes=h.content.drawing.shapes; const i=shapes.indexOf(sh);
+              if(i!==-1) shapes.splice(i,1);
+              clearRedo(h.id); nbScheduleSave(item); renderTextLabels();
+            };
+            lbl.appendChild(del);
+            lbl.addEventListener('pointerdown',(e)=>{
+              if(e.target===del) return;
+              e.stopPropagation(); e.preventDefault();
+              lbl.setPointerCapture(e.pointerId);
+              const startX=e.clientX, startY=e.clientY, ox=sh.x, oy=sh.y, sc=currentScale();
+              let moved=false;
+              function onMove(ev){
+                moved=true;
+                sh.x=ox+(ev.clientX-startX)/sc; sh.y=oy+(ev.clientY-startY)/sc;
+                lbl.style.left=sh.x+'px'; lbl.style.top=sh.y+'px';
+              }
+              function onUp(){
+                lbl.removeEventListener('pointermove', onMove);
+                lbl.removeEventListener('pointerup', onUp);
+                if(moved) nbScheduleSave(item);
+              }
+              lbl.addEventListener('pointermove', onMove);
+              lbl.addEventListener('pointerup', onUp);
+            });
+          }
+          textLayer.appendChild(lbl);
+        });
+      });
+    }
+
+    function renderLayersBar(){
+      layersBar.innerHTML='';
+      page.hotspots.forEach((h,idx)=>{
+        const chip=document.createElement('div');
+        chip.className='ft-layer-chip'+(h.id===activeLayerId?' active':'')+(h.visible===false?' hidden-layer':'');
+        chip.style.setProperty('--ft-color', h.color||'#f2a93c');
+        const sw=document.createElement('span'); sw.className='ft-layer-swatch';
+        const nm=document.createElement('span'); nm.className='ft-layer-name'; nm.textContent=h.name||('طبقة '+(idx+1));
+        chip.append(sw,nm);
+        if(mode==='edit'){
+          const eyeBtn=document.createElement('button'); eyeBtn.type='button'; eyeBtn.className='ft-layer-btn'; eyeBtn.textContent=h.visible===false?'🚫':'👁';
+          eyeBtn.title='إظهار/إخفاء الطبقة';
+          eyeBtn.onclick=(e)=>{ e.stopPropagation(); h.visible=h.visible===false; nbScheduleSave(item); redrawCanvas(); renderTextLabels(); renderMarkers(); renderLayersBar(); };
+          const editBtnL=document.createElement('button'); editBtnL.type='button'; editBtnL.className='ft-layer-btn'; editBtnL.textContent='✏️'; editBtnL.title='خصائص الطبقة';
+          editBtnL.onclick=(e)=>{ e.stopPropagation(); nbFtOpenEditor(h, item, ()=>{ renderMarkers(); renderLayersBar(); }); };
+          const delBtnL=document.createElement('button'); delBtnL.type='button'; delBtnL.className='ft-layer-btn danger'; delBtnL.textContent='🗑'; delBtnL.title='حذف الطبقة';
+          delBtnL.onclick=(e)=>{
+            e.stopPropagation();
+            if(!nbArmConfirm(e.currentTarget,'تأكيد؟')) return;
+            const i=page.hotspots.indexOf(h); if(i!==-1) page.hotspots.splice(i,1);
+            if(activeLayerId===h.id) activeLayerId = page.hotspots[0]?page.hotspots[0].id:null;
+            clearRedo(h.id);
+            nbScheduleSave(item); redrawCanvas(); renderTextLabels(); renderMarkers(); renderLayersBar();
+          };
+          chip.append(eyeBtn, editBtnL, delBtnL);
+        }
+        chip.onclick=()=>{ activeLayerId=h.id; renderMarkers(); renderLayersBar(); };
+        layersBar.appendChild(chip);
+      });
+      if(mode==='edit'){
+        const addBtn=document.createElement('button'); addBtn.type='button'; addBtn.className='btn small ft-layer-add'; addBtn.textContent='＋ طبقة جديدة';
+        addBtn.onclick=()=>{
+          const rect=viewport.getBoundingClientRect();
+          const c=screenToNatural(rect.left+rect.width/2, rect.top+rect.height/2);
+          const w=Math.min(0.07, natW?60/natW:0.07), h=Math.min(0.07, natH?60/natH:0.07);
+          const nh={ id:uid('fths'), name:'طبقة '+(page.hotspots.length+1), x:Math.min(Math.max((c.x/natW)-w/2,0),1-w), y:Math.min(Math.max((c.y/natH)-h/2,0),1-h), w, h, shape:'circle', color:FT_LAYER_COLORS[page.hotspots.length % FT_LAYER_COLORS.length], visible:true, content:{title:'',note:'',images:[],drawing:{shapes:[]}} };
+          page.hotspots.push(nh);
+          activeLayerId=nh.id;
+          nbScheduleSave(item); renderMarkers(); renderLayersBar();
+        };
+        layersBar.appendChild(addBtn);
+      }
+    }
+
+    function renderMarkers(){
+      markersLayer.innerHTML='';
+      page.hotspots.forEach(h=>{
+        if(h.visible===false && mode==='view') return;
+        const el=document.createElement('div');
+        el.className='ft-marker'+(h.shape==='rect'?' shape-rect':' shape-circle')+(mode==='edit'?' mode-edit':' mode-view')+(mode==='edit'&&h.id===activeLayerId?' active-layer':'')+(mode==='view'&&h.id===revealedLayerId?' revealed':'')+(nbFtHasContent(h)?' has-content':'');
+        el.style.left=(h.x*natW)+'px'; el.style.top=(h.y*natH)+'px'; el.style.width=(h.w*natW)+'px'; el.style.height=(h.h*natH)+'px';
+        el.style.setProperty('--ft-color', h.color||'#f2a93c');
+        if(h.visible===false) el.style.opacity='.35';
+        if(mode==='view'){
+          const dot=document.createElement('div'); dot.className='ft-marker-dot'+(nbFtHasContent(h)?'':' empty');
+          el.appendChild(dot);
+          if(nbFtHasContent(h)) el.title = h.content.title || h.name || 'اضغط لإظهار محتوى هذه النقطة';
+          el.addEventListener('click',(e)=>{
+            e.stopPropagation();
+            if(panDragMoved || !nbFtHasContent(h)) return;
+            revealedLayerId = (revealedLayerId===h.id) ? null : h.id;
+            redrawCanvas(); renderTextLabels(); renderMarkers();
+          });
+        } else {
+          el.title = h.name || 'طبقة';
+          const handle=document.createElement('div'); handle.className='ft-marker-handle';
+          el.appendChild(handle);
+          const delBtn=document.createElement('button'); delBtn.type='button'; delBtn.className='ft-marker-del'; delBtn.textContent='✕';
+          delBtn.onclick=(e)=>{ e.stopPropagation(); const i=page.hotspots.indexOf(h); if(i!==-1) page.hotspots.splice(i,1); if(activeLayerId===h.id) activeLayerId=page.hotspots[0]?page.hotspots[0].id:null; clearRedo(h.id); nbScheduleSave(item); redrawCanvas(); renderTextLabels(); renderMarkers(); renderLayersBar(); };
+          el.appendChild(delBtn);
+
+          /* نقطة اللمس (الطبقة) قابلة لتغيير موقعها دائمًا في وضع التحرير بالسحب */
+          el.addEventListener('pointerdown',(e)=>{
+            if(e.target===handle || e.target===delBtn) return;
+            e.stopPropagation(); e.preventDefault();
+            activeLayerId=h.id; renderLayersBar();
+            markersLayer.querySelectorAll('.ft-marker.mode-edit').forEach(x=>x.classList.remove('active-layer'));
+            el.classList.add('active-layer');
+            el.setPointerCapture(e.pointerId);
+            const startX=e.clientX, startY=e.clientY, ox=h.x, oy=h.y, s=currentScale();
+            let moved=false;
+            function onMove(ev){
+              moved=true;
+              const dx=(ev.clientX-startX)/s/natW, dy=(ev.clientY-startY)/s/natH;
+              h.x=Math.min(Math.max(ox+dx,0), Math.max(0,1-h.w));
+              h.y=Math.min(Math.max(oy+dy,0), Math.max(0,1-h.h));
+              el.style.left=(h.x*natW)+'px'; el.style.top=(h.y*natH)+'px';
+            }
+            function onUp(){
+              el.removeEventListener('pointermove', onMove);
+              el.removeEventListener('pointerup', onUp);
+              if(moved) nbScheduleSave(item);
+            }
+            el.addEventListener('pointermove', onMove);
+            el.addEventListener('pointerup', onUp);
+          });
+          handle.addEventListener('pointerdown',(e)=>{
+            e.stopPropagation(); e.preventDefault();
+            handle.setPointerCapture(e.pointerId);
+            const startX=e.clientX, startY=e.clientY, ow=h.w, oh=h.h, s=currentScale();
+            function onMove(ev){
+              const dx=(ev.clientX-startX)/s/natW, dy=(ev.clientY-startY)/s/natH;
+              h.w=Math.min(Math.max(ow+dx, 0.015), Math.max(0.015,1-h.x));
+              h.h=Math.min(Math.max(oh+dy, 0.015), Math.max(0.015,1-h.y));
+              el.style.width=(h.w*natW)+'px'; el.style.height=(h.h*natH)+'px';
+            }
+            function onUp(){
+              handle.removeEventListener('pointermove', onMove);
+              handle.removeEventListener('pointerup', onUp);
+              nbScheduleSave(item);
+            }
+            handle.addEventListener('pointermove', onMove);
+            handle.addEventListener('pointerup', onUp);
+          });
+          el.addEventListener('dblclick',(e)=>{ e.stopPropagation(); nbFtOpenEditor(h, item, ()=>{ redrawCanvas(); renderTextLabels(); renderMarkers(); renderLayersBar(); }); });
+        }
+        markersLayer.appendChild(el);
+      });
+    }
+
+    /* ===== تكبير باللمس (Pinch) + تحريك بإصبع واحد + رسم مباشر على الصورة ===== */
+    const activePointers=new Map();
+    let panDragStart=null, panDragMoved=false;
+    let drawState=null;
+    function activeLayerNow(){ return page.hotspots.find(x=>x.id===activeLayerId) || null; }
+
+    function askInlineText(pos, onDone){
+      const input=document.createElement('input');
+      input.type='text'; input.placeholder='اكتب النص واضغط Enter…'; input.className='ft-inline-text-input';
+      const fsz=parseInt(fontInput.value,10)||18;
+      input.style.left=pos.x+'px'; input.style.top=pos.y+'px';
+      input.style.fontSize=fsz+'px';
+      input.style.color=colorInput.value;
+      world.appendChild(input); input.focus();
+      function finish(commit){ const val=input.value.trim(); input.remove(); if(commit&&val) onDone(val); }
+      input.addEventListener('pointerdown',(e)=>e.stopPropagation());
+      input.addEventListener('keydown',(e)=>{ e.stopPropagation(); if(e.key==='Enter') finish(true); if(e.key==='Escape') finish(false); });
+      input.addEventListener('blur',()=>finish(true));
+    }
+    function eraseNearActive(pos){
+      const layer=activeLayerNow(); if(!layer) return;
+      const shapes=layer.content.drawing.shapes;
+      let bestIdx=-1, bestDist=26/currentScale();
+      shapes.forEach((sh,i)=>{
+        nbShapeRefPoints(sh).forEach(p=>{ const d=Math.hypot(p.x-pos.x,p.y-pos.y); if(d<bestDist){ bestDist=d; bestIdx=i; } });
+      });
+      if(bestIdx!==-1){ shapes.splice(bestIdx,1); clearRedo(layer.id); nbScheduleSave(item); redrawCanvas(); renderTextLabels(); }
+    }
+    function startPan(clientX, clientY){ panDragStart={x:clientX,y:clientY,tx,ty}; }
+    function movePan(clientX, clientY){
+      if(!panDragStart) return;
+      const dx=clientX-panDragStart.x, dy=clientY-panDragStart.y;
+      if(Math.abs(dx)+Math.abs(dy)>5) panDragMoved=true;
+      tx=panDragStart.tx+dx; ty=panDragStart.ty+dy;
+      applyTransform();
+    }
+
+    if(drawToolbar){
+      drawToolbar.querySelector('.ft-undo-btn').onclick=()=>{
+        const layer=activeLayerNow(); if(!layer||!layer.content.drawing.shapes.length) return;
+        const popped=layer.content.drawing.shapes.pop();
+        const st=redoStacks.get(layer.id)||[]; st.push(popped); redoStacks.set(layer.id, st);
+        nbScheduleSave(item); redrawCanvas(); renderTextLabels();
+      };
+      drawToolbar.querySelector('.ft-redo-btn').onclick=()=>{
+        const layer=activeLayerNow(); if(!layer) return;
+        const st=redoStacks.get(layer.id)||[]; if(!st.length) return;
+        layer.content.drawing.shapes.push(st.pop());
+        nbScheduleSave(item); redrawCanvas(); renderTextLabels();
+      };
+      drawToolbar.querySelector('.ft-clear-btn').onclick=(e)=>{
+        const layer=activeLayerNow(); if(!layer) return;
+        if(!nbArmConfirm(e.currentTarget,'تأكيد المسح؟')) return;
+        layer.content.drawing.shapes=[]; clearRedo(layer.id);
+        nbScheduleSave(item); redrawCanvas(); renderTextLabels();
+      };
+    }
+
+    viewport.addEventListener('pointerdown',(e)=>{
+      if(e.target.closest('.ft-marker') || e.target.closest('.ft-zoom-controls') || e.target.closest('.ft-text-label') || e.target.classList.contains('ft-inline-text-input')) return;
+      viewport.setPointerCapture(e.pointerId);
+      activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+      panDragMoved=false;
+      if(activePointers.size===1){
+        const canDraw = mode==='edit' && activeLayerId && currentTool!=='pan';
+        if(canDraw){
+          const layer=activeLayerNow();
+          const pos=screenToNatural(e.clientX, e.clientY);
+          if(currentTool==='text'){
+            askInlineText(pos,(txt)=>{
+              layer.content.drawing.shapes.push({type:'text',x:pos.x,y:pos.y,text:txt,color:colorInput.value,fontSize:parseInt(fontInput.value,10)||18});
+              clearRedo(layer.id); nbScheduleSave(item); redrawCanvas(); renderTextLabels();
+            });
+            drawState=null; return;
+          }
+          if(currentTool==='eraser'){ drawState={erasing:true}; eraseNearActive(pos); return; }
+          drawState={ tool:currentTool, start:pos, points: currentTool==='pen'?[pos]:null };
+          return;
+        }
+        startPan(e.clientX, e.clientY);
+      } else if(activePointers.size===2){
+        drawState=null; panDragStart=null;
+        const pts=Array.from(activePointers.values());
+        viewport._pinchStartDist=ptDist(pts[0],pts[1]);
+        viewport._pinchStartZoom=zoomFactor;
+      }
+    });
+    viewport.addEventListener('pointermove',(e)=>{
+      if(!activePointers.has(e.pointerId)) return;
+      activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+      if(activePointers.size===1 && drawState){
+        const pos=screenToNatural(e.clientX, e.clientY);
+        const layer=activeLayerNow(); if(!layer) return;
+        if(drawState.erasing){ eraseNearActive(pos); return; }
+        const width=parseInt(widthInput.value,10)||3;
+        redrawCanvas();
+        if(drawState.tool==='pen'){
+          drawState.points.push(pos);
+          nbDrawShape(ctx,{type:'freehand',points:drawState.points,color:colorInput.value,width});
+        } else {
+          nbDrawShape(ctx, nbBuildLiveShape(drawState.tool, drawState.start, pos, colorInput.value, width, fillInput.checked));
+        }
+      } else if(activePointers.size===1 && panDragStart){
+        movePan(e.clientX, e.clientY);
+      } else if(activePointers.size===2){
+        const pts=Array.from(activePointers.values());
+        const dist=ptDist(pts[0],pts[1]);
+        const mid=ptMid(pts[0],pts[1]);
+        const rect=viewport.getBoundingClientRect();
+        const oldScale=currentScale();
+        let newZoom=Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, (viewport._pinchStartZoom||1)*(dist/(viewport._pinchStartDist||dist))));
+        const newScale=baseScale*newZoom;
+        const cx=mid.x-rect.left, cy=mid.y-rect.top;
+        tx = cx - (cx-tx)*(newScale/oldScale);
+        ty = cy - (cy-ty)*(newScale/oldScale);
+        zoomFactor=newZoom;
+        applyTransform();
+      }
+    });
+    function releasePointer(e){
+      activePointers.delete(e.pointerId);
+      if(drawState && !drawState.erasing){
+        const layer=activeLayerNow();
+        if(layer){
+          const pos=screenToNatural(e.clientX, e.clientY);
+          const width=parseInt(widthInput.value,10)||3;
+          if(drawState.tool==='pen'){
+            if(drawState.points && drawState.points.length>1){ layer.content.drawing.shapes.push({type:'freehand',points:drawState.points,color:colorInput.value,width}); clearRedo(layer.id); nbScheduleSave(item); }
+          } else {
+            const shape=nbBuildLiveShape(drawState.tool, drawState.start, pos, colorInput.value, width, fillInput.checked);
+            if(Math.abs(shape.x2-shape.x1)>2/currentScale() || Math.abs(shape.y2-shape.y1)>2/currentScale()){ layer.content.drawing.shapes.push(shape); clearRedo(layer.id); nbScheduleSave(item); }
+          }
+        }
+      }
+      drawState=null;
+      panDragStart=null;
+      redrawCanvas();
+      if(activePointers.size===1){
+        const entry=Array.from(activePointers.entries())[0];
+        startPan(entry[1].x, entry[1].y);
+      }
+    }
+    viewport.addEventListener('pointerup', releasePointer);
+    viewport.addEventListener('pointercancel', releasePointer);
+    viewport.addEventListener('pointerleave',(e)=>{ if(activePointers.has(e.pointerId)) releasePointer(e); });
+    viewport.addEventListener('dblclick',(e)=>{
+      if(e.target.closest('.ft-marker') || e.target.closest('.ft-text-label')) return;
+      if(zoomFactor>1.05){ zoomFactor=1; computeBaseScaleAndCenter(); } else zoomBy(2, e.clientX, e.clientY);
+      applyTransform();
+    });
+
+    worldImg.addEventListener('load', ()=>{
+      natW=worldImg.naturalWidth; natH=worldImg.naturalHeight;
+      worldImg.style.width=natW+'px'; worldImg.style.height=natH+'px';
+      canvas.width=natW; canvas.height=natH; canvas.style.width=natW+'px'; canvas.style.height=natH+'px';
+      textLayer.style.width=natW+'px'; textLayer.style.height=natH+'px';
+      markersLayer.style.width=natW+'px'; markersLayer.style.height=natH+'px';
+      zoomFactor=1;
+      computeBaseScaleAndCenter(); applyTransform();
+      redrawCanvas(); renderTextLabels(); renderMarkers();
+    });
+    window.addEventListener('resize', ()=>{ if(natW){ computeBaseScaleAndCenter(); applyTransform(); } });
+
+    renderLayersBar();
+    renderMarkers();
+  }
+  render();
+}
+
 /* ===== الحاوية الرئيسية ===== */
 function nbMountNotebook(holder, item){
   const s = ensureNotebookData(item);
@@ -8889,7 +9706,7 @@ function nbMountNotebook(holder, item){
 
     const nav=document.createElement('div');
     nav.className='nb-tabs';
-    [['text','📝 الشرح والصور'],['code','💻 الأكواد'],['draw','📐 الرسم'],['map','🧠 الخريطة']].forEach(([id,label])=>{
+    [['text','📝 الشرح والصور'],['code','💻 الأكواد'],['draw','📐 الرسم'],['map','🧠 الخريطة'],['fault','🩺 تتبع الأعطال']].forEach(([id,label])=>{
       const b=document.createElement('button');
       b.type='button'; b.className='btn small'+(id===tab?' primary':'');
       b.textContent=label;
@@ -8906,7 +9723,8 @@ function nbMountNotebook(holder, item){
     if(tab==='text') nbTextPanel(body, s, item);
     else if(tab==='code') nbCodePanel(body, s, item, render);
     else if(tab==='draw') nbDrawTab(body, s, item);
-    else nbMapTab(body, s, item);
+    else if(tab==='map') nbMapTab(body, s, item);
+    else nbFaultPanel(body, s, item);
   }
   render();
 }
