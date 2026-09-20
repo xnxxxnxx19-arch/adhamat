@@ -5053,260 +5053,362 @@ const memoryDB = {
 function openDB(){
   return new Promise((resolve, reject)=>{
     let req;
-    try{
-      req = indexedDB.open(DB_NAME, DB_VERSION);
-    }catch(err){ reject(err); return; }
+    try{ req = indexedDB.open(DB_NAME, DB_VERSION); }
+    catch(err){ reject(err); return; }
     req.onupgradeneeded = (e)=>{
       const d = e.target.result;
       if(!d.objectStoreNames.contains("folders")) d.createObjectStore("folders",{keyPath:"id"});
       if(!d.objectStoreNames.contains("items")){
-        const s = d.createObjectStore("items",{keyPath:"id"});
-        s.createIndex("folderId","folderId",{unique:false});
+        const st = d.createObjectStore("items",{keyPath:"id"});
+        st.createIndex("folderId","folderId",{unique:false});
       }
       if(!d.objectStoreNames.contains("files")) d.createObjectStore("files",{keyPath:"id"});
       if(!d.objectStoreNames.contains("meta")) d.createObjectStore("meta",{keyPath:"key"});
     };
-    req.onsuccess = (e)=>{ resolve(e.target.result); };
-    req.onerror = (e)=>{ reject(e.target.error || new Error("idb-open-failed")); };
-    req.onblocked = ()=>{ reject(new Error("idb-blocked")); };
+    req.onsuccess = e=>resolve(e.target.result);
+    req.onerror = e=>reject(e.target.error || new Error("idb-open-failed"));
+    req.onblocked = ()=>reject(new Error("idb-blocked"));
   });
 }
-function tx(storeNames, mode){
-  return db.transaction(storeNames, mode||"readonly");
-}
+function tx(storeNames, mode){ return db.transaction(storeNames, mode||"readonly"); }
 
-/* ---- تنفيذ فعلي عبر IndexedDB ---- */
 function idbGetAll_real(storeName){
-  return new Promise((resolve, reject)=>{
-    const t = tx(storeName);
-    const req = t.objectStore(storeName).getAll();
-    req.onsuccess = ()=>resolve(req.result || []);
-    req.onerror = ()=>reject(req.error);
+  return new Promise((resolve,reject)=>{
+    const t=tx(storeName); const req=t.objectStore(storeName).getAll();
+    req.onsuccess=()=>resolve(req.result||[]); req.onerror=()=>reject(req.error);
   });
 }
-function idbGet_real(storeName, key){
-  return new Promise((resolve, reject)=>{
-    const req = tx(storeName).objectStore(storeName).get(key);
-    req.onsuccess = ()=>resolve(req.result);
-    req.onerror = ()=>reject(req.error);
+function idbGet_real(storeName,key){
+  return new Promise((resolve,reject)=>{
+    const req=tx(storeName).objectStore(storeName).get(key);
+    req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error);
   });
 }
-function idbPut_real(storeName, value){
-  return new Promise((resolve, reject)=>{
-    const t = tx(storeName, "readwrite");
-    t.objectStore(storeName).put(value);
-    t.oncomplete = ()=>resolve(value);
-    t.onerror = ()=>reject(t.error);
+function idbPut_real(storeName,value){
+  return new Promise((resolve,reject)=>{
+    const t=tx(storeName,"readwrite"); t.objectStore(storeName).put(value);
+    t.oncomplete=()=>resolve(value); t.onerror=()=>reject(t.error);
   });
 }
-function idbDelete_real(storeName, key){
-  return new Promise((resolve, reject)=>{
-    const t = tx(storeName, "readwrite");
-    t.objectStore(storeName).delete(key);
-    t.oncomplete = ()=>resolve();
-    t.onerror = ()=>reject(t.error);
+function idbDelete_real(storeName,key){
+  return new Promise((resolve,reject)=>{
+    const t=tx(storeName,"readwrite"); t.objectStore(storeName).delete(key);
+    t.oncomplete=()=>resolve(); t.onerror=()=>reject(t.error);
   });
 }
 function idbClear_real(storeName){
-  return new Promise((resolve, reject)=>{
-    const t = tx(storeName, "readwrite");
-    t.objectStore(storeName).clear();
-    t.oncomplete = ()=>resolve();
-    t.onerror = ()=>reject(t.error);
+  return new Promise((resolve,reject)=>{
+    const t=tx(storeName,"readwrite"); t.objectStore(storeName).clear();
+    t.oncomplete=()=>resolve(); t.onerror=()=>reject(t.error);
   });
 }
 
-/* ---- تنفيذ بديل في الذاكرة (يُستخدم تلقائيًا عند فشل IndexedDB) ---- */
-function memKey(storeName, value){ return storeName==="meta" ? value.key : value.id; }
+function memKey(storeName,value){ return storeName==="meta" ? value.key : value.id; }
 function memGetAll(storeName){ return Promise.resolve(Array.from(memoryDB[storeName].values())); }
-function memGet(storeName, key){ return Promise.resolve(memoryDB[storeName].get(key)); }
-function memPut(storeName, value){ memoryDB[storeName].set(memKey(storeName, value), value); return Promise.resolve(value); }
-function memDelete(storeName, key){ memoryDB[storeName].delete(key); return Promise.resolve(); }
+function memGet(storeName,key){ return Promise.resolve(memoryDB[storeName].get(key)); }
+function memPut(storeName,value){ memoryDB[storeName].set(memKey(storeName,value),value); return Promise.resolve(value); }
+function memDelete(storeName,key){ memoryDB[storeName].delete(key); return Promise.resolve(); }
 function memClear(storeName){ memoryDB[storeName].clear(); return Promise.resolve(); }
 
-/* ---- الواجهة الموحّدة المستخدمة في باقي التطبيق ---- */
+/* =========================================================
+   التخزين الحقيقي + مزامنة المجلد المرتبط
+   IndexedDB يبقى طبقة عمل سريعة، لكن عند ربط مجلد يصبح
+   المجلد نسخة التشغيل الخارجية الفعلية: كل تعديل/إضافة/حذف
+   يُكتب إليه، والملفات غير المرتبطة تُحذف منه تلقائيًا.
+   ========================================================= */
 function idbGetAll(storeName){ return STORAGE_MODE==="memory" ? memGetAll(storeName) : idbGetAll_real(storeName); }
-function idbGet(storeName, key){ return STORAGE_MODE==="memory" ? memGet(storeName, key) : idbGet_real(storeName, key); }
-function idbPut(storeName, value){
-  const p = STORAGE_MODE==="memory" ? memPut(storeName, value) : idbPut_real(storeName, value);
-  if(storeName==="items" || storeName==="folders") p.then(()=>{ try{ mirrorSnapshotDebounced(); }catch(e){} });
-  if(storeName==="files") p.then(()=>{ try{ mirrorFileToFolder(value.id, value.blob, value.name); }catch(e){} });
-  return p;
-}
-function idbDelete(storeName, key){
-  const p = STORAGE_MODE==="memory" ? memDelete(storeName, key) : idbDelete_real(storeName, key);
-  if(storeName==="items" || storeName==="folders") p.then(()=>{ try{ mirrorSnapshotDebounced(); }catch(e){} });
-  return p;
-}
-function idbClear(storeName){ return STORAGE_MODE==="memory" ? memClear(storeName) : idbClear_real(storeName); }
+function idbGet(storeName,key){ return STORAGE_MODE==="memory" ? memGet(storeName,key) : idbGet_real(storeName,key); }
 
-async function saveAndFlag(storeName, value){
-  setSaveBadge("saving");
+let linkedDirHandle = null;
+let folderSyncChain = Promise.resolve();
+let folderSyncTimer = null;
+let folderSyncAgain = false;
+let folderSyncBusy = false;
+let folderSyncError = null;
+const FOLDER_SNAPSHOT_VERSION = 2;
+
+const FS_ACCESS_SUPPORTED = (typeof window!=="undefined") && ("showDirectoryPicker" in window);
+
+async function ensureFolderPermission(handle, request=false){
+  if(!handle) return false;
   try{
-    await idbPut(storeName, value);
-  } finally {
-    setTimeout(()=>setSaveBadge("idle"), 350);
-  }
+    const opts={mode:"readwrite"};
+    if((await handle.queryPermission(opts))==="granted") return true;
+    if(request && (await handle.requestPermission(opts))==="granted") return true;
+  }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد:",e); }
+  return false;
 }
 
-/* ملفات (صور/مستندات) كـ Blob */
-async function storeFile(blob, name, mime){
-  const id = uid("file");
-  await idbPut("files", {id, blob, name: name||"", mime: mime||blob.type||""});
+function referencedFileIds(){
+  const ids=new Set();
+  for(const it of (state.items||[])){
+    (it.imageIds||[]).forEach(id=>id&&ids.add(id));
+    if(it.mainImageId) ids.add(it.mainImageId);
+    (it.docs||[]).forEach(d=>d && d.fileId && ids.add(d.fileId));
+    const nb=it.notebookData;
+    (nb?.images||[]).forEach(x=>x?.id&&ids.add(x.id));
+    const ft=nb?.faultTracking;
+    (ft?.pages||[]).forEach(pg=>{
+      if(pg?.imageId) ids.add(pg.imageId);
+      (pg?.hotspots||[]).forEach(h=> (h?.content?.images||[]).forEach(x=>x?.id&&ids.add(x.id)));
+    });
+  }
+  return ids;
+}
+
+function safeFileStem(name){
+  return String(name||"").replace(/[\\/:*?"<>|]/g,"_");
+}
+function fileIdFromBackupName(name){
+  const m=String(name||"").match(/^(.+?)(?:\.[^.]+)?$/); return m?m[1]:name;
+}
+
+async function writeProjectSnapshot(handle){
+  const snapshot={
+    schemaVersion:FOLDER_SNAPSHOT_VERSION,
+    savedAt:Date.now(),
+    folders:state.folders||[],
+    items:state.items||[],
+    settings:state.settings||{},
+  };
+  // نكتب ملفًا مؤقتًا ثم نستبدل محتواه في النهاية لتقليل احتمال بقاء JSON ناقص.
+  const tmp=await handle.getFileHandle("project.json.tmp",{create:true});
+  const w=await tmp.createWritable();
+  await w.write(JSON.stringify(snapshot));
+  await w.close();
+  const final=await handle.getFileHandle("project.json",{create:true});
+  const fw=await final.createWritable();
+  await fw.write(JSON.stringify(snapshot));
+  await fw.close();
+  try{ await handle.removeEntry("project.json.tmp"); }catch(e){}
+}
+
+async function syncFolderStorageNow(){
+  if(!linkedDirHandle || STORAGE_MODE==="memory") return;
+  const ok=await ensureFolderPermission(linkedDirHandle,false);
+  if(!ok) throw new Error("folder-permission-required");
+  folderSyncBusy=true; folderSyncError=null;
+  try{
+    await writeProjectSnapshot(linkedDirHandle);
+    const filesDir=await linkedDirHandle.getDirectoryHandle("files",{create:true});
+    const records=await idbGetAll_real("files");
+    const refs=referencedFileIds();
+    const live=new Set();
+    for(const rec of records){
+      if(!rec?.id || !refs.has(rec.id) || !rec.blob) continue;
+      const ext=guessExt(rec.mime,rec.name);
+      const filename=safeFileStem(rec.id)+ext;
+      live.add(filename);
+      const fh=await filesDir.getFileHandle(filename,{create:true});
+      const w=await fh.createWritable();
+      await w.write(rec.blob);
+      await w.close();
+    }
+    // حذف أي ملف موجود في مجلد النسخ وليس له مرجع حالي داخل البرنامج.
+    for await(const [fname,fh] of filesDir.entries()){
+      if(fh.kind!=="file") continue;
+      if(!live.has(fname)){
+        try{ await filesDir.removeEntry(fname); }catch(e){ console.warn("تعذر حذف ملف قديم من النسخة:",fname,e); }
+      }
+    }
+    try{ await idbPut_real("meta",{key:"lastFolderSyncAt",value:Date.now()}); }catch(e){}
+  }catch(e){
+    folderSyncError=e;
+    throw e;
+  }finally{ folderSyncBusy=false; }
+}
+
+function requestFolderSync(){
+  if(!linkedDirHandle || STORAGE_MODE==="memory") return Promise.resolve();
+  if(folderSyncTimer) clearTimeout(folderSyncTimer);
+  return new Promise(resolve=>{
+    folderSyncTimer=setTimeout(()=>{
+      folderSyncTimer=null;
+      folderSyncChain=folderSyncChain.catch(()=>{}).then(async()=>{
+        try{ await syncFolderStorageNow(); }
+        catch(e){ console.warn("فشل تحديث مجلد التخزين:",e); }
+      }).finally(resolve);
+    },120);
+  });
+}
+
+async function idbPut(storeName,value){
+  const p=STORAGE_MODE==="memory" ? memPut(storeName,value) : idbPut_real(storeName,value);
+  const result=await p;
+  // لا ننتظر المزامنة هنا لأن بعض مسارات البرنامج تحدّث state مباشرة بعد idbPut.
+  // نؤجلها قليلًا حتى تصبح state هي الحالة النهائية ثم نكتبها للمجلد.
+  if(linkedDirHandle && (storeName==="items" || storeName==="folders" || storeName==="files" || storeName==="meta")) requestFolderSync();
+  return result;
+}
+async function idbDelete(storeName,key){
+  const p=STORAGE_MODE==="memory" ? memDelete(storeName,key) : idbDelete_real(storeName,key);
+  await p;
+  if(linkedDirHandle && (storeName==="items" || storeName==="folders" || storeName==="files" || storeName==="meta")) requestFolderSync();
+}
+async function idbClear(storeName){
+  const p=STORAGE_MODE==="memory" ? memClear(storeName) : idbClear_real(storeName);
+  await p;
+  if(linkedDirHandle) requestFolderSync();
+}
+
+async function garbageCollectUnreferencedFiles(){
+  if(STORAGE_MODE==="memory") return;
+  const refs=referencedFileIds();
+  const records=await idbGetAll_real("files");
+  for(const rec of records){
+    if(rec?.id && !refs.has(rec.id)){
+      try{ await idbDelete_real("files",rec.id); }catch(e){}
+    }
+  }
+  if(linkedDirHandle) requestFolderSync();
+}
+
+async function saveAndFlag(storeName,value){
+  setSaveBadge("saving");
+  try{ await idbPut(storeName,value); }
+  catch(e){ setSaveBadge("idle"); throw e; }
+  finally{ setTimeout(()=>setSaveBadge("idle"),350); }
+}
+
+async function storeFile(blob,name,mime){
+  const id=uid("file");
+  await idbPut("files",{id,blob,name:name||"",mime:mime||blob.type||""});
   return id;
 }
 async function getFileBlobURL(fileId){
   if(!fileId) return null;
   if(state.objectUrls.has(fileId)) return state.objectUrls.get(fileId);
-  const rec = await idbGet("files", fileId);
+  const rec=await idbGet("files",fileId);
   if(!rec) return null;
-  const url = URL.createObjectURL(rec.blob);
-  state.objectUrls.set(fileId, url);
-  return url;
+  const url=URL.createObjectURL(rec.blob); state.objectUrls.set(fileId,url); return url;
 }
 async function deleteFile(fileId){
+  if(!fileId) return;
   if(state.objectUrls.has(fileId)){ URL.revokeObjectURL(state.objectUrls.get(fileId)); state.objectUrls.delete(fileId); }
-  await idbDelete("files", fileId);
+  await idbDelete("files",fileId);
 }
 
 /* =========================================================
-   مجلد نسخ احتياطي تلقائي على الجهاز (File System Access API)
-   متاح فقط في Chrome/Edge على الكمبيوتر، وفي Chrome على أندرويد
-   بالإصدارات الحديثة. يقوم بنسخ كل تعديل (بيانات + صور) تلقائيًا
-   إلى مجلد حقيقي على القرص، ويُستخدم للاسترجاع التلقائي لو فقدت
-   IndexedDB بياناتها لأي سبب (تصفح خاص، حذف تلقائي من المتصفح...).
+   مجلد التخزين المرتبط — ليس مجرد نسخة احتياطية: عند ربطه
+   يصبح هو المصدر الخارجي الفعلي، ويُعاد منه تحميل المشروع عند
+   فتح التطبيق. أي حذف من التطبيق = حذف فعلي من مجلد files.
    ========================================================= */
-const FS_ACCESS_SUPPORTED = (typeof window!=="undefined") && ("showDirectoryPicker" in window);
-let linkedDirHandle = null;
-
-async function ensureFolderPermission(handle){
-  if(!handle) return false;
-  try{
-    const opts = {mode:"readwrite"};
-    if((await handle.queryPermission(opts))==="granted") return true;
-    if((await handle.requestPermission(opts))==="granted") return true;
-  }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد:", e); }
-  return false;
-}
-async function mirrorFullSnapshotToFolder(){
-  if(!linkedDirHandle) return;
-  const ok = await ensureFolderPermission(linkedDirHandle);
-  if(!ok) return;
-  try{
-    const snapshot = { version:1, savedAt: Date.now(), folders: state.folders, items: state.items, settings: state.settings };
-    const fh = await linkedDirHandle.getFileHandle("project.json", {create:true});
-    const w = await fh.createWritable();
-    await w.write(JSON.stringify(snapshot));
-    await w.close();
-  }catch(e){ console.warn("فشل نسخ البيانات للمجلد:", e); }
-}
-async function mirrorFileToFolder(fileId, blob, name){
-  if(!linkedDirHandle || !fileId || !blob) return;
-  const ok = await ensureFolderPermission(linkedDirHandle);
-  if(!ok) return;
-  try{
-    const filesDir = await linkedDirHandle.getDirectoryHandle("files", {create:true});
-    const ext = guessExt(blob.type, name);
-    const fh = await filesDir.getFileHandle(fileId+ext, {create:true});
-    const w = await fh.createWritable();
-    await w.write(blob);
-    await w.close();
-  }catch(e){ console.warn("فشل نسخ ملف للمجلد:", e); }
-}
-const mirrorSnapshotDebounced = debounce(()=>{ mirrorFullSnapshotToFolder(); }, 1200);
-
 async function readFolderSnapshot(handle){
   try{
-    const fh = await handle.getFileHandle("project.json");
-    const file = await fh.getFile();
-    return JSON.parse(await file.text());
+    const fh=await handle.getFileHandle("project.json");
+    const file=await fh.getFile();
+    const snap=JSON.parse(await file.text());
+    if(!snap || !Array.isArray(snap.folders) || !Array.isArray(snap.items)) return null;
+    return snap;
   }catch(e){ return null; }
 }
-async function restoreAllFromFolder(handle, snap){
-  const gotFolders = Array.isArray(snap.folders) ? snap.folders : [];
-  const gotItems = Array.isArray(snap.items) ? snap.items : [];
-  state.folders = gotFolders; state.items = gotItems;
-  for(const f of state.folders) await idbPut_real("folders", f);
-  for(const it of state.items) await idbPut_real("items", it);
+
+async function restoreAllFromFolder(handle,snap){
+  const gotFolders=Array.isArray(snap?.folders)?snap.folders:[];
+  const gotItems=Array.isArray(snap?.items)?snap.items:[];
+  const gotSettings=snap?.settings && typeof snap.settings==="object" ? snap.settings : null;
+
+  // المجلد هو المصدر: امسح طبقة IndexedDB ثم أعد بناءها من محتوى المجلد.
+  await idbClear_real("folders"); await idbClear_real("items"); await idbClear_real("files");
+  for(const f of gotFolders) await idbPut_real("folders",f);
+  for(const it of gotItems) await idbPut_real("items",it);
+  if(gotSettings) await idbPut_real("meta",{key:"settings",value:gotSettings});
+
+  const present=new Set();
   try{
-    const filesDir = await handle.getDirectoryHandle("files");
-    for await (const [fname, fhandle] of filesDir.entries()){
+    const filesDir=await handle.getDirectoryHandle("files");
+    for await(const [fname,fhandle] of filesDir.entries()){
       if(fhandle.kind!=="file") continue;
-      const dot = fname.lastIndexOf(".");
-      const fileId = dot!==-1 ? fname.slice(0,dot) : fname;
-      const fileBlob = await fhandle.getFile();
-      await idbPut_real("files", {id:fileId, blob:fileBlob, name:fname, mime:fileBlob.type||""});
+      const fileId=fileIdFromBackupName(fname);
+      if(!fileId) continue;
+      const fileBlob=await fhandle.getFile();
+      await idbPut_real("files",{id:fileId,blob:fileBlob,name:fname,mime:fileBlob.type||""});
+      present.add(fileId);
     }
-  }catch(e){ console.warn("تعذر استرجاع الملفات من المجلد:", e); }
+  }catch(e){ /* مجلد files قد لا يكون موجودًا في نسخة قديمة */ }
+
+  state.folders=gotFolders; state.items=gotItems;
+  if(gotSettings) state.settings=Object.assign(state.settings,gotSettings);
+  // تنظيف مراجع الملفات التي لم تعد موجودة فعليًا في المجلد.
+  for(const it of state.items){
+    it.imageIds=(it.imageIds||[]).filter(id=>present.has(id));
+    if(it.mainImageId && !present.has(it.mainImageId)) it.mainImageId=it.imageIds[0]||null;
+    it.docs=(it.docs||[]).filter(d=>d?.fileId && present.has(d.fileId));
+    if(it.notebookData?.images) it.notebookData.images=it.notebookData.images.filter(x=>present.has(x.id));
+    const ft=it.notebookData?.faultTracking;
+    if(ft?.pages) ft.pages.forEach(pg=>{
+      if(pg.imageId && !present.has(pg.imageId)) pg.imageId=null;
+      (pg.hotspots||[]).forEach(h=>{ if(h.content?.images) h.content.images=h.content.images.filter(x=>present.has(x.id)); });
+    });
+    await idbPut_real("items",it);
+  }
 }
 
 async function linkBackupFolder(){
-  if(!FS_ACCESS_SUPPORTED){
-    toast("هذه الميزة غير مدعومة في هذا المتصفح (متاحة في Chrome/Edge على الكمبيوتر أو أندرويد).", "err", 5000);
-    return;
-  }
+  if(!FS_ACCESS_SUPPORTED){ toast("هذا المتصفح لا يدعم ربط مجلد حقيقي. استخدم Chrome/Edge بإصدار يدعم File System Access API.","err",6000); return; }
   try{
-    const handle = await window.showDirectoryPicker({mode:"readwrite"});
-    const granted = await ensureFolderPermission(handle);
-    if(!granted){ toast("لم يتم منح صلاحية الكتابة على هذا المجلد.", "err"); return; }
-    linkedDirHandle = handle;
-    await idbPut("meta", {key:"linkedDir", value:handle});
+    const handle=await window.showDirectoryPicker({mode:"readwrite"});
+    const granted=await ensureFolderPermission(handle,true);
+    if(!granted){ toast("لم يتم منح صلاحية الكتابة على المجلد.","err"); return; }
+    linkedDirHandle=handle;
+    await idbPut_real("meta",{key:"linkedDir",value:handle});
 
-    // ربط مزدوج: لو المجلد فيه بيانات محفوظة من قبل نتعرّف عليها ونبدأ التخزين
-    // فوقها، ولو فارغ نبدأ تخزين بيانات التطبيق الحالية فيه من جديد.
-    const snap = await readFolderSnapshot(handle);
-    const folderHasData = !!(snap && (((snap.folders||[]).length) || ((snap.items||[]).length)));
-
-    if(folderHasData){
-      const appHasData = state.folders.length || state.items.length;
-      let useFolderData = true;
-      if(appHasData){
-        useFolderData = confirm(
-          "هذا المجلد يحتوي على بيانات محفوظة مسبقًا ("+((snap.items||[]).length)+" عنصر، "+((snap.folders||[]).length)+" مجلد).\n\n"+
-          "اضغط \"موافق\" لتحميل بيانات المجلد (ستحل محل بيانات التطبيق الحالية).\n"+
-          "اضغط \"إلغاء\" للاحتفاظ ببيانات التطبيق الحالية ونسخها فوق بيانات المجلد."
-        );
-      }
-      if(useFolderData){
-        await restoreAllFromFolder(handle, snap);
-        renderSidebarTree();
-        navigateTo({type:"home"});
-        toast("✅ تم التعرف على بيانات المجلد وتحميلها بنجاح — سيُحدَّث تلقائيًا مع كل تعديل من الآن.", "ok", 6000);
+    const snap=await readFolderSnapshot(handle);
+    if(snap){
+      const useFolder=confirm(
+        "تم العثور على مشروع محفوظ داخل هذا المجلد ("+(snap.items||[]).length+" عنصر، "+(snap.folders||[]).length+" مجلد).\n\n"+
+        "موافق = استخدام محتوى المجلد كمصدر المشروع.\nإلغاء = الاحتفاظ بالمشروع الحالي وكتابته فوق المجلد."
+      );
+      if(useFolder){
+        await restoreAllFromFolder(handle,snap);
+        applyTheme(state.settings.theme||"amber");
+        renderSidebarTree(); navigateTo({type:"home"});
+        toast("✅ تم تفعيل المجلد كمصدر التخزين الفعلي للمشروع.","ok",6000);
+        renderFolderLinkStatus();
         return;
       }
     }
-    // المجلد فارغ، أو تم اختيار الاحتفاظ ببيانات التطبيق: نبدأ التخزين عليه من الحالة الحالية
-    await mirrorFullSnapshotToFolder();
-    const filesAll = await idbGetAll("files");
-    for(const f of filesAll){ await mirrorFileToFolder(f.id, f.blob, f.name); }
-    toast("تم ربط المجلد وبدء الحفظ التلقائي فيه.", "ok");
+    await syncFolderStorageNow();
+    toast("✅ تم ربط المجلد. من الآن كل حفظ وتعديل وحذف يُكتب إليه تلقائيًا.","ok",5000);
   }catch(e){
-    if(e && e.name!=="AbortError") toast("تعذر ربط المجلد: "+(e.message||e), "err");
+    if(e?.name!=="AbortError") toast("تعذر ربط المجلد: "+(e.message||e),"err");
   }
+  renderFolderLinkStatus();
+}
+
+async function activateLinkedFolder(){
+  if(!linkedDirHandle){ return linkBackupFolder(); }
+  const ok=await ensureFolderPermission(linkedDirHandle,true);
+  if(!ok){ toast("لم تُمنح صلاحية المجلد.","err"); return; }
+  await requestFolderSync();
+  toast("🟢 تم تفعيل صلاحية المجلد وسيستمر الحفظ التلقائي عليه.","ok");
+  renderFolderLinkStatus();
 }
 async function unlinkBackupFolder(){
-  linkedDirHandle = null;
-  try{ await idbDelete("meta", "linkedDir"); }catch(e){}
-  toast("تم فصل المجلد — لن يُنسخ إليه أي تعديل بعد الآن.", "ok");
+  linkedDirHandle=null;
+  try{ await idbDelete_real("meta","linkedDir"); }catch(e){}
+  toast("تم فصل مجلد التخزين. سيستمر البرنامج باستخدام IndexedDB.","ok");
+  renderFolderLinkStatus();
 }
 function renderFolderLinkStatus(){
-  const box = document.getElementById("folderLinkStatus");
-  const linkBtn = document.getElementById("linkFolderBtn");
-  const unlinkBtn = document.getElementById("unlinkFolderBtn");
+  const box=document.getElementById("folderLinkStatus");
+  const linkBtn=document.getElementById("linkFolderBtn");
+  const unlinkBtn=document.getElementById("unlinkFolderBtn");
   if(!box) return;
   if(!FS_ACCESS_SUPPORTED){
-    box.innerHTML = "⚠️ متصفحك لا يدعم ربط مجلد حقيقي (مدعوم في Chrome/Edge على الكمبيوتر، وفي Chrome على أندرويد بالإصدارات الحديثة).";
-    if(linkBtn) linkBtn.disabled = true;
+    box.innerHTML="⚠️ المتصفح لا يدعم ربط مجلد حقيقي.";
+    if(linkBtn){ linkBtn.disabled=true; linkBtn.style.display=""; linkBtn.textContent="🗂 ربط مجلد"; }
+    if(unlinkBtn) unlinkBtn.style.display="none";
     return;
   }
   if(linkedDirHandle){
-    box.innerHTML = "🟢 مرتبط بمجلد: <b>"+esc(linkedDirHandle.name||"")+"</b> — يتم النسخ إليه تلقائيًا.";
-    if(linkBtn) linkBtn.style.display = "none";
-    if(unlinkBtn) unlinkBtn.style.display = "";
-  } else {
-    box.innerHTML = "🔴 غير مرتبط بأي مجلد حاليًا.";
-    if(linkBtn) linkBtn.style.display = "";
-    if(unlinkBtn) unlinkBtn.style.display = "none";
+    box.innerHTML="🟡 مرتبط بالمجلد <b>"+esc(linkedDirHandle.name||"")+"</b> — اضغط تفعيل إذا طلب المتصفح الصلاحية.";
+    if(linkBtn){ linkBtn.disabled=false; linkBtn.style.display=""; linkBtn.textContent="🟢 تفعيل / مزامنة المجلد"; }
+    if(unlinkBtn) unlinkBtn.style.display="";
+  }else{
+    box.innerHTML="🔴 لا يوجد مجلد تخزين مرتبط.";
+    if(linkBtn){ linkBtn.disabled=false; linkBtn.style.display=""; linkBtn.textContent="🗂 ربط مجلد التخزين"; }
+    if(unlinkBtn) unlinkBtn.style.display="none";
   }
 }
 
@@ -5393,22 +5495,24 @@ async function boot(){
   if(settingsRow && settingsRow.value) state.settings = Object.assign(state.settings, settingsRow.value);
   applyTheme(state.settings.theme || "amber");
 
-  // لو فيه مجلد نسخ احتياطي مرتبط من قبل: تحقق من الصلاحية، ولو IndexedDB
-  // رجعت فاضية (فقدان بيانات) بينما المجلد فيه نسخة محفوظة، استرجعها تلقائيًا
+  // إذا كان هناك مجلد مرتبط سابقًا، فملف project.json داخله هو المصدر الخارجي
+  // الفعلي. لا نستخدم IndexedDB بدلًا منه؛ نحمّل منه عند فتح البرنامج كلما كانت
+  // الصلاحية متاحة. إذا كانت الصلاحية تحتاج تفاعلًا من المستخدم، تظهر حالة
+  // "تفعيل" في الإعدادات بدل محاولة requestPermission خارج gesture.
   if(STORAGE_MODE!=="memory"){
     const linkedDirRow = metaRows.find(m=>m.key==="linkedDir");
     if(linkedDirRow && linkedDirRow.value){
       linkedDirHandle = linkedDirRow.value;
       try{
-        const granted = await ensureFolderPermission(linkedDirHandle);
-        if(granted && !state.folders.length && !state.items.length){
+        const granted = await ensureFolderPermission(linkedDirHandle,false);
+        if(granted){
           const snap = await readFolderSnapshot(linkedDirHandle);
-          if(snap && (((snap.folders||[]).length) || ((snap.items||[]).length))){
-            await restoreAllFromFolder(linkedDirHandle, snap);
-            toast("⚠️ تم اكتشاف فقدان في بيانات المتصفح، وتمت استعادتها تلقائيًا من المجلد المرتبط.", "ok", 7000);
+          if(snap){
+            await restoreAllFromFolder(linkedDirHandle,snap);
+            applyTheme(state.settings.theme || "amber");
           }
         }
-      }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد المرتبط:", e); }
+      }catch(e){ console.warn("تعذر تحميل التخزين من المجلد المرتبط:",e); }
     }
   }
 
@@ -5453,9 +5557,9 @@ async function boot(){
     }catch(e){}
   }
 
-  // نبضة حفظ دورية: كل بضع ثوانٍ، لو فيه مجلد نسخ احتياطي مرتبط، ننسخ آخر حالة
-  // للبيانات إليه — بالإضافة للنسخ الفوري عند كل تعديل — كضمان إضافي.
-  setInterval(()=>{ if(linkedDirHandle) mirrorFullSnapshotToFolder(); }, 8000);
+  // فحص خفيف للتأكد من أن المجلد ما زال متاحًا. المزامنة الأساسية تتم بعد كل عملية
+  // حفظ/تعديل/حذف، وليس بالاعتماد على مؤقت فقط.
+  setInterval(()=>{ if(linkedDirHandle && !folderSyncBusy) requestFolderSync(); }, 5000);
 }
 
 async function saveSettings(){
@@ -5898,6 +6002,8 @@ async function confirmDeleteItem(itemId){
   for(const d of (it.docs||[])) await deleteFile(d.fileId);
   await idbDelete("items", itemId);
   state.items = state.items.filter(i=>i.id!==itemId);
+  await garbageCollectUnreferencedFiles();
+  await requestFolderSync();
   toast("تم حذف العنصر", "ok");
   navigateTo({type:"folder", id: it.folderId});
   renderSidebarTree();
@@ -6082,15 +6188,23 @@ function openFolderModal(folderId, parentId){
 }
 
 async function deleteFolderDeep(folderId){
-  for(const child of getChildFolders(folderId)) await deleteFolderDeep(child.id);
-  for(const it of getItemsInFolder(folderId)){
+  const ids=new Set();
+  function collect(fid){
+    ids.add(fid);
+    for(const c of getChildFolders(fid)) collect(c.id);
+  }
+  collect(folderId);
+  const doomedItems=state.items.filter(it=>ids.has(it.folderId));
+  for(const it of doomedItems){
     for(const fid of (it.imageIds||[])) await deleteFile(fid);
     for(const d of (it.docs||[])) await deleteFile(d.fileId);
-    await idbDelete("items", it.id);
   }
-  state.items = state.items.filter(i=>i.folderId!==folderId);
-  await idbDelete("folders", folderId);
-  state.folders = state.folders.filter(f=>f.id!==folderId);
+  for(const it of doomedItems) await idbDelete("items",it.id);
+  for(const fid of ids) await idbDelete("folders",fid);
+  state.items=state.items.filter(it=>!ids.has(it.folderId));
+  state.folders=state.folders.filter(f=>!ids.has(f.id));
+  await garbageCollectUnreferencedFiles();
+  await requestFolderSync();
 }
 
 /* =========================================================
@@ -6386,10 +6500,10 @@ async function renderSettingsView(c){
         <div class="stat-card"><div class="num">${filesCount}</div><div class="lbl">ملفات (صور/مستندات)</div></div>
         <div class="stat-card good"><div class="num" style="font-size:15px">${sizeStr}</div><div class="lbl">المساحة التقريبية المستخدمة</div></div>
       </div>
-      <div style="font-size:11.5px;color:var(--dim2)">البيانات مخزّنة محليًا في هذا المتصفح فقط (IndexedDB). استخدم التصدير أدناه لعمل نسخة احتياطية.</div>
+      <div style="font-size:11.5px;color:var(--dim2)">IndexedDB طبقة تشغيل سريعة. عند ربط مجلد التخزين يصبح محتوى المجلد هو النسخة الخارجية الفعلية للمشروع، وكل حفظ/تعديل/حذف ومرفق تتم مزامنته معه تلقائيًا.</div>
     </div>
     <div class="panel">
-      <h3>🗂 مجلد نسخ احتياطي تلقائي على الجهاز</h3>
+      <h3>🗂 مجلد التخزين الفعلي والتزامن التلقائي</h3>
       <div style="font-size:11.5px;color:var(--dim2);margin-bottom:8px">
         اربط مجلدًا حقيقيًا على جهازك (كمبيوتر أو أندرويد عبر Chrome/Edge)، وسيقوم البرنامج بنسخ كل تعديل (بيانات وصور) إليه تلقائيًا فور حدوثه. لو تصفح البرنامج بعد كده حذف بيانات IndexedDB لأي سبب، هيسترجع تلقائيًا من هذا المجلد عند إعادة الفتح.
       </div>
@@ -6421,16 +6535,21 @@ async function renderSettingsView(c){
     grid.appendChild(sw);
   });
   renderFolderLinkStatus();
-  document.getElementById("linkFolderBtn").onclick = async ()=>{ await linkBackupFolder(); renderFolderLinkStatus(); };
+  document.getElementById("linkFolderBtn").onclick = async ()=>{
+    if(linkedDirHandle) await activateLinkedFolder();
+    else await linkBackupFolder();
+    renderFolderLinkStatus();
+  };
   document.getElementById("unlinkFolderBtn").onclick = async ()=>{ await unlinkBackupFolder(); renderFolderLinkStatus(); };
   document.getElementById("exportBtn").onclick = exportProject;
   document.getElementById("importBtn").onclick = ()=> document.getElementById("hiddenImportInput").click();
   document.getElementById("wipeBtn").onclick = async ()=>{
     if(!confirm("سيتم حذف كل المجلدات والعناصر والصور نهائيًا من هذا المتصفح. متابعة؟")) return;
     if(!confirm("تأكيد أخير: هذا الإجراء لا يمكن التراجع عنه.")) return;
-    await idbClear("folders"); await idbClear("items"); await idbClear("files");
     state.folders = []; state.items = [];
+    await idbClear("folders"); await idbClear("items"); await idbClear("files");
     state.objectUrls.forEach(u=>URL.revokeObjectURL(u)); state.objectUrls.clear();
+    await requestFolderSync();
     toast("تم حذف كل البيانات", "ok");
     renderSidebarTree();
     navigateTo({type:"home"});
@@ -8650,7 +8769,7 @@ function nbTextPanel(body, s, item){
       acts.className='nb-photo-actions';
       const delBtn=document.createElement('button');
       delBtn.type='button'; delBtn.className='btn small danger'; delBtn.textContent='🗑 حذف';
-      delBtn.onclick=()=>{ s.images.splice(i,1); nbScheduleSave(item); renderGallery(); };
+      delBtn.onclick=async ()=>{ const removed=s.images.splice(i,1)[0]; nbScheduleSave(item); await garbageCollectUnreferencedFiles(); await requestFolderSync(); renderGallery(); };
       acts.appendChild(delBtn);
       card.append(img, cap, acts);
       gallery.appendChild(card);
@@ -9454,7 +9573,9 @@ function nbFaultPanel(body, s, item){
       if(idx!==-1) ft.pages.splice(idx,1);
       activeId = ft.pages[0] ? ft.pages[0].id : null;
       ft.activePageId=activeId; activeLayerId=null;
-      nbScheduleSave(item); render();
+      nbScheduleSave(item);
+      garbageCollectUnreferencedFiles().then(()=>requestFolderSync());
+      render();
     };
     toolbar.append(nameInput, modeBtns, delPageBtn);
     root.appendChild(toolbar);
