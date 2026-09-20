@@ -5127,8 +5127,17 @@ function memClear(storeName){ memoryDB[storeName].clear(); return Promise.resolv
 /* ---- الواجهة الموحّدة المستخدمة في باقي التطبيق ---- */
 function idbGetAll(storeName){ return STORAGE_MODE==="memory" ? memGetAll(storeName) : idbGetAll_real(storeName); }
 function idbGet(storeName, key){ return STORAGE_MODE==="memory" ? memGet(storeName, key) : idbGet_real(storeName, key); }
-function idbPut(storeName, value){ return STORAGE_MODE==="memory" ? memPut(storeName, value) : idbPut_real(storeName, value); }
-function idbDelete(storeName, key){ return STORAGE_MODE==="memory" ? memDelete(storeName, key) : idbDelete_real(storeName, key); }
+function idbPut(storeName, value){
+  const p = STORAGE_MODE==="memory" ? memPut(storeName, value) : idbPut_real(storeName, value);
+  if(storeName==="items" || storeName==="folders") p.then(()=>{ try{ mirrorSnapshotDebounced(); }catch(e){} });
+  if(storeName==="files") p.then(()=>{ try{ mirrorFileToFolder(value.id, value.blob, value.name); }catch(e){} });
+  return p;
+}
+function idbDelete(storeName, key){
+  const p = STORAGE_MODE==="memory" ? memDelete(storeName, key) : idbDelete_real(storeName, key);
+  if(storeName==="items" || storeName==="folders") p.then(()=>{ try{ mirrorSnapshotDebounced(); }catch(e){} });
+  return p;
+}
 function idbClear(storeName){ return STORAGE_MODE==="memory" ? memClear(storeName) : idbClear_real(storeName); }
 
 async function saveAndFlag(storeName, value){
@@ -5158,6 +5167,147 @@ async function getFileBlobURL(fileId){
 async function deleteFile(fileId){
   if(state.objectUrls.has(fileId)){ URL.revokeObjectURL(state.objectUrls.get(fileId)); state.objectUrls.delete(fileId); }
   await idbDelete("files", fileId);
+}
+
+/* =========================================================
+   مجلد نسخ احتياطي تلقائي على الجهاز (File System Access API)
+   متاح فقط في Chrome/Edge على الكمبيوتر، وفي Chrome على أندرويد
+   بالإصدارات الحديثة. يقوم بنسخ كل تعديل (بيانات + صور) تلقائيًا
+   إلى مجلد حقيقي على القرص، ويُستخدم للاسترجاع التلقائي لو فقدت
+   IndexedDB بياناتها لأي سبب (تصفح خاص، حذف تلقائي من المتصفح...).
+   ========================================================= */
+const FS_ACCESS_SUPPORTED = (typeof window!=="undefined") && ("showDirectoryPicker" in window);
+let linkedDirHandle = null;
+
+async function ensureFolderPermission(handle){
+  if(!handle) return false;
+  try{
+    const opts = {mode:"readwrite"};
+    if((await handle.queryPermission(opts))==="granted") return true;
+    if((await handle.requestPermission(opts))==="granted") return true;
+  }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد:", e); }
+  return false;
+}
+async function mirrorFullSnapshotToFolder(){
+  if(!linkedDirHandle) return;
+  const ok = await ensureFolderPermission(linkedDirHandle);
+  if(!ok) return;
+  try{
+    const snapshot = { version:1, savedAt: Date.now(), folders: state.folders, items: state.items, settings: state.settings };
+    const fh = await linkedDirHandle.getFileHandle("project.json", {create:true});
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(snapshot));
+    await w.close();
+  }catch(e){ console.warn("فشل نسخ البيانات للمجلد:", e); }
+}
+async function mirrorFileToFolder(fileId, blob, name){
+  if(!linkedDirHandle || !fileId || !blob) return;
+  const ok = await ensureFolderPermission(linkedDirHandle);
+  if(!ok) return;
+  try{
+    const filesDir = await linkedDirHandle.getDirectoryHandle("files", {create:true});
+    const ext = guessExt(blob.type, name);
+    const fh = await filesDir.getFileHandle(fileId+ext, {create:true});
+    const w = await fh.createWritable();
+    await w.write(blob);
+    await w.close();
+  }catch(e){ console.warn("فشل نسخ ملف للمجلد:", e); }
+}
+const mirrorSnapshotDebounced = debounce(()=>{ mirrorFullSnapshotToFolder(); }, 1200);
+
+async function readFolderSnapshot(handle){
+  try{
+    const fh = await handle.getFileHandle("project.json");
+    const file = await fh.getFile();
+    return JSON.parse(await file.text());
+  }catch(e){ return null; }
+}
+async function restoreAllFromFolder(handle, snap){
+  const gotFolders = Array.isArray(snap.folders) ? snap.folders : [];
+  const gotItems = Array.isArray(snap.items) ? snap.items : [];
+  state.folders = gotFolders; state.items = gotItems;
+  for(const f of state.folders) await idbPut_real("folders", f);
+  for(const it of state.items) await idbPut_real("items", it);
+  try{
+    const filesDir = await handle.getDirectoryHandle("files");
+    for await (const [fname, fhandle] of filesDir.entries()){
+      if(fhandle.kind!=="file") continue;
+      const dot = fname.lastIndexOf(".");
+      const fileId = dot!==-1 ? fname.slice(0,dot) : fname;
+      const fileBlob = await fhandle.getFile();
+      await idbPut_real("files", {id:fileId, blob:fileBlob, name:fname, mime:fileBlob.type||""});
+    }
+  }catch(e){ console.warn("تعذر استرجاع الملفات من المجلد:", e); }
+}
+
+async function linkBackupFolder(){
+  if(!FS_ACCESS_SUPPORTED){
+    toast("هذه الميزة غير مدعومة في هذا المتصفح (متاحة في Chrome/Edge على الكمبيوتر أو أندرويد).", "err", 5000);
+    return;
+  }
+  try{
+    const handle = await window.showDirectoryPicker({mode:"readwrite"});
+    const granted = await ensureFolderPermission(handle);
+    if(!granted){ toast("لم يتم منح صلاحية الكتابة على هذا المجلد.", "err"); return; }
+    linkedDirHandle = handle;
+    await idbPut("meta", {key:"linkedDir", value:handle});
+
+    // ربط مزدوج: لو المجلد فيه بيانات محفوظة من قبل نتعرّف عليها ونبدأ التخزين
+    // فوقها، ولو فارغ نبدأ تخزين بيانات التطبيق الحالية فيه من جديد.
+    const snap = await readFolderSnapshot(handle);
+    const folderHasData = !!(snap && (((snap.folders||[]).length) || ((snap.items||[]).length)));
+
+    if(folderHasData){
+      const appHasData = state.folders.length || state.items.length;
+      let useFolderData = true;
+      if(appHasData){
+        useFolderData = confirm(
+          "هذا المجلد يحتوي على بيانات محفوظة مسبقًا ("+((snap.items||[]).length)+" عنصر، "+((snap.folders||[]).length)+" مجلد).\n\n"+
+          "اضغط \"موافق\" لتحميل بيانات المجلد (ستحل محل بيانات التطبيق الحالية).\n"+
+          "اضغط \"إلغاء\" للاحتفاظ ببيانات التطبيق الحالية ونسخها فوق بيانات المجلد."
+        );
+      }
+      if(useFolderData){
+        await restoreAllFromFolder(handle, snap);
+        renderSidebarTree();
+        navigateTo({type:"home"});
+        toast("✅ تم التعرف على بيانات المجلد وتحميلها بنجاح — سيُحدَّث تلقائيًا مع كل تعديل من الآن.", "ok", 6000);
+        return;
+      }
+    }
+    // المجلد فارغ، أو تم اختيار الاحتفاظ ببيانات التطبيق: نبدأ التخزين عليه من الحالة الحالية
+    await mirrorFullSnapshotToFolder();
+    const filesAll = await idbGetAll("files");
+    for(const f of filesAll){ await mirrorFileToFolder(f.id, f.blob, f.name); }
+    toast("تم ربط المجلد وبدء الحفظ التلقائي فيه.", "ok");
+  }catch(e){
+    if(e && e.name!=="AbortError") toast("تعذر ربط المجلد: "+(e.message||e), "err");
+  }
+}
+async function unlinkBackupFolder(){
+  linkedDirHandle = null;
+  try{ await idbDelete("meta", "linkedDir"); }catch(e){}
+  toast("تم فصل المجلد — لن يُنسخ إليه أي تعديل بعد الآن.", "ok");
+}
+function renderFolderLinkStatus(){
+  const box = document.getElementById("folderLinkStatus");
+  const linkBtn = document.getElementById("linkFolderBtn");
+  const unlinkBtn = document.getElementById("unlinkFolderBtn");
+  if(!box) return;
+  if(!FS_ACCESS_SUPPORTED){
+    box.innerHTML = "⚠️ متصفحك لا يدعم ربط مجلد حقيقي (مدعوم في Chrome/Edge على الكمبيوتر، وفي Chrome على أندرويد بالإصدارات الحديثة).";
+    if(linkBtn) linkBtn.disabled = true;
+    return;
+  }
+  if(linkedDirHandle){
+    box.innerHTML = "🟢 مرتبط بمجلد: <b>"+esc(linkedDirHandle.name||"")+"</b> — يتم النسخ إليه تلقائيًا.";
+    if(linkBtn) linkBtn.style.display = "none";
+    if(unlinkBtn) unlinkBtn.style.display = "";
+  } else {
+    box.innerHTML = "🔴 غير مرتبط بأي مجلد حاليًا.";
+    if(linkBtn) linkBtn.style.display = "";
+    if(unlinkBtn) unlinkBtn.style.display = "none";
+  }
 }
 
 /* =========================================================
@@ -5208,6 +5358,22 @@ function isDescendantFolder(folderId, possibleParentId){
 }
 
 /* =========================================================
+   بانر تحذير ثابت (لا يختفي تلقائيًا مثل التوست) لمشاكل التخزين
+   ========================================================= */
+function showStorageBanner(msg, kind){
+  let bar = document.getElementById("storageWarnBar");
+  if(!bar){
+    bar = document.createElement("div");
+    bar.id = "storageWarnBar";
+    bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;padding:10px 14px;font-size:13px;font-weight:700;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.35);";
+    document.body.appendChild(bar);
+  }
+  bar.style.background = kind==="err" ? "#5a1a1a" : "#5a4412";
+  bar.style.color = "#fff";
+  bar.textContent = msg;
+}
+
+/* =========================================================
    الإقلاع
    ========================================================= */
 async function boot(){
@@ -5227,6 +5393,25 @@ async function boot(){
   if(settingsRow && settingsRow.value) state.settings = Object.assign(state.settings, settingsRow.value);
   applyTheme(state.settings.theme || "amber");
 
+  // لو فيه مجلد نسخ احتياطي مرتبط من قبل: تحقق من الصلاحية، ولو IndexedDB
+  // رجعت فاضية (فقدان بيانات) بينما المجلد فيه نسخة محفوظة، استرجعها تلقائيًا
+  if(STORAGE_MODE!=="memory"){
+    const linkedDirRow = metaRows.find(m=>m.key==="linkedDir");
+    if(linkedDirRow && linkedDirRow.value){
+      linkedDirHandle = linkedDirRow.value;
+      try{
+        const granted = await ensureFolderPermission(linkedDirHandle);
+        if(granted && !state.folders.length && !state.items.length){
+          const snap = await readFolderSnapshot(linkedDirHandle);
+          if(snap && (((snap.folders||[]).length) || ((snap.items||[]).length))){
+            await restoreAllFromFolder(linkedDirHandle, snap);
+            toast("⚠️ تم اكتشاف فقدان في بيانات المتصفح، وتمت استعادتها تلقائيًا من المجلد المرتبط.", "ok", 7000);
+          }
+        }
+      }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد المرتبط:", e); }
+    }
+  }
+
   bindGlobalEvents();
   renderSidebarTree();
   navigateTo({type:"home"});
@@ -5237,6 +5422,7 @@ async function boot(){
     const badge = document.getElementById("saveBadgeText");
     if(badge) badge.textContent = "⚠️ التخزين الدائم غير متاح";
     toast("تحذير: المتصفح منع IndexedDB، البيانات الحالية مؤقتة.", "err");
+    showStorageBanner("⚠️ التخزين الدائم غير متاح في هذا المتصفح — أي عنصر تضيفه الآن سيُفقد فور إغلاق الصفحة. صدّر نسخة ZIP فورًا كل مرة قبل الإغلاق.", "err");
 
     window.addEventListener("beforeunload", (e)=>{
       if(state.folders.length || state.items.length){
@@ -5244,7 +5430,32 @@ async function boot(){
         e.returnValue = "";
       }
     });
+  } else {
+    // نطلب من المتصفح تخزينًا "دائمًا" (Persistent Storage) لتقليل احتمال أن يحذف
+    // المتصفح بيانات IndexedDB تلقائيًا عند ضغط المساحة أو عدم الاستخدام لفترة (خاصة
+    // على الموبايل وفي أوضاع التصفح الخفي/الوضع الخاص، وهو السبب الأشهر لفقدان
+    // العناصر بعد إغلاق التطبيق وإعادة فتحه رغم عدم ظهور أي خطأ وقت الحفظ).
+    try{
+      if(navigator.storage && navigator.storage.persist){
+        const already = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+        if(!already) await navigator.storage.persist();
+      }
+    }catch(e){ console.warn("storage.persist() غير متاح:", e); }
+
+    // تذكير بالنسخ الاحتياطي: لو مفيش تصدير منذ فترة طويلة (أو أبدًا) ويوجد بيانات فعلية
+    try{
+      const backupRow = metaRows.find(m=>m.key==="lastBackupAt");
+      const lastBackupAt = backupRow ? backupRow.value : null;
+      const hasData = (state.folders.length || state.items.length);
+      if(hasData && (!lastBackupAt || (Date.now()-lastBackupAt) > 7*24*3600*1000)){
+        toast("💡 تذكير: لم يتم تصدير نسخة ZIP احتياطية منذ فترة طويلة — يُفضّل تصديرها بانتظام حماية للبيانات.", "warn", 6000);
+      }
+    }catch(e){}
   }
+
+  // نبضة حفظ دورية: كل بضع ثوانٍ، لو فيه مجلد نسخ احتياطي مرتبط، ننسخ آخر حالة
+  // للبيانات إليه — بالإضافة للنسخ الفوري عند كل تعديل — كضمان إضافي.
+  setInterval(()=>{ if(linkedDirHandle) mirrorFullSnapshotToFolder(); }, 8000);
 }
 
 async function saveSettings(){
@@ -6178,6 +6389,17 @@ async function renderSettingsView(c){
       <div style="font-size:11.5px;color:var(--dim2)">البيانات مخزّنة محليًا في هذا المتصفح فقط (IndexedDB). استخدم التصدير أدناه لعمل نسخة احتياطية.</div>
     </div>
     <div class="panel">
+      <h3>🗂 مجلد نسخ احتياطي تلقائي على الجهاز</h3>
+      <div style="font-size:11.5px;color:var(--dim2);margin-bottom:8px">
+        اربط مجلدًا حقيقيًا على جهازك (كمبيوتر أو أندرويد عبر Chrome/Edge)، وسيقوم البرنامج بنسخ كل تعديل (بيانات وصور) إليه تلقائيًا فور حدوثه. لو تصفح البرنامج بعد كده حذف بيانات IndexedDB لأي سبب، هيسترجع تلقائيًا من هذا المجلد عند إعادة الفتح.
+      </div>
+      <div id="folderLinkStatus" style="font-size:12px;margin-bottom:8px;"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn primary" id="linkFolderBtn">🗂 ربط مجلد للنسخ التلقائي</button>
+        <button class="btn danger small" id="unlinkFolderBtn" style="display:none">فصل المجلد</button>
+      </div>
+    </div>
+    <div class="panel">
       <h3>📦 تصدير / استيراد</h3>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
         <button class="btn primary" id="exportBtn">⬇️ تصدير نسخة كاملة (ZIP)</button>
@@ -6198,6 +6420,9 @@ async function renderSettingsView(c){
     sw.onclick = async ()=>{ applyTheme(t.v); await saveSettings(); renderSettingsView(c); };
     grid.appendChild(sw);
   });
+  renderFolderLinkStatus();
+  document.getElementById("linkFolderBtn").onclick = async ()=>{ await linkBackupFolder(); renderFolderLinkStatus(); };
+  document.getElementById("unlinkFolderBtn").onclick = async ()=>{ await unlinkBackupFolder(); renderFolderLinkStatus(); };
   document.getElementById("exportBtn").onclick = exportProject;
   document.getElementById("importBtn").onclick = ()=> document.getElementById("hiddenImportInput").click();
   document.getElementById("wipeBtn").onclick = async ()=>{
@@ -6312,6 +6537,9 @@ async function exportProject(){
     }else{
       toast("تم تصدير النسخة بنجاح (تشمل الفئات ودفاتر الملاحظات والرسم والخرائط الذهنية)", "ok");
     }
+    try{ await idbPut("meta", {key:"lastBackupAt", value: Date.now()}); }catch(e){}
+    const bar = document.getElementById("storageWarnBar");
+    if(bar && STORAGE_MODE!=="memory") bar.remove();
   }catch(err){
     console.error(err);
     toast("فشل التصدير: " + (err.message||err), "err");
@@ -7941,6 +8169,9 @@ renderSidebarTree = function(){
 .ft-view-caption{font-size:11px;color:var(--dim);margin-top:5px;}
 .ft-draw-preview-wrap{border:1px solid var(--border);border-radius:9px;overflow:hidden;background:#fff;}
 .ft-draw-preview-wrap canvas{display:block;width:100%;}
+.ft-caption-wrap{display:flex;flex-direction:column;gap:6px;}
+.ft-caption-editor{min-height:70px;}
+.ft-caption-view{background:var(--panel3);border:1px solid var(--border);border-radius:9px;padding:10px 12px;}
 </style>
 
 <script id="native-technical-notebook">
@@ -7984,6 +8215,7 @@ function ensureFaultTrackingData(s){
   if(!Array.isArray(ft.pages)) ft.pages = [];
   ft.pages.forEach((p,pidx)=>{
     if(typeof p.name !== 'string') p.name = '';
+    if(typeof p.caption !== 'string') p.caption = '';
     if(!Array.isArray(p.hotspots)) p.hotspots = [];
     p.hotspots.forEach((h,hidx)=>{
       if(typeof h.x !== 'number') h.x = 0.4;
@@ -9285,6 +9517,26 @@ function nbFaultPanel(body, s, item){
     viewport.appendChild(world);
     root.appendChild(viewport);
     if(page.imageId) getFileBlobURL(page.imageId).then(u=>{ if(u) worldImg.src=u; });
+
+    /* شرح/تعليق نصي يظهر أسفل الصورة (خاص بالصفحة كلها، وليس بطبقة معينة) */
+    const captionWrap=document.createElement('div'); captionWrap.className='ft-caption-wrap';
+    root.appendChild(captionWrap);
+    if(mode==='edit'){
+      const capHead=document.createElement('div'); capHead.className='nb-subhead'; capHead.innerHTML='<b>📝 شرح الصفحة (يظهر أسفل الصورة)</b>';
+      captionWrap.appendChild(capHead);
+      const capToolbarHolder=document.createElement('div'); capToolbarHolder.className='fmt-toolbar-holder';
+      capToolbarHolder.appendChild(nbBuildFormatToolbar(()=>capEditor));
+      const capEditor=document.createElement('textarea'); capEditor.className='nb-editor ft-caption-editor';
+      capEditor.placeholder='اكتب شرحًا أو ملاحظة عامة عن هذه الصورة تظهر أسفلها للجميع...';
+      capEditor.value=page.caption||'';
+      capEditor.oninput=()=>{ page.caption=capEditor.value; nbScheduleSave(item); };
+      captionWrap.append(capToolbarHolder, capEditor);
+    } else if(page.caption && page.caption.trim()){
+      const capView=document.createElement('div'); capView.className='explain-view ft-caption-view';
+      capView.innerHTML=nbRenderMarkdown(page.caption);
+      captionWrap.appendChild(capView);
+      nbEnhanceMarkdownView(capView);
+    }
 
     const MIN_ZOOM=0.4, MAX_ZOOM=8;
     let natW=0, natH=0, baseScale=1, zoomFactor=1, tx=0, ty=0;
