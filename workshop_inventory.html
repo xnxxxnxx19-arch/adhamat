@@ -11168,6 +11168,25 @@ async function idbPutImage(id, blob, extraMeta={}){
   try{ if(typeof mirrorFileToFolder==='function') mirrorFileToFolder(String(id), blob, meta.name); }catch(e){}
   return meta;
 }
+async function getImageDisplayURL(ref){
+  // نقطة دخول موحدة لعرض الصور/الملفات المخزنة في IndexedDB أو OPFS.
+  // بعض أجزاء البرنامج القديمة تعتمد على هذا الاسم مباشرة.
+  try{
+    if(ref && typeof ref==='object') ref=ref.id;
+    if(!ref) return '';
+    if(typeof ref==='string' && (ref.startsWith('data:') || ref.startsWith('blob:') || ref.startsWith('http://') || ref.startsWith('https://'))) return ref;
+    if(typeof window.__workshopDisplayImage==='function'){
+      const u=await window.__workshopDisplayImage(ref);
+      if(u) return u;
+    }
+    const blob=await idbGetImage(ref);
+    return blob ? URL.createObjectURL(blob) : '';
+  }catch(e){
+    console.warn('تعذر عرض الملف/الصورة:',e);
+    return '';
+  }
+}
+
 async function idbGetImage(id){
   const key=String(id);
   let meta=null; try{ meta=await idbGet(ASSET_META_PREFIX+key); }catch(e){}
