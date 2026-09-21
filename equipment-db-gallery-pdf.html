@@ -177,6 +177,8 @@ nav.navlist{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:0 0 
 .item-card:hover{border-color:var(--amber);transform:translateY(-2px);box-shadow:0 8px 22px rgba(0,0,0,.25);}
 .item-thumb{width:100%;aspect-ratio:4/3;background:var(--panel2);display:flex;align-items:center;justify-content:center;color:var(--dim2);font-size:30px;overflow:hidden;}
 .item-thumb img{width:100%;height:100%;object-fit:cover;}
+.item-thumb .lazy-placeholder,.ilr-thumb .lazy-placeholder{opacity:.45;font-size:22px;transition:opacity .2s;}
+.lazy-media{content-visibility:auto;}
 .item-body{padding:11px 12px 12px;}
 .item-name{font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .item-model{font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -5163,59 +5165,96 @@ function fileIdFromBackupName(name){
   const m=String(name||"").match(/^(.+?)(?:\.[^.]+)?$/); return m?m[1]:name;
 }
 
-async function writeProjectSnapshot(handle){
-  const snapshot={
-    schemaVersion:FOLDER_SNAPSHOT_VERSION,
-    savedAt:Date.now(),
-    folders:state.folders||[],
-    items:state.items||[],
-    settings:state.settings||{},
-  };
-  // نكتب ملفًا مؤقتًا ثم نستبدل محتواه في النهاية لتقليل احتمال بقاء JSON ناقص.
-  const tmp=await handle.getFileHandle("project.json.tmp",{create:true});
+async function writeJsonAtomic(handle,name,value){
+  const tmpName=name+'.tmp';
+  const tmp=await handle.getFileHandle(tmpName,{create:true});
   const w=await tmp.createWritable();
-  await w.write(JSON.stringify(snapshot));
-  await w.close();
-  const final=await handle.getFileHandle("project.json",{create:true});
+  try{ await w.write(JSON.stringify(value)); await w.close(); }
+  catch(e){ try{await w.abort();}catch(_e){} throw e; }
+  const final=await handle.getFileHandle(name,{create:true});
   const fw=await final.createWritable();
-  await fw.write(JSON.stringify(snapshot));
-  await fw.close();
-  try{ await handle.removeEntry("project.json.tmp"); }catch(e){}
+  try{ await fw.write(JSON.stringify(value)); await fw.close(); }
+  catch(e){ try{await fw.abort();}catch(_e){} throw e; }
+  try{ await handle.removeEntry(tmpName); }catch(e){}
 }
-
+async function readJsonFile(handle,name,fallback=null){
+  try{ const fh=await handle.getFileHandle(name); return JSON.parse(await (await fh.getFile()).text()); }
+  catch(e){ return fallback; }
+}
+async function sha256Blob(blob){
+  try{
+    if(!window.crypto?.subtle) return null;
+    const buf=await blob.arrayBuffer();
+    const hash=await crypto.subtle.digest('SHA-256',buf);
+    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){ return null; }
+}
+async function writeProjectSnapshot(handle){
+  const revision=(Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7));
+  const snapshot={schemaVersion:3,revision,savedAt:Date.now(),folders:state.folders||[],items:state.items||[],settings:state.settings||{}};
+  await writeJsonAtomic(handle,'project.json',snapshot);
+  return snapshot;
+}
+async function pruneFolderRevisions(handle){
+  try{
+    const revDir=await handle.getDirectoryHandle('revisions',{create:true});
+    const names=[];
+    for await(const [name,fh] of revDir.entries()) if(fh.kind==='directory' && /^rev_/.test(name)) names.push(name);
+    names.sort().reverse();
+    for(const name of names.slice(5)) { try{ await revDir.removeEntry(name,{recursive:true}); }catch(e){} }
+  }catch(e){}
+}
+async function saveFolderRevision(handle,snapshot,manifest){
+  try{
+    const revDir=await handle.getDirectoryHandle('revisions',{create:true});
+    const d=await revDir.getDirectoryHandle('rev_'+snapshot.revision,{create:true});
+    await writeJsonAtomic(d,'project.json',snapshot);
+    await writeJsonAtomic(d,'manifest.json',manifest);
+    await pruneFolderRevisions(handle);
+  }catch(e){ console.warn('تعذر إنشاء Revision:',e); }
+}
 async function syncFolderStorageNow(){
-  if(!linkedDirHandle || STORAGE_MODE==="memory") return;
+  if(!linkedDirHandle || STORAGE_MODE==='memory') return;
   const ok=await ensureFolderPermission(linkedDirHandle,false);
-  if(!ok) throw new Error("folder-permission-required");
+  if(!ok) throw new Error('folder-permission-required');
   folderSyncBusy=true; folderSyncError=null;
   try{
-    await writeProjectSnapshot(linkedDirHandle);
-    const filesDir=await linkedDirHandle.getDirectoryHandle("files",{create:true});
-    const records=await idbGetAll_real("files");
+    const snapshot=await writeProjectSnapshot(linkedDirHandle);
+    const filesDir=await linkedDirHandle.getDirectoryHandle('files',{create:true});
+    const records=await idbGetAll_real('files');
     const refs=referencedFileIds();
+    const oldManifest=await readJsonFile(linkedDirHandle,'project-manifest.json',{files:{}});
+    const manifest={schemaVersion:2,revision:snapshot.revision,updatedAt:snapshot.savedAt,files:{}};
     const live=new Set();
     for(const rec of records){
       if(!rec?.id || !refs.has(rec.id) || !rec.blob) continue;
       const ext=guessExt(rec.mime,rec.name);
       const filename=safeFileStem(rec.id)+ext;
       live.add(filename);
-      const fh=await filesDir.getFileHandle(filename,{create:true});
-      const w=await fh.createWritable();
-      await w.write(rec.blob);
-      await w.close();
-    }
-    // حذف أي ملف موجود في مجلد النسخ وليس له مرجع حالي داخل البرنامج.
-    for await(const [fname,fh] of filesDir.entries()){
-      if(fh.kind!=="file") continue;
-      if(!live.has(fname)){
-        try{ await filesDir.removeEntry(fname); }catch(e){ console.warn("تعذر حذف ملف قديم من النسخة:",fname,e); }
+      const size=rec.size ?? rec.blob.size ?? 0;
+      const updatedAt=rec.updatedAt||0;
+      const old=oldManifest?.files?.[filename];
+      let needsWrite=!(old && old.size===size && old.updatedAt===updatedAt);
+      if(needsWrite){
+        const fh=await filesDir.getFileHandle(filename,{create:true});
+        const w=await fh.createWritable();
+        try{ await w.write(rec.blob); await w.close(); }
+        catch(e){ try{await w.abort();}catch(_e){} throw e; }
       }
+      let sha=old?.sha256||null;
+      if(needsWrite || !sha) sha=await sha256Blob(rec.blob);
+      manifest.files[filename]={id:rec.id,name:rec.name||'',mime:rec.mime||'',size,updatedAt,sha256:sha};
     }
-    try{ await idbPut_real("meta",{key:"lastFolderSyncAt",value:Date.now()}); }catch(e){}
-  }catch(e){
-    folderSyncError=e;
-    throw e;
-  }finally{ folderSyncBusy=false; }
+    for await(const [fname,fh] of filesDir.entries()){
+      if(fh.kind!=='file') continue;
+      if(!live.has(fname)){ try{ await filesDir.removeEntry(fname); }catch(e){ console.warn('تعذر حذف ملف قديم:',fname,e); } }
+    }
+    await writeJsonAtomic(linkedDirHandle,'project-manifest.json',manifest);
+    await writeJsonAtomic(linkedDirHandle,'COMMIT.json',{schemaVersion:1,revision:snapshot.revision,savedAt:snapshot.savedAt,fileCount:Object.keys(manifest.files).length,committedAt:Date.now()});
+    await saveFolderRevision(linkedDirHandle,snapshot,manifest);
+    try{ await idbPut_real('meta',{key:'lastFolderSyncAt',value:Date.now()}); await idbPut_real('meta',{key:'lastFolderRevision',value:snapshot.revision}); }catch(e){}
+  }catch(e){ folderSyncError=e; throw e; }
+  finally{ folderSyncBusy=false; }
 }
 
 function requestFolderSync(){
@@ -5272,15 +5311,49 @@ async function saveAndFlag(storeName,value){
 
 async function storeFile(blob,name,mime){
   const id=uid("file");
-  await idbPut("files",{id,blob,name:name||"",mime:mime||blob.type||""});
+  await idbPut("files",{id,blob,name:name||"",mime:mime||blob.type||"",size:blob?.size||0,updatedAt:Date.now()});
   return id;
+}
+const MAX_OBJECT_URL_CACHE = 96;
+const lazyFileObserver = ("IntersectionObserver" in window) ? new IntersectionObserver(entries=>{
+  entries.forEach(entry=>{
+    if(!entry.isIntersecting) return;
+    const el=entry.target; const fid=el.dataset.fileId;
+    lazyFileObserver.unobserve(el);
+    if(fid) loadFileIntoElement(el,fid);
+  });
+},{root:null,rootMargin:"220px 0px",threshold:0.01}) : null;
+function trimObjectUrlCache(){
+  while(state.objectUrls.size > MAX_OBJECT_URL_CACHE){
+    const firstKey=state.objectUrls.keys().next().value;
+    const firstUrl=state.objectUrls.get(firstKey);
+    state.objectUrls.delete(firstKey);
+    try{ URL.revokeObjectURL(firstUrl); }catch(e){}
+  }
 }
 async function getFileBlobURL(fileId){
   if(!fileId) return null;
   if(state.objectUrls.has(fileId)) return state.objectUrls.get(fileId);
   const rec=await idbGet("files",fileId);
-  if(!rec) return null;
-  const url=URL.createObjectURL(rec.blob); state.objectUrls.set(fileId,url); return url;
+  if(!rec || !rec.blob) return null;
+  const url=URL.createObjectURL(rec.blob);
+  state.objectUrls.set(fileId,url);
+  trimObjectUrlCache();
+  return url;
+}
+async function loadFileIntoElement(el,fileId){
+  try{
+    const url=await getFileBlobURL(fileId);
+    if(!url || !el.isConnected) return;
+    if(el.tagName==='IMG'){ el.src=url; el.classList.add('loaded'); }
+    else { el.innerHTML=`<img src="${url}" alt="" loading="lazy">`; }
+  }catch(e){}
+}
+function observeLazyFileImage(container,fileId,alt=''){
+  if(!container || !fileId) return;
+  container.dataset.fileId=fileId;
+  if(lazyFileObserver) lazyFileObserver.observe(container);
+  else loadFileIntoElement(container,fileId);
 }
 async function deleteFile(fileId){
   if(!fileId) return;
@@ -5296,9 +5369,10 @@ async function deleteFile(fileId){
 async function readFolderSnapshot(handle){
   try{
     const fh=await handle.getFileHandle("project.json");
-    const file=await fh.getFile();
-    const snap=JSON.parse(await file.text());
+    const snap=JSON.parse(await (await fh.getFile()).text());
     if(!snap || !Array.isArray(snap.folders) || !Array.isArray(snap.items)) return null;
+    const commit=await readJsonFile(handle,"COMMIT.json",null);
+    if(commit && snap.revision && commit.revision!==snap.revision) return null;
     return snap;
   }catch(e){ return null; }
 }
@@ -5474,6 +5548,14 @@ function showStorageBanner(msg, kind){
   bar.style.color = "#fff";
   bar.textContent = msg;
 }
+
+/* =========================================================
+   حماية الحفظ عند مغادرة الصفحة + تنظيف كاش الصور
+   ========================================================= */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden' && linkedDirHandle) requestFolderSync();
+});
+window.addEventListener('pagehide',()=>{ if(linkedDirHandle) requestFolderSync(); });
 
 /* =========================================================
    الإقلاع
@@ -5822,59 +5904,53 @@ function renderFolderView(c, folderId){
 }
 
 async function renderItemGallery(holder, items){
-  const firstFolder = items.length ? getFolder(items[0].folderId) : null;
-  const columns = Math.max(2, Math.min(6, Number(firstFolder?.columns) || 4));
-  holder.innerHTML = '<div class="item-grid"></div>';
-  const grid = holder.querySelector(".item-grid");
-  grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
-  for(const it of items){
-    const card = document.createElement("div");
-    card.className = "item-card";
-    const template = getEffectiveFieldTemplate(it.folderId).filter(f=>f.showInCard);
-    let fieldsHtml = "";
-    template.forEach(f=>{
-      const val = it.fields ? it.fields[f.id] : null;
-      if(val==null || val==="") return;
-      fieldsHtml += `<div class="row"><span class="k">${esc(f.label)}</span><span class="v">${esc(val)}${f.unit?esc(f.unit):""}</span></div>`;
-    });
-    card.innerHTML = `
-      <div class="item-thumb">🧰</div>
-      <div class="item-body">
-        <div class="item-name">${esc(it.name)}</div>
-        <div class="item-model">${esc(it.model||"—")}</div>
-        <div class="item-fields">${fieldsHtml}</div>
-        ${(it.tags&&it.tags.length)? `<div class="item-tags">${it.tags.slice(0,4).map(t=>`<span class="tag-chip">#${esc(t)}</span>`).join("")}</div>`:""}
-        ${(it.indicators&&it.indicators.length)? renderIndicatorsHtml(it.indicators, true) : ""}
-      </div>
-    `;
-    card.onclick = ()=> navigateTo({type:"item", id:it.id});
-    grid.appendChild(card);
-    if(it.mainImageId){
-      getFileBlobURL(it.mainImageId).then(url=>{
-        if(url) card.querySelector(".item-thumb").innerHTML = `<img src="${url}" alt="">`;
-      });
+  const firstFolder=items.length?getFolder(items[0].folderId):null;
+  const columns=Math.max(2,Math.min(6,Number(firstFolder?.columns)||4));
+  holder.innerHTML='<div class="item-grid"></div><div class="lazy-list-sentinel" style="height:1px"></div>';
+  const grid=holder.querySelector('.item-grid'); grid.style.gridTemplateColumns=`repeat(${columns}, minmax(0,1fr))`;
+  const sentinel=holder.querySelector('.lazy-list-sentinel');
+  let cursor=0,rendering=false;
+  const pageSize=40;
+  const renderNext=()=>{
+    if(rendering || cursor>=items.length) return;
+    rendering=true;
+    const end=Math.min(cursor+pageSize,items.length);
+    const frag=document.createDocumentFragment();
+    for(;cursor<end;cursor++){
+      const it=items[cursor], card=document.createElement('div'); card.className='item-card';
+      const template=getEffectiveFieldTemplate(it.folderId).filter(f=>f.showInCard); let fieldsHtml='';
+      template.forEach(f=>{const val=it.fields?it.fields[f.id]:null;if(val==null||val==='')return;fieldsHtml+=`<div class="row"><span class="k">${esc(f.label)}</span><span class="v">${esc(val)}${f.unit?esc(f.unit):''}</span></div>`;});
+      card.innerHTML=`<div class="item-thumb">🧰</div><div class="item-body"><div class="item-name">${esc(it.name)}</div><div class="item-model">${esc(it.model||'—')}</div><div class="item-fields">${fieldsHtml}</div>${(it.tags&&it.tags.length)?`<div class="item-tags">${it.tags.slice(0,4).map(t=>`<span class="tag-chip">#${esc(t)}</span>`).join('')}</div>`:''}${(it.indicators&&it.indicators.length)?renderIndicatorsHtml(it.indicators,true):''}</div>`;
+      card.onclick=()=>navigateTo({type:'item',id:it.id});
+      frag.appendChild(card);
+      if(it.mainImageId) observeLazyFileImage(card.querySelector('.item-thumb'),it.mainImageId);
     }
+    grid.appendChild(frag); rendering=false;
+  };
+  renderNext();
+  if('IntersectionObserver' in window){
+    const moreObserver=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){renderNext(); if(cursor>=items.length) moreObserver.disconnect();}},{root:document.getElementById('viewContainer'),rootMargin:'500px'});
+    moreObserver.observe(sentinel);
   }
 }
 
 function renderItemList(holder, items){
-  holder.innerHTML = '<div class="item-list"></div>';
-  const list = holder.querySelector(".item-list");
-  items.forEach(it=>{
-    const row = document.createElement("div");
-    row.className = "item-list-row";
-    row.innerHTML = `
-      <div class="ilr-thumb">🧰</div>
-      <div class="ilr-name">${esc(it.name)}</div>
-      <div class="ilr-model">${esc(it.model||"—")}</div>
-      <div class="ilr-badge">${renderIndicatorsHtml((it.indicators||[]).filter(x=>x.type==="badge").slice(0,1), false)}</div>
-    `;
-    row.onclick = ()=> navigateTo({type:"item", id:it.id});
-    list.appendChild(row);
-    if(it.mainImageId){
-      getFileBlobURL(it.mainImageId).then(url=>{ if(url) row.querySelector(".ilr-thumb").innerHTML = `<img src="${url}">`; });
+  holder.innerHTML='<div class="item-list"></div><div class="lazy-list-sentinel" style="height:1px"></div>';
+  const list=holder.querySelector('.item-list'), sentinel=holder.querySelector('.lazy-list-sentinel');
+  let cursor=0,rendering=false; const pageSize=60;
+  const renderNext=()=>{
+    if(rendering||cursor>=items.length)return; rendering=true;
+    const end=Math.min(cursor+pageSize,items.length),frag=document.createDocumentFragment();
+    for(;cursor<end;cursor++){
+      const it=items[cursor],row=document.createElement('div'); row.className='item-list-row';
+      row.innerHTML=`<div class="ilr-thumb">🧰</div><div class="ilr-name">${esc(it.name)}</div><div class="ilr-model">${esc(it.model||'—')}</div><div class="ilr-badge">${renderIndicatorsHtml((it.indicators||[]).filter(x=>x.type==='badge').slice(0,1),false)}</div>`;
+      row.onclick=()=>navigateTo({type:'item',id:it.id}); frag.appendChild(row);
+      if(it.mainImageId) observeLazyFileImage(row.querySelector('.ilr-thumb'),it.mainImageId);
     }
-  });
+    list.appendChild(frag); rendering=false;
+  };
+  renderNext();
+  if('IntersectionObserver' in window){const moreObserver=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){renderNext();if(cursor>=items.length)moreObserver.disconnect();}},{root:document.getElementById('viewContainer'),rootMargin:'500px'});moreObserver.observe(sentinel);}
 }
 
 function renderIndicatorsHtml(indicators, compact){
@@ -5953,8 +6029,10 @@ async function renderItemDetail(c, itemId){
     it.imageIds.forEach(fid=>{
       const t = document.createElement("div");
       t.className = "img-thumb" + (fid===it.mainImageId? " is-main":"");
+      t.innerHTML='🖼️';
       strip.appendChild(t);
-      getFileBlobURL(fid).then(url=>{ if(url){ t.innerHTML = `<img src="${url}">`; t.onclick=()=>openLightbox(url); } });
+      observeLazyFileImage(t,fid);
+      t.onclick=async()=>{const u=await getFileBlobURL(fid);if(u)openLightbox(u);};
     });
   }
   if(it.docs && it.docs.length){

@@ -1046,45 +1046,12 @@ table.tbl tr:hover td{background:var(--panel2);}
 #newCompFields > .field-row:has(#fPartNumber),#newCompFields > .field-row:has(#fPackage),#newCompFields > .field-row:has(#fValue),#newCompFields > .field-row:has(#fWarn),#newCompFields > .field-row:has(#fTarget){display:none!important}
 #editCategoryManagedFields ~ .field-row:has(#ecPart),#editCategoryManagedFields ~ .field-row:has(#ecPkg),#editCategoryManagedFields ~ .field-row:has(#ecVolt),#editCategoryManagedFields ~ .field-row:has(#ecSupplier),#editCategoryManagedFields ~ .field-row:has(#ecPower){display:none!important}
 #editCategoryManagedFields + #editCompSpecs{margin-top:8px}
-/* ============================= لوحة صحة الحفظ والنظام ============================= */
-.save-health{padding:4px 2px 40px}
-.sh-head h2{margin:0 0 4px;font-size:20px}
-.sh-sub{color:var(--dim);font-size:13px;margin-bottom:16px}
-.sh-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.sh-card{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:14px}
-.sh-card h3{margin:0 0 10px;font-size:14px;color:var(--text)}
-.sh-wide{grid-column:1/-1}
-.sh-row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px}
-.sh-row.small{font-size:11.5px;color:var(--dim)}
-.sh-row span:first-child{color:var(--dim)}
-.sh-row b{font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%}
-.sh-empty{color:var(--dim2);font-size:12.5px;padding:8px 0;text-align:center}
-.sh-details{margin-top:8px;font-size:12px}
-.sh-details summary{cursor:pointer;color:var(--dim)}
-.sh-bar{height:7px;background:var(--panel3);border-radius:5px;overflow:hidden;margin:4px 0 10px}
-.sh-bar-fill{height:100%;background:linear-gradient(90deg,var(--amber),var(--blue));border-radius:5px}
-.sh-subsection{margin-bottom:14px}
-.sh-subsection>b{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px}
-.sh-note{font-size:11px;color:var(--dim2);line-height:1.6;margin-top:4px}
-.sh-table{width:100%;border-collapse:collapse;font-size:12px}
-.sh-table th{text-align:right;color:var(--dim);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border-lt);position:sticky;top:0;background:var(--panel2)}
-.sh-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
-.sh-table tbody tr:hover{background:var(--panel3)}
-.sh-fail-row{background:var(--red-dim)}
-.sh-err-inline{color:var(--red);font-size:11px}
-.sh-error-item{padding:8px 10px;border-radius:8px;background:var(--panel3);border:1px solid var(--border);margin-bottom:8px}
-.sh-error-head{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:4px}
-.sh-error-cat{background:var(--amber-dim);color:var(--amber);border-radius:5px;padding:1px 8px;font-size:10.5px}
-.sh-error-msg{font-size:13px}
-.sh-error-detail{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px;word-break:break-all}
-.muted{color:var(--dim2)}
-.sh-io-item{background:var(--panel3);border:1px solid var(--border);border-radius:10px;padding:2px 12px;margin-bottom:8px}
-.sh-io-item summary{display:flex;justify-content:space-between;gap:10px;padding:10px 0;cursor:pointer;font-size:12.5px;list-style:none}
-.sh-io-item summary::-webkit-details-marker{display:none}
-.sh-io-item summary span:nth-child(2){flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
-.sh-io-fail{border-color:var(--red)}
-.sh-io-body{padding:4px 0 12px;border-top:1px dashed var(--border)}
-@media (max-width:760px){ .sh-grid{grid-template-columns:1fr} .sh-row b{max-width:50%} }
+
+/* ================= PRO STORAGE + LAZY UI ENGINE v2 ================= */
+.lazy-asset{background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.09),rgba(255,255,255,.04));min-height:48px;object-fit:cover;}
+.lazy-asset.is-loading{filter:saturate(.45);opacity:.72;}
+.lazy-asset.is-loaded{opacity:1;transition:opacity .18s ease;}
+.lazy-more-bar{display:flex;justify-content:center;align-items:center;gap:8px;padding:14px;color:var(--dim);font-size:11px;}
 </style>
 <style>
 
@@ -4267,7 +4234,6 @@ table.tbl tr:hover td{background:var(--panel2);}
       <button class="nav-item" data-view="projects"><span class="ico">📁</span><span class="lbl">المشاريع</span></button>
       <button class="nav-item" data-view="experiments"><span class="ico">🧪</span><span class="lbl">التجارب</span></button>
       <button class="nav-item" data-view="stats"><span class="ico">📊</span><span class="lbl">الإحصائيات</span></button>
-      <button class="nav-item" data-view="savehealth"><span class="ico">🩺</span><span class="lbl">صحة الحفظ والنظام</span></button>
       <button class="nav-item" data-view="settings"><span class="ico">⚙️</span><span class="lbl">الإعدادات</span></button>
     </nav>
     <div class="save-badge" id="saveBadge">🟢 محفوظ</div>
@@ -4914,12 +4880,12 @@ function initAuditTracker(){
 function resetAuditTracker(){auditReady=false;auditBaseline='';if(state&&!Array.isArray(state.auditHistory))state.auditHistory=[];try{auditBaseline=JSON.stringify(auditProjection());auditReady=true;}catch(e){} }
 function deleteSelectedAudit(id){
   if(!state?.auditHistory)return;
-  state.auditHistory=state.auditHistory.filter(x=>x.id!==id);scheduleSave();renderHistory();toast('تم حذف سجل التعديل المحدد');
+  state.auditHistory=state.auditHistory.filter(x=>x.id!==id);scheduleSave({immediate:true});renderHistory();toast('تم حذف سجل التعديل المحدد');
 }
 function clearAllAuditHistory(){
   if(!state?.auditHistory?.length){toast('لا يوجد سجل تعديلات للحذف');return;}
   if(!confirm('سيتم حذف سجل التعديلات التفصيلي بالكامل. لا يمكن التراجع عن هذا الحذف. هل تريد المتابعة؟'))return;
-  state.auditHistory=[];scheduleSave();renderHistory();toast('تم حذف سجل التعديلات بالكامل');
+  state.auditHistory=[];scheduleSave({immediate:true});renderHistory();toast('تم حذف سجل التعديلات بالكامل');
 }
 function openAuditEntry(a){
   if(a?.cellId && findContainer(a.cellId)){
@@ -4933,6 +4899,53 @@ function openAuditEntry(a){
   }
   if(a?.kind==='category')showView('categories');
 }
+
+/* ================= PRO PERFORMANCE / LAZY LOADING ENGINE v2 =================
+   الملفات الثقيلة لا تدخل الذاكرة عند فتح التطبيق؛ يتم تحميلها عند الحاجة.
+   القوائم الكبيرة تُعرض على دفعات، والمجلد الحقيقي يستخدم revisions + commit.
+*/
+const APP_STORAGE_ENGINE_VERSION='2.0';
+const LAZY_BATCH_SIZE=80;
+const LAZY_ROOT_MARGIN='260px';
+let __lazyObserver=null;
+function getLazyObserver(){
+  if(__lazyObserver || typeof IntersectionObserver==='undefined') return __lazyObserver;
+  __lazyObserver=new IntersectionObserver(entries=>{
+    for(const e of entries){ if(!e.isIntersecting) continue; const el=e.target; __lazyObserver.unobserve(el); lazyLoadImageElement(el); }
+  },{root:null,rootMargin:LAZY_ROOT_MARGIN,threshold:0.01});
+  return __lazyObserver;
+}
+async function lazyLoadImageElement(img){
+  if(!img || img.dataset.lazyLoaded==='1' || img.dataset.lazyLoading==='1') return;
+  const ref=img.dataset.lazyRef; if(!ref)return;
+  img.dataset.lazyLoading='1'; img.classList.add('is-loading');
+  try{
+    let url='';
+    if(typeof window.__workshopDisplayImage==='function') url=await window.__workshopDisplayImage(ref);
+    else if(typeof idbGetImage==='function'){const blob=await idbGetImage(ref);if(blob)url=URL.createObjectURL(blob);}
+    if(url){img.src=url;img.dataset.lazyLoaded='1';img.classList.add('is-loaded');}
+  }catch(e){img.dataset.lazyError='1';}
+  finally{delete img.dataset.lazyLoading;img.classList.remove('is-loading');}
+}
+function observeLazyImages(root=document){
+  const els=root.querySelectorAll?root.querySelectorAll('img[data-lazy-ref]:not([data-lazy-bound])'):[];
+  for(const img of els){img.dataset.lazyBound='1';const ob=getLazyObserver();if(ob)ob.observe(img);else lazyLoadImageElement(img);}
+}
+function renderInBatches(items,renderItem,host,opts={}){
+  const batch=Math.max(10,Number(opts.batch||LAZY_BATCH_SIZE));let shown=0;
+  const paint=()=>{
+    const end=Math.min(items.length,shown+batch);const frag=document.createDocumentFragment();
+    for(let i=shown;i<end;i++){const wrap=document.createElement('div');wrap.innerHTML=renderItem(items[i],i);while(wrap.firstChild)frag.appendChild(wrap.firstChild);}
+    host.appendChild(frag);shown=end;observeLazyImages(host);
+    const old=host.querySelector('.lazy-more-bar');if(old)old.remove();
+    if(shown<items.length){
+      const bar=document.createElement('div');bar.className='lazy-more-bar';bar.innerHTML=`<span>عرض ${shown} من ${items.length}</span><button class="btn small">تحميل المزيد</button>`;
+      bar.querySelector('button').onclick=paint;host.appendChild(bar);
+      if(typeof IntersectionObserver!=='undefined'){const io=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting)){io.disconnect();paint();}},{rootMargin:'500px'});io.observe(bar);}
+    }
+  }; paint();
+}
+function deferNonCritical(fn){if(typeof requestIdleCallback==='function')requestIdleCallback(()=>{try{fn()}catch(e){}},{timeout:1200});else setTimeout(()=>{try{fn()}catch(e){}},80);}
 
 /* ================= RUNTIME PERSISTENCE BRIDGE v1 =================
    كل ما يمكن أن يعيش خارج state يدخل في النسخة الموحدة أيضًا.
@@ -4960,141 +4973,27 @@ function startRuntimePersistenceWatcher(){
   setInterval(()=>{const fp=runtimeLocalStorageFingerprintNow();if(fp!==runtimeLocalStorageFingerprint){runtimeLocalStorageFingerprint=fp;try{scheduleSave();}catch(_e){}}},1500);
 }
 
-/* ============================= لوحة صحة الحفظ: البنية التحتية للتسجيل ============================= */
-/* هذه السجلات في الذاكرة فقط (غير محفوظة ضمن state) لأنها تشخيصية بطبيعتها ولا داعي لتضخيم
-   حجم كل نسخة احتياطية بها. تُفرَّغ تلقائيًا عند إعادة تحميل الصفحة، وهذا متوقع ومقصود. */
-const APP_VERSION='2026.09.06-zip64-1'; // ارفع هذا الرقم يدويًا مع كل تعديل حقيقي على كود التطبيق
-const SAVE_LOG_MAX=300, ERROR_LOG_MAX=300, CHANGE_QUEUE_MAX=200;
-let saveEventLog=[], errorLog=[], pendingChangeDescriptors=[];
-let saveDashboardOpen=false;
-function refreshSaveDashboardIfOpen(){ if(saveDashboardOpen && currentView==='savehealth') try{ renderSaveDashboard(); }catch(e){} }
-function logError(category,message,detail){
-  errorLog.push({ts:Date.now(),category:String(category||'عام'),message:String(message||'خطأ غير معروف'),detail:detail?String(detail):''});
-  if(errorLog.length>ERROR_LOG_MAX) errorLog.splice(0,errorLog.length-ERROR_LOG_MAX);
-  refreshSaveDashboardIfOpen();
-}
-/* يمكن استدعاؤها من أي نقطة تعديل فعلية (تغيير محتوى خلية، إضافة/حذف/تعديل مكوّن أو فئة...)
-   قبل استدعاء scheduleSave، لتسجيل "ماذا تغيّر" فعليًا بدل الاكتفاء بمعرفة أن حفظًا ما قد حدث.
-   كل استدعاء لـ doSave يلتقط كل ما تجمّع هنا منذ آخر حفظ وينسبه لتلك العملية. */
-function logSaveEvent(type,id,action){
-  pendingChangeDescriptors.push({type:String(type||'?'),id:String(id??''),action:String(action||'update'),ts:Date.now()});
-  if(pendingChangeDescriptors.length>CHANGE_QUEUE_MAX) pendingChangeDescriptors.shift();
-}
-function recordSaveEvent(ev){
-  saveEventLog.push(ev);
-  if(saveEventLog.length>SAVE_LOG_MAX) saveEventLog.splice(0,saveEventLog.length-SAVE_LOG_MAX);
-  refreshSaveDashboardIfOpen();
-}
-const BACKUP_HISTORY_MAX=20;
-function recordBackupHistory(name,bytes){
-  if(!Array.isArray(state.__backupHistory)) state.__backupHistory=[];
-  state.__backupHistory.push({name,bytes,ts:Date.now()});
-  if(state.__backupHistory.length>BACKUP_HISTORY_MAX) state.__backupHistory.splice(0,state.__backupHistory.length-BACKUP_HISTORY_MAX);
-  refreshSaveDashboardIfOpen();
-}
-/* ===================== سجل تفصيلي للتصدير والاستيراد ===================== */
-/* يُحفظ في مفتاح IndexedDB منفصل تمامًا عن state الرئيسي (نفس مبدأ state_meta) حتى لا يُحمَّل
-   هذا السجل التشخيصي على كل حفظ/تصدير عادي لبيانات المشروع. يُحمَّل مرة واحدة عند أول فتح
-   للوحة صحة الحفظ، ثم يبقى في الذاكرة ويُكتب فورًا بعد كل عملية تصدير/استيراد فعلية. */
-const IO_HISTORY_MAX=30;
-let ioHistoryLog=null; // null = لم يُحمَّل بعد
-async function ensureIoHistoryLoaded(){
-  if(ioHistoryLog) return ioHistoryLog;
-  try{ ioHistoryLog=await idbGet('io_history'); }catch(e){ ioHistoryLog=null; }
-  if(!ioHistoryLog||typeof ioHistoryLog!=='object') ioHistoryLog={exports:[],imports:[]};
-  if(!Array.isArray(ioHistoryLog.exports)) ioHistoryLog.exports=[];
-  if(!Array.isArray(ioHistoryLog.imports)) ioHistoryLog.imports=[];
-  return ioHistoryLog;
-}
-async function persistIoHistory(){
-  try{ await idbSet('io_history',ioHistoryLog); }catch(e){ logError('save','فشل حفظ سجل التصدير/الاستيراد التفصيلي',String(e?.message||e)); }
-}
-async function recordExportDetail(rec){
-  await ensureIoHistoryLoaded();
-  ioHistoryLog.exports.push(rec);
-  if(ioHistoryLog.exports.length>IO_HISTORY_MAX) ioHistoryLog.exports.splice(0,ioHistoryLog.exports.length-IO_HISTORY_MAX);
-  await persistIoHistory();
-  refreshSaveDashboardIfOpen();
-}
-async function recordImportDetail(rec){
-  await ensureIoHistoryLoaded();
-  ioHistoryLog.imports.push(rec);
-  if(ioHistoryLog.imports.length>IO_HISTORY_MAX) ioHistoryLog.imports.splice(0,ioHistoryLog.imports.length-IO_HISTORY_MAX);
-  await persistIoHistory();
-  refreshSaveDashboardIfOpen();
-}
-/* لا توجد أي واجهة برمجية في المتصفح تعطي "نسبة استخدام المعالج" الحقيقية — هذا قيد من
-   المتصفح نفسه وليس نقصًا في هذا الكود، ولا يمكن لأي تطبيق ويب قراءتها مباشرة. البديل
-   القياسي والمعتمد هو رصد "Long Tasks" (مهام حجبت الواجهة أكثر من 50ms) عبر PerformanceObserver،
-   وهو المؤشر الفعلي لضغط المعالج المتاح فعلًا على الويب. */
-let longTaskTimestamps=[];
-try{
-  const _po=new PerformanceObserver(list=>{ const now=Date.now(); list.getEntries().forEach(()=>longTaskTimestamps.push(now)); if(longTaskTimestamps.length>1000) longTaskTimestamps.splice(0,longTaskTimestamps.length-1000); });
-  _po.observe({type:'longtask',buffered:true});
-}catch(e){}
-function getLongTaskCountLastMinute(){ const cutoff=Date.now()-60000; return longTaskTimestamps.filter(t=>t>=cutoff).length; }
-async function getResourceSnapshot(){
-  const out={};
-  if(performance.memory) out.ram={supported:true,used:performance.memory.usedJSHeapSize,total:performance.memory.totalJSHeapSize,limit:performance.memory.jsHeapSizeLimit};
-  else out.ram={supported:false};
-  try{
-    if(navigator.storage&&navigator.storage.estimate){ const est=await navigator.storage.estimate(); out.storage={supported:true,usage:est.usage||0,quota:est.quota||0}; }
-    else out.storage={supported:false};
-  }catch(e){ out.storage={supported:false}; }
-  const lastOk=[...saveEventLog].reverse().find(e=>e.ok);
-  out.cpu={longTasksLastMinute:getLongTaskCountLastMinute(),lastSaveDurationMs:lastOk?lastOk.durationMs:null};
-  return out;
-}
-/* شبكة أمان عامة: أي خطأ JS غير ملتقَط أو Promise مرفوض بلا معالجة يُسجَّل هنا تلقائيًا،
-   حتى الأخطاء التي لا علاقة مباشرة لها بالحفظ نفسه — لأن أثرها غالبًا ما ينتهي بفقدان تعديل. */
-window.addEventListener('error',e=>logError('runtime',e.message||'خطأ JavaScript غير معروف',e.filename?`${e.filename}:${e.lineno}`:''));
-window.addEventListener('unhandledrejection',e=>logError('promise',(e.reason&&e.reason.message)||String(e.reason||'وعد مرفوض بلا معالجة'),''));
-function scheduleSave(){
+function scheduleSave(options={}){
   try{captureRuntimeLocalStorageIntoState();}catch(_e){}
-  auditCaptureChanges();
-  saveDirty=true;
-  setSaveBadge('pending');
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(doSave,500);
+  auditCaptureChanges(); saveDirty=true; setSaveBadge('pending'); clearTimeout(saveTimer);
+  const immediate=options===true || options.immediate===true;
+  if(immediate){saveTimer=null;doSave();}else saveTimer=setTimeout(doSave,500);
   syncLowStockToHub();
 }
 const MAX_EMERGENCY_LOCALSTORAGE_BYTES = 1800000;
-let saveRevision = 0;
-let saveInFlight = false;
-let saveQueued = false;
+let saveRevision = 0; let saveInFlight = false; let saveQueued = false;
 async function doSave(){
-  if(saveInFlight){ saveQueued=true; return; }
-  saveInFlight=true;
-  const __t0=performance.now();
-  const __changes=pendingChangeDescriptors.splice(0,pendingChangeDescriptors.length);
+  if(saveInFlight){saveQueued=true;return;} saveInFlight=true;
   try{
-    captureRuntimeLocalStorageIntoState();
-    state.__savedAtTs=Date.now();
-    const json=JSON.stringify(state);
-    const revision=++saveRevision;
-    // التخزين الرئيسي: IndexedDB. لا نستخدم localStorage كقاعدة البيانات لأنه صغير ومناسب فقط للطوارئ.
-    await idbSet(STATE_KEY,json);
-    await idbSet('state_meta',{revision,savedAt:new Date().toISOString(),bytes:json.length,storage:'indexeddb'});
-    // نسخة طوارئ صغيرة فقط إذا كانت الحالة صغيرة؛ الملفات الكبيرة لا تدخل هنا إطلاقاً.
-    if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){
-      try{ localStorage.setItem(FALLBACK_KEY,json); }catch(e){}
-    }
-    saveDirty=false;
-    setSaveBadge('saved');
-    recordSaveEvent({ts:Date.now(),revision,ok:true,bytes:json.length,durationMs:Math.round(performance.now()-__t0),changes:__changes});
+    captureRuntimeLocalStorageIntoState(); state.__savedAtTs=Date.now(); const json=JSON.stringify(state); const revision=++saveRevision;
+    await idbSet(STATE_KEY,json); await idbSet('state_meta',{revision,savedAt:new Date().toISOString(),bytes:json.length,storage:'indexeddb',engine:APP_STORAGE_ENGINE_VERSION});
+    if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){try{localStorage.setItem(FALLBACK_KEY,json);}catch(e){}}
+    try{if(typeof mirrorSnapshotDebounced==='function')mirrorSnapshotDebounced();}catch(e){}
+    saveDirty=false;setSaveBadge('saved');
   }catch(e){
-    // محاولة أخيرة للنسخة المحلية الصغيرة فقط.
-    try{
-      const json=JSON.stringify(state);
-      if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){ localStorage.setItem(FALLBACK_KEY,json); setSaveBadge('saved'); }
-      else setSaveBadge('fail','تعذر الحفظ في IndexedDB؛ والحالة أكبر من مساحة النسخة الاحتياطية المحلية.');
-    }catch(e2){ setSaveBadge('fail',String(e2?.message||e?.message||e)); }
-    logError('save','فشلت عملية حفظ الحالة الأساسية (IndexedDB)',String(e?.message||e));
-    recordSaveEvent({ts:Date.now(),revision:saveRevision,ok:false,bytes:0,durationMs:Math.round(performance.now()-__t0),changes:__changes,error:String(e?.message||e)});
-  }finally{
-    saveInFlight=false;
-    if(saveQueued){ saveQueued=false; scheduleSave(); }
-  }
+    try{const json=JSON.stringify(state);if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){localStorage.setItem(FALLBACK_KEY,json);setSaveBadge('saved');}else setSaveBadge('fail','تعذر الحفظ في التخزين المحلي.');}
+    catch(e2){setSaveBadge('fail',String(e2?.message||e?.message||e));}
+  }finally{saveInFlight=false;if(saveQueued){saveQueued=false;scheduleSave();}}
 }
 
 /* انتظار اكتمال آخر حفظ فعلي قبل أي Export/Import. هذا يمنع تصدير نسخة أقدم
@@ -5121,8 +5020,8 @@ function flushSaveNow(){
     state.__savedAtTs=Date.now();
     const json=JSON.stringify(state);
     if(json.length<=MAX_EMERGENCY_LOCALSTORAGE_BYTES){ try{ localStorage.setItem(FALLBACK_KEY,json); }catch(e){} }
-    try{ idbSet(STATE_KEY,json).catch(err=>logError('save','فشل حفظ الطوارئ عند إغلاق/إخفاء الصفحة (لا يمكن ضمان اكتماله)',String(err?.message||err))); }catch(e){}
-  }catch(e){ logError('save','فشل عام في flushSaveNow',String(e?.message||e)); }
+    try{ idbSet(STATE_KEY,json).catch(()=>{}); }catch(e){}
+  }catch(e){}
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSaveNow(); });
 window.addEventListener('pagehide',flushSaveNow);
@@ -5277,148 +5176,12 @@ function statusLabelAr(s){ return {green:'طبيعي',yellow:'تحذير',red:'�
 
 /* ============================= ROUTER ============================= */
 let currentView='dashboard';
-/* ============================= لوحة صحة الحفظ والنظام ============================= */
-let saveDashboardInterval=null;
-function formatTs(ts){ if(!ts)return'—'; return new Date(ts).toLocaleString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit',day:'2-digit',month:'2-digit'}); }
-function saveHealthShellHTML(){
-  return `<div class="save-health">
-    <div class="sh-head">
-      <h2>🩺 صحة الحفظ والنظام</h2>
-      <div class="sh-sub">إصدار التطبيق: <b>${APP_VERSION}</b> · مراجعة الحفظ الحالية: <b>#${saveRevision}</b> · الحالة: <b>${saveDirty?'⏳ تغييرات لم تُحفظ بعد':'✅ محفوظ بالكامل'}</b></div>
-    </div>
-    <div class="sh-grid">
-      <section class="sh-card" id="shResources"><h3>📟 استهلاك موارد الجهاز الآن</h3><div class="sh-body">جارٍ القياس…</div></section>
-      <section class="sh-card"><h3>💾 آخر نسخة احتياطية</h3><div class="sh-body">${backupHistoryHTML()}</div></section>
-      <section class="sh-card sh-wide"><h3>📝 سجل عمليات الحفظ الأخيرة (${saveEventLog.length})</h3><div class="sh-body">${saveLogHTML()}</div></section>
-      <section class="sh-card sh-wide" id="shExportDetail"><h3>📦 مراجعة شاملة لعمليات التصدير</h3><div class="sh-body">جارٍ التحميل…</div></section>
-      <section class="sh-card sh-wide" id="shImportDetail"><h3>📥 مراجعة شاملة لعمليات الاستيراد</h3><div class="sh-body">جارٍ التحميل…</div></section>
-      <section class="sh-card sh-wide"><h3>⚠️ سجل الأخطاء والتنبيهات (${errorLog.length})</h3><div class="sh-body">${errorLogHTML()}</div></section>
-    </div>
-  </div>`;
-}
-function ioCountsRowsHTML(counts){
-  if(!counts) return '';
-  const labels={categories:'الفئات',components:'المكوّنات',categorySchemas:'مخططات الفئات',shelves:'الأرفف',drawers:'الأدراج',columns:'الأعمدة',boxes:'الصناديق',cells:'الحاويات/الخلايا',usageHistory:'سجل الاستخدام',auditHistory:'سجل التدقيق',undoHistory:'سجل التراجع',redoHistory:'سجل الإعادة',maps:'الخرائط',projects:'المشاريع',experiments:'التجارب',checklist:'قوائم المهام'};
-  return Object.entries(counts).filter(([k,v])=>v>0||['categories','components','cells'].includes(k)).map(([k,v])=>`<div class="sh-row small"><span>${labels[k]||k}</span><b>${v}</b></div>`).join('');
-}
-function ioFilesListHTML(files){
-  if(!files||!files.length) return '<div class="sh-empty">لا توجد قائمة ملفات محفوظة لهذه العملية.</div>';
-  const cap=200;
-  const rows=files.slice(0,cap).map(f=>`<div class="sh-row small"><span title="${f.name}">${f.name}</span><b>${formatFileSize(f.size)}</b></div>`).join('');
-  return rows+(files.length>cap?`<div class="sh-note">…و${files.length-cap} ملف آخر لم يُعرض (القائمة الكاملة داخل الحزمة نفسها).</div>`:'');
-}
-function exportDetailHTML(){
-  const list=(ioHistoryLog&&ioHistoryLog.exports)||[];
-  if(!list.length) return '<div class="sh-empty">لا توجد عمليات تصدير مسجَّلة بعد.</div>';
-  return list.slice().reverse().map(r=>{
-    const imgCount=r.assetCount!=null?r.assetCount:'—';
-    return `<details class="sh-io-item">
-      <summary><span>${formatTs(r.ts)}</span><span title="${r.name}">${r.name}</span><b>${formatFileSize(r.bytes)}</b></summary>
-      <div class="sh-io-body">
-        <div class="sh-row"><span>معرّف التصدير (exportId)</span><b>${r.exportId||'—'}</b></div>
-        <div class="sh-row"><span>إصدار التطبيق وقت التصدير</span><b>${r.appVersion||'—'}</b></div>
-        <div class="sh-row"><span>عدد الصور/المرفقات المُصدَّرة</span><b>${imgCount}</b> <span class="muted">(${formatFileSize(r.assetBytes||0)})</span></div>
-        <div class="sh-row"><span>عدد الملفات داخل الحزمة</span><b>${(r.files||[]).length}</b></div>
-        ${r.danglingRemoved>0?`<div class="sh-row"><span>مراجع صور تالفة حُذفت تلقائيًا</span><b>${r.danglingRemoved}</b></div><div class="sh-note">المعرّفات: ${(r.danglingIds||[]).join('، ')}</div>`:''}
-        <details class="sh-details"><summary>تفاصيل العناصر (${Object.values(r.counts||{}).reduce((a,b)=>a+b,0)} إجمالاً)</summary>${ioCountsRowsHTML(r.counts)}</details>
-        <details class="sh-details"><summary>قائمة كل الملفات (${(r.files||[]).length})</summary>${ioFilesListHTML(r.files)}</details>
-      </div>
-    </details>`;
-  }).join('');
-}
-function importDetailHTML(){
-  const list=(ioHistoryLog&&ioHistoryLog.imports)||[];
-  if(!list.length) return '<div class="sh-empty">لا توجد عمليات استيراد مسجَّلة بعد.</div>';
-  return list.slice().reverse().map(r=>{
-    const okBadge=r.result==='success'?'🟢 نجح':'🔴 فشل';
-    return `<details class="sh-io-item ${r.result==='failed'?'sh-io-fail':''}">
-      <summary><span>${formatTs(r.ts)}</span><span title="${r.sourceFileName}">${r.sourceFileName}</span><b>${okBadge}</b></summary>
-      <div class="sh-io-body">
-        <div class="sh-row"><span>حجم الملف المستورَد</span><b>${formatFileSize(r.sourceFileBytes)}</b></div>
-        <div class="sh-row"><span>طريقة الاستيراد</span><b>${({'zip-small':'ZIP (صغير/متوسط)','zip-large':'ZIP (كبير، بالتدفق)',json:'JSON'})[r.mode]||r.mode||'—'}</b></div>
-        <div class="sh-row"><span>معرّف الحزمة المصدرية (exportId)</span><b>${r.sourceExportId||'غير معروف (نسخة قديمة أو JSON)'}</b></div>
-        <div class="sh-row"><span>تاريخ إنشاء الحزمة المصدرية</span><b>${r.sourceCreatedAt?formatTs(new Date(r.sourceCreatedAt).getTime()):'غير معروف'}</b></div>
-        <div class="sh-row"><span>إصدار التطبيق الذي صدّرها</span><b>${r.sourceAppVersion||'غير معروف (أقدم من هذا الإصلاح)'}</b></div>
-        ${r.result==='failed'?`<div class="sh-row"><span>المرحلة التي حدث فيها الفشل بالتحديد</span><b>${r.stage||'غير محددة'}</b></div><div class="sh-error-detail">${r.error||''}</div>`:''}
-        <div class="sh-row"><span>ملفات مرفقة استُعيدت بنجاح</span><b>${r.restoredAssets}</b></div>
-        ${r.failedAssets&&r.failedAssets.length?`<details class="sh-details"><summary>⚠️ ملفات فشلت استعادتها (${r.failedAssets.length})</summary>`+r.failedAssets.map(f=>`<div class="sh-row small"><span>${f.name}</span><b>${f.reason||''}</b></div>`).join('')+`</details>`:''}
-        ${r.missingRefsCount?`<details class="sh-details"><summary>⚠️ مراجع صور بلا ملف مطابق (${r.missingRefsCount})</summary>`+r.missingRefs.map(id=>`<div class="sh-row small"><span>${id}</span></div>`).join('')+`</details>`:''}
-        ${r.warnings&&r.warnings.length?`<details class="sh-details"><summary>ملاحظات (${r.warnings.length})</summary>`+r.warnings.map(w=>`<div class="sh-row small"><span>${w}</span></div>`).join('')+`</details>`:''}
-        ${r.beforeCounts?`<details class="sh-details"><summary>عدد العناصر قبل الاستيراد</summary>${ioCountsRowsHTML(r.beforeCounts)}</details>`:''}
-        ${r.afterCounts?`<details class="sh-details"><summary>عدد العناصر بعد الاستيراد</summary>${ioCountsRowsHTML(r.afterCounts)}</details>`:''}
-        <details class="sh-details"><summary>كل الملفات المكتشَفة داخل الحزمة (${(r.files||[]).length})</summary>${ioFilesListHTML(r.files)}</details>
-      </div>
-    </details>`;
-  }).join('');
-}
-function backupHistoryHTML(){
-  const hist=Array.isArray(state.__backupHistory)?state.__backupHistory:[];
-  const last=hist[hist.length-1];
-  const nextName=`workshop_project_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.zip`;
-  let html='';
-  if(last) html+=`<div class="sh-row"><span>اسم آخر نسخة</span><b title="${last.name}">${last.name}</b></div>
-    <div class="sh-row"><span>حجمها</span><b>${formatFileSize(last.bytes)}</b></div>
-    <div class="sh-row"><span>تاريخها</span><b>${formatTs(last.ts)}</b></div>`;
-  else html+=`<div class="sh-empty">لا توجد نسخة احتياطية مُصدَّرة في هذه الجلسة بعد.</div>`;
-  html+=`<div class="sh-row"><span>الاسم المقترح للنسخة القادمة</span><b>${nextName}</b></div>`;
-  if(hist.length>1){
-    html+=`<details class="sh-details"><summary>سجل آخر ${hist.length} نسخة</summary>`+
-      hist.slice().reverse().map(h=>`<div class="sh-row small"><span>${formatTs(h.ts)}</span><span>${h.name}</span><b>${formatFileSize(h.bytes)}</b></div>`).join('')+
-      `</details>`;
-  }
-  return html;
-}
-function saveLogHTML(){
-  if(!saveEventLog.length) return `<div class="sh-empty">لا توجد عمليات حفظ مسجَّلة في هذه الجلسة بعد.</div>`;
-  return `<table class="sh-table"><thead><tr><th>الوقت</th><th>#</th><th>الحالة</th><th>الحجم</th><th>المدة</th><th>ما تغيّر</th></tr></thead><tbody>`+
-    saveEventLog.slice().reverse().slice(0,80).map(e=>{
-      const changesTxt=e.changes&&e.changes.length?e.changes.map(c=>`${c.type}:${c.id}(${c.action})`).slice(0,6).join('، ')+(e.changes.length>6?` …+${e.changes.length-6}`:''):'<span class="muted">حفظ عام للحالة</span>';
-      return `<tr class="${e.ok?'':'sh-fail-row'}"><td>${formatTs(e.ts)}</td><td>#${e.revision}</td><td>${e.ok?'🟢 نجح':'🔴 فشل'}</td><td>${formatFileSize(e.bytes||0)}</td><td>${e.durationMs}ms</td><td>${changesTxt}${e.error?`<br><span class="sh-err-inline">${e.error}</span>`:''}</td></tr>`;
-    }).join('')+`</tbody></table>`;
-}
-function errorLogHTML(){
-  if(!errorLog.length) return `<div class="sh-empty">لا توجد أخطاء أو تنبيهات مسجَّلة في هذه الجلسة. 🎉</div>`;
-  return errorLog.slice().reverse().slice(0,100).map(er=>
-    `<div class="sh-error-item"><div class="sh-error-head"><span class="sh-error-cat">${er.category}</span><span>${formatTs(er.ts)}</span></div><div class="sh-error-msg">${er.message}</div>${er.detail?`<div class="sh-error-detail">${er.detail}</div>`:''}</div>`
-  ).join('');
-}
-function resourcePanelHTML(res){
-  const ramHTML=res.ram.supported
-    ? `<div class="sh-row"><span>ذاكرة JS المستخدمة (RAM)</span><b>${formatFileSize(res.ram.used)} / ${formatFileSize(res.ram.limit)}</b></div>
-       <div class="sh-bar"><div class="sh-bar-fill" style="width:${Math.min(100,res.ram.used/res.ram.limit*100).toFixed(1)}%"></div></div>`
-    : `<div class="sh-empty">قياس الذاكرة غير متاح في هذا المتصفح (مدعوم فقط في Chrome/Edge).</div>`;
-  const stHTML=res.storage.supported
-    ? `<div class="sh-row"><span>مساحة التخزين المستخدمة (ROM)</span><b>${formatFileSize(res.storage.usage)} / ${formatFileSize(res.storage.quota)}</b></div>
-       <div class="sh-bar"><div class="sh-bar-fill" style="width:${(res.storage.quota?res.storage.usage/res.storage.quota*100:0).toFixed(1)}%"></div></div>`
-    : `<div class="sh-empty">قياس مساحة التخزين غير متاح في هذا المتصفح.</div>`;
-  const cpuHTML=`<div class="sh-row"><span>مهام أبطأت الواجهة (آخر دقيقة)</span><b>${res.cpu.longTasksLastMinute}</b></div>
-    <div class="sh-row"><span>مدة آخر حفظ فعلي</span><b>${res.cpu.lastSaveDurationMs!=null?res.cpu.lastSaveDurationMs+'ms':'—'}</b></div>
-    <div class="sh-note">⚠️ المتصفح لا يوفّر أي واجهة لقراءة "نسبة استخدام المعالج" الفعلية — هذا قيد من المتصفح نفسه. المؤشر أعلاه (Long Tasks) هو البديل المعياري المتاح فعليًا على الويب لرصد ضغط المعالج.</div>`;
-  return `<div class="sh-subsection"><b>الذاكرة (RAM)</b>${ramHTML}</div>
-    <div class="sh-subsection"><b>التخزين (ROM)</b>${stHTML}</div>
-    <div class="sh-subsection"><b>المعالج (CPU)</b>${cpuHTML}</div>`;
-}
-function renderSaveDashboard(){
-  const vc=document.getElementById('viewContainer');
-  vc.innerHTML=saveHealthShellHTML();
-  getResourceSnapshot().then(res=>{
-    const el=document.getElementById('shResources');
-    if(el) el.querySelector('.sh-body').innerHTML=resourcePanelHTML(res);
-  });
-  ensureIoHistoryLoaded().then(()=>{
-    const ex=document.getElementById('shExportDetail'), im=document.getElementById('shImportDetail');
-    if(ex) ex.querySelector('.sh-body').innerHTML=exportDetailHTML();
-    if(im) im.querySelector('.sh-body').innerHTML=importDetailHTML();
-  });
-  clearInterval(saveDashboardInterval);
-  saveDashboardInterval=setInterval(()=>{ if(currentView==='savehealth') renderSaveDashboard(); else clearInterval(saveDashboardInterval); },5000);
-}
 function showView(v){
   currentView=v;
-  saveDashboardOpen=(v==='savehealth');
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
-  const map={dashboard:renderDashboard,storage:renderStorage,map:renderMap,components:renderComponents,bomimport:renderBomImport,categories:renderCategories,lowstock:renderLowStock,purchases:renderPurchases,checklist:renderChecklist,history:renderHistory,projects:renderProjects,experiments:renderExperiments,stats:renderStats,settings:renderSettings,savehealth:renderSaveDashboard};
+  const map={dashboard:renderDashboard,storage:renderStorage,map:renderMap,components:renderComponents,bomimport:renderBomImport,categories:renderCategories,lowstock:renderLowStock,purchases:renderPurchases,checklist:renderChecklist,history:renderHistory,projects:renderProjects,experiments:renderExperiments,stats:renderStats,settings:renderSettings};
   (map[v]||renderDashboard)();
+  requestAnimationFrame(()=>observeLazyImages(document.getElementById('viewContainer')||document));
 }
 document.getElementById('navlist').addEventListener('click',e=>{
   const b=e.target.closest('.nav-item'); if(!b) return; showView(b.dataset.view);
@@ -7176,15 +6939,16 @@ function renderComponents(){
     const list=state.components.filter(c=>!f || (c.name+c.category+c.partNumber).toLowerCase().includes(f));
     const grid=document.getElementById('compGrid');
     if(!list.length){ grid.innerHTML='<div class="empty-state">لا توجد نتائج</div>'; return; }
-    grid.innerHTML=list.map(c=>{
+    grid.replaceChildren();
+    renderInBatches(list,(c)=>{
       const total=totalQtyOfComponent(c.id);
       const st=total<=0?'red':(total<=c.criticalStock?'red':(total<=c.warningStock?'yellow':'green'));
       return `<div class="card" style="position:relative;" onclick="openComponentQuickView('${c.id}')">
         <span title="حذف المكون" onclick="event.stopPropagation();deleteComponent('${c.id}')" style="position:absolute;top:8px;left:8px;cursor:pointer;color:var(--red);font-size:14px;">✕</span>
-        <div style="display:flex;justify-content:space-between;"><b>${c.name}</b><span class="pill ${st}">${total}</span></div>
-        <div class="sub">${c.category||'—'} ${c.package?(' · '+c.package):''}</div>
+        <div style="display:flex;justify-content:space-between;"><b>${escapeHtml(c.name||'')}</b><span class="pill ${st}">${total}</span></div>
+        <div class="sub">${escapeHtml(c.category||'—')} ${c.package?(' · '+escapeHtml(c.package)):''}</div>
       </div>`;
-    }).join('');
+    },grid,{batch:LAZY_BATCH_SIZE});
   }
   draw('');
   document.getElementById('compFilter').addEventListener('input',e=>draw(e.target.value));
@@ -7215,7 +6979,7 @@ function deleteComponent(compId){
   containers.forEach(c=>{ c.componentId=null; c.quantity=0; });
   state.purchases=(state.purchases||[]).filter(p=>p.componentId!==compId);
   state.components=state.components.filter(c=>c.id!==compId);
-  scheduleSave();
+  scheduleSave({immediate:true});
   closeModal();
   showView('components');
   toast('تم حذف المكون');
@@ -8109,6 +7873,16 @@ function renderSettings(){
       <div id="storageStatus" style="margin-top:8px;color:var(--dim);font-size:11px;line-height:1.8;">⏳ جاري فحص التخزين...</div>
       <button class="btn small" id="persistStorageBtn" style="margin-top:8px;">🛡️ طلب حماية التخزين من الحذف التلقائي</button>
     </div>
+    <div class="panel"><h3>🗂 مجلد نسخ احتياطي تلقائي على الجهاز</h3>
+      <p style="color:var(--dim);font-size:12.5px;line-height:1.8;">اربط مجلدًا حقيقيًا على جهازك (كمبيوتر أو أندرويد عبر Chrome/Edge). يكتب البرنامج <b>state.json</b> بعد كل تعديل (بمعدل محدود)، ويضع الصور والملفات في <b>assets/</b> بأسمائها وأنواعها الحقيقية، مع <b>asset-manifest.json</b> يوثّق المحتوى، وينظّف تلقائيًا أي ملف صورة لم يعد مستخدمًا. لو فقدت IndexedDB بياناتها وهي فاضية، يتم الاسترجاع التلقائي من هذا المجلد عند فتح البرنامج.</p>
+      <div id="folderLinkStatus" style="font-size:12px;margin:8px 0;"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn primary small" id="linkFolderBtn">🗂 ربط مجلد للنسخ التلقائي</button>
+        <button class="btn small" id="syncFolderBtn" style="display:none">🔄 مزامنة الآن</button>
+        <button class="btn small" id="pullFolderBtn" style="display:none">⬇️ سحب بيانات المجلد (استبدال)</button>
+        <button class="btn danger small" id="unlinkFolderBtn" style="display:none">فصل المجلد</button>
+      </div>
+    </div>
     <div class="panel"><h3>الفئات (Categories)</h3>
       <div id="catChips">${state.categories.map((c,i)=>`<span class="chip">${c} <span style="cursor:pointer;color:var(--red);" onclick="removeCategory(${i})">✕</span></span>`).join('')}</div>
       <div style="margin-top:10px;display:flex;gap:8px;"><input id="newCatInput" placeholder="فئة جديدة" style="max-width:220px;"><button class="btn small" id="addCatBtn">إضافة</button></div>
@@ -8129,6 +7903,11 @@ function renderSettings(){
   document.getElementById('exportFullBtn').onclick=()=>exportFullProject();
   document.getElementById('exportJsonBtn').onclick=()=>exportPlainJSON();
   document.getElementById('persistStorageBtn').onclick=()=>requestPersistentStorage();
+  renderFolderLinkStatus();
+  document.getElementById('linkFolderBtn').onclick=async ()=>{ await linkBackupFolder(); renderFolderLinkStatus(); };
+  document.getElementById('unlinkFolderBtn').onclick=async ()=>{ await unlinkBackupFolder(); renderFolderLinkStatus(); };
+  document.getElementById('syncFolderBtn').onclick=async ()=>{ toast('جارٍ المزامنة...'); const ok=await syncFolderNow(true); toast(ok?'تمت المزامنة بنجاح':'فشلت المزامنة'); renderFolderLinkStatus(); };
+  document.getElementById('pullFolderBtn').onclick=async ()=>{ await forcePullFromFolder(); renderFolderLinkStatus(); };
   document.getElementById('checkIntegrityBtn').onclick=async()=>{
     const st=document.getElementById('backupStatus'); if(st){st.style.whiteSpace='pre-line';st.textContent='⏳ جارٍ فحص الملفات المرفقة…';}
     try{
@@ -8171,98 +7950,8 @@ function setUiTheme(themeId){
 }
 
 /* ============================= FULL PROJECT IMPORT / EXPORT ============================= */
-const FULL_BACKUP_VERSION=7;
+const FULL_BACKUP_VERSION=6;
 const STREAM_EXPORT_THRESHOLD=100*1024*1024;
-const FULL_BACKUP_FORMAT='Workshop Inventory Full Project';
-const BACKUP_REQUIRED_FILES=['project/state.json','project/manifest.json'];
-
-/* معرف فريد يربط كل ملفات النسخة ببعضها ويمنع تكوين مشروع هجين من ملفات نسخ مختلفة. */
-function backupExportId(){ return 'exp_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10); }
-function backupProjectId(st){ return String(st?.projectId||st?.id||st?.meta?.projectId||'default-project'); }
-function backupValidateManifest(m){
-  if(!m||typeof m!=='object') throw new Error('manifest.json غير صالح');
-  if(m.format!==FULL_BACKUP_FORMAT) throw new Error('صيغة النسخة الاحتياطية غير معروفة');
-  const v=Number(m.version);
-  if(!Number.isInteger(v)||v<1) throw new Error('رقم إصدار النسخة الاحتياطية غير صالح');
-  if(v>FULL_BACKUP_VERSION) throw new Error('هذه النسخة صادرة من إصدار أحدث وغير مدعوم حاليًا؛ لن يتم الاستيراد لتجنب فقد البيانات.');
-  /* exportId أُضيف بدءًا من الإصدار 7. النسخ الأقدم (v<7) لا تحتوي عليه أصلاً، وهذا متوقع وليس عطبًا —
-     تُقبل في "وضع توافق" بدل رفضها بالكامل. أما نسخة v7+ بدون exportId فهذا يدل فعليًا على حزمة تالفة/معدَّلة. */
-  if(v>=7 && !m.exportId) throw new Error('manifest.json لا يحتوي exportId رغم أن رقم إصداره يتطلبه؛ الحزمة على الأغلب تالفة أو مُعدَّلة يدويًا.');
-  m.__legacyNoExportId = (v<7 && !m.exportId);
-  return m;
-}
-function backupTryParseJSONBlob(v){
-  /* بعض أجزاء الحالة (خصوصًا state.__runtimePersistence.localStorage، اللي بينسخ كل مفاتيح
-     localStorage كنصوص كما هي) تحتوي كائنات JSON مُرمَّزة داخل نص (string) وليس ككائن حقيقي —
-     مثل ملاحظة عنصر فيها صور مرفقة. الفحص القديم كان يتعامل مع أي قيمة نصية كوحدة مقفولة،
-     فأي مرجع idbimg_ داخل نص كهذا كان يختفي عن كل فحوصات "الصور المُستخدمة" و"الصور المفقودة"،
-     ويؤدي لعدم تصديرها أبدًا رغم أنها صور حقيقية مرفقة بالمشروع. هنا نحاول فك أي نص يبدو كـ
-     JSON (يبدأ بـ { أو [) لنكمل البحث بداخله، بأمان وبدون تكلفة على النصوص العادية (شرح، أسماء
-     …) لأنها لن تبدأ بهذين الحرفين غالبًا فلا نحاول فكها أصلًا. */
-  if(typeof v!=='string') return null;
-  const t=v.trim();
-  if(t.length<2||(t[0]!=='{'&&t[0]!=='[')) return null;
-  try{ const p=JSON.parse(t); return (p&&typeof p==='object')?p:null; }catch(e){ return null; }
-}
-function backupWalkForIdbRefs(root,onRef){
-  const seen=new WeakSet();
-  (function walk(v){
-    if(!v)return;
-    if(typeof v==='string'){
-      if(isIdbImageRef(v)){ onRef(v); return; }
-      const parsed=backupTryParseJSONBlob(v);
-      if(parsed) walk(parsed);
-      return;
-    }
-    if(typeof v!=='object'||seen.has(v))return;seen.add(v);
-    if(Array.isArray(v)){v.forEach(walk);return;}
-    Object.keys(v).forEach(k=>{if(k!=='history'&&k!=='future')walk(v[k]);});
-  })(root);
-}
-async function backupCollectReferencedAssetIds(root){
-  const ids=new Set();
-  backupWalkForIdbRefs(root,ref=>ids.add(ref));
-  return [...ids];
-}
-/* مراجع الأصول الحرجة للاستيراد: لا نعتبر النسخ التاريخية/المؤقتة داخل
-   __runtimePersistence سببًا لإلغاء استيراد المشروع. تبقى هذه المراجع قابلة
-   للاكتشاف بواسطة scanForMissingAssetRefs() كتحذير بعد الاستيراد. */
-async function backupCollectCriticalReferencedAssetIds(root){
-  const ids=new Set(),seen=new WeakSet();
-  (function walk(v){
-    if(v==null)return;
-    if(typeof v==='string'){
-      if(isIdbImageRef(v)) ids.add(v);
-      else { const parsed=backupTryParseJSONBlob(v); if(parsed) walk(parsed); }
-      return;
-    }
-    if(typeof v!=='object'||seen.has(v))return;
-    seen.add(v);
-    if(Array.isArray(v)){v.forEach(walk);return;}
-    for(const [k,x] of Object.entries(v)){
-      if(k==='history'||k==='future'||k==='__runtimePersistence')continue;
-      walk(x);
-    }
-  })(root);
-  return [...ids];
-}
-function backupValidateStateShape(st){
-  if(!st||typeof st!=='object'||Array.isArray(st)) throw new Error('حالة المشروع غير صالحة');
-  const arrays=['categories','components','shelves','drawers','columns','boxes','containers'];
-  const bad=arrays.filter(k=>st[k]!=null&&!Array.isArray(st[k]));
-  if(bad.length) throw new Error('بنية المشروع غير صالحة: '+bad.join(', '));
-}
-function backupValidateRelationships(st){
-  const issues=[]; const ids=a=>new Set((Array.isArray(a)?a:[]).map(x=>String(x?.id)).filter(Boolean));
-  const shelfIds=ids(st.shelves),drawerIds=ids(st.drawers),columnIds=ids(st.columns),boxIds=ids(st.boxes),containerIds=ids(st.containers),componentIds=ids(st.components);
-  const check=(arr,parentKeys,set,label)=>{for(const x of (Array.isArray(arr)?arr:[])){for(const k of parentKeys){if(x&&x[k]!=null&&String(x[k])!==''&&!set.has(String(x[k])))issues.push(`${label} ${x.id||'?'} يشير إلى ${k} غير موجود: ${x[k]}`);}}};
-  check(st.drawers,['shelfId','rackId'],shelfIds,'Drawer');
-  check(st.columns,['drawerId'],drawerIds,'Column');
-  check(st.boxes,['columnId'],columnIds,'Box');
-  check(st.containers,['boxId','columnId'],new Set([...boxIds,...columnIds]),'Container');
-  check(st.components,['containerId'],containerIds,'Component');
-  return issues;
-}
 function backupSafeName(name,fallback='item'){return String(name||fallback).replace(/[\\/:*?"<>|\u0000-\u001F]/g,'_').replace(/\s+/g,' ').trim().slice(0,120)||fallback;}
 function backupUtf8(s){return new TextEncoder().encode(String(s));}
 function backupConcat(parts){let n=0;parts.forEach(x=>n+=x.length);const out=new Uint8Array(n);let o=0;parts.forEach(x=>{out.set(x,o);o+=x.length});return out;}
@@ -8272,92 +7961,9 @@ const BACKUP_CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++)
 function backupCRC32(data){let c=0xffffffff;for(let i=0;i<data.length;i++)c=BACKUP_CRC_TABLE[(c^data[i])&255]^(c>>>8);return (c^0xffffffff)>>>0;}
 function backupCRC32Update(c,data){for(let i=0;i<data.length;i++)c=BACKUP_CRC_TABLE[(c^data[i])&255]^(c>>>8);return c>>>0;}
 function backupDosTime(){const d=new Date();return {time:(d.getHours()<<11)|(d.getMinutes()<<5)|Math.floor(d.getSeconds()/2),date:((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate()};}
-function makeStoredZip(files){
-  const locals=[],cdParts=[];let offset=0;const td=backupDosTime();
-  files.forEach(file=>{
-    const name=backupUtf8(file.name);
-    const data=file.data instanceof Uint8Array?file.data:new Uint8Array(file.data);
-    const crc=backupCRC32(data),size=data.length,entryStart=offset;
-    const need64=size>=ZIP64_MARK;
-    const sizeField=need64?ZIP64_MARK:size;
-    const extra=need64?zip64ExtraLocal(size):new Uint8Array(0);
-    const local=backupConcat([new Uint8Array([0x50,0x4b,0x03,0x04]),backupU16(need64?45:20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(sizeField),backupU32(sizeField),backupU16(name.length),backupU16(extra.length),name,extra,data]);
-    locals.push(local);offset+=local.length;
-    const cneed64=size>=ZIP64_MARK||entryStart>=ZIP64_MARK;
-    const csizeField=cneed64?ZIP64_MARK:size,coffField=cneed64?ZIP64_MARK:entryStart;
-    const cextra=cneed64?zip64ExtraCentral(size,entryStart):new Uint8Array(0);
-    cdParts.push(backupConcat([new Uint8Array([0x50,0x4b,0x01,0x02]),backupU16(cneed64?45:20),backupU16(cneed64?45:20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(csizeField),backupU32(csizeField),backupU16(name.length),backupU16(cextra.length),backupU16(0),backupU16(0),backupU16(0),backupU32(0),backupU32(coffField),name,cextra]));
-  });
-  const body=backupConcat(locals),cd=backupConcat(cdParts);
-  const need64EOCD=files.length>ZIP64_MARK16||cd.length>=ZIP64_MARK||body.length>=ZIP64_MARK;
-  const tail=[];
-  if(need64EOCD){
-    const zip64EocdStart=body.length+cd.length;
-    tail.push(backupConcat([new Uint8Array([0x50,0x4b,0x06,0x06]),backupU64(44),backupU16(45),backupU16(45),backupU32(0),backupU32(0),backupU64(files.length),backupU64(files.length),backupU64(cd.length),backupU64(body.length)]));
-    tail.push(backupConcat([new Uint8Array([0x50,0x4b,0x06,0x07]),backupU32(0),backupU64(zip64EocdStart),backupU32(1)]));
-  }
-  const eocdCount=files.length>ZIP64_MARK16?ZIP64_MARK16:files.length;
-  const eocdCdSize=cd.length>=ZIP64_MARK?ZIP64_MARK:cd.length;
-  const eocdCdStart=body.length>=ZIP64_MARK?ZIP64_MARK:body.length;
-  tail.push(backupConcat([new Uint8Array([0x50,0x4b,0x05,0x06]),backupU16(0),backupU16(0),backupU16(eocdCount),backupU16(eocdCount),backupU32(eocdCdSize),backupU32(eocdCdStart),backupU16(0)]));
-  return backupConcat([body,cd,...tail]);
-}
+function makeStoredZip(files){const locals=[],centrals=[];let offset=0;const td=backupDosTime();files.forEach(file=>{const name=backupUtf8(file.name),data=file.data instanceof Uint8Array?file.data:new Uint8Array(file.data),crc=backupCRC32(data);if(data.length>0xffffffff||offset>0xffffffff)throw new Error('حجم المشروع يتجاوز حد ZIP التقليدي؛ استخدم التصدير المباشر.');const local=backupConcat([new Uint8Array([0x50,0x4b,0x03,0x04]),backupU16(20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(data.length),backupU32(data.length),backupU16(name.length),backupU16(0),name,data]);locals.push(local);centrals.push(backupConcat([new Uint8Array([0x50,0x4b,0x01,0x02]),backupU16(20),backupU16(20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(data.length),backupU32(data.length),backupU16(name.length),backupU16(0),backupU16(0),backupU16(0),backupU16(0),backupU32(0),backupU32(offset),name]));offset+=local.length;});const body=backupConcat(locals),cd=backupConcat(centrals);return backupConcat([body,cd,new Uint8Array([0x50,0x4b,0x05,0x06]),backupU16(0),backupU16(0),backupU16(files.length),backupU16(files.length),backupU32(cd.length),backupU32(body.length),backupU16(0)]);}
 function backupReadU16(a,o){return a[o]|(a[o+1]<<8)} function backupReadU32(a,o){return (a[o]|(a[o+1]<<8)|(a[o+2]<<16)|(a[o+3]<<24))>>>0}
-/* ===================== دعم ZIP64 (لإزالة سقف 4GB / 65535 ملف) =====================
-   نستخدم صيغة تخزين بلا ضغط (STORE) فقط، لذلك الحجم المضغوط == الحجم الأصلي دائمًا، وهذا يبسّط
-   إضافة ZIP64: كل ما نحتاجه هو تمثيل 64-بت للحجم والإزاحة (offset) وعدد الملفات، بدل حقول 32-بت
-   التقليدية التي تفيض عند 4GB أو 65535 ملف. القيم هنا آمنة حتى ~9 بيتابايت (Number.MAX_SAFE_INTEGER)
-   وهو أكبر من أي مشروع واقعي بمراحل. */
-const ZIP64_MARK=0xffffffff, ZIP64_MARK16=0xffff;
-function backupU64(n){ n=Math.max(0,Math.floor(n)); const lo=n>>>0, hi=Math.floor(n/4294967296)>>>0; return new Uint8Array([lo&255,(lo>>>8)&255,(lo>>>16)&255,(lo>>>24)&255,hi&255,(hi>>>8)&255,(hi>>>16)&255,(hi>>>24)&255]); }
-function backupReadU64(a,o){ return backupReadU32(a,o+4)*4294967296+backupReadU32(a,o); }
-function zip64ExtraLocal(size){ return backupConcat([backupU16(0x0001),backupU16(16),backupU64(size),backupU64(size)]); }
-function zip64ExtraCentral(size,offset){ return backupConcat([backupU16(0x0001),backupU16(24),backupU64(size),backupU64(size),backupU64(offset)]); }
-/* يفحص كل حقول extra field (قد يوجد أكثر من واحد) بحثًا عن حقل ZIP64 (tag=0x0001) ويرجع
-   أي قيم 64-بت وُجدت بداخله. الترتيب القياسي: original size, compressed size, offset, disk start —
-   لكن الحقل قد يحتوي أقل من ذلك (مثلًا سجل محلي عادة فيه original+compressed فقط)، لذلك نقرأ
-   بقدر طول الحقل المعلن فعليًا لا أكثر. */
-function parseZip64Extra(extra){
-  const out={};let i=0;
-  while(i+4<=extra.length){
-    const id=backupReadU16(extra,i),sz=backupReadU16(extra,i+2),end=i+4+sz;
-    if(id===0x0001){
-      let p=i+4;
-      if(p+8<=end){ out.usize=backupReadU64(extra,p); p+=8; }
-      if(p+8<=end){ out.csize=backupReadU64(extra,p); p+=8; }
-      if(p+8<=end){ out.offset=backupReadU64(extra,p); p+=8; }
-      break;
-    }
-    i=end;
-  }
-  return out;
-}
-function parseStoredZip(buf){
-  const a=new Uint8Array(buf),out=new Map();let pos=0;
-  while(pos+4<=a.length){
-    const sig=backupReadU32(a,pos);
-    if(sig===0x04034b50){
-      const flags=backupReadU16(a,pos+6),method=backupReadU16(a,pos+8);
-      let csize=backupReadU32(a,pos+18),usize=backupReadU32(a,pos+22);
-      const nlen=backupReadU16(a,pos+26),xlen=backupReadU16(a,pos+28);
-      if(flags&8)throw new Error('ZIP يستخدم Data Descriptor غير مدعوم');
-      if(method!==0)throw new Error('ZIP مضغوط غير مدعوم؛ استخدم ملفًا صادرًا من التطبيق');
-      const name=new TextDecoder().decode(a.subarray(pos+30,pos+30+nlen));
-      const extraStart=pos+30+nlen;
-      if((csize===ZIP64_MARK||usize===ZIP64_MARK)&&xlen>0){
-        const z=parseZip64Extra(a.subarray(extraStart,extraStart+xlen));
-        if(z.csize!=null)csize=z.csize; if(z.usize!=null)usize=z.usize;
-      }
-      const start=extraStart+xlen;
-      if(start+csize>a.length)throw new Error('ZIP تالف');
-      const data=a.slice(start,start+csize);
-      if(data.length!==usize||backupCRC32(data)!==backupReadU32(a,pos+14))throw new Error('فشل فحص سلامة: '+name);
-      out.set(name,data);pos=start+csize;
-    }else if(sig===0x02014b50||sig===0x06054b50||sig===0x06064b50||sig===0x07064b50)break;
-    else throw new Error('ملف ZIP غير صالح');
-  }
-  return out;
-}
+function parseStoredZip(buf){const a=new Uint8Array(buf),out=new Map();let pos=0;while(pos+4<=a.length){const sig=backupReadU32(a,pos);if(sig===0x04034b50){const flags=backupReadU16(a,pos+6),method=backupReadU16(a,pos+8),csize=backupReadU32(a,pos+18),usize=backupReadU32(a,pos+22),nlen=backupReadU16(a,pos+26),xlen=backupReadU16(a,pos+28);if(flags&8)throw new Error('ZIP يستخدم Data Descriptor غير مدعوم');if(method!==0)throw new Error('ZIP مضغوط غير مدعوم؛ استخدم ملفًا صادرًا من التطبيق');const name=new TextDecoder().decode(a.subarray(pos+30,pos+30+nlen)),start=pos+30+nlen+xlen;if(start+csize>a.length)throw new Error('ZIP تالف');const data=a.slice(start,start+csize);if(data.length!==usize||backupCRC32(data)!==backupReadU32(a,pos+14))throw new Error('فشل فحص سلامة: '+name);out.set(name,data);pos=start+csize;}else if(sig===0x02014b50||sig===0x06054b50)break;else throw new Error('ملف ZIP غير صالح');}return out;}
 async function backupAllImageKeys(){return await listStoredAssetIds();}
 function backupFindTables(v,path='root',out=[]){if(!v||typeof v!=='object')return out;if(Array.isArray(v)){v.forEach((x,i)=>backupFindTables(x,`${path}[${i}]`,out));return out;}if(Array.isArray(v.columns)&&Array.isArray(v.rows))out.push({table:v,path});Object.keys(v).forEach(k=>{if(k!=='history'&&k!=='future')backupFindTables(v[k],`${path}.${k}`,out)});return out;}
 function backupCsv(t){const cols=(t.columns||[]).map(c=>c.label||c.name||c.id),esc=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};const rows=[cols];(t.rows||[]).forEach(r=>rows.push((t.columns||[]).map(c=>r.values?.[c.id]??r[c.id]??'')));return '\ufeff'+rows.map(r=>r.map(esc).join(',')).join('\r\n');}
@@ -8367,18 +7973,26 @@ function backupCsv(t){const cols=(t.columns||[]).map(c=>c.label||c.name||c.id),e
  * localStorage الخاصة بالتطبيق معًا، مع إبقاء المفاتيح الحساسة/الخاصة بالمتصفح خارج الحزمة.
  */
 const BACKUP_LS_EXCLUDE_PREFIXES=['__'];
-const BACKUP_LS_ALLOWED_PREFIXES=['workshop_','inventory_','wi_'];
-const BACKUP_LS_ALLOWED_KEYS=new Set(['theme','uiTheme']);
-function backupIsPortableLocalStorageKey(k){k=String(k||'');return BACKUP_LS_ALLOWED_KEYS.has(k)||BACKUP_LS_ALLOWED_PREFIXES.some(p=>k.startsWith(p));}
-function getPortableLocalStorage(){const out={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||BACKUP_LS_EXCLUDE_PREFIXES.some(p=>k.startsWith(p))||!backupIsPortableLocalStorageKey(k))continue;const v=localStorage.getItem(k);if(v!==null)out[k]=v;}}catch(e){}return out;}
+function getPortableLocalStorage(){
+  const out={};
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i); if(!k) continue;
+      if(BACKUP_LS_EXCLUDE_PREFIXES.some(p=>k.startsWith(p))) continue;
+      const v=localStorage.getItem(k);
+      if(v!==null) out[k]=v;
+    }
+  }catch(e){}
+  return out;
+}
 function clearPortableLocalStorageExcept(data){
   const keep=new Set(Object.keys(data||{}));
-  try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&backupIsPortableLocalStorageKey(k))keys.push(k);}keys.forEach(k=>{if(!keep.has(k))try{localStorage.removeItem(k);}catch(_e){}});}catch(_e){}
+  try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&!k.startsWith('__'))keys.push(k);}keys.forEach(k=>{if(!keep.has(k))try{localStorage.removeItem(k);}catch(_e){}});}catch(_e){}
 }
 function restorePortableLocalStorage(data,rep){
   if(!data||typeof data!=='object') return;
   for(const [k,v] of Object.entries(data)){
-    if(BACKUP_LS_EXCLUDE_PREFIXES.some(p=>String(k).startsWith(p))||!backupIsPortableLocalStorageKey(k)) continue;
+    if(BACKUP_LS_EXCLUDE_PREFIXES.some(p=>String(k).startsWith(p))) continue;
     try{localStorage.setItem(k,String(v));}
     catch(e){if(rep)rep.warnings.push('تعذر استعادة إعداد التخزين المحلي: '+k);}
   }
@@ -8434,58 +8048,12 @@ async function restoreImageDbExtra(data,rep){
 async function collectAllOPFSFiles(){
   const out=[];try{const root=await getOPFSRoot();if(!root)return out;for await(const [name,handle] of root.entries()){if(handle.kind==='file'){try{const file=await handle.getFile();out.push({name,file});}catch(_e){}}}}catch(_e){}return out;
 }
-function backupStripDanglingAssetRefs(root,existingIds,stats){
-  /* تنظيف استباقي: أي مرجع idbimg_ داخل نسخة التصدير (سواء مباشر في مصفوفة/حقل، أو متداخل جوه
-     نص JSON مُرمَّز مثل ملاحظات العناصر) لا يقابله ملف موجود فعليًا في التخزين — يُحذف من نسخة
-     التصدير فقط (الحالة الحية للتطبيق لا تُمس إطلاقًا). هذا يضمن أن أي نسخة تُصدَّر ستكون قابلة
-     للاستيراد دائمًا بذاتها، بدل انتظار حدوث هذا التعارض عند الاستيراد على جهاز آخر لاحقًا.
-     ملاحظة: هذا لا يتعارض مع تساهل التحقق عند الاستيراد (backupCollectCriticalReferencedAssetIds) —
-     بالعكس، الاثنان يكملان بعض: هذا يمنع حدوث الفجوة من الأساس عند التصدير، وذاك يضمن ألا تُرفض
-     عملية استيراد كاملة بسبب فجوة قديمة لم يعد بالإمكان تفاديها (نسخة صدرت قبل هذا الإصلاح مثلاً). */
-  const seen=new WeakSet();
-  function walk(v){
-    if(!v||typeof v!=='object'||seen.has(v))return;seen.add(v);
-    if(Array.isArray(v)){
-      for(let i=v.length-1;i>=0;i--){
-        const item=v[i];
-        if(typeof item==='string'){
-          if(isIdbImageRef(item)){ if(!existingIds.has(item)){ v.splice(i,1); stats.removed++; stats.ids.push(item); } continue; }
-          const parsed=backupTryParseJSONBlob(item);
-          if(parsed){ walk(parsed); v[i]=JSON.stringify(parsed); }
-          continue;
-        }
-        if(item&&typeof item==='object'){
-          if(item.id&&typeof item.id==='string'&&isIdbImageRef(item.id)&&!existingIds.has(item.id)){ v.splice(i,1); stats.removed++; stats.ids.push(item.id); continue; }
-          walk(item);
-        }
-      }
-      return;
-    }
-    Object.keys(v).forEach(k=>{
-      if(k==='history'||k==='future')return; // يُصفَّى بالكامل بعد أي استيراد لاحقًا، لا نعبث فيه هنا
-      const val=v[k];
-      if(typeof val==='string'){
-        if(isIdbImageRef(val)){ if(!existingIds.has(val)){ delete v[k]; stats.removed++; stats.ids.push(val); } return; }
-        const parsed=backupTryParseJSONBlob(val);
-        if(parsed){ walk(parsed); v[k]=JSON.stringify(parsed); }
-        return;
-      }
-      if(val&&typeof val==='object') walk(val);
-    });
-  }
-  walk(root);
-}
 async function collectBackupEntries(){
   const entries=[],seen=new Set();
   const add=(name,data,mime='application/octet-stream',size)=>{name=name.replace(/^\/+/, '');if(seen.has(name))return;seen.add(name);entries.push({name,data,mime,size:size!=null?size:(data instanceof Uint8Array?data.length:data?.size||0)});};
   /* نأخذ نسخة مستقلة من الحالة بعد التحقق من آخر نسخة محفوظة فعليًا. */
   const persistedState=await verifyPersistedStateForBackup();
-  const exportState=structuredClone(persistedState&&typeof persistedState==='object'?persistedState:state);
-  const danglingStats={removed:0,ids:[]};
-  try{
-    const existingAssetIds=new Set((await listStoredAssetIds()).map(String));
-    backupStripDanglingAssetRefs(exportState,existingAssetIds,danglingStats);
-  }catch(e){}
+  const exportState=persistedState && typeof persistedState==='object' ? persistedState : state;
   const stateJson=JSON.stringify(exportState,null,2);
   add('project/state.json',backupUtf8(stateJson),'application/json');
   const portableLS=getPortableLocalStorage();
@@ -8516,7 +8084,7 @@ async function collectBackupEntries(){
   add('project/preferences.json',backupUtf8(JSON.stringify(exportState.preferences||{},null,2)),'application/json');
 
   const refs=backupFindTables(exportState);
-  const exportId=backupExportId(); const meta={format:FULL_BACKUP_FORMAT,version:FULL_BACKUP_VERSION,exportId,projectId:backupProjectId(exportState),createdAt:new Date().toISOString(),hashAlgorithm:'SHA-256',theme:exportState.uiTheme||'amber',appVersion:APP_VERSION,
+  const meta={format:'Workshop Inventory Full Project',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),theme:exportState.uiTheme||'amber',
     counts:{categories:(exportState.categories||[]).length,components:(exportState.components||[]).length,categorySchemas:Object.keys(exportState.categorySchemas||{}).length,
       shelves:(exportState.shelves||[]).length,drawers:(exportState.drawers||[]).length,columns:(exportState.columns||[]).length,boxes:(exportState.boxes||[]).length,cells:(exportState.containers||[]).length,
       usageHistory:(exportState.usageHistory||[]).length,auditHistory:(exportState.auditHistory||[]).length,undoHistory:(exportState.history||[]).length,redoHistory:(exportState.future||[]).length,
@@ -8525,10 +8093,8 @@ async function collectBackupEntries(){
     storage:{database:'IndexedDB',largeFiles:'OPFS when available',largeFileThreshold:LARGE_ASSET_THRESHOLD}};
   refs.forEach((x,i)=>{const b=`tables/${String(i+1).padStart(3,'0')}_${backupSafeName(x.table.title||'جدول')}`;add(b+'.json',backupUtf8(JSON.stringify(x.table,null,2)),'application/json');add(b+'.csv',backupUtf8(backupCsv(x.table)),'text/csv');});
   const assetManifest={};let assetCount=0,totalAssetBytes=0;
-  const referencedAssetIds=new Set(await backupCollectReferencedAssetIds(exportState));
   try{
     for(const key of await backupAllImageKeys()){
-      if(!referencedAssetIds.has(String(key))) continue;
       const blob=await idbGetImage(key);if(!blob)continue;
       const meta0=await getAssetMeta(key)||{};
       const ext=(meta0.name||'').includes('.')?backupSafeName(meta0.name).split('.').pop():((blob.type||'bin').split('/')[1]||'bin').replace(/[^a-z0-9]/gi,'');
@@ -8544,23 +8110,13 @@ async function collectBackupEntries(){
       const n='assets/opfs-orphans/'+backupSafeName(item.name);
       if(seen.has(n))continue;
       add(n,item.file,item.file.type||'application/octet-stream',item.file.size||0);
-      assetManifest[n]={id:'opfs:'+String(item.name),mime:item.file.type||'application/octet-stream',size:item.file.size||0,name:item.name,backend:'opfs-orphan'};
-      assetCount++; totalAssetBytes+=Number(item.file.size||0);
     }
   }catch(_e){}
   meta.assetCount=assetCount;meta.assetBytes=totalAssetBytes;meta.assets=assetManifest;meta.fileCount=entries.length+1;
   add('project/asset-manifest.json',backupUtf8(JSON.stringify(assetManifest,null,2)),'application/json');
-  // بصمات كل ملفات الحزمة قبل manifest نفسه؛ manifest يصف المحتويات ولا يدخل في بصمته لتجنب مرجع دائري.
-  meta.files={};
-  for(const e of entries){
-    let bytes;
-    if(e.data instanceof Uint8Array) bytes=e.data;
-    else bytes=new Uint8Array(await e.data.arrayBuffer());
-    meta.files[e.name]={size:bytes.length,sha256:await backupSHA256(bytes)};
-  }
   meta.fileCount=entries.length+1;
   add('project/manifest.json',backupUtf8(JSON.stringify(meta,null,2)),'application/json');
-  return {entries,danglingRemoved:danglingStats.removed,danglingIds:danglingStats.ids,meta};
+  return entries;
 }
 async function backupSaveFile(blob,filename){if(window.showSaveFilePicker){try{const h=await window.showSaveFilePicker({suggestedName:filename,types:[{description:'Workshop Project ZIP',accept:{'application/zip':['.zip']}}]});const w=await h.createWritable();await w.write(blob);await w.close();return'saved';}catch(e){if(e?.name==='AbortError')return'cancel';}}const a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);return'download';}
 async function streamBlobCRC(blob){let c=0xffffffff,total=0;for await(const chunk of blob.stream()){const u=chunk instanceof Uint8Array?chunk:new Uint8Array(chunk);c=backupCRC32Update(c,u);total+=u.length;}return {crc:(c^0xffffffff)>>>0,size:total};}
@@ -8571,59 +8127,20 @@ async function writeStoredZipStream(entries,handle,onProgress){
       const e=entries[i],name=backupUtf8(e.name),data=e.data instanceof Uint8Array?e.data:e.data;
       let crc,size;
       if(data instanceof Uint8Array){crc=backupCRC32(data);size=data.length;}else{const r=await streamBlobCRC(data);crc=r.crc;size=r.size;}
-      const entryStart=offset;
-      const need64=size>=ZIP64_MARK;
-      const sizeField=need64?ZIP64_MARK:size;
-      const extra=need64?zip64ExtraLocal(size):new Uint8Array(0);
-      const local=backupConcat([new Uint8Array([0x50,0x4b,0x03,0x04]),backupU16(need64?45:20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(sizeField),backupU32(sizeField),backupU16(name.length),backupU16(extra.length),name,extra]);
+      if(size>0xffffffff||offset>0xffffffff)throw new Error('حجم التصدير تجاوز 4GB؛ ZIP64 غير مدعوم في هذه النسخة.');
+      const local=backupConcat([new Uint8Array([0x50,0x4b,0x03,0x04]),backupU16(20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(crc),backupU32(size),backupU32(size),backupU16(name.length),backupU16(0),name]);
       await writable.write(local);offset+=local.length;
       if(data instanceof Uint8Array){await writable.write(data);offset+=data.length;}else{for await(const chunk of data.stream()){const u=chunk instanceof Uint8Array?chunk:new Uint8Array(chunk);await writable.write(u);offset+=u.length;}}
-      central.push({name,crc,size,offset:entryStart});
+      central.push({name,crc,size,offset:offset-(size+local.length)});
       if(onProgress)onProgress(i+1,entries.length,size);
     }
-    const cdStart=offset;
-    for(const c of central){
-      const cneed64=c.size>=ZIP64_MARK||c.offset>=ZIP64_MARK;
-      const csizeField=cneed64?ZIP64_MARK:c.size,coffField=cneed64?ZIP64_MARK:c.offset;
-      const cextra=cneed64?zip64ExtraCentral(c.size,c.offset):new Uint8Array(0);
-      const h=backupConcat([new Uint8Array([0x50,0x4b,0x01,0x02]),backupU16(cneed64?45:20),backupU16(cneed64?45:20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(c.crc),backupU32(csizeField),backupU32(csizeField),backupU16(c.name.length),backupU16(cextra.length),backupU16(0),backupU16(0),backupU16(0),backupU32(0),backupU32(coffField),c.name,cextra]);
-      await writable.write(h);offset+=h.length;
-    }
-    const cdSize=offset-cdStart;
-    const need64EOCD=central.length>ZIP64_MARK16||cdSize>=ZIP64_MARK||cdStart>=ZIP64_MARK;
-    if(need64EOCD){
-      const zip64EocdStart=offset;
-      const zip64Eocd=backupConcat([new Uint8Array([0x50,0x4b,0x06,0x06]),backupU64(44),backupU16(45),backupU16(45),backupU32(0),backupU32(0),backupU64(central.length),backupU64(central.length),backupU64(cdSize),backupU64(cdStart)]);
-      await writable.write(zip64Eocd);offset+=zip64Eocd.length;
-      const zip64Locator=backupConcat([new Uint8Array([0x50,0x4b,0x06,0x07]),backupU32(0),backupU64(zip64EocdStart),backupU32(1)]);
-      await writable.write(zip64Locator);offset+=zip64Locator.length;
-    }
-    const eocdCount=central.length>ZIP64_MARK16?ZIP64_MARK16:central.length;
-    const eocdCdSize=cdSize>=ZIP64_MARK?ZIP64_MARK:cdSize;
-    const eocdCdStart=cdStart>=ZIP64_MARK?ZIP64_MARK:cdStart;
-    await writable.write(backupConcat([new Uint8Array([0x50,0x4b,0x05,0x06]),backupU16(0),backupU16(0),backupU16(eocdCount),backupU16(eocdCount),backupU32(eocdCdSize),backupU32(eocdCdStart),backupU16(0)]));
+    const cdStart=offset;for(const c of central){const h=backupConcat([new Uint8Array([0x50,0x4b,0x01,0x02]),backupU16(20),backupU16(20),backupU16(0x0800),backupU16(0),backupU16(td.time),backupU16(td.date),backupU32(c.crc),backupU32(c.size),backupU32(c.size),backupU16(c.name.length),backupU16(0),backupU16(0),backupU16(0),backupU16(0),backupU32(0),backupU32(c.offset),c.name]);await writable.write(h);offset+=h.length;}
+    const cdSize=offset-cdStart;if(cdSize>0xffffffff||cdStart>0xffffffff||central.length>0xffff)throw new Error('حجم/عدد ملفات التصدير تجاوز حدود ZIP التقليدي.');
+    await writable.write(backupConcat([new Uint8Array([0x50,0x4b,0x05,0x06]),backupU16(0),backupU16(0),backupU16(central.length),backupU16(central.length),backupU32(cdSize),backupU32(cdStart),backupU16(0)]));
     await writable.close();return offset;
   }catch(e){try{await writable.abort();}catch(_e){}throw e;}
 }
-/* قفل بسيط يمنع تشغيل تصدير/استيراد أثناء عملية أخرى جارية بالفعل، ويعطّل الأزرار المرتبطة،
-   ويحذّر المستخدم قبل إغلاق الصفحة أو الانتقال منها أثناء عملية طويلة (خصوصًا الاستيراد/التصدير
-   المتدفق للمشاريع الكبيرة)، لأن مغادرة الصفحة وقتها قد تترك عملية كتابة غير مكتملة. */
-let backupOpInProgress=false;
-function backupBeforeUnloadGuard(e){ e.preventDefault(); e.returnValue=''; return ''; }
-function backupBeginOp(){
-  if(backupOpInProgress){ toast('عملية نسخ احتياطي أخرى قيد التنفيذ بالفعل — انتظر حتى تنتهي.'); return false; }
-  backupOpInProgress=true;
-  window.addEventListener('beforeunload',backupBeforeUnloadGuard);
-  ['exportFullBtn','exportJsonBtn','importFullFile'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=true;});
-  return true;
-}
-function backupEndOp(){
-  backupOpInProgress=false;
-  window.removeEventListener('beforeunload',backupBeforeUnloadGuard);
-  ['exportFullBtn','exportJsonBtn','importFullFile'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=false;});
-}
 async function exportFullProject(){
-  if(!backupBeginOp()) return;
   const st=document.getElementById('backupStatus');if(st)st.textContent='⏳ جارٍ تجهيز المشروع وحساب الملفات الكبيرة…';
   try{
     captureRuntimeLocalStorageIntoState();
@@ -8631,7 +8148,7 @@ async function exportFullProject(){
     await flushSaveForBackup();
     await migrateLegacyDataUrlsToAssets();
     await flushSaveForBackup();
-    const {entries,danglingRemoved,danglingIds,meta}=await collectBackupEntries();const total=entries.reduce((n,e)=>n+Number(e.size||0),0);const name=`workshop_project_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.zip`;
+    const entries=await collectBackupEntries();const total=entries.reduce((n,e)=>n+Number(e.size||0),0);const name=`workshop_project_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.zip`;
     let r='';
     if(total>=STREAM_EXPORT_THRESHOLD && window.showSaveFilePicker){
       const h=await window.showSaveFilePicker({suggestedName:name,types:[{description:'Workshop Project ZIP',accept:{'application/zip':['.zip']}}]});
@@ -8642,24 +8159,10 @@ async function exportFullProject(){
       const small=[];for(const e of entries){small.push({name:e.name,data:e.data instanceof Uint8Array?e.data:new Uint8Array(await e.data.arrayBuffer()),mime:e.mime});}
       const zip=makeStoredZip(small);r=await backupSaveFile(new Blob([zip],{type:'application/zip'}),name);
     }
-    if(r!=='cancel'){
-      const cleanNote=danglingRemoved>0?` (تم تلقائيًا حذف ${danglingRemoved} مرجع صورة تالف/غير موجود من هذه النسخة)`:'';
-      if(st)st.textContent=`✅ تم التصدير بنجاح — ${entries.length} عنصر، ${formatFileSize(total)}${cleanNote}`;
-      toast('تم تصدير المشروع بالكامل'+cleanNote);
-      recordBackupHistory(name,total);
-      await recordExportDetail({ts:Date.now(),name,bytes:total,exportId:meta.exportId,appVersion:meta.appVersion,counts:meta.counts,assetCount:meta.assetCount,assetBytes:meta.assetBytes,danglingRemoved,danglingIds,files:entries.map(e=>({name:e.name,size:Number(e.size||0)}))});
-      if(danglingRemoved>0) logError('backup','تم حذف '+danglingRemoved+' مرجع صورة تالف تلقائيًا من نسخة التصدير (الملفات كانت مفقودة أصلًا من التخزين قبل التصدير): '+danglingIds.slice(0,10).join('، ')+(danglingIds.length>10?' …':''),'');
-    }
-  }catch(e){console.error(e);if(st)st.textContent='❌ فشل التصدير: '+(e.message||e);toast('فشل التصدير');logError('backup','فشل تصدير المشروع الكامل',String(e?.message||e));}
-  finally{ backupEndOp(); }
+    if(r!=='cancel'){if(st)st.textContent=`✅ تم التصدير بنجاح — ${entries.length} عنصر، ${formatFileSize(total)}`;toast('تم تصدير المشروع بالكامل');}
+  }catch(e){console.error(e);if(st)st.textContent='❌ فشل التصدير: '+(e.message||e);toast('فشل التصدير');}
 }
-async function exportPlainJSON(){
-  if(!backupBeginOp()) return;
-  try{
-    captureRuntimeLocalStorageIntoState();saveDirty=true;await flushSaveForBackup();const persisted=await verifyPersistedStateForBackup();const payload={format:'Workshop Inventory Data Only JSON',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),state:persisted,localStorage:getPortableLocalStorage()};await backupSaveFile(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),`workshop_inventory_${new Date().toISOString().slice(0,10)}.json`);toast('تم تصدير بيانات المشروع فقط (بدون ضمان تضمين الملفات المرفقة)');
-  }catch(e){console.error(e);toast('فشل تصدير JSON: '+(e.message||e));}
-  finally{ backupEndOp(); }
-}
+async function exportPlainJSON(){captureRuntimeLocalStorageIntoState();saveDirty=true;await flushSaveForBackup();const persisted=await verifyPersistedStateForBackup();const payload={format:'Workshop Inventory Full Project JSON',version:FULL_BACKUP_VERSION,createdAt:new Date().toISOString(),state:persisted,localStorage:getPortableLocalStorage()};await backupSaveFile(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),`workshop_inventory_${new Date().toISOString().slice(0,10)}.json`);toast('تم تصدير JSON الكامل');}
 async function readZipHeader(file,pos){const b=new Uint8Array(await file.slice(pos,pos+30).arrayBuffer());if(b.length<30)throw new Error('ZIP ناقص أو تالف');return {sig:backupReadU32(b,0),flags:backupReadU16(b,6),method:backupReadU16(b,8),crc:backupReadU32(b,14),csize:backupReadU32(b,18),usize:backupReadU32(b,22),nlen:backupReadU16(b,26),xlen:backupReadU16(b,28)};}
 function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))return'image/png';if(x.endsWith('.jpg')||x.endsWith('.jpeg'))return'image/jpeg';if(x.endsWith('.gif'))return'image/gif';if(x.endsWith('.webp'))return'image/webp';if(x.endsWith('.svg'))return'image/svg+xml';if(x.endsWith('.pdf'))return'application/pdf';if(x.endsWith('.mp4'))return'video/mp4';if(x.endsWith('.webm'))return'video/webm';return'application/octet-stream';}
 /* ============================= IMPORT: قراءة متسامحة (resilient) ============================= */
@@ -8667,87 +8170,46 @@ function guessMimeFromName(n){const x=n.toLowerCase();if(x.endsWith('.png'))retu
    ولا يوقف بقية الاستيراد. الاستثناء الوحيد القاتل هو غياب state.json نفسه — بدونه لا يوجد
    مشروع نستورده أصلاً. هذا يجعل الاستيراد "يتحلل بسهولة": حتى حزمة جزئية أو من نسخة أقدم
    تُستعاد بأقصى ما يمكن استعادته، مع تقرير واضح بما نجح وما فشل وليه. */
-function importReport(){ return {restoredAssets:0, failedAssets:[], skippedEntries:[], warnings:[], legacyEmbeddedConverted:0, allEntries:[], sourceManifest:null}; }
-/* سجل التراجع/الإعادة (history/future) يُصدَّر ويُستورد كما هو، لكن الصور/المرفقات المشار إليها
-   منه فقط (وليس من الحالة الحالية) لا تُضمَّن بالضرورة في حزمة الأصول عند التصدير. الضغط على
-   "تراجع" بعد استيراد كهذا قد يرجع لحالة قديمة تشير لصورة غير موجودة فعليًا داخل المشروع المستورد.
-   لتفادي هذا العطل الصامت، نمسح سجل التراجع/الإعادة فور نجاح أي استيراد كامل. */
-function clearUndoRedoAfterImport(rep){
-  const had=(Array.isArray(state.history)&&state.history.length)||(Array.isArray(state.future)&&state.future.length);
-  state.history=[]; state.future=[];
-  if(had && rep) rep.warnings.push('تم مسح سجل التراجع/الإعادة (Undo/Redo) بعد الاستيراد؛ قد يشير لصور غير مضمّنة بالضرورة في هذه الحزمة.');
-}
-async function importStoredZipStream(file,st,rep,preParsed){
-  let stateBytes=null,manifestBytes=null,assetManifestBytes=null,localStorageBytes=null,indexedDbExtraBytes=null,explicit={},assets=[];
-  if(preParsed){
-    /* الحزمة كانت أُفكِّكت وتحققت من سلامتها بالكامل (SHA-256 لكل ملف) في backupPreflightZip
-       بالفعل — نعيد استخدام نفس البايتات من الذاكرة بدل إعادة فتح وقراءة نفس الملف وحساب CRC
-       من جديد لكل عنصر، وهو ما كان يحدث سابقًا مرتين لكل استيراد صغير/متوسط الحجم. */
-    const entries=preParsed.entries;
-    const classify=(name)=>{
-      if(name==='project/state.json') stateBytes=entries.get(name);
-      else if(name==='project/manifest.json') manifestBytes=entries.get(name);
-      else if(name==='project/asset-manifest.json') assetManifestBytes=entries.get(name);
-      else if(name==='project/local-storage.json') localStorageBytes=entries.get(name);
-      else if(name==='project/indexeddb-extra.json') indexedDbExtraBytes=entries.get(name);
-      else if(name==='project/image-db-extra.json') explicit[name]=entries.get(name);
-      else if(/^project\/(categories|category-schemas|components|storage-layout|history|audit-history|audit-history-meta|undo-history|maps|projects|experiments|purchases|checklist|preferences)\.json$/.test(name)) explicit[name]=entries.get(name);
-      else if(name==='project/emergency-fallback.json' || name==='project/backup-runtime.json' || name==='project/ui-state.json' || name==='project/state-meta.json') explicit[name]=entries.get(name);
-      else if(/^assets\//.test(name)) assets.push({name,bytes:entries.get(name)});
+function importReport(){ return {restoredAssets:0, failedAssets:[], skippedEntries:[], warnings:[], legacyEmbeddedConverted:0}; }
+async function importStoredZipStream(file,st,rep){
+  let pos=0,stateBytes=null,manifestBytes=null,assetManifestBytes=null,localStorageBytes=null,indexedDbExtraBytes=null,explicit={},assets=[];const total=file.size;
+  while(pos+4<=total){
+    let h,name,dataStart,dataEnd,sig;
+    try{
+      const sigBytes=new Uint8Array(await file.slice(pos,pos+4).arrayBuffer());sig=backupReadU32(sigBytes,0);
+      if(sig===0x02014b50||sig===0x06054b50)break; // central directory / end — انتهت السجلات المحلية
+      if(sig!==0x04034b50){ rep.warnings.push(`توقيف القراءة عند موضع ${pos}: توقيع غير معروف (الملف قد يحتوي بيانات زائدة بعد الأرشيف).`); break; }
+      h=await readZipHeader(file,pos);
+      if(h.flags&8){ rep.warnings.push('تنسيق Data Descriptor غير مدعوم — تم إيقاف قراءة الأرشيف عند هذا السجل.'); break; }
+      if(h.method!==0){ rep.warnings.push('عثرنا على مدخل مضغوط (compressed) غير مدعوم داخل الأرشيف — تم تخطيه.'); pos=pos+30+h.nlen+h.xlen+h.csize; continue; }
+      const nameBytes=new Uint8Array(await file.slice(pos+30,pos+30+h.nlen).arrayBuffer());
+      name=new TextDecoder().decode(nameBytes);
+      dataStart=pos+30+h.nlen+h.xlen;dataEnd=dataStart+h.csize;
+      if(dataEnd>total){ rep.warnings.push('الأرشيف يبدو مقطوعًا/تالفًا عند: '+name+' — تم إيقاف القراءة هنا، وسنكمل بما استطعنا استخراجه فعليًا قبل هذه النقطة.'); break; }
+    }catch(e){ rep.warnings.push('تعذّرت قراءة سجل داخل الأرشيف عند موضع '+pos+': '+(e?.message||e)); break; }
+    try{
+      if(name==='project/state.json') stateBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/manifest.json') manifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/asset-manifest.json') assetManifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/local-storage.json') localStorageBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/indexeddb-extra.json') indexedDbExtraBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/image-db-extra.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(/^project\/(categories|category-schemas|components|storage-layout|history|audit-history|audit-history-meta|undo-history|maps|projects|experiments|purchases|checklist|preferences)\.json$/.test(name)) explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      else if(name==='project/emergency-fallback.json' || name==='project/backup-runtime.json' || name==='project/ui-state.json' || name==='project/state-meta.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
+      // نتعرّف على أي مجلد أصول محتمل (assets/…) وليس فقط المسارين الحاليين، حتى تبقى الحزم
+      // القديمة/المستقبلية بأسماء مجلدات مختلفة قابلة للاستيراد بدل تجاهلها بصمت.
+      else if(/^assets\//.test(name)) assets.push({name,start:dataStart,end:dataEnd,crc:h.crc});
       else rep.skippedEntries.push(name);
-    };
-    for(const name of entries.keys()) classify(name);
-    rep.allEntries=[...entries.keys()].map(name=>({name,size:(entries.get(name)||new Uint8Array(0)).length}));
-    if(st) st.textContent='⏳ استيراد الحزمة… 100%';
-  }else{
-    let pos=0;const total=file.size;
-    while(pos+4<=total){
-      let h,name,dataStart,dataEnd,sig;
-      try{
-        const sigBytes=new Uint8Array(await file.slice(pos,pos+4).arrayBuffer());sig=backupReadU32(sigBytes,0);
-        if(sig===0x02014b50||sig===0x06054b50||sig===0x06064b50||sig===0x07064b50)break; // central directory / end — انتهت السجلات المحلية
-        if(sig!==0x04034b50){ rep.warnings.push(`توقيف القراءة عند موضع ${pos}: توقيع غير معروف (الملف قد يحتوي بيانات زائدة بعد الأرشيف).`); break; }
-        h=await readZipHeader(file,pos);
-        const nameBytes=new Uint8Array(await file.slice(pos+30,pos+30+h.nlen).arrayBuffer());
-        name=new TextDecoder().decode(nameBytes);
-        if(h.flags&8){ rep.warnings.push('تنسيق Data Descriptor غير مدعوم — تم إيقاف قراءة الأرشيف عند: '+name); break; }
-        if(h.method!==0){ rep.compressedEntrySeen=true; rep.warnings.push('مدخل مضغوط (compressed) غير مدعوم — تم تخطيه: '+name); pos=pos+30+h.nlen+h.xlen+h.csize; continue; }
-        let csize=h.csize,usize=h.usize;
-        if((csize===ZIP64_MARK||usize===ZIP64_MARK)&&h.xlen>0){
-          const extraBytes=new Uint8Array(await file.slice(pos+30+h.nlen,pos+30+h.nlen+h.xlen).arrayBuffer());
-          const z=parseZip64Extra(extraBytes);
-          if(z.csize!=null)csize=z.csize; if(z.usize!=null)usize=z.usize;
-        }
-        dataStart=pos+30+h.nlen+h.xlen;dataEnd=dataStart+csize;
-        if(dataEnd>total){ rep.warnings.push('الأرشيف يبدو مقطوعًا/تالفًا عند: '+name+' — تم إيقاف القراءة هنا، وسنكمل بما استطعنا استخراجه فعليًا قبل هذه النقطة.'); break; }
-        rep.allEntries.push({name,size:csize});
-      }catch(e){ rep.warnings.push('تعذّرت قراءة سجل داخل الأرشيف عند موضع '+pos+': '+(e?.message||e)); break; }
-      try{
-        if(name==='project/state.json') stateBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-        else if(name==='project/manifest.json') manifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-        else if(name==='project/asset-manifest.json') assetManifestBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-        else if(name==='project/local-storage.json') localStorageBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-        else if(name==='project/indexeddb-extra.json') indexedDbExtraBytes=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-        else if(name==='project/image-db-extra.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-        else if(/^project\/(categories|category-schemas|components|storage-layout|history|audit-history|audit-history-meta|undo-history|maps|projects|experiments|purchases|checklist|preferences)\.json$/.test(name)) explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-        else if(name==='project/emergency-fallback.json' || name==='project/backup-runtime.json' || name==='project/ui-state.json' || name==='project/state-meta.json') explicit[name]=new Uint8Array(await file.slice(dataStart,dataEnd).arrayBuffer());
-        // نتعرّف على أي مجلد أصول محتمل (assets/…) وليس فقط المسارين الحاليين، حتى تبقى الحزم
-        // القديمة/المستقبلية بأسماء مجلدات مختلفة قابلة للاستيراد بدل تجاهلها بصمت.
-        else if(/^assets\//.test(name)) assets.push({name,start:dataStart,end:dataEnd,crc:h.crc});
-        else rep.skippedEntries.push(name);
-      }catch(e){ rep.warnings.push('فشل استخراج: '+name+' — '+(e?.message||e)); }
-      pos=dataEnd;if(st)st.textContent=`⏳ استيراد الحزمة… ${Math.min(100,Math.round(pos/total*100))}%`;
-    }
+    }catch(e){ rep.warnings.push('فشل استخراج: '+name+' — '+(e?.message||e)); }
+    pos=dataEnd;if(st)st.textContent=`⏳ استيراد الحزمة… ${Math.min(100,Math.round(pos/total*100))}%`;
   }
-  if(!stateBytes){
-    if(rep.compressedEntrySeen) throw new Error('يبدو أن هذا الملف أُعيد ضغطه بأداة خارجية (7-Zip/برنامج ضغط آخر) بطريقة ضغط غير مدعومة. استورد ملف الـ ZIP الأصلي الذي صدّره التطبيق مباشرة، بدون فك ضغطه أو إعادة ضغطه.');
-    throw new Error('الحزمة لا تحتوي project/state.json — لا يوجد مشروع يمكن استعادته من هذا الملف.');
-  }
-  if(!manifestBytes) throw new Error('لا يوجد manifest.json داخل الحزمة؛ استخدم ملف JSON القديم فقط للاستعادة التوافقية.');
+  if(!stateBytes) throw new Error('الحزمة لا تحتوي project/state.json — لا يوجد مشروع يمكن استعادته من هذا الملف.');
+  if(!manifestBytes) rep.warnings.push('لا يوجد manifest.json داخل الحزمة (حزمة قديمة أو غير مكتملة) — تم المتابعة بدونه.');
   else{
-    const m=backupValidateManifest(JSON.parse(new TextDecoder().decode(manifestBytes)));
-    if(m.__legacyNoExportId) rep.warnings.push('هذه نسخة قديمة (إصدار '+m.version+') بدون معرف تصدير فريد (exportId) — تم قبولها في وضع التوافق. راجع النتيجة بعد الاستيراد.');
-    rep.sourceManifest=m;
+    try{
+      const m=JSON.parse(new TextDecoder().decode(manifestBytes));
+      if(m.format!=='Workshop Inventory Full Project') rep.warnings.push('توقيع الحزمة غير معروف ("'+(m.format||'?')+'")؛ تمت محاولة الاستيراد كحزمة توافقية على أي حال.');
+    }catch(e){ rep.warnings.push('manifest.json تالف/غير قابل للقراءة — تم تجاهله والمتابعة.'); }
   }
   try{ state=JSON.parse(new TextDecoder().decode(stateBytes)); }
   catch(e){ throw new Error('project/state.json تالف ولا يمكن تحليله (JSON غير صالح): '+(e?.message||e)); }
@@ -8777,35 +8239,19 @@ async function importStoredZipStream(file,st,rep,preParsed){
   migrateStateIfNeeded();ensureNewFields();ensureStoragePreferences();
   let amap={};
   if(assetManifestBytes){ try{ amap=JSON.parse(new TextDecoder().decode(assetManifestBytes))||{}; }catch(e){ rep.warnings.push('asset-manifest.json تالف — سيتم استنتاج معرّفات الملفات من أسمائها مباشرة.'); } }
-  const restoredOrphanIds=[];
   for(const a of assets){
     try{
       const info=amap[a.name]||{};
       const id=String(info.id||backupSafeName(a.name.split('/').pop().split('.')[0]));
-      let blob;
-      if(a.bytes){
-        // مصدر الحزمة الصغيرة/المتوسطة: بايتات جُلبت وتحقّقت SHA-256 منها بالفعل في backupPreflightZip.
-        blob=new Blob([a.bytes],{type:info.mime||guessMimeFromName(a.name)});
-      }else{
-        blob=file.slice(a.start,a.end,{type:info.mime||guessMimeFromName(a.name)});
-        const check=await streamBlobCRC(blob);
-        if(check.size!==a.end-a.start||check.crc!==a.crc){
-          rep.failedAssets.push({name:a.name,reason:'فشل فحص السلامة (CRC/الحجم) — الملف على الأغلب تلف أثناء النقل'});
-          continue; // لا نوقف باقي الاستيراد بسبب ملف واحد تالف
-        }
+      const blob=file.slice(a.start,a.end,{type:info.mime||guessMimeFromName(a.name)});
+      const check=await streamBlobCRC(blob);
+      if(check.size!==a.end-a.start||check.crc!==a.crc){
+        rep.failedAssets.push({name:a.name,reason:'فشل فحص السلامة (CRC/الحجم) — الملف على الأغلب تلف أثناء النقل'});
+        continue; // لا نوقف باقي الاستيراد بسبب ملف واحد تالف
       }
       await idbPutImage(id,blob,{name:info.name||a.name.split('/').pop(),mime:info.mime||blob.type,size:blob.size});
       rep.restoredAssets++;
-      // ملفات OPFS اليتيمة (بلا مرجع داخل state) تُصدَّر عمدًا حتى لا تضيع، لكنها بلا مرجع
-      // بحكم تعريفها — فحص "المراجع المستخدمة" وحده سيعتبرها غير مستخدمة ويحذفها في نفس
-      // اللحظة عبر backupPruneUnreferencedAssets. نسجّلها هنا صراحةً لتُستثنى من ذلك التنظيف.
-      if(info.backend==='opfs-orphan') restoredOrphanIds.push(id);
     }catch(e){ rep.failedAssets.push({name:a.name,reason:String(e?.message||e)}); }
-  }
-  if(restoredOrphanIds.length){
-    const existing=Array.isArray(state.__keepOrphanAssetIds)?state.__keepOrphanAssetIds.map(String):[];
-    state.__keepOrphanAssetIds=[...new Set([...existing,...restoredOrphanIds])];
-    rep.warnings.push('تم الحفاظ على '+restoredOrphanIds.length+' ملف OPFS يتيم (بلا مرجع في المشروع) من الحذف التلقائي بعد الاستيراد.');
   }
   // بعد الاستيراد: نحوّل أي صور/ملفات ما زالت مضمّنة كـ data: URL داخل الحالة (من نسخ قديمة جدًا)
   // إلى أصول مخزّنة، بنفس آلية الترقية المستخدمة عند التصدير.
@@ -8816,13 +8262,11 @@ async function importPlainJSONFile(file,rep){
   const text=await file.text();
   let parsed;
   try{ parsed=JSON.parse(text); }catch(e){ throw new Error('الملف JSON غير صالح ولا يمكن تحليله: '+(e?.message||e)); }
-  rep.allEntries=[{name:file.name,size:file.size}];
   // يدعم كل من: ملف JSON خام لحالة التطبيق، أو ملف مغلّف بمفتاح "state"/"data" من مصادر أخرى.
   if(parsed && typeof parsed==='object' && !Array.isArray(parsed) && (parsed.columns||parsed.boxes||parsed.containers)){
     state=parsed;
   }else if(parsed && typeof parsed==='object' && parsed.state && typeof parsed.state==='object'){
     state=parsed.state; if(parsed.localStorage) restorePortableLocalStorage(parsed.localStorage,rep); rep.warnings.push('تم استخراج بيانات المشروع من مفتاح "state" داخل الملف.');
-    if(parsed.version||parsed.createdAt) rep.sourceManifest={version:parsed.version,createdAt:parsed.createdAt,format:parsed.format,appVersion:parsed.appVersion};
   }else{
     throw new Error('لا يمكن التعرّف على بنية بيانات المخزن داخل هذا الملف JSON.');
   }
@@ -8835,7 +8279,15 @@ async function importPlainJSONFile(file,rep){
 async function scanForMissingAssetRefs(){
   const stored=new Set((await listStoredAssetIds()).map(String));
   const missing=new Set();
-  backupWalkForIdbRefs(state,ref=>{ if(!stored.has(ref)) missing.add(ref); });
+  const seen=new WeakSet();
+  (function walk(v){
+    if(!v) return;
+    if(typeof v==='string'){ if(isIdbImageRef(v) && !stored.has(v)) missing.add(v); return; }
+    if(typeof v!=='object') return;
+    if(seen.has(v)) return; seen.add(v);
+    if(Array.isArray(v)){ v.forEach(walk); return; }
+    Object.keys(v).forEach(k=>{ if(k!=='history'&&k!=='future') walk(v[k]); });
+  })(state);
   return [...missing];
 }
 function renderImportReport(rep,missingRefs){
@@ -8846,173 +8298,36 @@ function renderImportReport(rep,missingRefs){
   if(rep.warnings.length) lines.push('ملاحظات: '+rep.warnings.slice(0,6).join(' | '));
   return lines.join('\n');
 }
-async function backupSnapshotCurrentProject(){
-  captureRuntimeLocalStorageIntoState(); await flushSaveForBackup();
-  const persisted=await verifyPersistedStateForBackup();
-  /* لا نحمّل محتوى الصور/المرفقات نفسه في الذاكرة هنا (قد يكون غيغابايتات لمشروع كبير) —
-     نكتفي بقائمة المعرّفات الموجودة فعليًا الآن. الاستيراد الحالي لا يحذف أي أصل قديم إلا بعد
-     نجاحه الكامل (backupPruneUnreferencedAssets)، فإذا فشل الاستيراد تبقى كل أصول المشروع
-     الحالي سليمة كما هي في IndexedDB/OPFS، ولا حاجة لإعادة كتابتها من نسخة في الذاكرة. */
-  const existingAssetIds=new Set((await listStoredAssetIds()).map(String));
-  return {state:structuredClone(persisted),localStorage:getPortableLocalStorage(),existingAssetIds};
-}
-async function backupRestoreSnapshot(snap){
-  if(!snap) return;
-  state=structuredClone(snap.state);
-  clearPortableLocalStorageExcept(snap.localStorage);
-  restorePortableLocalStorage(snap.localStorage,{warnings:[]});
-  // أصول المشروع القديم لم تُحذف أصلاً (الحذف يحدث فقط بعد نجاح الاستيراد) — كل ما يلزم هو
-  // حذف أي أصل جديد أُضيف أثناء محاولة الاستيراد الفاشلة، حتى لا يتراكم في التخزين بلا داعي.
-  const keep=snap.existingAssetIds||new Set();
-  for(const id of await listStoredAssetIds()){ if(!keep.has(String(id))){ try{await idbDeleteImage(id);}catch(e){} } }
-  restoreRuntimeLocalStorageFromState();
-  captureRuntimeLocalStorageIntoState();
-  saveDirty=true; await flushSaveForBackup();
-}
-async function backupPruneUnreferencedAssets(){
-  const keep=new Set(await backupCollectReferencedAssetIds(state));
-  if(Array.isArray(state.__keepOrphanAssetIds)) state.__keepOrphanAssetIds.forEach(id=>keep.add(String(id)));
-  const all=await listStoredAssetIds();
-  const removed=[];
-  for(const id of all){ if(!keep.has(String(id))){ try{await idbDeleteImage(id);removed.push(id);}catch(e){} } }
-  return removed;
-}
-async function backupSHA256(data){if(!globalThis.crypto?.subtle)return null;const b=data instanceof Uint8Array?data:data instanceof ArrayBuffer?new Uint8Array(data):backupUtf8(data);const hash=await crypto.subtle.digest('SHA-256',b);return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('');}
-async function backupVerifyChecksums(entries,manifest){const files=manifest?.files;if(!files||typeof files!=='object')return;for(const [name,meta] of Object.entries(files)){if(!entries.has(name))throw new Error('ملف مذكور في checksums مفقود: '+name);const data=entries.get(name);if(meta.size!=null&&Number(meta.size)!==data.length)throw new Error('حجم غير مطابق: '+name);if(meta.sha256){const h=await backupSHA256(data);if(h&&h!==String(meta.sha256).toLowerCase())throw new Error('فشل SHA-256: '+name);}}}
-async function backupValidateEntries(entries,manifest,incoming){
-  // التحقق من أن ملفات المشروع الإلزامية موجودة وأن قائمة الأصول متسقة مع الحالة.
-  for(const n of BACKUP_REQUIRED_FILES) if(!entries.has(n)) throw new Error('الحزمة ناقصة: '+n);
-  const referenced=new Set(await backupCollectCriticalReferencedAssetIds(incoming));
-  let amap={};
-  if(entries.has('project/asset-manifest.json')){
-    try{amap=JSON.parse(new TextDecoder().decode(entries.get('project/asset-manifest.json')))||{};}catch(e){throw new Error('asset-manifest.json تالف');}
-  }
-  const packageIds=new Set();
-  for(const [path,info] of Object.entries(amap)){
-    if(!entries.has(path)) throw new Error('ملف أصل مذكور في manifest لكنه مفقود: '+path);
-    if(info&&info.id) packageIds.add(String(info.id));
-  }
-  const missing=[...referenced].filter(id=>!packageIds.has(id));
-  if(missing.length) throw new Error('الحزمة لا تحتوي كل الملفات المشار إليها في المشروع: '+missing.slice(0,5).join(', ')+(missing.length>5?' …':''));
-  if(Number.isFinite(Number(manifest.assetCount)) && Number(manifest.assetCount)!==packageIds.size)
-    throw new Error('عدد الأصول في manifest ('+manifest.assetCount+') لا يطابق قائمة الأصول الفعلية في الحزمة ('+packageIds.size+')');
-}
-async function backupPreflightZip(file){
-  const rep=importReport(); const st=null;
-  // الحزم الكبيرة لا نحملها كاملة في الذاكرة؛ ننتقل إلى مسار الاستيراد المتدفق مع Snapshot/Rollback.
-  if(file.size>STREAM_EXPORT_THRESHOLD) return {mode:'streaming',rep};
-  const buf=await file.arrayBuffer(); const entries=parseStoredZip(buf);
-  for(const n of BACKUP_REQUIRED_FILES) if(!entries.has(n)) throw new Error('الحزمة ناقصة: '+n);
-  const manifest=backupValidateManifest(JSON.parse(new TextDecoder().decode(entries.get('project/manifest.json'))));
-  const incoming=JSON.parse(new TextDecoder().decode(entries.get('project/state.json')));
-  if(manifest.projectId&&backupProjectId(incoming)!==String(manifest.projectId)) throw new Error('projectId في state لا يطابق manifest؛ تم رفض الحزمة لمنع خلط نسختين.');
-  backupValidateStateShape(incoming);
-  const issues=backupValidateRelationships(incoming);
-  if(issues.length) throw new Error('فشل فحص علاقات المشروع: '+issues.slice(0,5).join(' | ')+(issues.length>5?' …':''));
-  await backupValidateEntries(entries,manifest,incoming);
-  await backupVerifyChecksums(entries,manifest);
-  return {mode:'validated-buffer',rep,entries,manifest,incoming};
-}
-function computeStateCounts(st){
-  st=st||{};
-  return {categories:(st.categories||[]).length,components:(st.components||[]).length,categorySchemas:Object.keys(st.categorySchemas||{}).length,
-    shelves:(st.shelves||[]).length,drawers:(st.drawers||[]).length,columns:(st.columns||[]).length,boxes:(st.boxes||[]).length,cells:(st.containers||[]).length,
-    usageHistory:(st.usageHistory||[]).length,auditHistory:(st.auditHistory||[]).length,undoHistory:(st.history||[]).length,redoHistory:(st.future||[]).length,
-    maps:(st.workshopMap||[]).length,projects:(st.projects||[]).length,experiments:(st.experiments||[]).length,checklist:(st.checklist||[]).length};
-}
 async function importFullProject(file){
-  if(!confirm('سيتم استبدال بيانات التطبيق الحالية بعد فحص الحزمة. لن تُحذف الملفات القديمة إلا بعد نجاح الاستيراد النهائي، ويمكن التراجع تلقائيًا عند حدوث خطأ. هل تريد المتابعة؟'))return;
-  if(!backupBeginOp()) return;
-  const status=document.getElementById('backupStatus'); if(status)status.textContent='⏳ جارٍ فحص الحزمة بالكامل قبل أي تغيير…';
-  let snapshot=null,importSucceeded=false,rep=null,stage='بدء العملية';
-  const beforeCounts=computeStateCounts(state);
+  if(!confirm('سيتم استبدال بيانات التطبيق الحالية واستعادة المشروع والملفات المرفقة. هل تريد المتابعة؟'))return;
+  const st=document.getElementById('backupStatus');if(st)st.textContent='⏳ جارٍ فحص الحزمة…';
+  const rep=importReport();
   try{
-    stage='أخذ لقطة أمان للمشروع الحالي';
-    snapshot=await backupSnapshotCurrentProject();
-    stage='التعرّف على نوع الملف';
+    // نتعرّف على نوع الملف من محتواه الفعلي (توقيع البايتات) وليس فقط امتداد الاسم،
+    // حتى لو أعاد المستخدم تسمية الملف أو جاء من مصدر آخر.
     const head=new Uint8Array(await file.slice(0,4).arrayBuffer());
-    const isZip=head[0]===0x50&&head[1]===0x4b&&(head[2]===3||head[2]===5||head[2]===7);
+    const isZip = head[0]===0x50 && head[1]===0x4b;
     if(isZip){
-      stage='الفحص المبدئي للحزمة (manifest + السلامة)';
-      const pre=await backupPreflightZip(file);
-      if(pre.mode==='validated-buffer'){
-        if(status)status.textContent='⏳ الفحص نجح، جارٍ الاستيراد…';
-        stage='استيراد محتوى الحزمة (نسخة صغيرة/متوسطة)';
-        // نُعيد استخدام الملفات المفكوكة والمتحقَّق من سلامتها (SHA-256) في backupPreflightZip
-        // بدل إعادة فتح الملف وقراءته وحساب CRC لكل عنصر فيه من جديد.
-        rep=importReport(); await importStoredZipStream(file,status,rep,{entries:pre.entries});
-        stage='التحقق من العلاقات والمراجع بعد الاستيراد';
-        const missingRefs=await scanForMissingAssetRefs();
-        const relIssues=backupValidateRelationships(state);
-        if(relIssues.length) throw new Error('تم اكتشاف علاقات مكسورة بعد الاستيراد: '+relIssues.slice(0,5).join(' | '));
-        if(rep.failedAssets.length) throw new Error('لم تكتمل استعادة بعض الملفات المرفقة، تم إلغاء اعتماد الاستيراد لحماية المشروع الحالي: '+rep.failedAssets.slice(0,5).map(f=>f.name+' ('+f.reason+')').join(' | '));
-        stage='حفظ الحالة الجديدة نهائيًا';
-        clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
-        importSucceeded=true;
-        const removed=await backupPruneUnreferencedAssets();
-        showView('dashboard');
-        if(status){status.textContent=renderImportReport(rep,missingRefs)+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف قديم/يتيم.':'');status.style.whiteSpace='pre-line';}
-        toast('تم استيراد المشروع بالكامل بعد اجتياز فحص السلامة');
-        await recordImportDetail(buildImportRecord({file,rep,missingRefs,result:'success',stage:null,error:null,mode:'zip-small',beforeCounts}));
-      }else{
-        // الحزم الكبيرة تُفحص وتُستورد بالتدفق؛ تبقى لقطة الأمان فعالة حتى نهاية العملية.
-        if(status)status.textContent='⏳ الحزمة كبيرة، جارٍ الاستيراد مع حماية التراجع…';
-        stage='استيراد محتوى الحزمة (نسخة كبيرة، بالتدفق)';
-        rep=importReport(); await importStoredZipStream(file,status,rep);
-        stage='التحقق من العلاقات والمراجع بعد الاستيراد';
-        const missingRefs=await scanForMissingAssetRefs(); const relIssues=backupValidateRelationships(state);
-        if(relIssues.length||rep.failedAssets.length) throw new Error('فشل التحقق النهائي للحزمة الكبيرة؛ سيتم الرجوع تلقائيًا للمشروع السابق.'+(rep.failedAssets.length?' ملفات فشلت: '+rep.failedAssets.slice(0,5).map(f=>f.name).join('، '):''));
-        stage='حفظ الحالة الجديدة نهائيًا';
-        clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
-        importSucceeded=true; const removed=await backupPruneUnreferencedAssets(); showView('dashboard');
-        if(status){status.textContent=renderImportReport(rep,missingRefs)+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف قديم/يتيم.':'');status.style.whiteSpace='pre-line';}
-        toast('تم استيراد المشروع الكبير بنجاح');
-        await recordImportDetail(buildImportRecord({file,rep,missingRefs,result:'success',stage:null,error:null,mode:'zip-large',beforeCounts}));
-      }
+      await importStoredZipStream(file,st,rep);
     }else{
-      stage='استيراد ملف JSON';
-      rep=importReport(); await importPlainJSONFile(file,rep);
-      stage='التحقق من بنية وعلاقات JSON';
-      backupValidateStateShape(state); const relIssues=backupValidateRelationships(state); if(relIssues.length)throw new Error('فشل فحص علاقات JSON: '+relIssues.slice(0,5).join(' | '));
-      stage='حفظ الحالة الجديدة نهائيًا';
-      clearUndoRedoAfterImport(rep); restoreRuntimeLocalStorageFromState(); captureRuntimeLocalStorageIntoState(); resetAuditTracker(); saveDirty=true; await flushSaveForBackup();
-      importSucceeded=true; const removed=await backupPruneUnreferencedAssets(); showView('dashboard');
-      const missingRefs=await scanForMissingAssetRefs();
-      if(status){status.textContent=renderImportReport(rep,missingRefs)+(removed.length?'\n🧹 تم تنظيف '+removed.length+' ملف يتيم.':'');status.style.whiteSpace='pre-line';}
-      toast('تم استيراد بيانات JSON');
-      await recordImportDetail(buildImportRecord({file,rep,missingRefs,result:'success',stage:null,error:null,mode:'json',beforeCounts}));
+      // ليس ZIP — نحاول قراءته كنص JSON (يدعم ملفات "JSON فقط" المُصدَّرة، أو أي state.json مفرد).
+      await importPlainJSONFile(file,rep);
     }
+    const missingRefs=await scanForMissingAssetRefs();
+    restoreRuntimeLocalStorageFromState();
+    captureRuntimeLocalStorageIntoState();
+    resetAuditTracker();
+    scheduleSave();
+    await flushSaveForBackup();
+    showView('dashboard');
+    if(st){ st.textContent=renderImportReport(rep,missingRefs); st.style.whiteSpace='pre-line'; }
+    toast(rep.failedAssets.length||missingRefs.length?'تم الاستيراد مع بعض التحذيرات — راجع التفاصيل':'تم استيراد المشروع بالكامل');
   }catch(e){
     console.error(e);
-    if(!importSucceeded&&snapshot){ try{await backupRestoreSnapshot(snapshot);}catch(re){console.error('rollback failed',re);} }
-    if(status){status.textContent='❌ فشل الاستيراد أثناء مرحلة: '+stage+'\nالسبب: '+(e.message||e)+(snapshot?'\n↩️ تم الرجوع تلقائيًا إلى المشروع السابق.':'');status.style.whiteSpace='pre-line';}
-    toast('تعذّر استيراد هذا الملف — تم الرجوع للمشروع السابق');
-    logError('backup','فشل استيراد المشروع أثناء مرحلة: '+stage,String(e?.message||e));
-    await recordImportDetail(buildImportRecord({file,rep,missingRefs:null,result:'failed',stage,error:String(e?.message||e),mode:null,beforeCounts}));
+    if(st){ st.textContent='❌ فشل الاستيراد: '+(e.message||e); st.style.whiteSpace='pre-line'; }
+    toast('تعذّر استيراد هذا الملف');
   }
-  finally{ backupEndOp(); }
 }
-/* يبني سجل استيراد موحّد الشكل بغض النظر عن نجاح العملية أو فشلها أو مسارها (ZIP صغير/كبير/JSON)،
-   يشمل: من أين جاءت الحزمة (exportId/تاريخ إنشائها/إصدار التطبيق الذي صدّرها إن وُجد)، وكل ملف
-   بداخلها بالاسم والحجم، وكل ملف فشل أو نقص بالتحديد، والمرحلة التي حدث فيها الفشل إن وُجد. */
-function buildImportRecord({file,rep,missingRefs,result,stage,error,mode,beforeCounts}){
-  const sm=rep&&rep.sourceManifest;
-  return {
-    ts:Date.now(), result, stage:stage||null, error:error||null, mode,
-    sourceFileName:file?.name||'غير معروف', sourceFileBytes:file?.size||0,
-    sourceExportId:sm?.exportId||null, sourceCreatedAt:sm?.createdAt||null, sourceAppVersion:sm?.appVersion||null,
-    restoredAssets:rep?rep.restoredAssets:0,
-    failedAssets:rep?rep.failedAssets.slice(0,50):[],
-    missingRefs:missingRefs?missingRefs.slice(0,50):[],
-    missingRefsCount:missingRefs?missingRefs.length:0,
-    warnings:rep?rep.warnings.slice(0,30):[],
-    skippedEntries:rep?rep.skippedEntries.slice(0,50):[],
-    files:rep&&rep.allEntries?rep.allEntries:[],
-    beforeCounts, afterCounts:result==='success'?computeStateCounts(state):null,
-  };
-}
-
-
 /* ============================= SEARCH ============================= */
 /* البحث يشمل: اسم المكون، اسم العبوة، اسم الرف، اسم العمود، ورقم الخلية (عبر locationLabel) */
 const searchInput=document.getElementById('searchInput');
@@ -9118,12 +8433,31 @@ document.addEventListener('click',e=>{ if(!e.target.closest('#notifBell') && !e.
   captureRuntimeLocalStorageIntoState();
   startRuntimePersistenceWatcher();
   initAuditTracker();
+
+  // لو فيه مجلد نسخ احتياطي مرتبط من قبل: تحقق من الصلاحية، ولو IndexedDB
+  // رجعت فاضية (فقدان بيانات) بينما المجلد فيه نسخة محفوظة، استرجعها تلقائيًا
+  try{
+    const savedHandle = await idbGet("linkedDirHandle");
+    if(savedHandle){
+      linkedDirHandle = savedHandle;
+      const granted = await ensureFolderPermission(linkedDirHandle);
+      if(granted){
+        const newer=await folderIsNewerThanLocal(linkedDirHandle);
+        const appHasData=(state.components||[]).length || (state.containers||[]).length || (state.projects||[]).length;
+        if(newer && folderSnapshotHasData(newer)){await restoreAllFromFolder(linkedDirHandle,newer);toast(appHasData?'🔄 تم تحديث البيانات من آخر نسخة ملتزمة في المجلد.':'⚠️ تمت استعادة المشروع تلقائيًا من المجلد المرتبط.');}
+        else if(!appHasData){const snap=await readFolderSnapshot(linkedDirHandle);if(folderSnapshotHasData(snap)){await restoreAllFromFolder(linkedDirHandle,snap);toast('⚠️ تمت استعادة البيانات تلقائيًا من المجلد المرتبط.');}}
+      }
+    }
+  }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد المرتبط:", e); }
+
   // طبقة أمان إضافية: أي input/change داخل التطبيق يضمن دخول الحفظ في الدورة.
   document.addEventListener('input',e=>{if(e.target&&e.target.closest('#viewContainer,#modalRoot')){setTimeout(()=>{try{scheduleSave();}catch(_e){}},0);}},false);
   document.addEventListener('change',e=>{if(e.target&&e.target.closest('#viewContainer,#modalRoot')){setTimeout(()=>{try{scheduleSave();}catch(_e){}},0);}},false);
   showView('dashboard');
   renderNotifBadge();
   setInterval(renderNotifBadge,4000);
+  // نبضة حفظ دورية: كل بضع ثوانٍ، لو فيه مجلد نسخ احتياطي مرتبط، ننسخ آخر حالة إليه
+  setInterval(()=>{ if(linkedDirHandle) syncFolderNow(false); }, 8000);
 })();
 </script>
 
@@ -11819,6 +11153,7 @@ async function idbPutImage(id, blob, extraMeta={}){
       await opfsPut(id,blob);
       meta.backend='opfs';
       await idbSet(ASSET_META_PREFIX+String(id),meta);
+      try{ if(typeof mirrorFileToFolder==='function') mirrorFileToFolder(String(id), blob, meta.name); }catch(e){}
       return meta;
     }catch(e){ /* fallback to IndexedDB */ }
   }
@@ -11830,6 +11165,7 @@ async function idbPutImage(id, blob, extraMeta={}){
   });
   meta.backend='idb';
   try{ await idbSet(ASSET_META_PREFIX+String(id),meta); }catch(e){}
+  try{ if(typeof mirrorFileToFolder==='function') mirrorFileToFolder(String(id), blob, meta.name); }catch(e){}
   return meta;
 }
 async function idbGetImage(id){
@@ -11855,6 +11191,214 @@ async function idbDeleteImage(id){
     await new Promise((resolve,reject)=>{const tx=db.transaction(IMG_STORE,'readwrite');tx.objectStore(IMG_STORE).delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});
   }catch(e){}
   try{ await idbSet(ASSET_META_PREFIX+key,null); }catch(e){}
+}
+
+/* =========================================================
+   مجلد نسخ احتياطي تلقائي على الجهاز (File System Access API)
+   متاح في Chrome/Edge على الكمبيوتر، وفي Chrome على أندرويد
+   بالإصدارات الحديثة. ينسخ كل تعديل (حالة كاملة + كل الصور
+   والملفات المرفقة) تلقائيًا إلى مجلد حقيقي على القرص، ويُستخدم
+   للاسترجاع التلقائي لو فقدت IndexedDB بياناتها لأي سبب.
+   ========================================================= */
+const FS_ACCESS_SUPPORTED = (typeof window!=="undefined") && ("showDirectoryPicker" in window);
+let linkedDirHandle = null;
+let folderSyncInFlight = false;
+let folderSyncQueued = false;
+let folderSyncTimer = null;
+let lastFolderSyncAt = null;
+
+async function ensureFolderPermission(handle, write){
+  if(!handle) return false;
+  try{
+    const opts = {mode: write===false ? "read" : "readwrite"};
+    if(handle.queryPermission){
+      if((await handle.queryPermission(opts))==="granted") return true;
+      if(handle.requestPermission && (await handle.requestPermission(opts))==="granted") return true;
+      return false;
+    }
+    return true; // متصفح لا يدعم فحص الصلاحية بشكل صريح — نفترض النجاح ونترك العملية الفعلية تفشل لو لم تكن مسموحة
+  }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد:", e); return false; }
+}
+
+// نمسح شجرة state بالكامل (وليس حقولًا محددة) لنلتقط أي معرّف صورة idbimg_* أينما
+// وُجد — سواء في بيانات المكونات، أو توثيق الخلايا، أو صفحات/طبقات تتبع الأعطال —
+// فهذا يضمن أن أي صور مستقبلية (مهما أُضيفت من ميزات جديدة) تُنسخ تلقائيًا للمجلد
+// من غير الحاجة لتحديث كود المزامنة يدويًا في كل مرة.
+async function collectReferencedAssets(){
+  const ids = new Set();
+  const walk = v=>{
+    if(!v || typeof v!=="object") return;
+    if(Array.isArray(v)){ v.forEach(walk); return; }
+    if(typeof v.id==="string" && /^idbimg_/.test(v.id)) ids.add(v.id);
+    for(const k in v){ if(Object.prototype.hasOwnProperty.call(v,k)) walk(v[k]); }
+  };
+  walk(state);
+  const out=[];
+  for(const id of ids){
+    const meta = await getAssetMeta(id);
+    out.push({id, name:(meta&&meta.name)||id, mime:(meta&&meta.mime)||""});
+  }
+  return out;
+}
+function folderAssetExtFor(name, mime){
+  const fromName = (name||"").match(/\.[A-Za-z0-9]{1,8}$/);
+  if(fromName) return fromName[0].slice(1).toLowerCase();
+  const fromMime = (mime||"").split("/")[1];
+  return (fromMime||"bin").replace(/[^a-z0-9]/gi,"").slice(0,8) || "bin";
+}
+async function writeFolderFile(dirHandle, name, data){
+  const fh = await dirHandle.getFileHandle(name, {create:true});
+  const w = await fh.createWritable(); // الكتابة عبر createWritable آمنة ذريًا: تُكتب لملف مؤقت ولا تستبدل الأصلي إلا بعد close() الناجح
+  try{ await w.write(data); await w.close(); }
+  catch(e){ try{ await w.abort(); }catch(_e){} throw e; }
+}
+async function sha256Blob(blob){
+  if(!blob || !crypto?.subtle)return '';
+  try{const buf=await blob.arrayBuffer();const hash=await crypto.subtle.digest('SHA-256',buf);return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('');}catch(e){return '';}
+}
+async function folderJson(dir,name,fallback=null){try{const f=await (await dir.getFileHandle(name)).getFile();return JSON.parse(await f.text());}catch(e){return fallback;}}
+async function folderWriteText(dir,name,obj){return writeFolderFile(dir,name,typeof obj==='string'?obj:JSON.stringify(obj,null,2));}
+async function getFolderRevisionState(handle){
+  try{const sys=await handle.getDirectoryHandle('.system');const commit=await folderJson(sys,'COMMIT.json',null);if(!commit?.revision)return null;const revs=await sys.getDirectoryHandle('revisions');const rev=await revs.getDirectoryHandle(String(commit.revision));return {commit,snap:await folderJson(rev,'state.json',null),manifest:await folderJson(rev,'manifest.json',null)};}catch(e){return null;}
+}
+function buildModularFolderData(st){return {
+  'core.json':{schemaVersion:1,engine:APP_STORAGE_ENGINE_VERSION,savedAt:st.__savedAtTs||Date.now()},
+  'components.json':st.components||[],'categories.json':st.categories||[],'category-schemas.json':st.categorySchemas||{},
+  'storage-layout.json':{shelves:st.shelves||[],drawers:st.drawers||[],columns:st.columns||[],boxes:st.boxes||[],containers:st.containers||[]},
+  'projects.json':st.projects||[],'experiments.json':st.experiments||[],'purchases.json':st.purchases||[],'checklist.json':st.checklist||[],
+  'history.json':st.usageHistory||[],'audit-history.json':st.auditHistory||[],'maps.json':st.workshopMap||[],
+  'preferences.json':st.preferences||{},'fault-tracking.json':st.faultTracking||null
+};}
+async function syncFolderNow(force){
+  if(!linkedDirHandle)return false;if(folderSyncInFlight){folderSyncQueued=true;return false;}
+  const ok=await ensureFolderPermission(linkedDirHandle,true);if(!ok)return false;folderSyncInFlight=true;
+  try{
+    captureRuntimeLocalStorageIntoState();state.__savedAtTs=Date.now();const revision=String(Date.now())+'_'+String(++saveRevision);
+    const system=await linkedDirHandle.getDirectoryHandle('.system',{create:true});const revisions=await system.getDirectoryHandle('revisions',{create:true});
+    const revDir=await revisions.getDirectoryHandle(revision,{create:true});const dataDir=await linkedDirHandle.getDirectoryHandle('data',{create:true});const assetsDir=await linkedDirHandle.getDirectoryHandle('assets',{create:true});
+    const referenced=await collectReferencedAssets();const previous=await folderJson(linkedDirHandle,'asset-manifest.json',{assets:[]});const prevById=new Map((previous?.assets||[]).map(a=>[String(a.id),a]));
+    const assetManifest=[];const keepNames=new Set();
+    for(const a of referenced){
+      const ext=folderAssetExtFor(a.name,a.mime),fname=a.id+'.'+ext;keepNames.add(fname);let entry=prevById.get(String(a.id));let exists=false;
+      try{const f=await (await assetsDir.getFileHandle(fname)).getFile();exists=f.size>0;}catch(e){}
+      if(!exists||force){const blob=await idbGetImage(a.id);if(!blob)throw new Error('ملف مرفق مفقود من الكاش: '+a.id);await writeFolderFile(assetsDir,fname,blob);entry={id:a.id,name:a.name,mime:a.mime,size:blob.size,sha256:await sha256Blob(blob),filename:fname};}
+      if(entry)assetManifest.push({...entry,filename:fname});
+    }
+    const manifest={version:2,engine:APP_STORAGE_ENGINE_VERSION,revision,savedAt:new Date().toISOString(),count:assetManifest.length,assets:assetManifest};
+    const stateJson=JSON.stringify(state);const modular=buildModularFolderData(state);
+    // كل المكونات تكتب داخل revision معزول. COMMIT هو آخر خطوة.
+    await folderWriteText(revDir,'state.json',stateJson);await folderWriteText(revDir,'manifest.json',manifest);
+    for(const [name,obj] of Object.entries(modular))await folderWriteText(dataDir,name,obj);
+    await folderWriteText(linkedDirHandle,'state.json',stateJson);await folderWriteText(linkedDirHandle,'asset-manifest.json',manifest);
+    await folderWriteText(system,'PENDING.json',{revision,savedAt:new Date().toISOString(),status:'ready-to-commit'});
+    await folderWriteText(system,'COMMIT.json',{revision,savedAt:new Date().toISOString(),engine:APP_STORAGE_ENGINE_VERSION,assetCount:assetManifest.length});
+    // تنظيف اليتيم بعد نجاح الـ commit فقط.
+    try{for await(const [fname,h] of assetsDir.entries()){if(h.kind==='file'&&!keepNames.has(fname)){try{await assetsDir.removeEntry(fname);}catch(e){}}}}catch(e){}
+    // الاحتفاظ بخمس نسخ آمنة على الأقل للاسترجاع.
+    try{const names=[];for await(const [n,h] of revisions.entries())if(h.kind==='directory')names.push(n);names.sort().reverse();for(const old of names.slice(5))try{await revisions.removeEntry(old,{recursive:true});}catch(e){}}catch(e){}
+    lastFolderSyncAt=Date.now();renderFolderLinkStatus();return true;
+  }catch(e){console.warn('فشل مزامنة المجلد الاحترافية:',e);return false;}
+  finally{folderSyncInFlight=false;if(folderSyncQueued){folderSyncQueued=false;setTimeout(()=>syncFolderNow(false),0);}}
+}
+
+function mirrorSnapshotDebounced(){
+  clearTimeout(folderSyncTimer);
+  folderSyncTimer = setTimeout(()=>{ syncFolderNow(false); }, 1200);
+}
+function mirrorFileToFolder(){ /* التزامن الآن موحّد بالكامل عبر syncFolderNow — الإبقاء على الاسم للتوافق مع نداءات idbPutImage */ mirrorSnapshotDebounced(); }
+
+async function readFolderSnapshot(handle){const committed=await getFolderRevisionState(handle);if(committed?.snap)return committed.snap;try{const f=await (await handle.getFileHandle('state.json')).getFile();return JSON.parse(await f.text());}catch(e){return null;}}
+function folderSnapshotHasData(snap){if(!snap||typeof snap!=='object')return false;return !!(((snap.components||[]).length)||((snap.containers||[]).length)||((snap.boxes||[]).length)||((snap.projects||[]).length));}
+async function restoreAllFromFolder(handle,snap){
+  state=snap;await idbSet(STATE_KEY,JSON.stringify(state));
+  try{const assetsDir=await handle.getDirectoryHandle('assets');for await(const [fname,h] of assetsDir.entries()){if(h.kind!=='file')continue;const dot=fname.lastIndexOf('.');const id=dot!==-1?fname.slice(0,dot):fname;const blob=await h.getFile();await idbPutImage(id,blob,{name:fname,mime:blob.type||''});}}catch(e){console.warn('تعذر استرجاع الملفات من المجلد:',e);}
+  migrateStateIfNeeded();ensureNewFields();ensureStoragePreferences();applyPreferences();applyUiTheme();saveDirty=false;
+}
+async function folderIsNewerThanLocal(handle){const committed=await getFolderRevisionState(handle);if(!committed?.snap)return null;return Number(committed.snap.__savedAtTs||0)>Number(state?.__savedAtTs||0)?committed.snap:null;}
+
+async function linkBackupFolder(){
+  if(!FS_ACCESS_SUPPORTED){
+    toast("هذه الميزة غير مدعومة في هذا المتصفح (متاحة في Chrome/Edge على الكمبيوتر أو أندرويد).");
+    return;
+  }
+  try{
+    const handle = await window.showDirectoryPicker({mode:"readwrite", id:"workshop-real-storage"});
+    const granted = await ensureFolderPermission(handle, true);
+    if(!granted){ toast("لم يتم منح صلاحية الكتابة على هذا المجلد."); return; }
+    linkedDirHandle = handle;
+    await idbSet("linkedDirHandle", handle);
+
+    // ربط مزدوج وآمن: لو المجلد فيه بيانات محفوظة من قبل نتعرّف عليها قبل أي كتابة،
+    // ونسأل المستخدم أيهما يحتفظ به بدل الكتابة فوقها تلقائيًا.
+    const snap = await readFolderSnapshot(handle);
+    const folderHasData = folderSnapshotHasData(snap);
+    if(folderHasData){
+      const appHasData = (state.components||[]).length || (state.containers||[]).length;
+      let useFolderData = true;
+      if(appHasData){
+        useFolderData = confirm(
+          "هذا المجلد يحتوي على بيانات محفوظة مسبقًا ("+((snap.components||[]).length)+" مكون، "+((snap.containers||[]).length)+" خلية).\n\n"+
+          "اضغط \"موافق\" لتحميل بيانات المجلد (ستحل محل بيانات التطبيق الحالية).\n"+
+          "اضغط \"إلغاء\" للاحتفاظ ببيانات التطبيق الحالية ونسخها فوق بيانات المجلد."
+        );
+      }
+      if(useFolderData){
+        await restoreAllFromFolder(handle, snap);
+        toast("✅ تم التعرف على بيانات المجلد وتحميلها بنجاح — سيُحدَّث تلقائيًا مع كل تعديل من الآن.");
+        showView("dashboard");
+        renderFolderLinkStatus();
+        return;
+      }
+    }
+    await syncFolderNow(true);
+    toast("تم ربط المجلد وبدء الحفظ التلقائي فيه.");
+    renderFolderLinkStatus();
+  }catch(e){
+    if(e && e.name!=="AbortError") toast("تعذر ربط المجلد: "+(e.message||e));
+  }
+}
+async function unlinkBackupFolder(){
+  linkedDirHandle = null;
+  try{ await idbSet("linkedDirHandle", null); }catch(e){}
+  toast("تم فصل المجلد — لن يُنسخ إليه أي تعديل بعد الآن (ملفاته لم تُحذف).");
+}
+async function forcePullFromFolder(){
+  if(!linkedDirHandle){ toast("لا يوجد مجلد مرتبط."); return; }
+  const granted = await ensureFolderPermission(linkedDirHandle, false);
+  if(!granted){ toast("لا توجد صلاحية قراءة لهذا المجلد."); return; }
+  const snap = await readFolderSnapshot(linkedDirHandle);
+  if(!folderSnapshotHasData(snap)){ toast("المجلد لا يحتوي على نسخة بيانات صالحة بعد."); return; }
+  if(!confirm("سيتم استبدال بيانات التطبيق الحالية بالكامل ببيانات المجلد. هل أنت متأكد؟")) return;
+  await restoreAllFromFolder(linkedDirHandle, snap);
+  toast("تم سحب بيانات المجلد بنجاح.");
+  showView("dashboard");
+}
+function renderFolderLinkStatus(){
+  const box = document.getElementById("folderLinkStatus");
+  const linkBtn = document.getElementById("linkFolderBtn");
+  const unlinkBtn = document.getElementById("unlinkFolderBtn");
+  const pullBtn = document.getElementById("pullFolderBtn");
+  const syncBtn = document.getElementById("syncFolderBtn");
+  if(!box) return;
+  if(!FS_ACCESS_SUPPORTED){
+    box.innerHTML = "⚠️ متصفحك لا يدعم ربط مجلد حقيقي (مدعوم في Chrome/Edge على الكمبيوتر، وفي Chrome على أندرويد بالإصدارات الحديثة).";
+    if(linkBtn) linkBtn.disabled = true;
+    return;
+  }
+  const when = lastFolderSyncAt ? new Date(lastFolderSyncAt).toLocaleTimeString('ar-EG') : "—";
+  if(linkedDirHandle){
+    box.innerHTML = "🟢 مرتبط بمجلد: <b>"+escapeHtml(linkedDirHandle.name||"")+"</b> — آخر مزامنة: "+when+"<br><span style=\"color:var(--dim);font-size:11px;\">البنية: state.json + data/ + assets/ + .system/revisions + COMMIT — حفظ آمن ومراجعات واسترجاع</span>";
+    if(linkBtn) linkBtn.style.display = "none";
+    if(unlinkBtn) unlinkBtn.style.display = "";
+    if(pullBtn) pullBtn.style.display = "";
+    if(syncBtn) syncBtn.style.display = "";
+  } else {
+    box.innerHTML = "🔴 غير مرتبط بأي مجلد حاليًا.";
+    if(linkBtn) linkBtn.style.display = "";
+    if(unlinkBtn) unlinkBtn.style.display = "none";
+    if(pullBtn) pullBtn.style.display = "none";
+    if(syncBtn) syncBtn.style.display = "none";
+  }
 }
 async function getAssetMeta(id){ try{return await idbGet(ASSET_META_PREFIX+String(id));}catch(e){return null;} }
 async function listStoredAssetIds(){
@@ -11910,15 +11454,8 @@ async function wipeAllAppData(){
       }
     }
   }catch(e){ errors.push('opfs: '+(e?.message||e)); }
-  // 4) مسح كل مفاتيح localStorage الخاصة بالتطبيق فعليًا — بلا استثناء لأي ميزة (ملاحظات، سجلات
-  // مصطلحات، أو أي شيء آخر يخزّن بياناته في localStorage تحت أي اسم مفتاح). المسح الكامل معناه
-  // فعلاً "كل شيء"، ولا يجوز حصره في القائمة الضيقة المخصّصة لإعدادات النسخ الاحتياطي المحمولة
-  // (workshop_/inventory_/wi_) لأن أي ميزة لا تتبع هذا النمط كانت تنجو من "المسح الكامل" بصمت.
-  try{
-    const keys=[];
-    for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && !BACKUP_LS_EXCLUDE_PREFIXES.some(p=>k.startsWith(p))) keys.push(k); }
-    keys.forEach(k=>{ try{ localStorage.removeItem(k); }catch(_e){} });
-  }catch(e){ errors.push('localStorage: '+(e?.message||e)); }
+  // 4) مسح كل مفاتيح localStorage الخاصة بالتطبيق (نفس منطق الاستيراد الكامل: كل شيء عدا مفاتيح __ المحجوزة)
+  try{ clearPortableLocalStorageExcept({}); }catch(e){ errors.push('localStorage: '+(e?.message||e)); }
   return errors;
 }
 async function migrateLegacyDataUrlsToAssets(){
@@ -14271,18 +13808,587 @@ window.ensureVisual=ensureVisual;
 
 <style>
 .vdoc{direction:rtl;width:100%;max-width:100%;min-width:0;color:var(--text)}.vdoc *{box-sizing:border-box;min-width:0}.vdoc-box{overflow:hidden;border:1px solid var(--border-lt);border-radius:14px;background:var(--panel2)}.vdoc-head{padding:14px;background:var(--panel3);border-bottom:1px solid var(--border)}.vdoc-title{width:100%;border:0!important;border-bottom:1px solid var(--border-lt)!important;border-radius:0!important;background:transparent!important;color:var(--text)!important;font:700 18px var(--sans);padding:7px 0!important}.vdoc-note{color:var(--dim);font-size:11px;margin-top:6px}.vdoc-tabs{display:flex;gap:6px;padding:10px;overflow-x:auto;background:var(--panel);border-bottom:1px solid var(--border)}.vdoc-tabs button{flex:0 0 auto!important;white-space:nowrap!important;padding:6px 10px!important}.vdoc-tabs button.on{background:var(--amber)!important;color:var(--amber-ink)!important;border-color:var(--amber)!important}.vdoc-body{padding:14px;min-height:300px;max-width:100%;overflow:hidden}.vdoc-body h4{margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)}.vdoc-help{color:var(--dim);font-size:11px;line-height:1.7}.vdoc-editor{width:100%;min-height:190px;resize:vertical;padding:11px;border:1px solid var(--border-lt);border-radius:9px;background:var(--panel3);color:var(--text);font:14px/1.8 var(--sans)}.vdoc-preview{margin-top:12px;max-width:100%;overflow:hidden}.vdoc-preview img{max-width:100%!important;height:auto!important}.vdoc-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}.vdoc-photo{overflow:hidden;padding:8px;border:1px solid var(--border-lt);border-radius:10px;background:var(--panel)}.vdoc-photo img{display:block;width:100%;height:132px;object-fit:cover;border-radius:7px;cursor:zoom-in}.vdoc-photo textarea{width:100%;min-height:62px;margin-top:7px;padding:6px;resize:vertical;background:var(--panel3);color:var(--text);border:1px solid var(--border);border-radius:6px}.vdoc-actions{display:flex;gap:5px;margin-top:6px}.vdoc-actions button{flex:1;padding:4px!important;font-size:10px!important}.vdoc-add{display:flex;align-items:center;justify-content:center;min-height:118px;padding:10px;border:1px dashed var(--amber);border-radius:10px;background:var(--amber-dim);cursor:pointer;text-align:center}.vdoc-add input{display:none}@media(max-width:640px){.vdoc-body{padding:10px}.vdoc-title{font-size:16px}}
+/* ===== تتبع الأعطال ===== */
+.ft-wrap{display:flex;flex-direction:column;gap:10px;}
+.ft-pages-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 8px;}
+.ft-page-thumb{flex:0 0 auto;width:84px;cursor:pointer;border:2px solid var(--border);border-radius:9px;overflow:hidden;background:var(--panel);display:flex;flex-direction:column;}
+.ft-page-thumb.active{border-color:var(--amber);}
+.ft-page-thumb img{width:100%;height:56px;object-fit:cover;background:var(--panel3);display:block;}
+.ft-page-thumb span{font-size:10px;padding:4px 5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ft-page-add{flex:0 0 auto;width:84px;height:82px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10.5px;color:var(--amber);border:1px dashed var(--amber);border-radius:9px;background:var(--amber-dim);cursor:pointer;padding:4px;}
+.ft-page-add input{display:none;}
+.ft-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;}
+.ft-page-name{flex:1;min-width:140px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12.5px;}
+.ft-mode-switch{display:flex;gap:6px;}
+.ft-edit-hint{font-size:11px;color:var(--dim2);padding:2px 2px 0;}
+.ft-layers-bar{display:flex;gap:8px;overflow-x:auto;padding:4px 2px;align-items:center;}
+.ft-layer-add{flex:0 0 auto;font-size:11.5px;}
+.ft-layer-chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:20px;border:1.5px solid var(--border-lt);background:var(--panel);cursor:pointer;max-width:180px;}
+.ft-layer-chip.active{border-color:var(--ft-color,var(--amber));box-shadow:0 0 0 2px color-mix(in srgb, var(--ft-color,var(--amber)) 35%, transparent);}
+.ft-layer-chip.hidden-layer{opacity:.45;}
+.ft-layer-swatch{width:14px;height:14px;border-radius:50%;flex:0 0 auto;background:var(--ft-color,var(--amber));border:1px solid rgba(0,0,0,.3);}
+.ft-layer-name{font-size:11.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px;}
+.ft-layer-btn{flex:0 0 auto;background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:0 1px;}
+.ft-layer-btn:hover{color:var(--text);}
+.ft-layer-btn.danger:hover{color:var(--red);}
+.ft-draw-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;}
+.ft-draw-toolbar select,.ft-draw-toolbar input[type=color],.ft-draw-toolbar input[type=range],.ft-draw-toolbar input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 6px;font-size:11.5px;}
+.ft-draw-toolbar .fill-toggle{color:var(--dim);font-size:11px;display:flex;align-items:center;gap:3px;}
+.ft-nolayer-note{font-size:11.5px;color:var(--dim2);padding:8px;background:var(--panel3);border:1px dashed var(--border);border-radius:9px;}
+.ft-stage-viewport{position:relative;border:1px solid var(--border);border-radius:10px;background:var(--panel);overflow:hidden;height:min(64vh,560px);touch-action:none;}
+.ft-stage-world{position:absolute;top:0;left:0;transform-origin:0 0;}
+.ft-world-img{display:block;user-select:none;-webkit-user-drag:none;position:absolute;top:0;left:0;}
+.ft-world-canvas{position:absolute;top:0;left:0;}
+.ft-markers-layer{position:absolute;top:0;left:0;}
+.ft-text-layer{position:absolute;top:0;left:0;pointer-events:none;}
+.ft-text-label{position:absolute;background:transparent;white-space:nowrap;line-height:1.25;padding:1px 3px;user-select:none;pointer-events:none;}
+.ft-text-label.editable{pointer-events:auto;cursor:move;outline:1px dashed color-mix(in srgb, currentColor 55%, transparent);border-radius:4px;touch-action:none;}
+.ft-text-del{position:absolute;top:-9px;left:-9px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;line-height:1;cursor:pointer;padding:0;}
+.ft-zoom-controls{position:absolute;top:10px;left:10px;z-index:3;display:flex;gap:5px;background:rgba(0,0,0,.5);border-radius:9px;padding:4px;}
+.ft-zbtn{background:#fff;color:#111;border:none;border-radius:6px;min-width:30px;height:28px;padding:0 6px;font-size:14px;font-weight:900;cursor:pointer;}
+.ft-zlevel{color:#fff;font-size:11px;min-width:38px;text-align:center;align-self:center;font-weight:700;}
+.ft-marker{position:absolute;box-sizing:border-box;pointer-events:auto;}
+.ft-marker.shape-circle{border-radius:50%;}
+.ft-marker.shape-rect{border-radius:6px;}
+.ft-marker.mode-view{background:transparent;border:2px solid transparent;cursor:default;transition:background .15s,box-shadow .15s;}
+.ft-marker.mode-view.has-content{cursor:pointer;}
+.ft-marker.mode-view.has-content:hover{box-shadow:0 0 0 2px var(--ft-color,var(--amber)) inset;}
+.ft-marker.mode-view.revealed{box-shadow:0 0 0 2px var(--ft-color,var(--amber)) inset;}
+.ft-marker-dot{position:absolute;top:50%;left:50%;width:15px;height:15px;margin:-8.5px 0 0 -8.5px;border-radius:50%;background:var(--ft-color,var(--amber));border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.55);pointer-events:none;transition:transform .15s;}
+.ft-marker-dot.empty{opacity:.5;}
+.ft-marker.mode-view.revealed .ft-marker-dot{transform:scale(1.35);box-shadow:0 0 0 4px color-mix(in srgb, var(--ft-color,var(--amber)) 45%, transparent), 0 1px 5px rgba(0,0,0,.55);}
+.ft-marker.mode-edit{background:color-mix(in srgb, var(--ft-color,var(--amber)) 22%, transparent);border:2px dashed var(--ft-color,var(--amber));cursor:move;}
+.ft-marker.mode-edit.active-layer{box-shadow:0 0 0 2px var(--ft-color,var(--amber));border-style:solid;}
+.ft-marker.mode-edit.has-content::after{content:'●';position:absolute;top:1px;left:1px;font-size:7px;color:var(--ft-color,var(--amber));}
+.ft-marker-handle{position:absolute;width:13px;height:13px;right:-7px;bottom:-7px;background:var(--ft-color,var(--amber));border:2px solid #fff;border-radius:50%;cursor:nwse-resize;touch-action:none;}
+.ft-marker-del{position:absolute;top:-9px;left:-9px;width:17px;height:17px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;line-height:1;cursor:pointer;padding:0;}
+.ft-inline-text-input{position:absolute;z-index:5;font-size:13px;padding:3px 6px;border:1.5px solid var(--amber);border-radius:5px;min-width:120px;background:#fff;color:#111;}
+.ft-modal-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:16px;}
+.ft-modal-box{width:min(640px,100%);max-height:88vh;overflow:auto;background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.ft-modal-box.wide{width:min(880px,100%);}
+.ft-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.ft-view-title{margin:0;font-size:15px;color:var(--amber);}
+.ft-view-caption{font-size:11px;color:var(--dim);margin-top:5px;}
+.ft-caption-wrap{display:flex;flex-direction:column;gap:6px;}
+.ft-caption-editor{min-height:70px;}
+.ft-caption-view{background:var(--panel3);border:1px solid var(--border);border-radius:9px;padding:10px 12px;}
 </style>
 <script>
 (function(){
  const button=(t,c)=>{const b=document.createElement('button');b.type='button';b.textContent=t;if(c)b.className=c;return b};
  const save=()=>{if(typeof scheduleSave==='function')scheduleSave()};
- async function display(ref){if(ref&&typeof ref==='object')ref=ref.id;if(!ref)return '';if(String(ref).startsWith('data:')||String(ref).startsWith('http'))return ref;try{const blob=await idbGetImage(ref);return blob?URL.createObjectURL(blob):''}catch(e){return ''}}
+ const __imgUrlCache = new Map(); // id -> {url, ts}  — كاش محدود لروابط الصور لمنع تسرّب الذاكرة مع الاستخدام الطويل
+ const __IMG_CACHE_MAX = 80;
+ function __imgCacheGet(id){
+   const hit = __imgUrlCache.get(id);
+   if(!hit) return null;
+   __imgUrlCache.delete(id); __imgUrlCache.set(id, hit); // نقل لآخر الكاش (الأحدث استخدامًا)
+   return hit.url;
+ }
+ function __imgCacheSet(id, url){
+   __imgUrlCache.set(id, {url, ts: Date.now()});
+   while(__imgUrlCache.size > __IMG_CACHE_MAX){
+     const oldestKey = __imgUrlCache.keys().next().value;
+     const old = __imgUrlCache.get(oldestKey);
+     __imgUrlCache.delete(oldestKey);
+     if(old && old.url && old.url.startsWith('blob:')){ try{ URL.revokeObjectURL(old.url); }catch(e){} }
+   }
+ }
+ async function display(ref){
+   if(ref&&typeof ref==='object')ref=ref.id;
+   if(!ref)return '';
+   if(String(ref).startsWith('data:')||String(ref).startsWith('http'))return ref;
+   const cached = __imgCacheGet(ref);
+   if(cached) return cached;
+   try{
+     const blob=await idbGetImage(ref);
+     if(!blob) return '';
+     const url = URL.createObjectURL(blob);
+     __imgCacheSet(ref, url);
+     return url;
+   }catch(e){ return ''; }
+ }
+ window.__workshopDisplayImage=display;
  async function keep(file){try{const id=genImageId();await idbPutImage(id,file,{name:file.name,mime:file.type,size:file.size});return id}catch(e){return await blobToBase64(file)}}
- function mount(host,cont){const s=cont.section=cont.section||{};if(!Array.isArray(s.images))s.images=[];if(!Array.isArray(s.codes))s.codes=[];if(typeof s.explanation!=='string')s.explanation='';if(typeof s.title!=='string')s.title='';if(!s.drawing)s.drawing={shapes:[]};let tab='text';const render=()=>{host.replaceChildren();host.className='sec-scope vdoc';const box=document.createElement('section');box.className='vdoc-box';const head=document.createElement('header');head.className='vdoc-head';const title=document.createElement('input');title.className='vdoc-title';title.placeholder='عنوان التوثيق التقني';title.value=s.title;title.oninput=()=>{s.title=title.value;save()};const note=document.createElement('div');note.className='vdoc-note';note.textContent='الحفظ تلقائي · الصور تُضمَّن في ملف ZIP الكامل للنقل بين الأجهزة';head.append(title,note);box.appendChild(head);const nav=document.createElement('nav');nav.className='vdoc-tabs';[['text','📝 الشرح والصور'],['code','💻 الأكواد'],['draw','📐 الرسم'],['map','🧠 الخريطة']].forEach(([id,label])=>{const b=button(label,id===tab?'on':'');b.onclick=()=>{tab=id;render()};nav.appendChild(b)});box.appendChild(nav);const body=document.createElement('main');body.className='vdoc-body';box.appendChild(body);host.appendChild(box);if(tab==='text')textPanel(body);else if(tab==='code')codePanel(body);else if(tab==='draw'){body.appendChild(h('الرسم التوضيحي'));body.appendChild(buildDrawingPanel(s))}else{body.appendChild(h('الخريطة الذهنية'));body.appendChild(buildMindMapPanel(s))}};
+ const FT_LAYER_COLORS=["#f2a93c","#4da3ff","#3ddc84","#ff5d5d","#c77dff","#ffb703","#2ec4b6","#e07be0"];
+ function ftEnsure(s){
+   if(!s.faultTracking||typeof s.faultTracking!=='object'||Array.isArray(s.faultTracking))s.faultTracking={pages:[],activePageId:null};
+   const ft=s.faultTracking;
+   if(!Array.isArray(ft.pages))ft.pages=[];
+   ft.pages.forEach((p,pidx)=>{
+     if(typeof p.name!=='string')p.name='';
+     if(typeof p.caption!=='string')p.caption='';
+     if(!Array.isArray(p.hotspots))p.hotspots=[];
+     p.hotspots.forEach((hh,hidx)=>{
+       if(typeof hh.x!=='number')hh.x=0.4;
+       if(typeof hh.y!=='number')hh.y=0.4;
+       if(typeof hh.w!=='number')hh.w=0.06;
+       if(typeof hh.h!=='number')hh.h=0.06;
+       if(hh.shape!=='rect'&&hh.shape!=='circle')hh.shape='circle';
+       if(typeof hh.color!=='string')hh.color=FT_LAYER_COLORS[hidx%FT_LAYER_COLORS.length];
+       if(typeof hh.visible!=='boolean')hh.visible=true;
+       if(typeof hh.name!=='string'||!hh.name)hh.name='طبقة '+(hidx+1);
+       if(!hh.content||typeof hh.content!=='object'||Array.isArray(hh.content))hh.content={};
+       if(typeof hh.content.title!=='string')hh.content.title='';
+       if(typeof hh.content.note!=='string')hh.content.note='';
+       if(!Array.isArray(hh.content.images))hh.content.images=[];
+       if(!hh.content.drawing||!Array.isArray(hh.content.drawing.shapes))hh.content.drawing={shapes:[]};
+     });
+   });
+   return ft;
+ }
+ function mount(host,cont){const s=cont.section=cont.section||{};if(!Array.isArray(s.images))s.images=[];if(!Array.isArray(s.codes))s.codes=[];if(typeof s.explanation!=='string')s.explanation='';if(typeof s.title!=='string')s.title='';if(!s.drawing)s.drawing={shapes:[]};ftEnsure(s);let tab='text';const render=()=>{host.replaceChildren();host.className='sec-scope vdoc';const box=document.createElement('section');box.className='vdoc-box';const head=document.createElement('header');head.className='vdoc-head';const title=document.createElement('input');title.className='vdoc-title';title.placeholder='عنوان التوثيق التقني';title.value=s.title;title.oninput=()=>{s.title=title.value;save()};const note=document.createElement('div');note.className='vdoc-note';note.textContent='الحفظ تلقائي · الصور تُضمَّن في ملف ZIP الكامل للنقل بين الأجهزة';head.append(title,note);box.appendChild(head);const nav=document.createElement('nav');nav.className='vdoc-tabs';[['text','📝 الشرح والصور'],['code','💻 الأكواد'],['draw','📐 الرسم'],['map','🧠 الخريطة'],['fault','🩺 تتبع الأعطال']].forEach(([id,label])=>{const b=button(label,id===tab?'on':'');b.onclick=()=>{tab=id;render()};nav.appendChild(b)});box.appendChild(nav);const body=document.createElement('main');body.className='vdoc-body';box.appendChild(body);host.appendChild(box);if(tab==='text')textPanel(body);else if(tab==='code')codePanel(body);else if(tab==='draw'){body.appendChild(h('الرسم التوضيحي'));body.appendChild(buildDrawingPanel(s))}else if(tab==='map'){body.appendChild(h('الخريطة الذهنية'));body.appendChild(buildMindMapPanel(s))}else{ftMountPanel(body,s)}};
  const h=t=>{const x=document.createElement('h4');x.textContent=t;return x};
- function textPanel(body){body.appendChild(h('الشرح والصور'));const help=document.createElement('p');help.className='vdoc-help';help.textContent='أضف صورًا بلا حد، واكتب وصفًا أسفل كل صورة. اضغط الصورة أو زر تكبير لمشاهدتها بالحجم الأصلي مع التكبير والتصغير.';body.appendChild(help);const editor=document.createElement('textarea');editor.className='vdoc-editor';editor.placeholder='اكتب الشرح…';editor.value=s.explanation;const preview=document.createElement('div');preview.className='explain-view vdoc-preview';const paint=()=>{preview.innerHTML=typeof renderMarkdownLite==='function'?renderMarkdownLite(s.explanation):s.explanation.replace(/\n/g,'<br>');if(typeof enhanceMarkdownView==='function')enhanceMarkdownView(preview)};editor.oninput=()=>{s.explanation=editor.value;paint();save()};body.append(editor,preview);paint();const gallery=document.createElement('div');gallery.className='vdoc-gallery';s.images.forEach((entry,i)=>{const id=typeof entry==='object'?entry.id:entry;const card=document.createElement('article');card.className='vdoc-photo';const img=document.createElement('img');img.alt='صورة توثيق';display(id).then(u=>{if(u&&img.isConnected)img.src=u});const open=async()=>{const u=await display(id);if(u)openTblViewer({kind:'image',url:u,caption:caption.value})};img.onclick=open;const caption=document.createElement('textarea');caption.placeholder='شرح أسفل الصورة…';caption.value=typeof entry==='object'?(entry.caption||''):'';caption.oninput=()=>{s.images[i]={id,caption:caption.value};save()};const acts=document.createElement('div');acts.className='vdoc-actions';const zoom=button('تكبير','ghost');zoom.onclick=open;const del=button('حذف','danger ghost');del.onclick=()=>{s.images.splice(i,1);save();render()};acts.append(zoom,del);card.append(img,caption,acts);gallery.appendChild(card)});const add=document.createElement('label');add.className='vdoc-add';add.textContent='＋ أضف صورًا من الجهاز';const pick=document.createElement('input');pick.type='file';pick.accept='image/*';pick.multiple=true;pick.onchange=async()=>{const files=[...(pick.files||[])];if(!files.length)return;add.style.pointerEvents='none';add.textContent='جارٍ حفظ الصور…';let embedded=0;for(const f of files){const id=await keep(f);if(String(id).startsWith('data:'))embedded++;s.images.push({id,caption:''})}save();if(embedded&&typeof toast==='function')toast('تم حفظ الصور داخل المشروع كنسخة احتياطية متوافقة');render()};add.appendChild(pick);gallery.appendChild(add);body.appendChild(gallery)}
+ function textPanel(body){body.appendChild(h('الشرح والصور'));const help=document.createElement('p');help.className='vdoc-help';help.textContent='أضف صورًا بلا حد، واكتب وصفًا أسفل كل صورة. اضغط الصورة أو زر تكبير لمشاهدتها بالحجم الأصلي مع التكبير والتصغير.';body.appendChild(help);const editor=document.createElement('textarea');editor.className='vdoc-editor';editor.placeholder='اكتب الشرح…';editor.value=s.explanation;const preview=document.createElement('div');preview.className='explain-view vdoc-preview';const paint=()=>{preview.innerHTML=typeof renderMarkdownLite==='function'?renderMarkdownLite(s.explanation):s.explanation.replace(/\n/g,'<br>');if(typeof enhanceMarkdownView==='function')enhanceMarkdownView(preview)};editor.oninput=()=>{s.explanation=editor.value;paint();save()};body.append(editor,preview);paint();const gallery=document.createElement('div');gallery.className='vdoc-gallery';s.images.forEach((entry,i)=>{const id=typeof entry==='object'?entry.id:entry;const card=document.createElement('article');card.className='vdoc-photo';const img=document.createElement('img');img.alt='صورة توثيق';img.className='lazy-asset';img.dataset.lazyRef=id;const open=async()=>{const u=await display(id);if(u)openTblViewer({kind:'image',url:u,caption:caption.value})};img.onclick=open;const caption=document.createElement('textarea');caption.placeholder='شرح أسفل الصورة…';caption.value=typeof entry==='object'?(entry.caption||''):'';caption.oninput=()=>{s.images[i]={id,caption:caption.value};save()};const acts=document.createElement('div');acts.className='vdoc-actions';const zoom=button('تكبير','ghost');zoom.onclick=open;const del=button('حذف','danger ghost');del.onclick=()=>{s.images.splice(i,1);save();render()};acts.append(zoom,del);card.append(img,caption,acts);gallery.appendChild(card)});const add=document.createElement('label');add.className='vdoc-add';add.textContent='＋ أضف صورًا من الجهاز';const pick=document.createElement('input');pick.type='file';pick.accept='image/*';pick.multiple=true;pick.onchange=async()=>{const files=[...(pick.files||[])];if(!files.length)return;add.style.pointerEvents='none';add.textContent='جارٍ حفظ الصور…';let embedded=0;for(const f of files){const id=await keep(f);if(String(id).startsWith('data:'))embedded++;s.images.push({id,caption:''})}save();if(embedded&&typeof toast==='function')toast('تم حفظ الصور داخل المشروع كنسخة احتياطية متوافقة');render()};add.appendChild(pick);gallery.appendChild(add);body.appendChild(gallery)}
  function codePanel(body){body.appendChild(h('كتل الأكواد'));const hold=document.createElement('div');hold.className='codes-holder';s.codes.forEach((c,i)=>hold.appendChild(buildCodeBlock(s,c,i)));body.appendChild(hold);const add=button('＋ إضافة كتلة كود','ghost addcode-btn');add.onclick=()=>{s.codes.push({lang:'text',label:'كود جديد',code:''});save();render()};body.appendChild(add)}
+ /* ============================= تتبع الأعطال: طبقات + رسم مباشر على الصورة + تكبير باللمس ============================= */
+ function ftHasContent(hh){const c=hh.content||{};return !!((c.title&&c.title.trim())||(c.note&&c.note.trim())||(c.images&&c.images.length)||(c.drawing&&c.drawing.shapes&&c.drawing.shapes.length));}
+ function ftRenderContentReadonly(container,content){
+   container.innerHTML='';
+   if(content.title&&content.title.trim()){const hx=document.createElement('h3');hx.className='ft-view-title';hx.textContent=content.title;container.appendChild(hx);}
+   if(content.note&&content.note.trim()){const d=document.createElement('div');d.className='explain-view';d.innerHTML=typeof renderMarkdownLite==='function'?renderMarkdownLite(content.note):content.note.replace(/\n/g,'<br>');container.appendChild(d);if(typeof enhanceMarkdownView==='function')enhanceMarkdownView(d);}
+   if(content.images&&content.images.length){
+     const gal=document.createElement('div');gal.className='nb-gallery ft-view-gallery';
+     content.images.forEach(entry=>{
+       const card=document.createElement('div');card.className='nb-photo';
+       const img=document.createElement('img');img.alt=entry.caption||'صورة';img.className='lazy-asset';img.dataset.lazyRef=entry.id;
+       img.onclick=async()=>{const u=await display(entry.id);if(u)openTblViewer({kind:'image',url:u,caption:entry.caption||''});};
+       card.appendChild(img);
+       if(entry.caption){const cap=document.createElement('div');cap.className='ft-view-caption';cap.textContent=entry.caption;card.appendChild(cap);}
+       gal.appendChild(card);
+     });
+     container.appendChild(gal);observeLazyImages(gal);
+   }
+   if(!container.children.length){const p=document.createElement('div');p.style.cssText='color:var(--dim2);font-size:12.5px;';p.textContent='لا يوجد محتوى نصي مضاف بعد لهذه الطبقة.';container.appendChild(p);}
+ }
+ function ftCloseOnEsc(overlay,close){function onKey(e){if(e.key==='Escape')close();}document.addEventListener('keydown',onKey);overlay.addEventListener('mousedown',e=>{if(e.target===overlay)close();});return onKey;}
+ function ftOpenViewer(hh){
+   const overlay=document.createElement('div');overlay.className='ft-modal-overlay';
+   overlay.innerHTML=`<div class="ft-modal-box"><div class="ft-modal-head"><b>👁 ${escapeHtml(hh.content.title||hh.name||'تفاصيل الطبقة')}</b><button type="button" class="btn small ft-modal-close">✕ إغلاق</button></div><div class="ft-modal-body"></div></div>`;
+   document.body.appendChild(overlay);
+   ftRenderContentReadonly(overlay.querySelector('.ft-modal-body'),hh.content);
+   function close(){overlay.remove();document.removeEventListener('keydown',onKey);}
+   const onKey=ftCloseOnEsc(overlay,close);
+   overlay.querySelector('.ft-modal-close').onclick=close;
+ }
+ function ftOpenEditor(hh,onChange){
+   const overlay=document.createElement('div');overlay.className='ft-modal-overlay';
+   overlay.innerHTML=`<div class="ft-modal-box wide"><div class="ft-modal-head"><b>✏️ خصائص الطبقة</b><button type="button" class="btn small ft-modal-close">✕ إغلاق</button></div><div class="ft-modal-body"></div></div>`;
+   document.body.appendChild(overlay);
+   const bodyEl=overlay.querySelector('.ft-modal-body');
+   const nameInput=document.createElement('input');nameInput.className='nb-title';nameInput.placeholder='اسم الطبقة (مثال: تسريب زيت)';nameInput.value=hh.name||'';
+   nameInput.oninput=()=>{hh.name=nameInput.value;save();onChange&&onChange();};
+   bodyEl.appendChild(nameInput);
+   const titleInput=document.createElement('input');titleInput.className='nb-title';titleInput.placeholder='عنوان يظهر عند فتح الطبقة (اختياري)';titleInput.value=hh.content.title||'';
+   titleInput.oninput=()=>{hh.content.title=titleInput.value;save();onChange&&onChange();};
+   bodyEl.appendChild(titleInput);
+   const shapeRow=document.createElement('div');shapeRow.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+   const colorInput=document.createElement('input');colorInput.type='color';colorInput.value=hh.color||'#f2a93c';colorInput.title='لون الطبقة';
+   colorInput.oninput=()=>{hh.color=colorInput.value;save();onChange&&onChange();};
+   const shapeSel=document.createElement('select');shapeSel.className='draw-tool';shapeSel.innerHTML='<option value="circle">⚪ دائرة</option><option value="rect">▭ مستطيل</option>';shapeSel.value=hh.shape||'circle';
+   shapeSel.onchange=()=>{hh.shape=shapeSel.value;save();onChange&&onChange();};
+   shapeRow.append(colorInput,shapeSel);bodyEl.appendChild(shapeRow);
+   const noteHead=document.createElement('div');noteHead.className='nb-subhead';noteHead.innerHTML='<b>ملاحظة / تشخيص</b>';bodyEl.appendChild(noteHead);
+   const toolbarHolder=document.createElement('div');toolbarHolder.className='fmt-toolbar-holder';
+   toolbarHolder.appendChild(buildFormatToolbar(()=>editor));
+   const editor=document.createElement('textarea');editor.className='nb-editor';editor.style.minHeight='110px';editor.placeholder='اكتب وصف العطل أو خطوات التشخيص...';editor.value=hh.content.note||'';
+   editor.oninput=()=>{hh.content.note=editor.value;save();};
+   bodyEl.append(toolbarHolder,editor);
+   const hint=document.createElement('div');hint.className='ft-nolayer-note';hint.textContent='💡 الرسم بالأسهم والخطوط والمسارات يتم مباشرة فوق الصورة نفسها من شريط أدوات الرسم في وضع التحرير، بعد اختيار هذه الطبقة.';bodyEl.appendChild(hint);
+   const galHead=document.createElement('div');galHead.className='nb-subhead';galHead.innerHTML='<b>📷 صور مرفقة</b>';bodyEl.appendChild(galHead);
+   const gallery=document.createElement('div');gallery.className='nb-gallery';bodyEl.appendChild(gallery);
+   function renderGallery(){
+     gallery.innerHTML='';
+     (hh.content.images||[]).forEach((entry,i)=>{
+       const card=document.createElement('div');card.className='nb-photo';
+       const img=document.createElement('img');img.alt='صورة مرفقة';img.className='lazy-asset';img.dataset.lazyRef=entry.id;
+       const cap=document.createElement('textarea');cap.placeholder='وصف...';cap.value=entry.caption||'';
+       img.onclick=async()=>{const u=await display(entry.id);if(u)openTblViewer({kind:'image',url:u,caption:cap.value});};
+       cap.oninput=()=>{entry.caption=cap.value;save();};
+       const acts=document.createElement('div');acts.className='nb-photo-actions';
+       const del=document.createElement('button');del.type='button';del.className='btn small danger';del.textContent='🗑 حذف';
+       del.onclick=()=>{hh.content.images.splice(i,1);save();renderGallery();};
+       acts.appendChild(del);card.append(img,cap,acts);gallery.appendChild(card);
+     });
+     const addCard=document.createElement('label');addCard.className='nb-photo-add';addCard.textContent='＋ أضف صورة';
+     const pick=document.createElement('input');pick.type='file';pick.accept='image/*';pick.multiple=true;
+     pick.onchange=async()=>{
+       const files=[...(pick.files||[])];if(!files.length)return;
+       for(const f of files){const id=await keep(f);hh.content.images.push({id,caption:''});}
+       save();renderGallery();
+     };
+     addCard.appendChild(pick);gallery.appendChild(addCard);
+   }
+   renderGallery();observeLazyImages(gallery);
+   function close(){overlay.remove();document.removeEventListener('keydown',onKey);onChange&&onChange();}
+   const onKey=ftCloseOnEsc(overlay,close);
+   overlay.querySelector('.ft-modal-close').onclick=close;
+ }
+ function ftMountPanel(body,sArg){
+   const ft=ftEnsure(sArg);
+   let mode='view';
+   let activeId=(ft.activePageId&&ft.pages.some(p=>p.id===ft.activePageId))?ft.activePageId:(ft.pages[0]?ft.pages[0].id:null);
+   let activeLayerId=null;
+   let currentTool='pen';
+   const helpEl=document.createElement('div');helpEl.className='nb-help';
+   helpEl.textContent='أضف صورًا للجهاز، وأنشئ طبقة لكل نقطة عطل (دائرة قابلة للتحريك)، وارسم أسهمًا/خطوطًا/مسارات ونصوصًا مباشرة فوق الصورة داخل الطبقة المختارة. في وضع العرض تكون كل الطبقات مخفية، واضغط على نقطة محددة لإظهار محتواها فقط. كبّر وصغّر الصورة بإصبعين (Pinch) أو بعجلة الفأرة.';
+   body.appendChild(helpEl);
+   const root=document.createElement('div');root.className='ft-wrap';body.appendChild(root);
+   function currentPage(){return ft.pages.find(p=>p.id===activeId)||null;}
+   function renderFt(){
+     root.innerHTML='';let revealedLayerId=null;
+     const pagesBar=document.createElement('div');pagesBar.className='ft-pages-strip';
+     ft.pages.forEach((p,idx)=>{
+       const thumb=document.createElement('div');thumb.className='ft-page-thumb'+(p.id===activeId?' active':'');
+       const img=document.createElement('img');img.className='lazy-asset';if(p.imageId){img.dataset.lazyRef=p.imageId;img.alt='صورة الصفحة';}
+       const lbl=document.createElement('span');lbl.textContent=p.name||('صفحة '+(idx+1));
+       thumb.append(img,lbl);
+       thumb.onclick=()=>{activeId=p.id;ft.activePageId=p.id;activeLayerId=null;mode='view';save();renderFt();};
+       pagesBar.appendChild(thumb);
+     });
+     const addPage=document.createElement('label');addPage.className='ft-page-add';addPage.textContent='＋ صفحة جديدة';
+     const pagePick=document.createElement('input');pagePick.type='file';pagePick.accept='image/*';pagePick.multiple=true;
+     pagePick.onchange=async()=>{
+       const files=[...(pagePick.files||[])];if(!files.length)return;
+       addPage.textContent='جارٍ الحفظ...';
+       for(const f of files){
+         const id=await keep(f);
+         const pg={id:uid('ftpg'),name:'صفحة '+(ft.pages.length+1),imageId:id,hotspots:[],caption:''};
+         ft.pages.push(pg);if(!activeId)activeId=pg.id;
+       }
+       ft.activePageId=activeId;save();renderFt();
+     };
+     addPage.appendChild(pagePick);pagesBar.appendChild(addPage);root.appendChild(pagesBar);
+     const page=currentPage();
+     if(!page){
+       const empty=document.createElement('div');empty.style.cssText='padding:26px;text-align:center;color:var(--dim2);font-size:12.5px;';
+       empty.textContent='لا توجد صفحات بعد — أضف صورة لبدء تتبع الأعطال.';
+       root.appendChild(empty);return;
+     }
+     if(!page.hotspots.some(hh=>hh.id===activeLayerId))activeLayerId=page.hotspots[0]?page.hotspots[0].id:null;
+     const toolbar=document.createElement('div');toolbar.className='ft-toolbar';
+     const nameInput=document.createElement('input');nameInput.className='ft-page-name';nameInput.value=page.name||'';nameInput.placeholder='اسم الصفحة';
+     nameInput.oninput=()=>{page.name=nameInput.value;save();};
+     const modeBtns=document.createElement('div');modeBtns.className='ft-mode-switch';
+     const viewBtn=document.createElement('button');viewBtn.type='button';viewBtn.className='btn small'+(mode==='view'?' primary':'');viewBtn.textContent='👁 عرض';
+     const editBtn=document.createElement('button');editBtn.type='button';editBtn.className='btn small'+(mode==='edit'?' primary':'');editBtn.textContent='✏️ تحرير';
+     viewBtn.onclick=()=>{mode='view';renderFt();};
+     editBtn.onclick=()=>{mode='edit';renderFt();};
+     modeBtns.append(viewBtn,editBtn);
+     const delPageBtn=document.createElement('button');delPageBtn.type='button';delPageBtn.className='btn small danger';delPageBtn.textContent='🗑 حذف الصفحة';
+     delPageBtn.onclick=(e)=>{
+       if(!armConfirm(e.currentTarget,'اضغط تاني لتأكيد الحذف'))return;
+       const idx=ft.pages.findIndex(p=>p.id===page.id);if(idx!==-1)ft.pages.splice(idx,1);
+       activeId=ft.pages[0]?ft.pages[0].id:null;ft.activePageId=activeId;activeLayerId=null;
+       save();renderFt();
+     };
+     toolbar.append(nameInput,modeBtns,delPageBtn);root.appendChild(toolbar);
+     const layersBar=document.createElement('div');layersBar.className='ft-layers-bar';root.appendChild(layersBar);
+     let drawToolbar=null,toolSel=null,colorInput=null,widthInput=null,fontInput=null,fillInput=null;
+     if(mode==='edit'){
+       drawToolbar=document.createElement('div');drawToolbar.className='ft-draw-toolbar';
+       drawToolbar.innerHTML=`<select class="draw-tool" title="الأداة"><option value="pen">✏️ رسم حر</option><option value="line">📏 خط مستقيم</option><option value="arrow">➡️ سهم</option><option value="dotted">┄ خط منقط</option><option value="curve">〰️ خط منحني (مسار)</option><option value="zigzag">⚡ خط متعرج</option><option value="rect">▭ مستطيل</option><option value="triangle">▲ مثلث</option><option value="circle">◯ دائرة</option><option value="text">🔤 كتابة</option><option value="eraser">🧹 ممحاة</option><option value="pan">🖐 تحريك فقط</option></select><input type="color" class="draw-color" value="#1e2519" title="لون الرسم"><input type="range" class="draw-width" min="1" max="14" value="3" title="سُمك الخط"><input type="number" class="draw-fontsize" min="8" max="60" value="18" title="حجم الخط" style="width:52px;"><label class="fill-toggle"><input type="checkbox" class="draw-fill"> تعبئة</label><button type="button" class="btn small ft-undo-btn" title="تراجع عن آخر شكل في الطبقة">↩️ تراجع</button><button type="button" class="btn small ft-redo-btn" title="إعادة آخر شكل تم التراجع عنه">↪️ إعادة</button><button type="button" class="btn small danger ft-clear-btn" title="مسح رسم الطبقة الحالية">🗑 مسح رسم الطبقة</button>`;
+       root.appendChild(drawToolbar);
+       toolSel=drawToolbar.querySelector('.draw-tool');colorInput=drawToolbar.querySelector('.draw-color');widthInput=drawToolbar.querySelector('.draw-width');fontInput=drawToolbar.querySelector('.draw-fontsize');fillInput=drawToolbar.querySelector('.draw-fill');
+       toolSel.value=currentTool;toolSel.onchange=()=>{currentTool=toolSel.value;};
+       const hintEl=document.createElement('div');hintEl.className='ft-edit-hint';
+       hintEl.textContent='إصبع واحد: يرسم على الطبقة المختارة (أو يحرّك الصورة مع أداة 🖐) · إصبعان: تكبير/تصغير وتحريك دائمًا · اسحب دائرة الطبقة لنقلها في أي وقت، والمقبض الملوّن لتغيير حجم منطقة اللمس، ودبل كليك لفتح خصائصها · مربعات الكتابة يمكن سحبها لتحريكها بعد كتابتها.';
+       root.appendChild(hintEl);
+     }
+     const viewport=document.createElement('div');viewport.className='ft-stage-viewport';
+     const zoomCtrls=document.createElement('div');zoomCtrls.className='ft-zoom-controls';
+     zoomCtrls.innerHTML=`<button type="button" class="ft-zbtn" data-act="zout">−</button><span class="ft-zlevel">100%</span><button type="button" class="ft-zbtn" data-act="zin">+</button><button type="button" class="ft-zbtn" data-act="zreset" title="إعادة الضبط">⤢</button>`;
+     viewport.appendChild(zoomCtrls);
+     const world=document.createElement('div');world.className='ft-stage-world';
+     const worldImg=document.createElement('img');worldImg.className='ft-world-img';worldImg.draggable=false;worldImg.alt='صورة تتبع الأعطال';
+     const canvasEl=document.createElement('canvas');canvasEl.className='ft-world-canvas';
+     const textLayer=document.createElement('div');textLayer.className='ft-text-layer';
+     const markersLayer=document.createElement('div');markersLayer.className='ft-markers-layer';
+     world.append(worldImg,canvasEl,textLayer,markersLayer);viewport.appendChild(world);root.appendChild(viewport);
+     if(page.imageId){worldImg.dataset.lazyRef=page.imageId;worldImg.classList.add('lazy-asset');}
+     const captionWrap=document.createElement('div');captionWrap.className='ft-caption-wrap';root.appendChild(captionWrap);
+     if(mode==='edit'){
+       const capHead=document.createElement('div');capHead.className='nb-subhead';capHead.innerHTML='<b>📝 شرح الصفحة (يظهر أسفل الصورة)</b>';captionWrap.appendChild(capHead);
+       const capToolbarHolder=document.createElement('div');capToolbarHolder.className='fmt-toolbar-holder';capToolbarHolder.appendChild(buildFormatToolbar(()=>capEditor));
+       const capEditor=document.createElement('textarea');capEditor.className='nb-editor ft-caption-editor';capEditor.placeholder='اكتب شرحًا أو ملاحظة عامة عن هذه الصورة تظهر أسفلها للجميع...';capEditor.value=page.caption||'';
+       capEditor.oninput=()=>{page.caption=capEditor.value;save();};
+       captionWrap.append(capToolbarHolder,capEditor);
+     } else if(page.caption&&page.caption.trim()){
+       const capView=document.createElement('div');capView.className='explain-view ft-caption-view';
+       capView.innerHTML=typeof renderMarkdownLite==='function'?renderMarkdownLite(page.caption):page.caption.replace(/\n/g,'<br>');
+       captionWrap.appendChild(capView);if(typeof enhanceMarkdownView==='function')enhanceMarkdownView(capView);
+     }
+     const MIN_ZOOM=0.4,MAX_ZOOM=8;
+     let natW=0,natH=0,baseScale=1,zoomFactor=1,tx=0,ty=0;
+     const zlevelEl=zoomCtrls.querySelector('.ft-zlevel');
+     const ctx=canvasEl.getContext('2d');
+     const redoStacks=new Map();
+     function clearRedo(lid){redoStacks.delete(lid);}
+     function computeBaseScaleAndCenter(){
+       const rect=viewport.getBoundingClientRect();
+       if(!natW||!natH||!rect.width){baseScale=1;}else{baseScale=Math.min((rect.width*0.98)/natW,(rect.height*0.98)/natH,1);}
+       const dispW=natW*baseScale*zoomFactor,dispH=natH*baseScale*zoomFactor;
+       tx=(rect.width-dispW)/2;ty=(rect.height-dispH)/2;
+     }
+     function applyTransform(){const scale=baseScale*zoomFactor;world.style.transform=`translate(${tx}px, ${ty}px) scale(${scale})`;zlevelEl.textContent=Math.round(zoomFactor*100)+'%';}
+     function currentScale(){return baseScale*zoomFactor;}
+     function zoomBy(factor,clientX,clientY){
+       const rect=viewport.getBoundingClientRect();
+       const cx=clientX!=null?clientX-rect.left:rect.width/2,cy=clientY!=null?clientY-rect.top:rect.height/2;
+       const oldScale=currentScale();
+       let newZoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,zoomFactor*factor));
+       const newScale=baseScale*newZoom;
+       tx=cx-(cx-tx)*(newScale/oldScale);ty=cy-(cy-ty)*(newScale/oldScale);
+       zoomFactor=newZoom;applyTransform();
+     }
+     zoomCtrls.querySelector('[data-act="zin"]').onclick=()=>zoomBy(1.35);
+     zoomCtrls.querySelector('[data-act="zout"]').onclick=()=>zoomBy(1/1.35);
+     zoomCtrls.querySelector('[data-act="zreset"]').onclick=()=>{zoomFactor=1;computeBaseScaleAndCenter();applyTransform();};
+     viewport.addEventListener('wheel',(e)=>{e.preventDefault();zoomBy(e.deltaY<0?1.15:1/1.15,e.clientX,e.clientY);},{passive:false});
+     function screenToNatural(clientX,clientY){const rect=world.getBoundingClientRect();const sc=currentScale();return{x:(clientX-rect.left)/sc,y:(clientY-rect.top)/sc};}
+     function layerIsShown(hh){if(hh.visible===false)return false;if(mode==='view')return hh.id===revealedLayerId;return true;}
+     function redrawCanvas(){
+       if(!natW||!natH)return;ctx.clearRect(0,0,natW,natH);
+       page.hotspots.forEach(hh=>{if(!layerIsShown(hh))return;(hh.content.drawing.shapes||[]).forEach(sh=>{if(sh.type!=='text')drawShape(ctx,sh);});});
+     }
+     function renderTextLabels(){
+       textLayer.innerHTML='';
+       page.hotspots.forEach(hh=>{
+         if(!layerIsShown(hh))return;
+         (hh.content.drawing.shapes||[]).forEach(sh=>{
+           if(sh.type!=='text')return;
+           const lbl=document.createElement('div');lbl.className='ft-text-label'+(mode==='edit'?' editable':'');
+           lbl.textContent=sh.text;lbl.style.left=sh.x+'px';lbl.style.top=sh.y+'px';lbl.style.color=sh.color||'#1e2519';lbl.style.fontSize=(sh.fontSize||18)+'px';
+           if(mode==='edit'){
+             const del=document.createElement('button');del.type='button';del.className='ft-text-del';del.textContent='✕';
+             del.onclick=(e)=>{e.stopPropagation();const shapes=hh.content.drawing.shapes;const i=shapes.indexOf(sh);if(i!==-1)shapes.splice(i,1);clearRedo(hh.id);save();renderTextLabels();};
+             lbl.appendChild(del);
+             lbl.addEventListener('pointerdown',(e)=>{
+               if(e.target===del)return;e.stopPropagation();e.preventDefault();
+               lbl.setPointerCapture(e.pointerId);
+               const startX=e.clientX,startY=e.clientY,ox=sh.x,oy=sh.y,sc=currentScale();let moved=false;
+               function onMove(ev){moved=true;sh.x=ox+(ev.clientX-startX)/sc;sh.y=oy+(ev.clientY-startY)/sc;lbl.style.left=sh.x+'px';lbl.style.top=sh.y+'px';}
+               function onUp(){lbl.removeEventListener('pointermove',onMove);lbl.removeEventListener('pointerup',onUp);if(moved)save();}
+               lbl.addEventListener('pointermove',onMove);lbl.addEventListener('pointerup',onUp);
+             });
+           }
+           textLayer.appendChild(lbl);
+         });
+       });
+     }
+     function renderLayersBar(){
+       layersBar.innerHTML='';
+       page.hotspots.forEach((hh,idx)=>{
+         const chip=document.createElement('div');chip.className='ft-layer-chip'+(hh.id===activeLayerId?' active':'')+(hh.visible===false?' hidden-layer':'');
+         chip.style.setProperty('--ft-color',hh.color||'#f2a93c');
+         const sw=document.createElement('span');sw.className='ft-layer-swatch';
+         const nm=document.createElement('span');nm.className='ft-layer-name';nm.textContent=hh.name||('طبقة '+(idx+1));
+         chip.append(sw,nm);
+         if(mode==='edit'){
+           const eyeBtn=document.createElement('button');eyeBtn.type='button';eyeBtn.className='ft-layer-btn';eyeBtn.textContent=hh.visible===false?'🚫':'👁';eyeBtn.title='إظهار/إخفاء الطبقة';
+           eyeBtn.onclick=(e)=>{e.stopPropagation();hh.visible=hh.visible===false;save();redrawCanvas();renderTextLabels();renderMarkers();renderLayersBar();};
+           const editBtnL=document.createElement('button');editBtnL.type='button';editBtnL.className='ft-layer-btn';editBtnL.textContent='✏️';editBtnL.title='خصائص الطبقة';
+           editBtnL.onclick=(e)=>{e.stopPropagation();ftOpenEditor(hh,()=>{renderMarkers();renderLayersBar();});};
+           const delBtnL=document.createElement('button');delBtnL.type='button';delBtnL.className='ft-layer-btn danger';delBtnL.textContent='🗑';delBtnL.title='حذف الطبقة';
+           delBtnL.onclick=(e)=>{
+             e.stopPropagation();if(!armConfirm(e.currentTarget,'تأكيد؟'))return;
+             const i=page.hotspots.indexOf(hh);if(i!==-1)page.hotspots.splice(i,1);
+             if(activeLayerId===hh.id)activeLayerId=page.hotspots[0]?page.hotspots[0].id:null;
+             clearRedo(hh.id);save();redrawCanvas();renderTextLabels();renderMarkers();renderLayersBar();
+           };
+           chip.append(eyeBtn,editBtnL,delBtnL);
+         }
+         chip.onclick=()=>{activeLayerId=hh.id;renderMarkers();renderLayersBar();};
+         layersBar.appendChild(chip);
+       });
+       if(mode==='edit'){
+         const addBtn=document.createElement('button');addBtn.type='button';addBtn.className='btn small ft-layer-add';addBtn.textContent='＋ طبقة جديدة';
+         addBtn.onclick=()=>{
+           const rect=viewport.getBoundingClientRect();
+           const c=screenToNatural(rect.left+rect.width/2,rect.top+rect.height/2);
+           const w=Math.min(0.07,natW?60/natW:0.07),hh2=Math.min(0.07,natH?60/natH:0.07);
+           const nh={id:uid('fths'),name:'طبقة '+(page.hotspots.length+1),x:Math.min(Math.max((c.x/natW)-w/2,0),1-w),y:Math.min(Math.max((c.y/natH)-hh2/2,0),1-hh2),w,h:hh2,shape:'circle',color:FT_LAYER_COLORS[page.hotspots.length%FT_LAYER_COLORS.length],visible:true,content:{title:'',note:'',images:[],drawing:{shapes:[]}}};
+           page.hotspots.push(nh);activeLayerId=nh.id;save();renderMarkers();renderLayersBar();
+         };
+         layersBar.appendChild(addBtn);
+       }
+     }
+     function renderMarkers(){
+       markersLayer.innerHTML='';
+       page.hotspots.forEach(hh=>{
+         if(hh.visible===false&&mode==='view')return;
+         const el=document.createElement('div');
+         el.className='ft-marker'+(hh.shape==='rect'?' shape-rect':' shape-circle')+(mode==='edit'?' mode-edit':' mode-view')+(mode==='edit'&&hh.id===activeLayerId?' active-layer':'')+(mode==='view'&&hh.id===revealedLayerId?' revealed':'')+(ftHasContent(hh)?' has-content':'');
+         el.style.left=(hh.x*natW)+'px';el.style.top=(hh.y*natH)+'px';el.style.width=(hh.w*natW)+'px';el.style.height=(hh.h*natH)+'px';
+         el.style.setProperty('--ft-color',hh.color||'#f2a93c');
+         if(hh.visible===false)el.style.opacity='.35';
+         if(mode==='view'){
+           const dot=document.createElement('div');dot.className='ft-marker-dot'+(ftHasContent(hh)?'':' empty');
+           el.appendChild(dot);
+           if(ftHasContent(hh))el.title=hh.content.title||hh.name||'اضغط لإظهار محتوى هذه النقطة';
+           el.addEventListener('click',(e)=>{
+             e.stopPropagation();if(panDragMoved||!ftHasContent(hh))return;
+             revealedLayerId=(revealedLayerId===hh.id)?null:hh.id;
+             redrawCanvas();renderTextLabels();renderMarkers();
+           });
+         } else {
+           el.title=hh.name||'طبقة';
+           const handle=document.createElement('div');handle.className='ft-marker-handle';el.appendChild(handle);
+           const delBtn=document.createElement('button');delBtn.type='button';delBtn.className='ft-marker-del';delBtn.textContent='✕';
+           delBtn.onclick=(e)=>{e.stopPropagation();const i=page.hotspots.indexOf(hh);if(i!==-1)page.hotspots.splice(i,1);if(activeLayerId===hh.id)activeLayerId=page.hotspots[0]?page.hotspots[0].id:null;clearRedo(hh.id);save();redrawCanvas();renderTextLabels();renderMarkers();renderLayersBar();};
+           el.appendChild(delBtn);
+           el.addEventListener('pointerdown',(e)=>{
+             if(e.target===handle||e.target===delBtn)return;
+             e.stopPropagation();e.preventDefault();
+             activeLayerId=hh.id;renderLayersBar();
+             markersLayer.querySelectorAll('.ft-marker.mode-edit').forEach(x=>x.classList.remove('active-layer'));
+             el.classList.add('active-layer');el.setPointerCapture(e.pointerId);
+             const startX=e.clientX,startY=e.clientY,ox=hh.x,oy=hh.y,sc=currentScale();let moved=false;
+             function onMove(ev){
+               moved=true;
+               const dx=(ev.clientX-startX)/sc/natW,dy=(ev.clientY-startY)/sc/natH;
+               hh.x=Math.min(Math.max(ox+dx,0),Math.max(0,1-hh.w));hh.y=Math.min(Math.max(oy+dy,0),Math.max(0,1-hh.h));
+               el.style.left=(hh.x*natW)+'px';el.style.top=(hh.y*natH)+'px';
+             }
+             function onUp(){el.removeEventListener('pointermove',onMove);el.removeEventListener('pointerup',onUp);if(moved)save();}
+             el.addEventListener('pointermove',onMove);el.addEventListener('pointerup',onUp);
+           });
+           handle.addEventListener('pointerdown',(e)=>{
+             e.stopPropagation();e.preventDefault();handle.setPointerCapture(e.pointerId);
+             const startX=e.clientX,startY=e.clientY,ow=hh.w,oh=hh.h,sc=currentScale();
+             function onMove(ev){
+               const dx=(ev.clientX-startX)/sc/natW,dy=(ev.clientY-startY)/sc/natH;
+               hh.w=Math.min(Math.max(ow+dx,0.015),Math.max(0.015,1-hh.x));hh.h=Math.min(Math.max(oh+dy,0.015),Math.max(0.015,1-hh.y));
+               el.style.width=(hh.w*natW)+'px';el.style.height=(hh.h*natH)+'px';
+             }
+             function onUp(){handle.removeEventListener('pointermove',onMove);handle.removeEventListener('pointerup',onUp);save();}
+             handle.addEventListener('pointermove',onMove);handle.addEventListener('pointerup',onUp);
+           });
+           el.addEventListener('dblclick',(e)=>{e.stopPropagation();ftOpenEditor(hh,()=>{redrawCanvas();renderTextLabels();renderMarkers();renderLayersBar();});});
+         }
+         markersLayer.appendChild(el);
+       });
+     }
+     const activePointers=new Map();let panDragStart=null,panDragMoved=false,drawState=null;
+     function activeLayerNow(){return page.hotspots.find(x=>x.id===activeLayerId)||null;}
+     function askInlineText(pos,onDone){
+       const input=document.createElement('input');input.type='text';input.placeholder='اكتب النص واضغط Enter…';input.className='ft-inline-text-input';
+       const fsz=parseInt(fontInput.value,10)||18;input.style.left=pos.x+'px';input.style.top=pos.y+'px';input.style.fontSize=fsz+'px';input.style.color=colorInput.value;
+       world.appendChild(input);input.focus();
+       function finish(commit){const val=input.value.trim();input.remove();if(commit&&val)onDone(val);}
+       input.addEventListener('pointerdown',(e)=>e.stopPropagation());
+       input.addEventListener('keydown',(e)=>{e.stopPropagation();if(e.key==='Enter')finish(true);if(e.key==='Escape')finish(false);});
+       input.addEventListener('blur',()=>finish(true));
+     }
+     function eraseNearActive(pos){
+       const layer=activeLayerNow();if(!layer)return;
+       const shapes=layer.content.drawing.shapes;let bestIdx=-1,bestDist=26/currentScale();
+       shapes.forEach((sh,i)=>{shapeRefPoints(sh).forEach(p=>{const d=Math.hypot(p.x-pos.x,p.y-pos.y);if(d<bestDist){bestDist=d;bestIdx=i;}});});
+       if(bestIdx!==-1){shapes.splice(bestIdx,1);clearRedo(layer.id);save();redrawCanvas();renderTextLabels();}
+     }
+     function startPan(clientX,clientY){panDragStart={x:clientX,y:clientY,tx,ty};}
+     function movePan(clientX,clientY){
+       if(!panDragStart)return;
+       const dx=clientX-panDragStart.x,dy=clientY-panDragStart.y;
+       if(Math.abs(dx)+Math.abs(dy)>5)panDragMoved=true;
+       tx=panDragStart.tx+dx;ty=panDragStart.ty+dy;applyTransform();
+     }
+     if(drawToolbar){
+       drawToolbar.querySelector('.ft-undo-btn').onclick=()=>{
+         const layer=activeLayerNow();if(!layer||!layer.content.drawing.shapes.length)return;
+         const popped=layer.content.drawing.shapes.pop();const st=redoStacks.get(layer.id)||[];st.push(popped);redoStacks.set(layer.id,st);
+         save();redrawCanvas();renderTextLabels();
+       };
+       drawToolbar.querySelector('.ft-redo-btn').onclick=()=>{
+         const layer=activeLayerNow();if(!layer)return;
+         const st=redoStacks.get(layer.id)||[];if(!st.length)return;
+         layer.content.drawing.shapes.push(st.pop());save();redrawCanvas();renderTextLabels();
+       };
+       drawToolbar.querySelector('.ft-clear-btn').onclick=(e)=>{
+         const layer=activeLayerNow();if(!layer)return;
+         if(!armConfirm(e.currentTarget,'تأكيد المسح؟'))return;
+         layer.content.drawing.shapes=[];clearRedo(layer.id);save();redrawCanvas();renderTextLabels();
+       };
+     }
+     viewport.addEventListener('pointerdown',(e)=>{
+       if(e.target.closest('.ft-marker')||e.target.closest('.ft-zoom-controls')||e.target.closest('.ft-text-label')||e.target.classList.contains('ft-inline-text-input'))return;
+       viewport.setPointerCapture(e.pointerId);activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});panDragMoved=false;
+       if(activePointers.size===1){
+         const canDraw=mode==='edit'&&activeLayerId&&currentTool!=='pan';
+         if(canDraw){
+           const layer=activeLayerNow();const pos=screenToNatural(e.clientX,e.clientY);
+           if(currentTool==='text'){
+             askInlineText(pos,(txt)=>{layer.content.drawing.shapes.push({type:'text',x:pos.x,y:pos.y,text:txt,color:colorInput.value,fontSize:parseInt(fontInput.value,10)||18});clearRedo(layer.id);save();redrawCanvas();renderTextLabels();});
+             drawState=null;return;
+           }
+           if(currentTool==='eraser'){drawState={erasing:true};eraseNearActive(pos);return;}
+           drawState={tool:currentTool,start:pos,points:currentTool==='pen'?[pos]:null};return;
+         }
+         startPan(e.clientX,e.clientY);
+       } else if(activePointers.size===2){
+         drawState=null;panDragStart=null;
+         const pts=Array.from(activePointers.values());
+         viewport._pinchStartDist=ptDist(pts[0],pts[1]);viewport._pinchStartZoom=zoomFactor;
+       }
+     });
+     viewport.addEventListener('pointermove',(e)=>{
+       if(!activePointers.has(e.pointerId))return;
+       activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+       if(activePointers.size===1&&drawState){
+         const pos=screenToNatural(e.clientX,e.clientY);const layer=activeLayerNow();if(!layer)return;
+         if(drawState.erasing){eraseNearActive(pos);return;}
+         const width=parseInt(widthInput.value,10)||3;redrawCanvas();
+         if(drawState.tool==='pen'){drawState.points.push(pos);drawShape(ctx,{type:'freehand',points:drawState.points,color:colorInput.value,width});}
+         else{drawShape(ctx,buildLiveShape(drawState.tool,drawState.start,pos,colorInput.value,width,fillInput.checked));}
+       } else if(activePointers.size===1&&panDragStart){movePan(e.clientX,e.clientY);}
+       else if(activePointers.size===2){
+         const pts=Array.from(activePointers.values());
+         const dist=ptDist(pts[0],pts[1]);const mid=ptMid(pts[0],pts[1]);
+         const rect=viewport.getBoundingClientRect();const oldScale=currentScale();
+         let newZoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,(viewport._pinchStartZoom||1)*(dist/(viewport._pinchStartDist||dist))));
+         const newScale=baseScale*newZoom;const cx=mid.x-rect.left,cy=mid.y-rect.top;
+         tx=cx-(cx-tx)*(newScale/oldScale);ty=cy-(cy-ty)*(newScale/oldScale);zoomFactor=newZoom;applyTransform();
+       }
+     });
+     function releasePointer(e){
+       activePointers.delete(e.pointerId);
+       if(drawState&&!drawState.erasing){
+         const layer=activeLayerNow();
+         if(layer){
+           const pos=screenToNatural(e.clientX,e.clientY);const width=parseInt(widthInput.value,10)||3;
+           if(drawState.tool==='pen'){
+             if(drawState.points&&drawState.points.length>1){layer.content.drawing.shapes.push({type:'freehand',points:drawState.points,color:colorInput.value,width});clearRedo(layer.id);save();}
+           } else {
+             const shape=buildLiveShape(drawState.tool,drawState.start,pos,colorInput.value,width,fillInput.checked);
+             if(Math.abs(shape.x2-shape.x1)>2/currentScale()||Math.abs(shape.y2-shape.y1)>2/currentScale()){layer.content.drawing.shapes.push(shape);clearRedo(layer.id);save();}
+           }
+         }
+       }
+       drawState=null;panDragStart=null;redrawCanvas();
+       if(activePointers.size===1){const entry=Array.from(activePointers.entries())[0];startPan(entry[1].x,entry[1].y);}
+     }
+     viewport.addEventListener('pointerup',releasePointer);
+     viewport.addEventListener('pointercancel',releasePointer);
+     viewport.addEventListener('pointerleave',(e)=>{if(activePointers.has(e.pointerId))releasePointer(e);});
+     viewport.addEventListener('dblclick',(e)=>{
+       if(e.target.closest('.ft-marker')||e.target.closest('.ft-text-label'))return;
+       if(zoomFactor>1.05){zoomFactor=1;computeBaseScaleAndCenter();}else zoomBy(2,e.clientX,e.clientY);
+       applyTransform();
+     });
+     worldImg.addEventListener('load',()=>{
+       natW=worldImg.naturalWidth;natH=worldImg.naturalHeight;
+       worldImg.style.width=natW+'px';worldImg.style.height=natH+'px';
+       canvasEl.width=natW;canvasEl.height=natH;canvasEl.style.width=natW+'px';canvasEl.style.height=natH+'px';
+       textLayer.style.width=natW+'px';textLayer.style.height=natH+'px';markersLayer.style.width=natW+'px';markersLayer.style.height=natH+'px';
+       zoomFactor=1;computeBaseScaleAndCenter();applyTransform();redrawCanvas();renderTextLabels();renderMarkers();
+     });
+     window.addEventListener('resize',()=>{if(natW){computeBaseScaleAndCenter();applyTransform();}});
+     renderLayersBar();renderMarkers();
+   }
+   renderFt();
+ }
  render()}
+
  window.mountCellSection=mount;
 })();
 </script>
@@ -14548,14 +14654,14 @@ window.ensureVisual=ensureVisual;
 
 
 <!-- BOX FLASH ON CELL SEARCH PATCH -->
-<style id="box-flash-search-patch-style">
+<style id="box-flash-search-patch">
 @keyframes boxSearchFlash{
   0%,100%{outline:0 solid transparent;box-shadow:none;filter:none}
   50%{outline:3px solid var(--amber);outline-offset:3px;box-shadow:0 0 0 6px var(--amber-dim),0 0 30px rgba(var(--amber-rgb),.75);filter:brightness(1.12)}
 }
 .box-search-flash{animation:boxSearchFlash .6s ease-in-out 3!important;position:relative;z-index:30}
 </style>
-<script id="box-flash-search-patch-script">
+<script id="box-flash-search-patch">
 (function(){
   function flashBoxEverywhere(boxId){
     if(!boxId) return;
