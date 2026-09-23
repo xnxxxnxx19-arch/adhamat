@@ -7878,6 +7878,7 @@ function renderSettings(){
       <div id="folderLinkStatus" style="font-size:12px;margin:8px 0;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn primary small" id="linkFolderBtn">🗂 ربط مجلد للنسخ التلقائي</button>
+        <button class="btn primary small" id="activateFolderBtn" style="display:none">🟡 تفعيل صلاحية المجلد</button>
         <button class="btn small" id="syncFolderBtn" style="display:none">🔄 مزامنة الآن</button>
         <button class="btn small" id="pullFolderBtn" style="display:none">⬇️ سحب بيانات المجلد (استبدال)</button>
         <button class="btn danger small" id="unlinkFolderBtn" style="display:none">فصل المجلد</button>
@@ -7908,6 +7909,12 @@ function renderSettings(){
   document.getElementById('unlinkFolderBtn').onclick=async ()=>{ await unlinkBackupFolder(); renderFolderLinkStatus(); };
   document.getElementById('syncFolderBtn').onclick=async ()=>{ toast('جارٍ المزامنة...'); const ok=await syncFolderNow(true); toast(ok?'تمت المزامنة بنجاح':'فشلت المزامنة'); renderFolderLinkStatus(); };
   document.getElementById('pullFolderBtn').onclick=async ()=>{ await forcePullFromFolder(); renderFolderLinkStatus(); };
+  document.getElementById('activateFolderBtn').onclick=async ()=>{
+    const ok = await ensureFolderPermission(linkedDirHandle, true, false);
+    if(ok){ folderPermissionNeedsActivation=false; toast('تم تفعيل الصلاحية بنجاح.'); await syncFolderNow(true); }
+    else toast('لم يتم منح الصلاحية.');
+    renderFolderLinkStatus();
+  };
   document.getElementById('checkIntegrityBtn').onclick=async()=>{
     const st=document.getElementById('backupStatus'); if(st){st.style.whiteSpace='pre-line';st.textContent='⏳ جارٍ فحص الملفات المرفقة…';}
     try{
@@ -8440,12 +8447,14 @@ document.addEventListener('click',e=>{ if(!e.target.closest('#notifBell') && !e.
     const savedHandle = await idbGet("linkedDirHandle");
     if(savedHandle){
       linkedDirHandle = savedHandle;
-      const granted = await ensureFolderPermission(linkedDirHandle);
+      const granted = await ensureFolderPermission(linkedDirHandle, true, true); // فحص صامت بدون نافذة إذن مزعجة عند كل فتح
       if(granted){
         const newer=await folderIsNewerThanLocal(linkedDirHandle);
         const appHasData=(state.components||[]).length || (state.containers||[]).length || (state.projects||[]).length;
         if(newer && folderSnapshotHasData(newer)){await restoreAllFromFolder(linkedDirHandle,newer);toast(appHasData?'🔄 تم تحديث البيانات من آخر نسخة ملتزمة في المجلد.':'⚠️ تمت استعادة المشروع تلقائيًا من المجلد المرتبط.');}
         else if(!appHasData){const snap=await readFolderSnapshot(linkedDirHandle);if(folderSnapshotHasData(snap)){await restoreAllFromFolder(linkedDirHandle,snap);toast('⚠️ تمت استعادة البيانات تلقائيًا من المجلد المرتبط.');}}
+      } else {
+        folderPermissionNeedsActivation = true; // نعرض زر تفعيل صريح في الإعدادات بدل إزعاج المستخدم بنافذة إذن تلقائية
       }
     }
   }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد المرتبط:", e); }
@@ -11226,18 +11235,20 @@ let folderSyncQueued = false;
 let folderSyncTimer = null;
 let lastFolderSyncAt = null;
 
-async function ensureFolderPermission(handle, write){
+async function ensureFolderPermission(handle, write, passive){
   if(!handle) return false;
   try{
     const opts = {mode: write===false ? "read" : "readwrite"};
     if(handle.queryPermission){
       if((await handle.queryPermission(opts))==="granted") return true;
+      if(passive) return false; // فحص صامت فقط: لا نستدعي requestPermission تلقائيًا (يمنع ظهور نافذة الإذن بدون تفاعل حقيقي من المستخدم)
       if(handle.requestPermission && (await handle.requestPermission(opts))==="granted") return true;
       return false;
     }
     return true; // متصفح لا يدعم فحص الصلاحية بشكل صريح — نفترض النجاح ونترك العملية الفعلية تفشل لو لم تكن مسموحة
   }catch(e){ console.warn("تعذر التحقق من صلاحية المجلد:", e); return false; }
 }
+let folderPermissionNeedsActivation = false;
 
 // نمسح شجرة state بالكامل (وليس حقولًا محددة) لنلتقط أي معرّف صورة idbimg_* أينما
 // وُجد — سواء في بيانات المكونات، أو توثيق الخلايا، أو صفحات/طبقات تتبع الأعطال —
@@ -11290,7 +11301,10 @@ function buildModularFolderData(st){return {
 };}
 async function syncFolderNow(force){
   if(!linkedDirHandle)return false;if(folderSyncInFlight){folderSyncQueued=true;return false;}
-  const ok=await ensureFolderPermission(linkedDirHandle,true);if(!ok)return false;folderSyncInFlight=true;
+  const ok=await ensureFolderPermission(linkedDirHandle,true,!force);
+  if(!ok){ folderPermissionNeedsActivation=true; return false; }
+  folderPermissionNeedsActivation=false;
+  folderSyncInFlight=true;
   try{
     captureRuntimeLocalStorageIntoState();state.__savedAtTs=Date.now();const revision=String(Date.now())+'_'+String(++saveRevision);
     const system=await linkedDirHandle.getDirectoryHandle('.system',{create:true});const revisions=await system.getDirectoryHandle('revisions',{create:true});
@@ -11398,6 +11412,7 @@ function renderFolderLinkStatus(){
   const unlinkBtn = document.getElementById("unlinkFolderBtn");
   const pullBtn = document.getElementById("pullFolderBtn");
   const syncBtn = document.getElementById("syncFolderBtn");
+  const activateBtn = document.getElementById("activateFolderBtn");
   if(!box) return;
   if(!FS_ACCESS_SUPPORTED){
     box.innerHTML = "⚠️ متصفحك لا يدعم ربط مجلد حقيقي (مدعوم في Chrome/Edge على الكمبيوتر، وفي Chrome على أندرويد بالإصدارات الحديثة).";
@@ -11405,16 +11420,25 @@ function renderFolderLinkStatus(){
     return;
   }
   const when = lastFolderSyncAt ? new Date(lastFolderSyncAt).toLocaleTimeString('ar-EG') : "—";
-  if(linkedDirHandle){
+  if(linkedDirHandle && folderPermissionNeedsActivation){
+    box.innerHTML = "🟡 المجلد مرتبط (<b>"+escapeHtml(linkedDirHandle.name||"")+"</b>) لكن المتصفح يحتاج تأكيدك مرة تانية على إذن الوصول — اضغط الزر أسفله.";
+    if(linkBtn) linkBtn.style.display = "none";
+    if(unlinkBtn) unlinkBtn.style.display = "";
+    if(pullBtn) pullBtn.style.display = "none";
+    if(syncBtn) syncBtn.style.display = "none";
+    if(activateBtn) activateBtn.style.display = "";
+  } else if(linkedDirHandle){
     box.innerHTML = "🟢 مرتبط بمجلد: <b>"+escapeHtml(linkedDirHandle.name||"")+"</b> — آخر مزامنة: "+when+"<br><span style=\"color:var(--dim);font-size:11px;\">البنية: state.json + data/ + assets/ + .system/revisions + COMMIT — حفظ آمن ومراجعات واسترجاع</span>";
     if(linkBtn) linkBtn.style.display = "none";
     if(unlinkBtn) unlinkBtn.style.display = "";
     if(pullBtn) pullBtn.style.display = "";
     if(syncBtn) syncBtn.style.display = "";
+    if(activateBtn) activateBtn.style.display = "none";
   } else {
     box.innerHTML = "🔴 غير مرتبط بأي مجلد حاليًا.";
     if(linkBtn) linkBtn.style.display = "";
     if(unlinkBtn) unlinkBtn.style.display = "none";
+    if(activateBtn) activateBtn.style.display = "none";
     if(pullBtn) pullBtn.style.display = "none";
     if(syncBtn) syncBtn.style.display = "none";
   }
