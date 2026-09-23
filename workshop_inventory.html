@@ -11256,10 +11256,15 @@ let folderPermissionNeedsActivation = false;
 // من غير الحاجة لتحديث كود المزامنة يدويًا في كل مرة.
 async function collectReferencedAssets(){
   const ids = new Set();
+  // نتحقق من كل قيمة نصية (وليس فقط خاصية id) لأن بعض الميزات — مثل صفحات
+  // تتبع الأعطال (page.imageId) — تخزّن معرّف الصورة مباشرة كسلسلة نصية
+  // تحت اسم خاصية مختلف، وليس كـ {id:"idbimg_..."}. الاعتماد على v.id فقط
+  // كان يفوّت هذه الصور فلا تُنسخ للمجلد وتُحذف لاحقًا باعتبارها يتيمة.
   const walk = v=>{
-    if(!v || typeof v!=="object") return;
+    if(v==null) return;
+    if(typeof v==="string"){ if(isIdbImageRef(v)) ids.add(v); return; }
+    if(typeof v!=="object") return;
     if(Array.isArray(v)){ v.forEach(walk); return; }
-    if(typeof v.id==="string" && /^idbimg_/.test(v.id)) ids.add(v.id);
     for(const k in v){ if(Object.prototype.hasOwnProperty.call(v,k)) walk(v[k]); }
   };
   walk(state);
