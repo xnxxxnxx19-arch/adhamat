@@ -298,6 +298,22 @@ nav.navlist{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:0 0 
   .ft-row{grid-template-columns:1fr 1fr;}
   #viewContainer{padding:14px 12px 50px;}
 }
+
+/* ===== إدارة العناصر والمزامنة الذكية ===== */
+.sync-conflict-modal{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:5000;display:flex;align-items:center;justify-content:center;padding:18px}
+.sync-conflict-box{width:min(1100px,100%);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--border-lt);border-radius:16px;box-shadow:0 20px 70px rgba(0,0,0,.45);padding:18px;direction:rtl}
+.sync-conflict-head{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.sync-conflict-head h2{font-size:16px;margin:0}.sync-conflict-sub{color:var(--dim);font-size:11.5px;line-height:1.6}
+.sync-conflict-toolbar{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0;padding:9px;background:var(--panel2);border:1px solid var(--border);border-radius:10px}
+.sync-conflict-row{display:grid;grid-template-columns:32px 1fr 1fr 150px;gap:8px;align-items:stretch;border:1px solid var(--border);border-radius:10px;padding:8px;margin-bottom:7px;background:var(--panel2)}
+.sync-conflict-cell{min-width:0;padding:6px;border-radius:7px;background:var(--panel)}.sync-conflict-cell b{display:block;font-size:12px;margin-bottom:4px}.sync-conflict-cell span{display:block;color:var(--dim);font-size:10.5px;line-height:1.55;overflow-wrap:anywhere}
+.sync-choice{display:flex;flex-direction:column;gap:5px}.sync-choice label{font-size:10.5px;color:var(--text);cursor:pointer}.sync-choice input{margin-left:4px}
+.sync-empty{padding:30px;text-align:center;color:var(--dim)}
+.sheet-toolbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.sheet-toolbar input{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;min-width:220px}
+.elements-sheet{overflow:auto;border:1px solid var(--border);border-radius:11px}.elements-sheet table{width:100%;border-collapse:collapse;min-width:850px;font-size:11.5px}.elements-sheet th,.elements-sheet td{border-bottom:1px solid var(--border);padding:7px 8px;text-align:right;vertical-align:middle}.elements-sheet th{position:sticky;top:0;background:var(--panel3);z-index:1;color:var(--dim);font-size:10.5px}.elements-sheet tr:hover td{background:var(--panel2)}.elements-sheet tr.dup-row td{background:rgba(242,169,60,.07)}.elements-sheet .sel{width:32px;text-align:center}.elements-sheet .mono{font-family:var(--mono)}
+.sheet-dup-badge{display:inline-block;font-size:9.5px;border:1px solid var(--yellow);color:var(--yellow);border-radius:20px;padding:2px 6px;margin-right:4px}.sheet-actions{display:flex;gap:4px;flex-wrap:wrap}.sheet-actions .btn{padding:4px 7px;font-size:10.5px}
+@media(max-width:760px){.sync-conflict-row{grid-template-columns:28px 1fr;}.sync-conflict-row .sync-choice{grid-column:2}.sheet-toolbar input{min-width:150px;width:100%}}
+
 </style>
 </head>
 <body>
@@ -311,6 +327,7 @@ nav.navlist{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:0 0 
     <nav class="navlist">
       <button class="nav-item" data-nav="home"><span class="ico">🏠</span><span class="lbl">الرئيسية</span></button>
       <button class="nav-item" data-nav="tags"><span class="ico">🏷️</span><span class="lbl">الوسوم</span></button>
+      <button class="nav-item" data-nav="items-sheet"><span class="ico">📋</span><span class="lbl">شيت العناصر</span></button>
       <button class="nav-item" data-nav="settings"><span class="ico">⚙️</span><span class="lbl">الإعدادات</span></button>
     </nav>
     <div class="tree-wrap">
@@ -5158,22 +5175,24 @@ function referencedFileIds(){
   return ids;
 }
 
-function safeFileStem(name){
-  return String(name||"").replace(/[\\/:*?"<>|]/g,"_");
+function safeFileName(name){
+  const raw=String(name||"file").split(/[\\/]/).pop().replace(/[<>:"|?*\x00-\x1F]/g,"_").trim();
+  return raw || "file";
 }
-function fileIdFromBackupName(name){
-  const m=String(name||"").match(/^(.+?)(?:\.[^.]+)?$/); return m?m[1]:name;
+function fileIdFromAssetName(name,manifest){
+  const m=manifest?.files?.[name];
+  if(m?.id) return m.id;
+  return null;
 }
-
 async function writeJsonAtomic(handle,name,value){
   const tmpName=name+'.tmp';
   const tmp=await handle.getFileHandle(tmpName,{create:true});
   const w=await tmp.createWritable();
-  try{ await w.write(JSON.stringify(value)); await w.close(); }
+  try{ await w.write(JSON.stringify(value,null,2)); await w.close(); }
   catch(e){ try{await w.abort();}catch(_e){} throw e; }
   const final=await handle.getFileHandle(name,{create:true});
   const fw=await final.createWritable();
-  try{ await fw.write(JSON.stringify(value)); await fw.close(); }
+  try{ await fw.write(JSON.stringify(value,null,2)); await fw.close(); }
   catch(e){ try{await fw.abort();}catch(_e){} throw e; }
   try{ await handle.removeEntry(tmpName); }catch(e){}
 }
@@ -5189,74 +5208,193 @@ async function sha256Blob(blob){
     return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
   }catch(e){ return null; }
 }
-async function writeProjectSnapshot(handle){
-  const revision=(Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7));
-  const snapshot={schemaVersion:3,revision,savedAt:Date.now(),folders:state.folders||[],items:state.items||[],settings:state.settings||{}};
-  await writeJsonAtomic(handle,'project.json',snapshot);
-  return snapshot;
+
+/* =========================================================
+   تخزين المجلد الحقيقي — البنية:
+   state.json
+   data/                ← بيانات البرنامج
+   assets/              ← الصور والمستندات بأسمائها/امتداداتها الأصلية
+   asset-manifest.json  ← يربط fileId بالاسم والنوع والحجم والـ hash
+   .system/revisions/   ← آخر 5 مراجعات
+   COMMIT               ← علامة اكتمال آخر عملية كتابة
+   ========================================================= */
+async function buildFolderStateSnapshot(){
+  return {
+    schemaVersion:4,
+    app:"workshop-equipment-db",
+    savedAt:Date.now(),
+    folders:state.folders||[],
+    items:state.items||[],
+    settings:state.settings||{},
+    categories:state.categories||[],
+    categorySchemas:state.categorySchemas||[]
+  };
 }
+async function writeDataFolder(handle,snapshot){
+  const dataDir=await handle.getDirectoryHandle("data",{create:true});
+  await writeJsonAtomic(dataDir,"folders.json",snapshot.folders||[]);
+  await writeJsonAtomic(dataDir,"items.json",snapshot.items||[]);
+  await writeJsonAtomic(dataDir,"settings.json",snapshot.settings||{});
+  await writeJsonAtomic(dataDir,"categories.json",{
+    categories:snapshot.categories||[],
+    categorySchemas:snapshot.categorySchemas||[]
+  });
+}
+async function readFolderSnapshot(handle){
+  try{
+    const stateFile=await readJsonFile(handle,"state.json",null);
+    if(stateFile && Array.isArray(stateFile.folders) && Array.isArray(stateFile.items)) return stateFile;
+
+    // دعم النسخ القديمة التي كانت تستخدم project.json
+    const old=await readJsonFile(handle,"project.json",null);
+    if(old && Array.isArray(old.folders) && Array.isArray(old.items)) return old;
+
+    const dataDir=await handle.getDirectoryHandle("data");
+    const folders=await readJsonFile(dataDir,"folders.json",[]);
+    const items=await readJsonFile(dataDir,"items.json",[]);
+    const settings=await readJsonFile(dataDir,"settings.json",{});
+    const cats=await readJsonFile(dataDir,"categories.json",{categories:[],categorySchemas:[]});
+    if(Array.isArray(folders)&&Array.isArray(items)){
+      return {schemaVersion:4,folders,items,settings,categories:cats.categories||[],categorySchemas:cats.categorySchemas||[]};
+    }
+  }catch(e){}
+  return null;
+}
+async function readAssetManifest(handle){
+  return await readJsonFile(handle,"asset-manifest.json",{schemaVersion:1,files:{}});
+}
+async function restoreAllFromFolder(handle,snap){
+  const gotFolders=Array.isArray(snap?.folders)?snap.folders:[];
+  const gotItems=Array.isArray(snap?.items)?snap.items:[];
+  const gotSettings=snap?.settings && typeof snap.settings==="object" ? snap.settings : null;
+
+  await idbClear_real("folders"); await idbClear_real("items"); await idbClear_real("files");
+  for(const f of gotFolders) await idbPut_real("folders",f);
+  for(const it of gotItems) await idbPut_real("items",it);
+  if(gotSettings) await idbPut_real("meta",{key:"settings",value:gotSettings});
+  if(Array.isArray(snap.categories)) state.categories=snap.categories;
+  if(Array.isArray(snap.categorySchemas)) state.categorySchemas=snap.categorySchemas;
+
+  const manifest=await readAssetManifest(handle);
+  const present=new Set();
+  try{
+    const assets=await handle.getDirectoryHandle("assets");
+    for await(const [fname,fhandle] of assets.entries()){
+      if(fhandle.kind!=="file") continue;
+      const fid=fileIdFromAssetName(fname,manifest);
+      if(!fid) continue;
+      const blob=await fhandle.getFile();
+      const meta=manifest.files?.[fname]||{};
+      await idbPut_real("files",{
+        id:fid,blob,name:meta.name||fname,mime:meta.mime||blob.type||"",
+        size:blob.size,updatedAt:meta.updatedAt||Date.now()
+      });
+      present.add(fid);
+    }
+  }catch(e){}
+
+  state.folders=gotFolders; state.items=gotItems;
+  if(gotSettings) state.settings=Object.assign(state.settings,gotSettings);
+  for(const it of state.items){
+    it.imageIds=(it.imageIds||[]).filter(id=>present.has(id));
+    if(it.mainImageId && !present.has(it.mainImageId)) it.mainImageId=it.imageIds[0]||null;
+    it.docs=(it.docs||[]).filter(d=>d?.fileId && present.has(d.fileId));
+    if(it.notebookData?.images) it.notebookData.images=it.notebookData.images.filter(x=>present.has(x.id));
+    const ft=it.notebookData?.faultTracking;
+    if(ft?.pages) ft.pages.forEach(pg=>{
+      if(pg.imageId && !present.has(pg.imageId)) pg.imageId=null;
+      (pg.hotspots||[]).forEach(h=>{ if(h.content?.images) h.content.images=h.content.images.filter(x=>present.has(x.id)); });
+    });
+    await idbPut_real("items",it);
+  }
+}
+
 async function pruneFolderRevisions(handle){
   try{
-    const revDir=await handle.getDirectoryHandle('revisions',{create:true});
+    const system=await handle.getDirectoryHandle(".system",{create:true});
+    const revDir=await system.getDirectoryHandle("revisions",{create:true});
     const names=[];
-    for await(const [name,fh] of revDir.entries()) if(fh.kind==='directory' && /^rev_/.test(name)) names.push(name);
+    for await(const [name,fh] of revDir.entries()) if(fh.kind==="directory" && /^rev_/.test(name)) names.push(name);
     names.sort().reverse();
     for(const name of names.slice(5)) { try{ await revDir.removeEntry(name,{recursive:true}); }catch(e){} }
   }catch(e){}
 }
 async function saveFolderRevision(handle,snapshot,manifest){
   try{
-    const revDir=await handle.getDirectoryHandle('revisions',{create:true});
-    const d=await revDir.getDirectoryHandle('rev_'+snapshot.revision,{create:true});
-    await writeJsonAtomic(d,'project.json',snapshot);
-    await writeJsonAtomic(d,'manifest.json',manifest);
+    const system=await handle.getDirectoryHandle(".system",{create:true});
+    const revDir=await system.getDirectoryHandle("revisions",{create:true});
+    const d=await revDir.getDirectoryHandle("rev_"+new Date(snapshot.savedAt).toISOString().replace(/[:.]/g,"-"),{create:true});
+    await writeJsonAtomic(d,"state.json",snapshot);
+    await writeJsonAtomic(d,"asset-manifest.json",manifest);
     await pruneFolderRevisions(handle);
-  }catch(e){ console.warn('تعذر إنشاء Revision:',e); }
+  }catch(e){ console.warn("تعذر إنشاء Revision:",e); }
 }
 async function syncFolderStorageNow(){
-  if(!linkedDirHandle || STORAGE_MODE==='memory') return;
+  if(!linkedDirHandle || STORAGE_MODE==="memory") return;
   const ok=await ensureFolderPermission(linkedDirHandle,false);
-  if(!ok) throw new Error('folder-permission-required');
+  if(!ok) throw new Error("folder-permission-required");
   folderSyncBusy=true; folderSyncError=null;
   try{
-    const snapshot=await writeProjectSnapshot(linkedDirHandle);
-    const filesDir=await linkedDirHandle.getDirectoryHandle('files',{create:true});
-    const records=await idbGetAll_real('files');
+    const snapshot=await buildFolderStateSnapshot();
+    await writeDataFolder(linkedDirHandle,snapshot);
+
+    const assets=await linkedDirHandle.getDirectoryHandle("assets",{create:true});
+    const records=await idbGetAll_real("files");
     const refs=referencedFileIds();
-    const oldManifest=await readJsonFile(linkedDirHandle,'project-manifest.json',{files:{}});
-    const manifest={schemaVersion:2,revision:snapshot.revision,updatedAt:snapshot.savedAt,files:{}};
+    const oldManifest=await readAssetManifest(linkedDirHandle);
+    const manifest={schemaVersion:1,updatedAt:snapshot.savedAt,files:{}};
     const live=new Set();
+
     for(const rec of records){
       if(!rec?.id || !refs.has(rec.id) || !rec.blob) continue;
-      const ext=guessExt(rec.mime,rec.name);
-      const filename=safeFileStem(rec.id)+ext;
+      let filename=safeFileName(rec.name||("asset_"+rec.id));
+      // امنع تعارض أسماء الملفات مع أصول أخرى.
+      const base=filename.replace(/(\.[^.]+)$/,"");
+      const extMatch=filename.match(/(\.[^.]+)$/);
+      const ext=extMatch?extMatch[1]:"";
+      let candidate=filename, n=2;
+      while(live.has(candidate)){ candidate=base+"_"+n+ext; n++; }
+      filename=candidate;
       live.add(filename);
+
       const size=rec.size ?? rec.blob.size ?? 0;
       const updatedAt=rec.updatedAt||0;
       const old=oldManifest?.files?.[filename];
-      let needsWrite=!(old && old.size===size && old.updatedAt===updatedAt);
-      if(needsWrite){
-        const fh=await filesDir.getFileHandle(filename,{create:true});
+      let sha=old?.sha256||null;
+      if(!(old && old.size===size && old.updatedAt===updatedAt)){
+        const fh=await assets.getFileHandle(filename,{create:true});
         const w=await fh.createWritable();
         try{ await w.write(rec.blob); await w.close(); }
         catch(e){ try{await w.abort();}catch(_e){} throw e; }
+        sha=await sha256Blob(rec.blob);
       }
-      let sha=old?.sha256||null;
-      if(needsWrite || !sha) sha=await sha256Blob(rec.blob);
-      manifest.files[filename]={id:rec.id,name:rec.name||'',mime:rec.mime||'',size,updatedAt,sha256:sha};
+      manifest.files[filename]={
+        id:rec.id,name:rec.name||filename,mime:rec.mime||rec.blob.type||"",
+        size,updatedAt,sha256:sha
+      };
     }
-    for await(const [fname,fh] of filesDir.entries()){
-      if(fh.kind!=='file') continue;
-      if(!live.has(fname)){ try{ await filesDir.removeEntry(fname); }catch(e){ console.warn('تعذر حذف ملف قديم:',fname,e); } }
+
+    // تنظيف تلقائي: أي ملف داخل assets لم يعد مستخدمًا يحذف من المجلد الحقيقي.
+    for await(const [fname,fh] of assets.entries()){
+      if(fh.kind==="file" && !live.has(fname)){
+        try{ await assets.removeEntry(fname); }catch(e){ console.warn("تعذر حذف أصل قديم:",fname,e); }
+      }
     }
-    await writeJsonAtomic(linkedDirHandle,'project-manifest.json',manifest);
-    await writeJsonAtomic(linkedDirHandle,'COMMIT.json',{schemaVersion:1,revision:snapshot.revision,savedAt:snapshot.savedAt,fileCount:Object.keys(manifest.files).length,committedAt:Date.now()});
+
+    await writeJsonAtomic(linkedDirHandle,"state.json",snapshot);
+    await writeJsonAtomic(linkedDirHandle,"asset-manifest.json",manifest);
+    await writeJsonAtomic(linkedDirHandle,"COMMIT",{
+      schemaVersion:1,revision:snapshot.savedAt,committedAt:Date.now(),
+      state:"complete",assetCount:Object.keys(manifest.files).length
+    });
     await saveFolderRevision(linkedDirHandle,snapshot,manifest);
-    try{ await idbPut_real('meta',{key:'lastFolderSyncAt',value:Date.now()}); await idbPut_real('meta',{key:'lastFolderRevision',value:snapshot.revision}); }catch(e){}
+    try{
+      await idbPut_real("meta",{key:"lastFolderSyncAt",value:Date.now()});
+      await idbPut_real("meta",{key:"lastFolderRevision",value:snapshot.savedAt});
+    }catch(e){}
   }catch(e){ folderSyncError=e; throw e; }
   finally{ folderSyncBusy=false; }
 }
-
 function requestFolderSync(){
   if(!linkedDirHandle || STORAGE_MODE==="memory") return Promise.resolve();
   if(folderSyncTimer) clearTimeout(folderSyncTimer);
@@ -5267,48 +5405,51 @@ function requestFolderSync(){
         try{ await syncFolderStorageNow(); }
         catch(e){ console.warn("فشل تحديث مجلد التخزين:",e); }
       }).finally(resolve);
-    },120);
+    },300);
   });
 }
-
+async function pullFolderData(){
+  if(!linkedDirHandle){ toast("اربط مجلد التخزين أولًا.","err"); return; }
+  const ok=await ensureFolderPermission(linkedDirHandle,true);
+  if(!ok){ toast("لم تُمنح صلاحية القراءة/الكتابة للمجلد.","err"); return; }
+  const snap=await readFolderSnapshot(linkedDirHandle);
+  if(!snap){ toast("لم يتم العثور على state.json صالح داخل المجلد.","err"); return; }
+  if(!confirm("سيتم استبدال بيانات البرنامج الحالية ببيانات مجلد النسخ. هل تريد المتابعة؟")) return;
+  await restoreAllFromFolder(linkedDirHandle,snap);
+  applyTheme(state.settings.theme||"amber");
+  renderSidebarTree(); navigateTo({type:"home"});
+  toast("⬇️ تم سحب بيانات المجلد واستبدال البيانات الحالية.","ok",5000);
+  renderFolderLinkStatus();
+}
 async function idbPut(storeName,value){
   const p=STORAGE_MODE==="memory" ? memPut(storeName,value) : idbPut_real(storeName,value);
   const result=await p;
-  // لا ننتظر المزامنة هنا لأن بعض مسارات البرنامج تحدّث state مباشرة بعد idbPut.
-  // نؤجلها قليلًا حتى تصبح state هي الحالة النهائية ثم نكتبها للمجلد.
-  if(linkedDirHandle && (storeName==="items" || storeName==="folders" || storeName==="files" || storeName==="meta")) requestFolderSync();
+  if(linkedDirHandle && ["items","folders","files","meta"].includes(storeName)) requestFolderSync();
   return result;
 }
 async function idbDelete(storeName,key){
   const p=STORAGE_MODE==="memory" ? memDelete(storeName,key) : idbDelete_real(storeName,key);
   await p;
-  if(linkedDirHandle && (storeName==="items" || storeName==="folders" || storeName==="files" || storeName==="meta")) requestFolderSync();
+  if(linkedDirHandle && ["items","folders","files","meta"].includes(storeName)) requestFolderSync();
 }
 async function idbClear(storeName){
   const p=STORAGE_MODE==="memory" ? memClear(storeName) : idbClear_real(storeName);
   await p;
   if(linkedDirHandle) requestFolderSync();
 }
-
 async function garbageCollectUnreferencedFiles(){
   if(STORAGE_MODE==="memory") return;
   const refs=referencedFileIds();
   const records=await idbGetAll_real("files");
-  for(const rec of records){
-    if(rec?.id && !refs.has(rec.id)){
-      try{ await idbDelete_real("files",rec.id); }catch(e){}
-    }
-  }
+  for(const rec of records) if(rec?.id && !refs.has(rec.id)){ try{ await idbDelete_real("files",rec.id); }catch(e){} }
   if(linkedDirHandle) requestFolderSync();
 }
-
 async function saveAndFlag(storeName,value){
   setSaveBadge("saving");
   try{ await idbPut(storeName,value); }
   catch(e){ setSaveBadge("idle"); throw e; }
   finally{ setTimeout(()=>setSaveBadge("idle"),350); }
 }
-
 async function storeFile(blob,name,mime){
   const id=uid("file");
   await idbPut("files",{id,blob,name:name||"",mime:mime||blob.type||"",size:blob?.size||0,updatedAt:Date.now()});
@@ -5345,15 +5486,14 @@ async function loadFileIntoElement(el,fileId){
   try{
     const url=await getFileBlobURL(fileId);
     if(!url || !el.isConnected) return;
-    if(el.tagName==='IMG'){ el.src=url; el.classList.add('loaded'); }
-    else { el.innerHTML=`<img src="${url}" alt="" loading="lazy">`; }
+    if(el.tagName==="IMG"){ el.src=url; el.classList.add("loaded"); }
+    else el.innerHTML=`<img src="${url}" alt="" loading="lazy">`;
   }catch(e){}
 }
-function observeLazyFileImage(container,fileId,alt=''){
+function observeLazyFileImage(container,fileId,alt=""){
   if(!container || !fileId) return;
   container.dataset.fileId=fileId;
-  if(lazyFileObserver) lazyFileObserver.observe(container);
-  else loadFileIntoElement(container,fileId);
+  if(lazyFileObserver) lazyFileObserver.observe(container); else loadFileIntoElement(container,fileId);
 }
 async function deleteFile(fileId){
   if(!fileId) return;
@@ -5361,61 +5501,175 @@ async function deleteFile(fileId){
   await idbDelete("files",fileId);
 }
 
+
 /* =========================================================
-   مجلد التخزين المرتبط — ليس مجرد نسخة احتياطية: عند ربطه
-   يصبح هو المصدر الخارجي الفعلي، ويُعاد منه تحميل المشروع عند
-   فتح التطبيق. أي حذف من التطبيق = حذف فعلي من مجلد files.
+   المزامنة الذكية + كشف العناصر المتشابهة
    ========================================================= */
-async function readFolderSnapshot(handle){
+function normDup(v){
+  return String(v??"").toLowerCase().trim().replace(/[\u064B-\u065F\u0670]/g,"").replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").replace(/[ـ\s\-_./\\()[\]{}]+/g," ").replace(/\s+/g," ");
+}
+function itemFingerprint(it){
+  const tags=(it.tags||[]).map(normDup).filter(Boolean).sort().join("|");
+  return [normDup(it.name),normDup(it.model),normDup(it.manufacturer),normDup(it.category),normDup(it.tag||it.code||""),tags].join("¦");
+}
+function itemLooseFingerprint(it){
+  const a=normDup(it.name), b=normDup(it.model), c=normDup(it.manufacturer);
+  return [a,b,c].filter(Boolean).join("¦");
+}
+function itemContentSignature(it){
   try{
-    const fh=await handle.getFileHandle("project.json");
-    const snap=JSON.parse(await (await fh.getFile()).text());
-    if(!snap || !Array.isArray(snap.folders) || !Array.isArray(snap.items)) return null;
-    const commit=await readJsonFile(handle,"COMMIT.json",null);
-    if(commit && snap.revision && commit.revision!==snap.revision) return null;
-    return snap;
-  }catch(e){ return null; }
+    const clone=JSON.parse(JSON.stringify(it||{}));
+    delete clone.updatedAt; delete clone.createdAt;
+    return JSON.stringify(clone);
+  }catch(e){ return String(it?.id||""); }
+}
+function findDuplicatePairs(localItems, folderItems){
+  const pairs=[]; const seen=new Set();
+  const byExact=new Map(), byLoose=new Map();
+  for(const it of localItems||[]){
+    const e=itemFingerprint(it), l=itemLooseFingerprint(it);
+    if(e) (byExact.get(e)||byExact.set(e,[]).get(e)).push(it);
+    if(l) (byLoose.get(l)||byLoose.set(l,[]).get(l)).push(it);
+  }
+  for(const f of folderItems||[]){
+    let candidates=[];
+    const e=itemFingerprint(f), l=itemLooseFingerprint(f);
+    if(e && byExact.has(e)) candidates=byExact.get(e);
+    else if(l && byLoose.has(l)) candidates=byLoose.get(l);
+    else if(f.id){ const same=localItems.find(x=>x.id===f.id); if(same) candidates=[same]; }
+    for(const local of candidates){
+      const key=(local.id||"")+"::"+(f.id||""); if(seen.has(key)) continue; seen.add(key);
+      const exact = itemFingerprint(local)===itemFingerprint(f);
+      const sameId = local.id===f.id;
+      const sameContent = itemContentSignature(local)===itemContentSignature(f);
+      pairs.push({local,folder:f,kind:(sameId&&sameContent)?"identical":(exact?"similar":"possible"),sameId,sameContent});
+    }
+  }
+  return pairs;
+}
+function cloneItemForMerge(it){ return JSON.parse(JSON.stringify(it)); }
+function mergeItemLists(localItems, folderItems, decisions){
+  const localById=new Map((localItems||[]).map(x=>[x.id,x]));
+  const folderById=new Map((folderItems||[]).map(x=>[x.id,x]));
+  const dropLocal=new Set(), dropFolder=new Set();
+  for(const d of decisions||[]){
+    if(d.choice==='local') dropFolder.add(d.folder.id);
+    else if(d.choice==='folder') dropLocal.add(d.local.id);
+    else if(d.choice==='both') { /* keep both; IDs are already unique in normal case */ }
+    else if(d.choice==='delete-local') dropLocal.add(d.local.id);
+    else if(d.choice==='delete-folder') dropFolder.add(d.folder.id);
+  }
+  const out=[]; const used=new Set();
+  for(const it of localItems||[]) if(!dropLocal.has(it.id)){ out.push(cloneItemForMerge(it)); used.add(it.id); }
+  for(const it of folderItems||[]) if(!dropFolder.has(it.id)){
+    let x=cloneItemForMerge(it);
+    if(used.has(x.id)){
+      x.id=uid("item");
+      // Preserve references inside the item; file IDs are global and remain valid.
+    }
+    out.push(x); used.add(x.id);
+  }
+  return out;
+}
+async function writeMergedStateToIDB(){
+  await idbClear_real("folders"); await idbClear_real("items");
+  for(const f of state.folders||[]) await idbPut_real("folders",f);
+  for(const it of state.items||[]) await idbPut_real("items",it);
+  await garbageCollectUnreferencedFiles();
+}
+function duplicateSummary(p){
+  const k=p.kind==='identical'?'مطابق تمامًا':p.kind==='similar'?'متشابه':'تشابه محتمل';
+  return k;
+}
+async function openSyncConflictManager(pairs, folderSnapshot){
+  return new Promise(resolve=>{
+    const modal=document.createElement('div'); modal.className='sync-conflict-modal';
+    const box=document.createElement('div'); box.className='sync-conflict-box';
+    const decisions=pairs.map((p,i)=>({index:i,local:p.local,folder:p.folder,choice:p.kind==='identical'?'local':'both'}));
+    box.innerHTML=`
+      <div class="sync-conflict-head"><div><h2>🔎 تعارض / عناصر متشابهة أثناء الربط</h2><div class="sync-conflict-sub">تم فحص عناصر البرنامج الحالية مقابل محتوى المجلد قبل الدمج. لا يتم حذف أي عنصر تلقائيًا. اختر القرار لكل حالة.</div></div><button class="btn small" id="scClose">✕ إلغاء</button></div>
+      <div class="sync-conflict-toolbar"><button class="btn small" id="scAllLocal">الكل ← البرنامج</button><button class="btn small" id="scAllFolder">الكل ← المجلد</button><button class="btn small" id="scAllBoth">الكل ← الاحتفاظ بالاثنين</button><button class="btn small danger" id="scDeleteFolder">الكل ← حذف نسخة المجلد</button><span style="margin-right:auto;color:var(--dim);font-size:11px">${pairs.length} حالة</span></div>
+      <div id="scRows"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-start;margin-top:12px;flex-wrap:wrap"><button class="btn primary" id="scApply">✅ تطبيق القرارات ودمج البيانات</button><button class="btn" id="scCancel">إلغاء</button></div>`;
+    modal.appendChild(box); document.body.appendChild(modal);
+    const rows=box.querySelector('#scRows');
+    function renderRows(){
+      rows.innerHTML='';
+      if(!pairs.length){ rows.innerHTML='<div class="sync-empty">لا توجد حالات مكررة.</div>'; return; }
+      pairs.forEach((p,i)=>{
+        const d=decisions[i], row=document.createElement('div'); row.className='sync-conflict-row';
+        row.innerHTML=`<div><input type="checkbox" class="sc-check" data-i="${i}" checked></div>
+          <div class="sync-conflict-cell"><b>💻 البرنامج <span class="sheet-dup-badge">${duplicateSummary(p)}</span></b><span>${esc(p.local.name||'بدون اسم')}</span><span>الموديل: ${esc(p.local.model||'—')} | الشركة: ${esc(p.local.manufacturer||'—')}</span><span class="mono">ID: ${esc(p.local.id||'')}</span></div>
+          <div class="sync-conflict-cell"><b>📁 المجلد</b><span>${esc(p.folder.name||'بدون اسم')}</span><span>الموديل: ${esc(p.folder.model||'—')} | الشركة: ${esc(p.folder.manufacturer||'—')}</span><span class="mono">ID: ${esc(p.folder.id||'')}</span></div>
+          <div class="sync-choice"><label><input type="radio" name="sc${i}" value="local" ${d.choice==='local'?'checked':''}> الاحتفاظ بنسخة البرنامج</label><label><input type="radio" name="sc${i}" value="folder" ${d.choice==='folder'?'checked':''}> الاحتفاظ بنسخة المجلد</label><label><input type="radio" name="sc${i}" value="both" ${d.choice==='both'?'checked':''}> الاحتفاظ بالاثنين</label><label><input type="radio" name="sc${i}" value="delete-local" ${d.choice==='delete-local'?'checked':''}> حذف نسخة البرنامج</label><label><input type="radio" name="sc${i}" value="delete-folder" ${d.choice==='delete-folder'?'checked':''}> حذف نسخة المجلد</label></div>`;
+        row.querySelectorAll('input[type=radio]').forEach(r=>r.onchange=()=>d.choice=r.value);
+        rows.appendChild(row);
+      });
+    }
+    renderRows();
+    const setAll=choice=>{decisions.forEach(d=>d.choice=choice);renderRows();};
+    box.querySelector('#scAllLocal').onclick=()=>setAll('local'); box.querySelector('#scAllFolder').onclick=()=>setAll('folder'); box.querySelector('#scAllBoth').onclick=()=>setAll('both'); box.querySelector('#scDeleteFolder').onclick=()=>setAll('delete-folder');
+    const close=()=>{modal.remove();resolve(null)}; box.querySelector('#scClose').onclick=close; box.querySelector('#scCancel').onclick=close;
+    box.querySelector('#scApply').onclick=()=>{modal.remove();resolve(decisions)};
+  });
+}
+async function smartLinkFolderMerge(handle,snap){
+  const localItems=state.items||[]; const folderItems=snap?.items||[];
+  if(!folderItems.length){ await syncFolderStorageNow(); return; }
+  if(!localItems.length){ await restoreAllFromFolder(handle,snap); return; }
+  const pairs=findDuplicatePairs(localItems,folderItems);
+  if(pairs.length){
+    const decisions=await openSyncConflictManager(pairs,snap);
+    if(!decisions) return false;
+    // دمج المجلدات: نفس المعرّف يطابق نفس المجلد؛ المجلدات الجديدة تُضاف.
+    const fById=new Map((snap.folders||[]).map(f=>[f.id,f]));
+    const mergedFolders=[...(state.folders||[])];
+    for(const f of snap.folders||[]) if(!mergedFolders.some(x=>x.id===f.id)) mergedFolders.push(cloneItemForMerge(f));
+    state.folders=mergedFolders;
+    state.items=mergeItemLists(localItems,folderItems,decisions);
+    await writeMergedStateToIDB();
+    await syncFolderStorageNow();
+    renderSidebarTree(); navigateTo({type:'home'}); toast('✅ تم دمج البرنامج والمجلد بعد مراجعة العناصر المتشابهة.','ok',6000);
+    return true;
+  }
+  // لا توجد تشابهات: دمج آمن بدل الاستبدال.
+  state.folders=[...(state.folders||[])];
+  for(const f of snap.folders||[]) if(!state.folders.some(x=>x.id===f.id)) state.folders.push(cloneItemForMerge(f));
+  const ids=new Set(state.items.map(x=>x.id));
+  for(const it of folderItems){ const x=cloneItemForMerge(it); if(ids.has(x.id)) x.id=uid('item'); state.items.push(x); ids.add(x.id); }
+  await writeMergedStateToIDB(); await syncFolderStorageNow();
+  renderSidebarTree(); navigateTo({type:'home'}); toast('✅ تم دمج محتوى المجلد بدون تعارضات.','ok',5000); return true;
 }
 
-async function restoreAllFromFolder(handle,snap){
-  const gotFolders=Array.isArray(snap?.folders)?snap.folders:[];
-  const gotItems=Array.isArray(snap?.items)?snap.items:[];
-  const gotSettings=snap?.settings && typeof snap.settings==="object" ? snap.settings : null;
-
-  // المجلد هو المصدر: امسح طبقة IndexedDB ثم أعد بناءها من محتوى المجلد.
-  await idbClear_real("folders"); await idbClear_real("items"); await idbClear_real("files");
-  for(const f of gotFolders) await idbPut_real("folders",f);
-  for(const it of gotItems) await idbPut_real("items",it);
-  if(gotSettings) await idbPut_real("meta",{key:"settings",value:gotSettings});
-
-  const present=new Set();
-  try{
-    const filesDir=await handle.getDirectoryHandle("files");
-    for await(const [fname,fhandle] of filesDir.entries()){
-      if(fhandle.kind!=="file") continue;
-      const fileId=fileIdFromBackupName(fname);
-      if(!fileId) continue;
-      const fileBlob=await fhandle.getFile();
-      await idbPut_real("files",{id:fileId,blob:fileBlob,name:fname,mime:fileBlob.type||""});
-      present.add(fileId);
-    }
-  }catch(e){ /* مجلد files قد لا يكون موجودًا في نسخة قديمة */ }
-
-  state.folders=gotFolders; state.items=gotItems;
-  if(gotSettings) state.settings=Object.assign(state.settings,gotSettings);
-  // تنظيف مراجع الملفات التي لم تعد موجودة فعليًا في المجلد.
-  for(const it of state.items){
-    it.imageIds=(it.imageIds||[]).filter(id=>present.has(id));
-    if(it.mainImageId && !present.has(it.mainImageId)) it.mainImageId=it.imageIds[0]||null;
-    it.docs=(it.docs||[]).filter(d=>d?.fileId && present.has(d.fileId));
-    if(it.notebookData?.images) it.notebookData.images=it.notebookData.images.filter(x=>present.has(x.id));
-    const ft=it.notebookData?.faultTracking;
-    if(ft?.pages) ft.pages.forEach(pg=>{
-      if(pg.imageId && !present.has(pg.imageId)) pg.imageId=null;
-      (pg.hotspots||[]).forEach(h=>{ if(h.content?.images) h.content.images=h.content.images.filter(x=>present.has(x.id)); });
-    });
-    await idbPut_real("items",it);
+/* ===== شيت العناصر ===== */
+function renderItemsSheetView(c){
+  const all=state.items||[];
+  const dupIds=new Set();
+  const groups=new Map();
+  all.forEach(it=>{ const k=itemFingerprint(it); if(k) (groups.get(k)||groups.set(k,[]).get(k)).push(it); });
+  groups.forEach(g=>{ if(g.length>1) g.forEach(x=>dupIds.add(x.id)); });
+  c.innerHTML=`<div class="view-title"><h1>📋 شيت كل العناصر</h1></div>
+    <div class="view-desc">جدول واحد لكل عناصر البرنامج. يمكنك تحديد عناصر فردية أو عدة عناصر وحذفها، البحث، وتحديد المكررات تلقائيًا.</div>
+    <div class="panel"><div class="sheet-toolbar"><input id="sheetSearch" placeholder="🔎 بحث بالاسم / الموديل / الشركة / التصنيف"><button class="btn small" id="sheetSelectAll">تحديد الظاهر</button><button class="btn small" id="sheetClear">إلغاء التحديد</button><button class="btn small" id="sheetDup">تحديد المكررات</button><button class="btn danger small" id="sheetDelete">🗑 حذف المحدد</button><span id="sheetCount" style="color:var(--dim);font-size:11px;margin-right:auto"></span></div><div class="elements-sheet"><table><thead><tr><th class="sel"><input type="checkbox" id="sheetMaster"></th><th>#</th><th>العنصر</th><th>الموديل</th><th>الشركة</th><th>التصنيف</th><th>المجلد</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="sheetBody"></tbody></table></div></div>`;
+  const body=document.getElementById('sheetBody'), search=document.getElementById('sheetSearch'), count=document.getElementById('sheetCount');
+  const selected=new Set();
+  function renderRows(){
+    const q=normDup(search.value); const rows=all.filter(it=>!q || [it.name,it.model,it.manufacturer,it.category,it.tag,it.code,(it.tags||[]).join(' ')].some(v=>normDup(v).includes(q)));
+    body.innerHTML='';
+    rows.forEach((it,idx)=>{const tr=document.createElement('tr'); if(dupIds.has(it.id)) tr.classList.add('dup-row'); tr.innerHTML=`<td class="sel"><input type="checkbox" data-id="${esc(it.id)}" ${selected.has(it.id)?'checked':''}></td><td>${idx+1}</td><td><b>${esc(it.name||'بدون اسم')}</b></td><td class="mono">${esc(it.model||'—')}</td><td>${esc(it.manufacturer||'—')}</td><td>${esc(it.category||'—')}</td><td>${esc(getFolderPath(it.folderId).map(x=>x.name).join(' / ')||'—')}</td><td>${dupIds.has(it.id)?'<span class="sheet-dup-badge">مكرر/متشابه</span>':'سليم'}</td><td><div class="sheet-actions"><button class="btn" data-open="${esc(it.id)}">فتح</button><button class="btn danger" data-del="${esc(it.id)}">حذف</button></div></td>`; body.appendChild(tr);});
+    body.querySelectorAll('input[data-id]').forEach(cb=>cb.onchange=()=>{cb.checked?selected.add(cb.dataset.id):selected.delete(cb.dataset.id);updateCount();});
+    body.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>navigateTo({type:'item',id:b.dataset.open}));
+    body.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('حذف هذا العنصر وملفاته المرتبطة؟'))return;await confirmDeleteItem(b.dataset.del);renderItemsSheetView(c);});
+    updateCount();
   }
+  function updateCount(){count.textContent=`${selected.size} محدد من ${all.length}`;}
+  search.oninput=renderRows;
+  document.getElementById('sheetSelectAll').onclick=()=>{const q=normDup(search.value);all.filter(it=>!q||[it.name,it.model,it.manufacturer,it.category,it.tag,it.code,(it.tags||[]).join(' ')].some(v=>normDup(v).includes(q))).forEach(it=>selected.add(it.id));renderRows();};
+  document.getElementById('sheetClear').onclick=()=>{selected.clear();renderRows();};
+  document.getElementById('sheetDup').onclick=()=>{dupIds.forEach(id=>selected.add(id));renderRows();};
+  document.getElementById('sheetMaster').onchange=e=>{if(e.target.checked) document.getElementById('sheetSelectAll').click(); else document.getElementById('sheetClear').click();};
+  document.getElementById('sheetDelete').onclick=async()=>{if(!selected.size)return toast('حدد عناصر أولًا.','warn'); if(!confirm(`سيتم حذف ${selected.size} عنصرًا وملفاته المرتبطة. متابعة؟`))return; for(const id of [...selected]) await confirmDeleteItem(id); selected.clear(); renderItemsSheetView(c);};
+  renderRows();
 }
 
 async function linkBackupFolder(){
@@ -5429,33 +5683,38 @@ async function linkBackupFolder(){
 
     const snap=await readFolderSnapshot(handle);
     if(snap){
-      const useFolder=confirm(
-        "تم العثور على مشروع محفوظ داخل هذا المجلد ("+(snap.items||[]).length+" عنصر، "+(snap.folders||[]).length+" مجلد).\n\n"+
-        "موافق = استخدام محتوى المجلد كمصدر المشروع.\nإلغاء = الاحتفاظ بالمشروع الحالي وكتابته فوق المجلد."
-      );
-      if(useFolder){
+      const hasLocal=!!((state.items?.length||0)+(state.folders?.length||0));
+      const hasFolder=!!((snap.items?.length||0)+(snap.folders?.length||0));
+      if(hasLocal && hasFolder){
+        const merged=await smartLinkFolderMerge(handle,snap);
+        if(!merged){ linkedDirHandle=null; try{await idbDelete_real("meta","linkedDir");}catch(e){} renderFolderLinkStatus(); return; }
+        renderFolderLinkStatus(); return;
+      }
+      if(hasFolder){
         await restoreAllFromFolder(handle,snap);
         applyTheme(state.settings.theme||"amber");
         renderSidebarTree(); navigateTo({type:"home"});
-        toast("✅ تم تفعيل المجلد كمصدر التخزين الفعلي للمشروع.","ok",6000);
-        renderFolderLinkStatus();
-        return;
+        toast("✅ تم التعرف على محتوى المجلد واستعادته.","ok",6000);
+        renderFolderLinkStatus(); return;
       }
     }
     await syncFolderStorageNow();
-    toast("✅ تم ربط المجلد. من الآن كل حفظ وتعديل وحذف يُكتب إليه تلقائيًا.","ok",5000);
+    toast("✅ تم ربط المجلد. كل تعديل سيُزامن إليه تلقائيًا.","ok",5000);
   }catch(e){
     if(e?.name!=="AbortError") toast("تعذر ربط المجلد: "+(e.message||e),"err");
   }
   renderFolderLinkStatus();
 }
-
 async function activateLinkedFolder(){
-  if(!linkedDirHandle){ return linkBackupFolder(); }
+  if(!linkedDirHandle) return linkBackupFolder();
   const ok=await ensureFolderPermission(linkedDirHandle,true);
   if(!ok){ toast("لم تُمنح صلاحية المجلد.","err"); return; }
-  await requestFolderSync();
-  toast("🟢 تم تفعيل صلاحية المجلد وسيستمر الحفظ التلقائي عليه.","ok");
+  const snap=await readFolderSnapshot(linkedDirHandle);
+  if((state.items?.length||0)===0 && snap){
+    await restoreAllFromFolder(linkedDirHandle,snap);
+    renderSidebarTree(); navigateTo({type:"home"});
+    toast("♻️ تم الاسترجاع تلقائيًا لأن بيانات IndexedDB كانت فارغة.","ok",5000);
+  }else await requestFolderSync();
   renderFolderLinkStatus();
 }
 async function unlinkBackupFolder(){
@@ -5464,28 +5723,37 @@ async function unlinkBackupFolder(){
   toast("تم فصل مجلد التخزين. سيستمر البرنامج باستخدام IndexedDB.","ok");
   renderFolderLinkStatus();
 }
-function renderFolderLinkStatus(){
+async function renderFolderLinkStatus(){
   const box=document.getElementById("folderLinkStatus");
   const linkBtn=document.getElementById("linkFolderBtn");
+  const pullBtn=document.getElementById("pullFolderBtn");
   const unlinkBtn=document.getElementById("unlinkFolderBtn");
   if(!box) return;
   if(!FS_ACCESS_SUPPORTED){
     box.innerHTML="⚠️ المتصفح لا يدعم ربط مجلد حقيقي.";
-    if(linkBtn){ linkBtn.disabled=true; linkBtn.style.display=""; linkBtn.textContent="🗂 ربط مجلد"; }
+    if(linkBtn){ linkBtn.disabled=true; linkBtn.textContent="🗂 ربط مجلد"; }
+    if(pullBtn) pullBtn.disabled=true;
     if(unlinkBtn) unlinkBtn.style.display="none";
     return;
   }
   if(linkedDirHandle){
-    box.innerHTML="🟡 مرتبط بالمجلد <b>"+esc(linkedDirHandle.name||"")+"</b> — اضغط تفعيل إذا طلب المتصفح الصلاحية.";
-    if(linkBtn){ linkBtn.disabled=false; linkBtn.style.display=""; linkBtn.textContent="🟢 تفعيل / مزامنة المجلد"; }
+    let last="—";
+    try{
+      const t=await idbGet("meta","lastFolderSyncAt");
+      if(t?.value) last=new Date(t.value).toLocaleString("ar-EG");
+    }catch(e){}
+    box.innerHTML=`🟢 مرتبط بمجلد: <b>${esc(linkedDirHandle.name||"")}</b> — آخر مزامنة: ${last}<br>
+      <span style="color:var(--dim2)">البنية: state.json + data/ + assets/ + asset-manifest.json + .system/revisions + COMMIT</span>`;
+    if(linkBtn){ linkBtn.disabled=false; linkBtn.textContent="🔄 مزامنة الآن"; }
+    if(pullBtn) pullBtn.disabled=false;
     if(unlinkBtn) unlinkBtn.style.display="";
   }else{
     box.innerHTML="🔴 لا يوجد مجلد تخزين مرتبط.";
-    if(linkBtn){ linkBtn.disabled=false; linkBtn.style.display=""; linkBtn.textContent="🗂 ربط مجلد التخزين"; }
+    if(linkBtn){ linkBtn.disabled=false; linkBtn.textContent="🗂 ربط مجلد للنسخ التلقائي"; }
+    if(pullBtn) pullBtn.disabled=true;
     if(unlinkBtn) unlinkBtn.style.display="none";
   }
 }
-
 /* =========================================================
    استعلامات بيانات مساعدة
    ========================================================= */
@@ -5805,6 +6073,7 @@ function render(){
   if(v.type==="folder") return renderFolderView(c, v.id);
   if(v.type==="tags") return renderTagsView(c, v.tag);
   if(v.type==="settings") return renderSettingsView(c);
+  if(v.type==="items-sheet") return renderItemsSheetView(c);
   if(v.type==="search") return renderSearchView(c, v.q);
   if(v.type==="item") return renderItemDetail(c, v.id);
 }
@@ -6588,7 +6857,8 @@ async function renderSettingsView(c){
       <div id="folderLinkStatus" style="font-size:12px;margin-bottom:8px;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn primary" id="linkFolderBtn">🗂 ربط مجلد للنسخ التلقائي</button>
-        <button class="btn danger small" id="unlinkFolderBtn" style="display:none">فصل المجلد</button>
+        <button class="btn" id="pullFolderBtn" disabled>⬇️ سحب بيانات المجلد (استبدال)</button>
+        <button class="btn danger small" id="unlinkFolderBtn" style="display:none">فصل المجلد</button><button class="btn small" id="openItemsSheetBtn">📋 فتح شيت كل العناصر</button>
       </div>
     </div>
     <div class="panel">
@@ -6612,12 +6882,14 @@ async function renderSettingsView(c){
     sw.onclick = async ()=>{ applyTheme(t.v); await saveSettings(); renderSettingsView(c); };
     grid.appendChild(sw);
   });
-  renderFolderLinkStatus();
+  await renderFolderLinkStatus();
   document.getElementById("linkFolderBtn").onclick = async ()=>{
     if(linkedDirHandle) await activateLinkedFolder();
     else await linkBackupFolder();
-    renderFolderLinkStatus();
+    await renderFolderLinkStatus();
   };
+  document.getElementById("pullFolderBtn").onclick = async ()=>{ await pullFolderData(); };
+  document.getElementById("openItemsSheetBtn").onclick = ()=> navigateTo({type:"items-sheet"});
   document.getElementById("unlinkFolderBtn").onclick = async ()=>{ await unlinkBackupFolder(); renderFolderLinkStatus(); };
   document.getElementById("exportBtn").onclick = exportProject;
   document.getElementById("importBtn").onclick = ()=> document.getElementById("hiddenImportInput").click();
