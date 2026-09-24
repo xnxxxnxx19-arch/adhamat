@@ -9183,6 +9183,19 @@ renderSidebarTree = function(){
 .ft-zoom-controls{position:absolute;top:10px;left:10px;z-index:3;display:flex;gap:5px;background:rgba(0,0,0,.5);border-radius:9px;padding:4px;}
 .ft-zbtn{background:#fff;color:#111;border:none;border-radius:6px;min-width:30px;height:28px;padding:0 6px;font-size:14px;font-weight:900;cursor:pointer;}
 .ft-zlevel{color:#fff;font-size:11px;min-width:38px;text-align:center;align-self:center;font-weight:700;}
+.ft-stage-area{display:flex;flex-direction:column;gap:8px;min-height:0;width:100%;}
+.ft-wrap.ft-fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;z-index:9999;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:8px;overflow:auto;box-sizing:border-box;max-width:none;}
+.ft-wrap.ft-fullscreen .ft-stage-area{flex:1 1 auto;flex-direction:row;min-height:0;width:auto;}
+.ft-wrap.ft-fullscreen .ft-layers-bar{flex-direction:column;overflow-y:auto;overflow-x:hidden;width:220px;flex:0 0 220px;align-items:stretch;}
+.ft-wrap.ft-fullscreen .ft-layer-chip{max-width:none;width:100%;box-sizing:border-box;}
+.ft-wrap.ft-fullscreen .ft-layer-name{max-width:none;}
+.ft-wrap.ft-fullscreen .ft-stage-viewport{flex:1 1 auto;height:auto;min-height:0;width:auto;}
+.ft-fullscreen-btn{margin-inline-start:auto;}
+@media (max-width:700px){
+  .ft-wrap.ft-fullscreen .ft-stage-area{flex-direction:column;}
+  .ft-wrap.ft-fullscreen .ft-layers-bar{flex-direction:row;overflow-x:auto;overflow-y:hidden;width:100%;flex:0 0 auto;max-height:64px;}
+  .ft-wrap.ft-fullscreen .ft-layer-chip{width:auto;max-width:180px;}
+}
 
 .ft-marker{position:absolute;box-sizing:border-box;pointer-events:auto;}
 .ft-marker.shape-circle{border-radius:50%;}
@@ -10429,6 +10442,8 @@ function nbFaultPanel(body, s, item){
   let activeId = (ft.activePageId && ft.pages.some(p=>p.id===ft.activePageId)) ? ft.activePageId : (ft.pages[0]?ft.pages[0].id:null);
   let activeLayerId=null;
   let currentTool='pen';
+  let isFullscreen=false;
+  let ftOriginalParent=null, ftOriginalNext=null;
 
   const help=document.createElement('div'); help.className='nb-help';
   help.textContent='أضف صورًا للجهاز، وأنشئ طبقة لكل نقطة عطل (دائرة قابلة للتحريك)، وارسم أسهمًا/خطوطًا/مسارات ونصوصًا مباشرة فوق الصورة داخل الطبقة المختارة. في وضع العرض تكون كل الطبقات مخفية، واضغط على نقطة محددة لإظهار محتواها فقط. كبّر وصغّر الصورة بإصبعين (Pinch) أو بعجلة الفأرة.';
@@ -10441,6 +10456,24 @@ function nbFaultPanel(body, s, item){
 
   function render(){
     root.innerHTML='';
+    if(isFullscreen){
+      if(root.parentNode!==document.body){
+        ftOriginalParent=root.parentNode;
+        ftOriginalNext=root.nextSibling;
+        document.body.appendChild(root);
+      }
+      root.classList.add('ft-fullscreen');
+      document.documentElement.style.overflow='hidden';
+      document.body.style.overflow='hidden';
+    } else {
+      if(root.parentNode===document.body && ftOriginalParent){
+        ftOriginalParent.insertBefore(root, ftOriginalNext);
+        ftOriginalParent=null; ftOriginalNext=null;
+      }
+      root.classList.remove('ft-fullscreen');
+      document.documentElement.style.overflow='';
+      document.body.style.overflow='';
+    }
     let revealedLayerId=null;
 
     /* شريط الصفحات */
@@ -10491,6 +10524,9 @@ function nbFaultPanel(body, s, item){
     viewBtn.onclick=()=>{ mode='view'; render(); };
     editBtn.onclick=()=>{ mode='edit'; render(); };
     modeBtns.append(viewBtn, editBtn);
+    const fsBtn=document.createElement('button'); fsBtn.type='button'; fsBtn.className='btn small ft-fullscreen-btn'; fsBtn.textContent=isFullscreen?'🗗 تصغير':'⛶ ملء الشاشة';
+    fsBtn.title='تكبير الصورة بحجم الشاشة مع الطبقات جانبها';
+    fsBtn.onclick=()=>{ isFullscreen=!isFullscreen; render(); };
     const delPageBtn=document.createElement('button'); delPageBtn.type='button'; delPageBtn.className='btn small danger'; delPageBtn.textContent='🗑 حذف الصفحة';
     delPageBtn.onclick=(e)=>{
       if(!nbArmConfirm(e.currentTarget,'اضغط تاني لتأكيد الحذف')) return;
@@ -10502,12 +10538,11 @@ function nbFaultPanel(body, s, item){
       garbageCollectUnreferencedFiles().then(()=>requestFolderSync());
       render();
     };
-    toolbar.append(nameInput, modeBtns, delPageBtn);
+    toolbar.append(nameInput, modeBtns, fsBtn, delPageBtn);
     root.appendChild(toolbar);
 
     /* شريط الطبقات */
     const layersBar=document.createElement('div'); layersBar.className='ft-layers-bar';
-    root.appendChild(layersBar);
 
     /* شريط أدوات الرسم (وضع التحرير فقط) */
     let drawToolbar=null, toolSel=null, colorInput=null, widthInput=null, fontInput=null, fillInput=null;
@@ -10550,9 +10585,11 @@ function nbFaultPanel(body, s, item){
     }
 
     /* منصة الصورة القابلة للتكبير */
+    const stageArea=document.createElement('div'); stageArea.className='ft-stage-area';
+    stageArea.appendChild(layersBar);
     const viewport=document.createElement('div'); viewport.className='ft-stage-viewport';
     const zoomCtrls=document.createElement('div'); zoomCtrls.className='ft-zoom-controls';
-    zoomCtrls.innerHTML=`<button type="button" class="ft-zbtn" data-act="zout">−</button><span class="ft-zlevel">100%</span><button type="button" class="ft-zbtn" data-act="zin">+</button><button type="button" class="ft-zbtn" data-act="zreset" title="إعادة الضبط">⤢</button>`;
+    zoomCtrls.innerHTML=`<button type="button" class="ft-zbtn" data-act="zout">−</button><span class="ft-zlevel">100%</span><button type="button" class="ft-zbtn" data-act="zin">+</button><button type="button" class="ft-zbtn" data-act="zreset" title="إعادة الضبط">⤢</button><button type="button" class="ft-zbtn" data-act="zfull" title="ملء الشاشة">${isFullscreen?'🗗':'⛶'}</button>`;
     viewport.appendChild(zoomCtrls);
     const world=document.createElement('div'); world.className='ft-stage-world';
     const worldImg=document.createElement('img'); worldImg.className='ft-world-img'; worldImg.draggable=false; worldImg.alt='صورة تتبع الأعطال';
@@ -10561,7 +10598,8 @@ function nbFaultPanel(body, s, item){
     const markersLayer=document.createElement('div'); markersLayer.className='ft-markers-layer';
     world.append(worldImg, canvas, textLayer, markersLayer);
     viewport.appendChild(world);
-    root.appendChild(viewport);
+    stageArea.appendChild(viewport);
+    root.appendChild(stageArea);
     if(page.imageId) getFileBlobURL(page.imageId).then(u=>{ if(u) worldImg.src=u; });
 
     /* شرح/تعليق نصي يظهر أسفل الصورة (خاص بالصفحة كلها، وليس بطبقة معينة) */
@@ -10621,6 +10659,7 @@ function nbFaultPanel(body, s, item){
     zoomCtrls.querySelector('[data-act="zin"]').onclick=()=>zoomBy(1.35);
     zoomCtrls.querySelector('[data-act="zout"]').onclick=()=>zoomBy(1/1.35);
     zoomCtrls.querySelector('[data-act="zreset"]').onclick=()=>{ zoomFactor=1; computeBaseScaleAndCenter(); applyTransform(); };
+    zoomCtrls.querySelector('[data-act="zfull"]').onclick=()=>{ isFullscreen=!isFullscreen; render(); };
     viewport.addEventListener('wheel',(e)=>{ e.preventDefault(); zoomBy(e.deltaY<0?1.15:1/1.15, e.clientX, e.clientY); }, {passive:false});
 
     function screenToNatural(clientX, clientY){
@@ -10958,6 +10997,7 @@ function nbFaultPanel(body, s, item){
     viewport.addEventListener('pointerleave',(e)=>{ if(activePointers.has(e.pointerId)) releasePointer(e); });
     viewport.addEventListener('dblclick',(e)=>{
       if(e.target.closest('.ft-marker') || e.target.closest('.ft-text-label')) return;
+      if(!isFullscreen){ isFullscreen=true; render(); return; }
       if(zoomFactor>1.05){ zoomFactor=1; computeBaseScaleAndCenter(); } else zoomBy(2, e.clientX, e.clientY);
       applyTransform();
     });
@@ -10973,6 +11013,7 @@ function nbFaultPanel(body, s, item){
       redrawCanvas(); renderTextLabels(); renderMarkers();
     });
     window.addEventListener('resize', ()=>{ if(natW){ computeBaseScaleAndCenter(); applyTransform(); } });
+    document.addEventListener('keydown', function escFsHandler(e){ if(e.key==='Escape' && isFullscreen){ isFullscreen=false; render(); } });
 
     renderLayersBar();
     renderMarkers();
