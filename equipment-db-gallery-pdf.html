@@ -329,6 +329,7 @@ nav.navlist{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:0 0 
       <button class="nav-item" data-nav="tags"><span class="ico">🏷️</span><span class="lbl">الوسوم</span></button>
       <button class="nav-item" data-nav="items-sheet"><span class="ico">📋</span><span class="lbl">شيت العناصر</span></button>
       <button class="nav-item" data-nav="settings"><span class="ico">⚙️</span><span class="lbl">الإعدادات</span></button>
+      <button class="nav-item" data-nav="activitylog"><span class="ico">🔄</span><span class="lbl">السجل والمزامنة</span></button>
     </nav>
     <div class="tree-wrap">
       <div class="tree-head"><span>المجلدات</span><button class="tree-add" id="rootAddFolderBtn" title="مجلد جديد">+</button></div>
@@ -5033,6 +5034,9 @@ const state = {
   pendingDocs: [],
   editingItemId: null,          // عند التعديل
   editingFolderId: null,
+  activityLog: [],              // سجل النشاط الموحّد (إضافة/تعديل/حذف/صورة/حفظ/مزامنة/استيراد/تصدير)
+  syncLogSettings: {enabled:false,intervalSec:60,batchSize:300,partitionBy:'day+type',includeTypes:['add','edit','delete','image','save','sync','import','export']},
+  syncLogState: {lastSyncedId:null,lastSyncAt:null,filesWritten:0,partitionStats:{},totalSynced:0},
 };
 
 /* ---------- أدوات عامة ---------- */
@@ -5422,15 +5426,25 @@ async function pullFolderData(){
   renderFolderLinkStatus();
 }
 async function idbPut(storeName,value){
+  let __oldForLog=null;
+  if(["items","folders","files"].includes(storeName)){
+    try{ __oldForLog = await idbGet(storeName, value && value.id); }catch(e){}
+  }
   const p=STORAGE_MODE==="memory" ? memPut(storeName,value) : idbPut_real(storeName,value);
   const result=await p;
   if(linkedDirHandle && ["items","folders","files","meta"].includes(storeName)) requestFolderSync();
+  try{ logStoreActivity(storeName,__oldForLog,value); }catch(e){}
   return result;
 }
 async function idbDelete(storeName,key){
+  let __oldForLog=null;
+  if(["items","folders","files"].includes(storeName)){
+    try{ __oldForLog = await idbGet(storeName, key); }catch(e){}
+  }
   const p=STORAGE_MODE==="memory" ? memDelete(storeName,key) : idbDelete_real(storeName,key);
   await p;
   if(linkedDirHandle && ["items","folders","files","meta"].includes(storeName)) requestFolderSync();
+  try{ logStoreDeleteActivity(storeName,key,__oldForLog); }catch(e){}
 }
 async function idbClear(storeName){
   const p=STORAGE_MODE==="memory" ? memClear(storeName) : idbClear_real(storeName);
@@ -5443,6 +5457,253 @@ async function garbageCollectUnreferencedFiles(){
   const records=await idbGetAll_real("files");
   for(const rec of records) if(rec?.id && !refs.has(rec.id)){ try{ await idbDelete_real("files",rec.id); }catch(e){} }
   if(linkedDirHandle) requestFolderSync();
+}
+
+/* =========================================================
+   سجل النشاط الموحّد والمزامنة التفصيلية (activity-log)
+   نظام مستقل تمامًا عن مزامنة بيانات المشروع نفسه (requestFolderSync).
+   يسجّل كل إضافة/تعديل/حذف/صورة/استيراد/تصدير لحظيًا، ويزامنها إلى
+   activity-log/ داخل نفس المجلد المرتبط حسب إعدادات قابلة للتحكم الكامل.
+   ========================================================= */
+const ACTIVITY_LOG_MAX_G=20000;
+const ACTIVITY_TYPES_ALL=['add','edit','delete','image','save','sync','import','export'];
+const ACTIVITY_TYPE_META={
+  add:{ico:'➕',label:'إضافة',color:'#3ddc84'},
+  edit:{ico:'✏️',label:'تعديل',color:'#f2c53d'},
+  delete:{ico:'🗑️',label:'حذف',color:'#ff5d5d'},
+  image:{ico:'🖼️',label:'صورة/ملف',color:'#4da3ff'},
+  save:{ico:'💾',label:'حفظ',color:'#8892a0'},
+  sync:{ico:'🔄',label:'مزامنة',color:'#4dd0e1'},
+  import:{ico:'📥',label:'استيراد',color:'#b78cf2'},
+  export:{ico:'📦',label:'تصدير',color:'#b78cf2'},
+};
+
+let activityLogPersistTimer=null;
+function persistActivityLogDebounced(){
+  clearTimeout(activityLogPersistTimer);
+  activityLogPersistTimer=setTimeout(async ()=>{
+    try{ const put=STORAGE_MODE==="memory"?memPut:idbPut_real; await put("meta",{key:"activityLog",value:state.activityLog}); }catch(e){}
+  },700);
+}
+async function persistSyncLogMetaNow(){
+  try{
+    const put=STORAGE_MODE==="memory"?memPut:idbPut_real;
+    await put("meta",{key:"syncLogSettings",value:state.syncLogSettings});
+    await put("meta",{key:"syncLogState",value:state.syncLogState});
+  }catch(e){}
+}
+function logActivity(type,payload){
+  try{
+    if(!Array.isArray(state.activityLog)) state.activityLog=[];
+    const ts=new Date().toISOString();
+    state.activityLog.unshift(Object.assign({id:uid('act'),ts,day:ts.slice(0,10),type},payload));
+    if(state.activityLog.length>ACTIVITY_LOG_MAX_G) state.activityLog.length=ACTIVITY_LOG_MAX_G;
+    persistActivityLogDebounced();
+    scheduleActivityLogSyncSoon();
+  }catch(e){}
+}
+function auditSafeStringG(v){
+  if(v===undefined) return 'غير موجود';
+  if(v===null) return 'فارغ';
+  if(typeof v==='object'){ try{ const j=JSON.stringify(v); return j.length>260?j.slice(0,257)+'…':j; }catch(e){ return String(v); } }
+  const t=String(v); return t.length>260?t.slice(0,257)+'…':t;
+}
+function classifyChangeTypeG(oldValue,newValue,field){
+  const f=String(field||'').toLowerCase();
+  const oldEmpty=(oldValue===undefined||oldValue===null||oldValue==='غير موجود'||oldValue==='فارغ'||oldValue==='');
+  const newEmpty=(newValue===undefined||newValue===null||newValue==='غير موجود'||newValue==='فارغ'||newValue==='');
+  if(/image|صور|صورة/.test(f)) return 'image';
+  if(oldEmpty && !newEmpty) return 'add';
+  if(!oldEmpty && newEmpty) return 'delete';
+  return 'edit';
+}
+function galleryFieldLabel(path){
+  const parts=String(path||'').split('.'); const key=(parts[parts.length-1]||'').replace(/\[\d+\]$/,'');
+  const map={name:'الاسم',model:'الموديل',manufacturer:'الشركة المصنعة',serial:'الرقم التسلسلي',partNumber:'رقم القطعة',type:'النوع',status:'الحالة',notes:'الملاحظات',icon:'الأيقونة',color:'اللون',description:'الوصف',mainImageId:'الصورة الرئيسية',category:'الفئة'};
+  if(map[key]) return map[key];
+  if(path && path.includes('fields')) return 'حقل بيانات: '+key;
+  if(path && path.includes('tags')) return 'وسم';
+  if(path && path.includes('links')) return 'رابط';
+  if(path && path.includes('imageIds')) return 'صورة مرتبطة';
+  if(path && path.includes('docs')) return 'مستند مرفق';
+  return key||'تعديل';
+}
+function logStoreActivity(storeName,oldValue,newValue){
+  if(storeName==='meta' || !newValue) return;
+  if(storeName==='files'){
+    const mime=newValue.mime||(newValue.blob&&newValue.blob.type)||'';
+    const isImg=/^image\//.test(mime);
+    logActivity(isImg?'image':'add',{entity:'file',entityId:newValue.id,entityLabel:newValue.name||newValue.id,field:isImg?'صورة':'ملف مرفق',summary:(oldValue?'تحديث':'إضافة')+' ملف: '+(newValue.name||newValue.id)});
+    return;
+  }
+  if(storeName==='items' || storeName==='folders'){
+    const kindLabel = storeName==='items' ? 'عنصر' : 'مجلد';
+    const label = newValue.name || (oldValue&&oldValue.name) || newValue.id || '—';
+    if(!oldValue){
+      logActivity('add',{entity:storeName,entityId:newValue.id,entityLabel:label,field:kindLabel,summary:'إضافة '+kindLabel+' جديد: '+label});
+      return;
+    }
+    // مقارنة سطحية-متعمقة محدودة (نستثني notebookData الثقيلة — لها التقاطها الخاص عبر هذا نفس المسار عند حفظها)
+    const oc=galleryClone(oldValue), nc=galleryClone(newValue);
+    delete oc.notebookData; delete nc.notebookData;
+    const diffs=[]; galleryDiff(oc,nc,'',diffs,25,0);
+    diffs.forEach(d=>{
+      const oldV=auditSafeStringG(d.oldValue), newV=auditSafeStringG(d.newValue);
+      const field=galleryFieldLabel(d.path);
+      logActivity(classifyChangeTypeG(oldV,newV,d.path),{entity:storeName,entityId:newValue.id,entityLabel:label,field,oldValue:oldV,newValue:newV,summary:'تعديل في '+kindLabel+': '+label});
+    });
+    if(oldValue.notebookData!==newValue.notebookData){
+      logActivity('edit',{entity:storeName,entityId:newValue.id,entityLabel:label,field:'محتوى التوثيق/الدفتر',summary:'تحديث محتوى التوثيق لعنصر: '+label});
+    }
+  }
+}
+function logStoreDeleteActivity(storeName,key,oldValue){
+  if(storeName==='items' || storeName==='folders'){
+    const kindLabel = storeName==='items' ? 'عنصر' : 'مجلد';
+    const label = (oldValue&&oldValue.name) || key;
+    logActivity('delete',{entity:storeName,entityId:key,entityLabel:label,field:kindLabel,summary:'حذف '+kindLabel+': '+label});
+  } else if(storeName==='files' && oldValue){
+    logActivity('delete',{entity:'file',entityId:key,entityLabel:oldValue.name||key,field:'ملف مرفق',summary:'حذف ملف: '+(oldValue.name||key)});
+  }
+}
+
+/* ---- تتبع لحظي (كل حرف) على مستوى الحقول لعناصر/مجلدات موجودة أصلًا ---- */
+let galleryAuditBaseline='';
+let galleryAuditReady=false;
+function galleryClone(v){ try{ return JSON.parse(JSON.stringify(v)); }catch(e){ return v; } }
+function galleryProjection(){
+  return {
+    folders: state.folders||[],
+    items: (state.items||[]).map(it=>{ const c=galleryClone(it); if(c) delete c.notebookData; return c; })
+  };
+}
+function galleryDiff(a,b,path,out,limit,depth){
+  if(out.length>=limit || a===b) return;
+  if(depth>6){ out.push({path,oldValue:a,newValue:b}); return; }
+  const ao=a&&typeof a==='object', bo=b&&typeof b==='object';
+  if(!ao||!bo){ out.push({path,oldValue:a,newValue:b}); return; }
+  if(Array.isArray(a)||Array.isArray(b)){
+    const aa=Array.isArray(a)?a:[], bb=Array.isArray(b)?b:[];
+    const n=Math.max(aa.length,bb.length);
+    for(let i=0;i<n && out.length<limit;i++) galleryDiff(aa[i],bb[i],path+'['+i+']',out,limit,depth+1);
+    return;
+  }
+  const keys=new Set([...Object.keys(a||{}),...Object.keys(b||{})]);
+  for(const k of keys){ if(out.length>=limit) break; galleryDiff(a?a[k]:undefined, b?b[k]:undefined, path?path+'.'+k:k, out, limit, depth+1); }
+}
+function indexByIdG(arr){ const m=new Map(); (arr||[]).forEach(x=>{ if(x && x.id!=null) m.set(String(x.id),x); }); return m; }
+function galleryAuditCaptureChanges(){
+  if(!galleryAuditReady) return;
+  let now; try{ now=JSON.stringify(galleryProjection()); }catch(e){ return; }
+  if(!galleryAuditBaseline){ galleryAuditBaseline=now; return; }
+  if(now===galleryAuditBaseline) return;
+  let before,after; try{ before=JSON.parse(galleryAuditBaseline); after=JSON.parse(now); }catch(e){ galleryAuditBaseline=now; return; }
+  let count=0;
+  const doCollection=(beforeArr,afterArr,storeName,kindLabel)=>{
+    const bi=indexByIdG(beforeArr), ai=indexByIdG(afterArr);
+    const ids=new Set([...bi.keys(),...ai.keys()]);
+    for(const id of ids){
+      if(count>=60) return;
+      const ov=bi.get(id), nv=ai.get(id);
+      if(!ov || !nv) continue; // الإضافة/الحذف يُلتقطان عبر idbPut/idbDelete
+      const diffs=[]; galleryDiff(ov,nv,'',diffs,20,0);
+      diffs.forEach(d=>{
+        if(count>=60) return;
+        const oldV=auditSafeStringG(d.oldValue), newV=auditSafeStringG(d.newValue);
+        const field=galleryFieldLabel(d.path);
+        logActivity(classifyChangeTypeG(oldV,newV,d.path),{entity:storeName,entityId:id,entityLabel:nv.name||ov.name||id,field,oldValue:oldV,newValue:newV,summary:'تعديل في '+kindLabel+': '+(nv.name||ov.name||id)});
+        count++;
+      });
+    }
+  };
+  doCollection(before.items,after.items,'items','عنصر');
+  doCollection(before.folders,after.folders,'folders','مجلد');
+  galleryAuditBaseline=now;
+}
+function initGalleryAuditTracker(){
+  try{ galleryAuditBaseline=JSON.stringify(galleryProjection()); galleryAuditReady=true; }catch(e){ galleryAuditBaseline=''; galleryAuditReady=false; }
+}
+
+/* ---- محرك المزامنة إلى المجلد ---- */
+let activityLogSyncBusy=false;
+let activityLogIntervalHandle=null;
+function restartActivityLogScheduler(){
+  if(activityLogIntervalHandle){ clearInterval(activityLogIntervalHandle); activityLogIntervalHandle=null; }
+  const s=state && state.syncLogSettings;
+  if(!s || !s.enabled || !linkedDirHandle) return;
+  const ms=Math.max(5,Number(s.intervalSec)||60)*1000;
+  activityLogIntervalHandle=setInterval(()=>{ if(!activityLogSyncBusy) runActivityLogSync(false); }, ms);
+}
+function scheduleActivityLogSyncSoon(){
+  if(!activityLogIntervalHandle) restartActivityLogScheduler();
+}
+function activityLogPartitionKey(entry){
+  const scheme=(state.syncLogSettings && state.syncLogSettings.partitionBy) || 'day+type';
+  if(scheme==='day') return entry.day;
+  if(scheme==='type') return entry.type;
+  return entry.day+'/'+entry.type;
+}
+async function writeTextAtomic(handle,name,text){
+  const tmpName=name+'.tmp';
+  const tmp=await handle.getFileHandle(tmpName,{create:true});
+  const w=await tmp.createWritable();
+  try{ await w.write(text); await w.close(); }catch(e){ try{await w.abort();}catch(_e){} throw e; }
+  const final=await handle.getFileHandle(name,{create:true});
+  const fw=await final.createWritable();
+  try{ await fw.write(text); await fw.close(); }catch(e){ try{await fw.abort();}catch(_e){} throw e; }
+  try{ await handle.removeEntry(tmpName); }catch(e){}
+}
+async function runActivityLogSync(manual){
+  if(!linkedDirHandle){ if(manual) toast('اربط مجلد النسخ الاحتياطي أولًا من الإعدادات.','warn'); return false; }
+  if(activityLogSyncBusy) return false;
+  const settings=state.syncLogSettings||{};
+  if(!settings.enabled && !manual) return false;
+  const ok=await ensureFolderPermission(linkedDirHandle, !!manual);
+  if(!ok){ if(manual) toast('المجلد يحتاج تأكيد الصلاحية من "ربط مجلد" في الإعدادات.','warn'); return false; }
+  activityLogSyncBusy=true;
+  try{
+    const includeTypes=new Set(settings.includeTypes && settings.includeTypes.length?settings.includeTypes:ACTIVITY_TYPES_ALL);
+    const all=state.activityLog||[];
+    const lastId=state.syncLogState && state.syncLogState.lastSyncedId;
+    let cutIndex=all.length;
+    if(lastId){ const idx=all.findIndex(e=>e.id===lastId); if(idx!==-1) cutIndex=idx; }
+    let pending=all.slice(0,cutIndex).filter(e=>includeTypes.has(e.type));
+    pending=pending.slice().reverse();
+    if(!pending.length){ if(manual) toast('لا يوجد جديد للمزامنة.','ok'); return true; }
+    const batchSize=Math.max(10,Number(settings.batchSize)||300);
+    const batch=pending.slice(0,batchSize);
+    const root=await linkedDirHandle.getDirectoryHandle('activity-log',{create:true});
+    const groups=new Map();
+    batch.forEach(e=>{ const key=activityLogPartitionKey(e); if(!groups.has(key)) groups.set(key,[]); groups.get(key).push(e); });
+    const stats=(state.syncLogState && state.syncLogState.partitionStats && typeof state.syncLogState.partitionStats==='object')?state.syncLogState.partitionStats:{};
+    let filesWritten=0;
+    for(const [key,entries] of groups){
+      const parts=key.split('/');
+      let dir=root;
+      for(let i=0;i<parts.length-1;i++) dir=await dir.getDirectoryHandle(parts[i],{create:true});
+      const fileName=parts[parts.length-1]+'.jsonl';
+      let existing='';
+      try{ const fh=await dir.getFileHandle(fileName); existing=await (await fh.getFile()).text(); }catch(e){}
+      const lines=entries.map(e=>JSON.stringify(e)).join('\n');
+      const merged=existing? (existing.replace(/\n?$/,'\n')+lines+'\n') : (lines+'\n');
+      await writeTextAtomic(dir,fileName,merged);
+      const prev=stats[key]||{count:0};
+      stats[key]={count:(prev.count||0)+entries.length,path:'activity-log/'+key+'.jsonl',lastUpdated:new Date().toISOString()};
+      filesWritten++;
+    }
+    const totalSynced=((state.syncLogState && state.syncLogState.totalSynced)||0)+batch.length;
+    const idx={updatedAt:new Date().toISOString(),totalEntriesInApp:all.length,totalSynced,partitionBy:settings.partitionBy||'day+type',partitions:stats};
+    await writeJsonAtomic(root,'index.json',idx);
+    state.syncLogState={lastSyncedId:batch[batch.length-1].id,lastSyncAt:new Date().toISOString(),filesWritten:((state.syncLogState&&state.syncLogState.filesWritten)||0)+filesWritten,partitionStats:stats,totalSynced};
+    await persistSyncLogMetaNow();
+    if(manual) toast('تمت مزامنة '+batch.length+' سجل إلى المجلد (activity-log/).','ok');
+    if(pending.length>batch.length) setTimeout(()=>runActivityLogSync(false),300);
+    return true;
+  }catch(e){
+    console.warn('فشل مزامنة سجل النشاط:',e);
+    if(manual) toast('فشلت مزامنة السجل: '+(e.message||e),'err');
+    return false;
+  }finally{ activityLogSyncBusy=false; }
 }
 async function saveAndFlag(storeName,value){
   setSaveBadge("saving");
@@ -5688,14 +5949,14 @@ async function linkBackupFolder(){
       if(hasLocal && hasFolder){
         const merged=await smartLinkFolderMerge(handle,snap);
         if(!merged){ linkedDirHandle=null; try{await idbDelete_real("meta","linkedDir");}catch(e){} renderFolderLinkStatus(); return; }
-        renderFolderLinkStatus(); return;
+        renderFolderLinkStatus(); try{restartActivityLogScheduler();}catch(e){} return;
       }
       if(hasFolder){
         await restoreAllFromFolder(handle,snap);
         applyTheme(state.settings.theme||"amber");
         renderSidebarTree(); navigateTo({type:"home"});
         toast("✅ تم التعرف على محتوى المجلد واستعادته.","ok",6000);
-        renderFolderLinkStatus(); return;
+        renderFolderLinkStatus(); try{restartActivityLogScheduler();}catch(e){} return;
       }
     }
     await syncFolderStorageNow();
@@ -5704,6 +5965,7 @@ async function linkBackupFolder(){
     if(e?.name!=="AbortError") toast("تعذر ربط المجلد: "+(e.message||e),"err");
   }
   renderFolderLinkStatus();
+  try{restartActivityLogScheduler();}catch(e){}
 }
 async function activateLinkedFolder(){
   if(!linkedDirHandle) return linkBackupFolder();
@@ -5722,6 +5984,7 @@ async function unlinkBackupFolder(){
   try{ await idbDelete_real("meta","linkedDir"); }catch(e){}
   toast("تم فصل مجلد التخزين. سيستمر البرنامج باستخدام IndexedDB.","ok");
   renderFolderLinkStatus();
+  try{restartActivityLogScheduler();}catch(e){}
 }
 async function renderFolderLinkStatus(){
   const box=document.getElementById("folderLinkStatus");
@@ -5844,6 +6107,12 @@ async function boot(){
   const settingsRow = metaRows.find(m=>m.key==="settings");
   if(settingsRow && settingsRow.value) state.settings = Object.assign(state.settings, settingsRow.value);
   applyTheme(state.settings.theme || "amber");
+  const actLogRow = metaRows.find(m=>m.key==="activityLog");
+  if(actLogRow && Array.isArray(actLogRow.value)) state.activityLog = actLogRow.value;
+  const syncSettingsRow = metaRows.find(m=>m.key==="syncLogSettings");
+  if(syncSettingsRow && syncSettingsRow.value) state.syncLogSettings = Object.assign(state.syncLogSettings, syncSettingsRow.value);
+  const syncStateRow = metaRows.find(m=>m.key==="syncLogState");
+  if(syncStateRow && syncStateRow.value) state.syncLogState = Object.assign(state.syncLogState, syncStateRow.value);
 
   // إذا كان هناك مجلد مرتبط سابقًا، فملف project.json داخله هو المصدر الخارجي
   // الفعلي. لا نستخدم IndexedDB بدلًا منه؛ نحمّل منه عند فتح البرنامج كلما كانت
@@ -5869,6 +6138,8 @@ async function boot(){
   bindGlobalEvents();
   renderSidebarTree();
   navigateTo({type:"home"});
+  initGalleryAuditTracker();
+  try{ restartActivityLogScheduler(); }catch(e){}
 
   if(STORAGE_MODE==="memory"){
     // في وضع الذاكرة لا يمكن ضمان بقاء البيانات بعد إغلاق الصفحة.
@@ -5950,6 +6221,8 @@ function updateBreadcrumb(){
     html = '<b data-go="home">🏠 الرئيسية</b><span class="sep">/</span><b>🏷️ الوسوم</b>' + (state.view.tag? '<span class="sep">/</span><b>#'+esc(state.view.tag)+'</b>' : '');
   } else if(state.view.type==="settings"){
     html = '<b data-go="home">🏠 الرئيسية</b><span class="sep">/</span><b>⚙️ الإعدادات</b>';
+  } else if(state.view.type==="activitylog"){
+    html = '<b data-go="home">🏠 الرئيسية</b><span class="sep">/</span><b>🔄 السجل والمزامنة</b>';
   } else if(state.view.type==="search"){
     html = '<b data-go="home">🏠 الرئيسية</b><span class="sep">/</span><b>🔎 نتائج البحث</b>';
   } else if(state.view.type==="folder"){
@@ -6060,6 +6333,13 @@ function bindGlobalEvents(){
   document.addEventListener("click", (e)=>{
     if(!e.target.closest(".search-wrap")) document.getElementById("searchResults").classList.add("hidden");
   });
+  // تتبع لحظي (كل حرف) لأي تعديل داخل شاشة العرض أو أي نافذة منبثقة
+  const __actLogRegions = ()=> document.querySelectorAll('#viewContainer, #modalRoot, .tbl-modal-overlay, .ft-modal-overlay');
+  const __actLogHandler = (e)=>{
+    for(const region of __actLogRegions()){ if(region.contains(e.target)){ setTimeout(()=>{ try{ galleryAuditCaptureChanges(); }catch(err){} },0); return; } }
+  };
+  document.addEventListener('input', __actLogHandler, true);
+  document.addEventListener('change', __actLogHandler, true);
 }
 
 /* =========================================================
@@ -6076,6 +6356,7 @@ function render(){
   if(v.type==="items-sheet") return renderItemsSheetView(c);
   if(v.type==="search") return renderSearchView(c, v.q);
   if(v.type==="item") return renderItemDetail(c, v.id);
+  if(v.type==="activitylog") return renderActivityLogView(c);
 }
 
 function renderHome(c){
@@ -6822,6 +7103,161 @@ const THEMES = [
   {v:"night-blue", l:"أزرق ليلي", emoji:"🌌", bg:"#0a0f1a", accent:"#4da3ff"},
   {v:"daylight", l:"فاتح نهاري", emoji:"☀️", bg:"#f3f5f8", accent:"#c9821f"},
 ];
+async function renderActivityLogView(c){
+  const s=state.syncLogSettings||{};
+  const ss=state.syncLogState||{};
+  const todayStr=new Date().toISOString().slice(0,10);
+  const total=(state.activityLog||[]).length;
+  const todayCount=(state.activityLog||[]).filter(e=>e.day===todayStr).length;
+  let pendingCount=0;
+  {
+    const all=state.activityLog||[]; const lastId=ss.lastSyncedId; let cut=all.length;
+    if(lastId){ const idx=all.findIndex(e=>e.id===lastId); if(idx!==-1) cut=idx; }
+    pendingCount=cut;
+  }
+  const intervalOptions=[[15,'كل 15 ثانية'],[30,'كل 30 ثانية'],[60,'كل دقيقة'],[300,'كل 5 دقائق'],[900,'كل 15 دقيقة'],[3600,'كل ساعة']];
+  c.innerHTML = `
+    <div class="view-title"><h1>🔄 السجل والمزامنة</h1></div>
+    <div class="view-desc">سجل تفصيلي لحظي لكل إضافة وتعديل وحذف وصورة وعملية حفظ/مزامنة/استيراد/تصدير، مع نظام مزامنة قابل للتحكم الكامل إلى نفس مجلد التخزين المرتبط.</div>
+    <div class="stat-grid">
+      <div class="stat-card info"><div class="num">${total}</div><div class="lbl">إجمالي السجلات</div></div>
+      <div class="stat-card"><div class="num">${todayCount}</div><div class="lbl">سجلات اليوم</div></div>
+      <div class="stat-card ${pendingCount?'crit':''}"><div class="num">${pendingCount}</div><div class="lbl">بانتظار المزامنة</div></div>
+      <div class="stat-card good"><div class="num" style="font-size:14px">${ss.lastSyncAt?new Date(ss.lastSyncAt).toLocaleString('ar-EG'):'—'}</div><div class="lbl">آخر مزامنة للسجل</div></div>
+    </div>
+
+    <div class="panel">
+      <h3>⚙️ إعدادات المزامنة</h3>
+      <div style="font-size:11.5px;color:var(--dim2);margin-bottom:8px;">نظام مستقل عن مزامنة بيانات المشروع نفسه، يكتب فقط داخل <b>activity-log/</b> في نفس المجلد المرتبط أدناه، مقسّمًا حسب اختيارك، وعلى دفعات بالسرعة والتوقيت اللي تحددهم.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="syncLogEnabled" ${s.enabled?'checked':''}> تفعيل المزامنة التلقائية للسجل</label>
+        <label style="display:flex;align-items:center;gap:6px;">التوقيت (كل):
+          <select id="syncLogInterval">${intervalOptions.map(([v,l])=>`<option value="${v}" ${Number(s.intervalSec)===v?'selected':''}>${l}</option>`).join('')}</select>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;">السرعة (سجل/دفعة):
+          <input type="number" id="syncLogBatch" min="10" max="5000" step="10" value="${Number(s.batchSize)||300}" style="width:90px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;">نظام التقسيم:
+          <select id="syncLogPartition">
+            <option value="day" ${s.partitionBy==='day'?'selected':''}>حسب التاريخ فقط</option>
+            <option value="type" ${s.partitionBy==='type'?'selected':''}>حسب نوع العملية فقط</option>
+            <option value="day+type" ${(!s.partitionBy||s.partitionBy==='day+type')?'selected':''}>حسب التاريخ + النوع (موصى به)</option>
+          </select>
+        </label>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="font-size:11.5px;color:var(--dim2);margin-bottom:5px;">أنواع العمليات المشمولة بالمزامنة:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          ${ACTIVITY_TYPES_ALL.map(t=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="syncLogType" value="${t}" ${(!s.includeTypes||s.includeTypes.includes(t))?'checked':''}> ${ACTIVITY_TYPE_META[t].ico} ${ACTIVITY_TYPE_META[t].label}</label>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+        <button class="btn primary small" id="saveSyncLogSettingsBtn">💾 حفظ إعدادات المزامنة</button>
+        <button class="btn small" id="runSyncLogNowBtn">🔄 مزامنة السجل الآن</button>
+        <button class="btn small" id="exportActivityLogBtn">🧾 تصدير السجل كملف JSON</button>
+        <button class="btn danger small" id="clearActivityLogBtn">🗑 مسح السجل بالكامل</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🗂 أين يُخزَّن ومتى</h3>
+      <div style="font-size:11.5px;color:var(--dim2);line-height:1.8;">
+        ${linkedDirHandle? `🟢 مرتبط بمجلد — البنية: <code>activity-log/&lt;تقسيم&gt;.jsonl</code> + <code>activity-log/index.json</code>` : '🔴 لا يوجد مجلد تخزين مرتبط بعد — اربط مجلدًا من صفحة "الإعدادات" أولًا حتى تعمل المزامنة الفعلية للسجل على القرص.'}
+        <br>عدد الملفات المكتوبة تراكميًا: ${ss.filesWritten||0} · سجلات تمت مزامنتها: ${ss.totalSynced||0}
+      </div>
+      <div id="syncLogPartitionTable" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <b>📜 السجل التفصيلي (الأحدث أولًا)</b><span style="font-size:11.5px;color:var(--dim2);" id="actLogCount"></span>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px;">
+        <input id="actLogFilter" placeholder="فلترة بالاسم أو الحقل أو الوصف..." style="flex:1;min-width:180px;">
+        <select id="actLogTypeFilter">
+          <option value="">كل الأنواع</option>
+          ${ACTIVITY_TYPES_ALL.map(t=>`<option value="${t}">${ACTIVITY_TYPE_META[t].ico} ${ACTIVITY_TYPE_META[t].label}</option>`).join('')}
+        </select>
+      </div>
+      <div id="actLogList"></div>
+    </div>
+  `;
+  const partBox=document.getElementById('syncLogPartitionTable');
+  const stats=ss.partitionStats||{};
+  const keys=Object.keys(stats);
+  partBox.innerHTML=keys.length? `<table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <tr style="text-align:right;color:var(--dim2);"><th style="padding:4px;">الملف</th><th style="padding:4px;">عدد السجلات</th><th style="padding:4px;">آخر تحديث</th></tr>
+      ${keys.map(k=>`<tr><td style="padding:4px;">${esc(stats[k].path||k)}</td><td style="padding:4px;">${stats[k].count||0}</td><td style="padding:4px;">${new Date(stats[k].lastUpdated).toLocaleString('ar-EG')}</td></tr>`).join('')}
+    </table>` : '<div style="font-size:12px;color:var(--dim2);">لا توجد ملفات مزامنة بعد</div>';
+
+  const listEl=document.getElementById('actLogList');
+  const filterEl=document.getElementById('actLogFilter');
+  const typeFilterEl=document.getElementById('actLogTypeFilter');
+  const LOG_PAGE_SIZE=300;
+  function draw(){
+    const f=(filterEl.value||'').toLowerCase();
+    const tf=typeFilterEl.value;
+    let rows=(state.activityLog||[]).filter(e=>{
+      if(tf && e.type!==tf) return false;
+      if(!f) return true;
+      const hay=[e.entityLabel,e.field,e.summary,e.oldValue,e.newValue].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(f);
+    });
+    document.getElementById('actLogCount').textContent=`${rows.length} سجل${rows.length>LOG_PAGE_SIZE?` (يُعرض أحدث ${LOG_PAGE_SIZE})`:''}`;
+    rows=rows.slice(0,LOG_PAGE_SIZE);
+    listEl.innerHTML=rows.length? rows.map(e=>{
+      const meta=ACTIVITY_TYPE_META[e.type]||{ico:'•',label:e.type,color:'#888'};
+      return `<div style="display:flex;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border);">
+        <div style="width:28px;height:28px;flex:0 0 auto;border-radius:8px;display:flex;align-items:center;justify-content:center;background:${meta.color}22;color:${meta.color};">${meta.ico}</div>
+        <div style="flex:1;min-width:0;">
+          <b>${esc(e.entityLabel||'—')}</b> <span style="font-size:10.5px;color:${meta.color};font-weight:700;">${meta.label}</span>
+          <div style="font-size:10.5px;color:var(--dim2);">${new Date(e.ts).toLocaleString('ar-EG')}</div>
+          <div style="font-size:12px;margin-top:3px;">${esc(e.field||'')} — ${esc(e.summary||'')}</div>
+          ${(e.oldValue!==undefined||e.newValue!==undefined)?`<div style="font-size:11px;color:var(--dim2);margin-top:2px;word-break:break-word;">${esc(String(e.oldValue??''))} ← ${esc(String(e.newValue??''))}</div>`:''}
+        </div>
+      </div>`;
+    }).join(''):'<div style="font-size:12px;color:var(--dim2);">لا توجد سجلات مطابقة</div>';
+  }
+  draw();
+  filterEl.addEventListener('input',draw);
+  typeFilterEl.addEventListener('change',draw);
+
+  document.getElementById('saveSyncLogSettingsBtn').onclick=async ()=>{
+    const includeTypes=[...document.querySelectorAll('.syncLogType:checked')].map(x=>x.value);
+    state.syncLogSettings={
+      enabled:document.getElementById('syncLogEnabled').checked,
+      intervalSec:Number(document.getElementById('syncLogInterval').value)||60,
+      batchSize:Math.max(10,Number(document.getElementById('syncLogBatch').value)||300),
+      partitionBy:document.getElementById('syncLogPartition').value||'day+type',
+      includeTypes: includeTypes.length?includeTypes:ACTIVITY_TYPES_ALL.slice(),
+    };
+    await persistSyncLogMetaNow();
+    restartActivityLogScheduler();
+    toast('تم حفظ إعدادات المزامنة','ok');
+    renderActivityLogView(c);
+  };
+  document.getElementById('runSyncLogNowBtn').onclick=async ()=>{
+    toast('جارٍ مزامنة السجل...','ok');
+    await runActivityLogSync(true);
+    renderActivityLogView(c);
+  };
+  document.getElementById('exportActivityLogBtn').onclick=()=>{
+    const blob=new Blob([JSON.stringify(state.activityLog||[],null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`activity-log_${new Date().toISOString().slice(0,10)}.json`; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  };
+  document.getElementById('clearActivityLogBtn').onclick=async ()=>{
+    if(!(state.activityLog||[]).length){ toast('لا يوجد سجل لمسحه','warn'); return; }
+    if(!confirm('سيتم حذف السجل التفصيلي بالكامل من التطبيق (الملفات المُزامنة سابقًا في المجلد لن تُحذف). هل تريد المتابعة؟')) return;
+    state.activityLog=[];
+    state.syncLogState={lastSyncedId:null,lastSyncAt:ss.lastSyncAt||null,filesWritten:ss.filesWritten||0,partitionStats:ss.partitionStats||{},totalSynced:ss.totalSynced||0};
+    persistActivityLogDebounced();
+    await persistSyncLogMetaNow();
+    toast('تم مسح السجل','ok');
+    renderActivityLogView(c);
+  };
+}
+
 async function renderSettingsView(c){
   const filesCount = (await idbGetAll("files")).length;
   let approxBytes = 0;
@@ -7006,6 +7442,8 @@ async function exportProject(){
     }else{
       toast("تم تصدير النسخة بنجاح (تشمل الفئات ودفاتر الملاحظات والرسم والخرائط الذهنية)", "ok");
     }
+    logActivity('export',{entity:'system',entityId:'export_'+Date.now(),entityLabel:'تصدير كامل (ZIP)',summary:`تصدير ${state.items.length} عنصر و${state.folders.length} مجلد`});
+    try{scheduleActivityLogSyncSoon();}catch(e){}
     try{ await idbPut("meta", {key:"lastBackupAt", value: Date.now()}); }catch(e){}
     const bar = document.getElementById("storageWarnBar");
     if(bar && STORAGE_MODE!=="memory") bar.remove();
@@ -7198,6 +7636,8 @@ async function importProject(file, mode){
     }else{
       toast(summary.join('\n'), "ok");
     }
+    logActivity('import',{entity:'system',entityId:'import_'+Date.now(),entityLabel:'استيراد مشروع (ZIP)',summary:`استيراد ${rep.itemsRestored} عنصر — وضع: ${mode==='merge'?'دمج':'استبدال'}`});
+    try{ initGalleryAuditTracker(); scheduleActivityLogSyncSoon(); }catch(e){}
   }catch(err){
     console.error(err);
     toast("فشل الاستيراد: " + (err.message||err), "err");
