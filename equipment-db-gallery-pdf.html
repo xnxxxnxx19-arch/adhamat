@@ -103,6 +103,12 @@ nav.navlist{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:0 0 
 .save-badge{margin-top:10px;font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--panel2);padding:7px 10px;border-radius:8px;border:1px solid var(--border);text-align:center;display:flex;align-items:center;justify-content:center;gap:6px;}
 .save-dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
 .save-badge.saving .save-dot{background:var(--yellow);animation:pulse 1s infinite;}
+.global-sync-badge{position:relative;cursor:pointer;font-size:15px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;transition:border-color .2s;}
+.global-sync-badge .dot{position:absolute;bottom:3px;left:3px;width:9px;height:9px;border-radius:50%;background:#888;border:2px solid var(--panel2);}
+.global-sync-badge.gsb-green{border-color:var(--green);} .global-sync-badge.gsb-green .dot{background:var(--green);}
+.global-sync-badge.gsb-amber{border-color:var(--yellow);} .global-sync-badge.gsb-amber .dot{background:var(--yellow);}
+.global-sync-badge.gsb-red{border-color:var(--red);} .global-sync-badge.gsb-red .dot{background:var(--red);}
+.global-sync-badge.gsb-gray{border-color:var(--border);} .global-sync-badge.gsb-gray .dot{background:#888;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
 
 /* ===== Main ===== */
@@ -351,6 +357,7 @@ nav.navlist{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:0 0 
         <button data-mode="grid" class="active" title="Gallery">▦</button>
         <button data-mode="list" title="قائمة">☰</button>
       </div>
+      <div class="global-sync-badge gsb-gray" id="globalSyncBadge" title="حالة مزامنة السجل">🔄<span class="dot"></span></div>
     </div>
     <div id="viewContainer"></div>
   </div>
@@ -5035,9 +5042,10 @@ const state = {
   editingItemId: null,          // عند التعديل
   editingFolderId: null,
   activityLog: [],              // سجل النشاط الموحّد (إضافة/تعديل/حذف/صورة/حفظ/مزامنة/استيراد/تصدير)
-  syncLogSettings: {enabled:false,intervalSec:60,batchSize:300,partitionBy:'day+type',includeTypes:['add','edit','delete','image','save','sync','import','export']},
-  syncLogState: {lastSyncedId:null,lastSyncAt:null,filesWritten:0,partitionStats:{},totalSynced:0},
+  syncLogSettings: {enabled:false,intervalSec:60,batchSize:300,partitionBy:'day+type',includeTypes:['add','edit','delete','image','save','sync','import','export'],autoRequestOnStart:false,notifyOnFailure:true,retentionDays:0},
+  syncLogState: {lastSyncedId:null,lastSyncAt:null,filesWritten:0,partitionStats:{},totalSynced:0,totalLogged:0,lastError:null,lastDurationMs:0},
 };
+let folderPermissionNeedsActivation = false;
 
 /* ---------- أدوات عامة ---------- */
 function uid(prefix){ return (prefix||"id") + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
@@ -5498,9 +5506,33 @@ function logActivity(type,payload){
     const ts=new Date().toISOString();
     state.activityLog.unshift(Object.assign({id:uid('act'),ts,day:ts.slice(0,10),type},payload));
     if(state.activityLog.length>ACTIVITY_LOG_MAX_G) state.activityLog.length=ACTIVITY_LOG_MAX_G;
+    if(!state.syncLogState || typeof state.syncLogState!=='object') state.syncLogState={lastSyncedId:null,lastSyncAt:null,filesWritten:0};
+    state.syncLogState.totalLogged=(state.syncLogState.totalLogged||0)+1;
     persistActivityLogDebounced();
     scheduleActivityLogSyncSoon();
   }catch(e){}
+}
+function applyLogRetentionG(){
+  try{
+    const days=Number(state.syncLogSettings && state.syncLogSettings.retentionDays)||0;
+    if(!days || !Array.isArray(state.activityLog) || !state.activityLog.length) return;
+    const cutoff=new Date(Date.now()-days*86400000).toISOString().slice(0,10);
+    const before=state.activityLog.length;
+    state.activityLog=state.activityLog.filter(e=>e.day>=cutoff);
+    if(state.activityLog.length!==before) persistActivityLogDebounced();
+  }catch(e){}
+}
+function activityLogPendingCountG(){
+  const all=state.activityLog||[]; const lastId=state.syncLogState && state.syncLogState.lastSyncedId;
+  let cut=all.length;
+  if(lastId){ const idx=all.findIndex(e=>e.id===lastId); if(idx!==-1) cut=idx; }
+  return cut;
+}
+function activityLogSavedPercentG(){
+  const totalLogged=(state.syncLogState && state.syncLogState.totalLogged)||0;
+  if(!totalLogged) return 100;
+  const pending=activityLogPendingCountG();
+  return Math.max(0,Math.min(100,Math.round(((totalLogged-pending)/totalLogged)*100)));
 }
 function auditSafeStringG(v){
   if(v===undefined) return 'غير موجود';
@@ -5637,6 +5669,39 @@ function restartActivityLogScheduler(){
 function scheduleActivityLogSyncSoon(){
   if(!activityLogIntervalHandle) restartActivityLogScheduler();
 }
+function updateGlobalSyncBadge(){
+  const el=document.getElementById('globalSyncBadge');
+  if(!el) return;
+  el.classList.remove('gsb-green','gsb-amber','gsb-red','gsb-gray');
+  const s=state.syncLogSettings||{};
+  const ss=state.syncLogState||{};
+  let cls='gsb-gray', title='لا يوجد مجلد تخزين مرتبط — اضغط للربط والتفعيل';
+  if(linkedDirHandle){
+    if(!s.enabled){
+      cls='gsb-amber'; title='المزامنة التلقائية للسجل غير مفعّلة — اضغط للسماح والتفعيل';
+    }else if(folderPermissionNeedsActivation){
+      cls='gsb-red'; title='صلاحية المجلد تحتاج تأكيد — اضغط للسماح';
+    }else if(ss.lastError){
+      cls='gsb-red'; title='فشلت آخر مزامنة للسجل: '+ss.lastError+' — اضغط لإعادة المحاولة';
+    }else{
+      const pct=activityLogSavedPercentG();
+      cls='gsb-green'; title='المزامنة تعمل بشكل سليم — نسبة الحفظ '+pct+'% — اضغط لمزامنة فورية';
+    }
+  }
+  el.classList.add(cls);
+  el.title=title;
+}
+async function handleGlobalSyncBadgeClick(){
+  if(!linkedDirHandle){ await linkBackupFolder(); updateGlobalSyncBadge(); return; }
+  if(!state.syncLogSettings.enabled){
+    state.syncLogSettings.enabled=true;
+    await persistSyncLogMetaNow();
+    restartActivityLogScheduler();
+    toast('تم تفعيل المزامنة التلقائية للسجل','ok');
+  }
+  await runActivityLogSync(true);
+  updateGlobalSyncBadge();
+}
 function activityLogPartitionKey(entry){
   const scheme=(state.syncLogSettings && state.syncLogSettings.partitionBy) || 'day+type';
   if(scheme==='day') return entry.day;
@@ -5659,9 +5724,12 @@ async function runActivityLogSync(manual){
   const settings=state.syncLogSettings||{};
   if(!settings.enabled && !manual) return false;
   const ok=await ensureFolderPermission(linkedDirHandle, !!manual);
-  if(!ok){ if(manual) toast('المجلد يحتاج تأكيد الصلاحية من "ربط مجلد" في الإعدادات.','warn'); return false; }
+  folderPermissionNeedsActivation=!ok;
+  if(!ok){ if(manual) toast('المجلد يحتاج تأكيد الصلاحية من "ربط مجلد" في الإعدادات.','warn'); try{updateGlobalSyncBadge();}catch(e){} return false; }
   activityLogSyncBusy=true;
+  const __t0=Date.now();
   try{
+    applyLogRetentionG();
     const includeTypes=new Set(settings.includeTypes && settings.includeTypes.length?settings.includeTypes:ACTIVITY_TYPES_ALL);
     const all=state.activityLog||[];
     const lastId=state.syncLogState && state.syncLogState.lastSyncedId;
@@ -5669,7 +5737,12 @@ async function runActivityLogSync(manual){
     if(lastId){ const idx=all.findIndex(e=>e.id===lastId); if(idx!==-1) cutIndex=idx; }
     let pending=all.slice(0,cutIndex).filter(e=>includeTypes.has(e.type));
     pending=pending.slice().reverse();
-    if(!pending.length){ if(manual) toast('لا يوجد جديد للمزامنة.','ok'); return true; }
+    if(!pending.length){
+      if(manual) toast('لا يوجد جديد للمزامنة.','ok');
+      state.syncLogState={...(state.syncLogState||{}),lastError:null};
+      try{updateGlobalSyncBadge();}catch(e){}
+      return true;
+    }
     const batchSize=Math.max(10,Number(settings.batchSize)||300);
     const batch=pending.slice(0,batchSize);
     const root=await linkedDirHandle.getDirectoryHandle('activity-log',{create:true});
@@ -5694,14 +5767,18 @@ async function runActivityLogSync(manual){
     const totalSynced=((state.syncLogState && state.syncLogState.totalSynced)||0)+batch.length;
     const idx={updatedAt:new Date().toISOString(),totalEntriesInApp:all.length,totalSynced,partitionBy:settings.partitionBy||'day+type',partitions:stats};
     await writeJsonAtomic(root,'index.json',idx);
-    state.syncLogState={lastSyncedId:batch[batch.length-1].id,lastSyncAt:new Date().toISOString(),filesWritten:((state.syncLogState&&state.syncLogState.filesWritten)||0)+filesWritten,partitionStats:stats,totalSynced};
+    state.syncLogState={lastSyncedId:batch[batch.length-1].id,lastSyncAt:new Date().toISOString(),filesWritten:((state.syncLogState&&state.syncLogState.filesWritten)||0)+filesWritten,partitionStats:stats,totalSynced,lastError:null,lastDurationMs:Date.now()-__t0,totalLogged:(state.syncLogState&&state.syncLogState.totalLogged)||0};
     await persistSyncLogMetaNow();
+    try{updateGlobalSyncBadge();}catch(e){}
     if(manual) toast('تمت مزامنة '+batch.length+' سجل إلى المجلد (activity-log/).','ok');
     if(pending.length>batch.length) setTimeout(()=>runActivityLogSync(false),300);
     return true;
   }catch(e){
     console.warn('فشل مزامنة سجل النشاط:',e);
-    if(manual) toast('فشلت مزامنة السجل: '+(e.message||e),'err');
+    if(manual || (state.syncLogSettings && state.syncLogSettings.notifyOnFailure)) toast('فشلت مزامنة السجل: '+(e.message||e),'err');
+    state.syncLogState={...(state.syncLogState||{}),lastError:String((e&&e.message)||e)};
+    try{ await persistSyncLogMetaNow(); }catch(e2){}
+    try{updateGlobalSyncBadge();}catch(e2){}
     return false;
   }finally{ activityLogSyncBusy=false; }
 }
@@ -5949,14 +6026,14 @@ async function linkBackupFolder(){
       if(hasLocal && hasFolder){
         const merged=await smartLinkFolderMerge(handle,snap);
         if(!merged){ linkedDirHandle=null; try{await idbDelete_real("meta","linkedDir");}catch(e){} renderFolderLinkStatus(); return; }
-        renderFolderLinkStatus(); try{restartActivityLogScheduler();}catch(e){} return;
+        renderFolderLinkStatus(); try{restartActivityLogScheduler();updateGlobalSyncBadge();}catch(e){} return;
       }
       if(hasFolder){
         await restoreAllFromFolder(handle,snap);
         applyTheme(state.settings.theme||"amber");
         renderSidebarTree(); navigateTo({type:"home"});
         toast("✅ تم التعرف على محتوى المجلد واستعادته.","ok",6000);
-        renderFolderLinkStatus(); try{restartActivityLogScheduler();}catch(e){} return;
+        renderFolderLinkStatus(); try{restartActivityLogScheduler();updateGlobalSyncBadge();}catch(e){} return;
       }
     }
     await syncFolderStorageNow();
@@ -5965,7 +6042,7 @@ async function linkBackupFolder(){
     if(e?.name!=="AbortError") toast("تعذر ربط المجلد: "+(e.message||e),"err");
   }
   renderFolderLinkStatus();
-  try{restartActivityLogScheduler();}catch(e){}
+  try{restartActivityLogScheduler();updateGlobalSyncBadge();}catch(e){}
 }
 async function activateLinkedFolder(){
   if(!linkedDirHandle) return linkBackupFolder();
@@ -5978,13 +6055,15 @@ async function activateLinkedFolder(){
     toast("♻️ تم الاسترجاع تلقائيًا لأن بيانات IndexedDB كانت فارغة.","ok",5000);
   }else await requestFolderSync();
   renderFolderLinkStatus();
+  folderPermissionNeedsActivation=false;
+  try{restartActivityLogScheduler();updateGlobalSyncBadge();}catch(e){}
 }
 async function unlinkBackupFolder(){
   linkedDirHandle=null;
   try{ await idbDelete_real("meta","linkedDir"); }catch(e){}
   toast("تم فصل مجلد التخزين. سيستمر البرنامج باستخدام IndexedDB.","ok");
   renderFolderLinkStatus();
-  try{restartActivityLogScheduler();}catch(e){}
+  try{restartActivityLogScheduler();updateGlobalSyncBadge();}catch(e){}
 }
 async function renderFolderLinkStatus(){
   const box=document.getElementById("folderLinkStatus");
@@ -6140,6 +6219,17 @@ async function boot(){
   navigateTo({type:"home"});
   initGalleryAuditTracker();
   try{ restartActivityLogScheduler(); }catch(e){}
+  try{
+    const gsb=document.getElementById('globalSyncBadge');
+    if(gsb) gsb.onclick=handleGlobalSyncBadgeClick;
+    updateGlobalSyncBadge();
+    setInterval(updateGlobalSyncBadge,15000);
+    if(state.syncLogSettings && state.syncLogSettings.autoRequestOnStart && linkedDirHandle && !state.syncLogSettings.enabled){
+      state.syncLogSettings.enabled=true;
+      persistSyncLogMetaNow();
+      restartActivityLogScheduler();
+    }
+  }catch(e){}
 
   if(STORAGE_MODE==="memory"){
     // في وضع الذاكرة لا يمكن ضمان بقاء البيانات بعد إغلاق الصفحة.
@@ -7109,13 +7199,12 @@ async function renderActivityLogView(c){
   const todayStr=new Date().toISOString().slice(0,10);
   const total=(state.activityLog||[]).length;
   const todayCount=(state.activityLog||[]).filter(e=>e.day===todayStr).length;
-  let pendingCount=0;
-  {
-    const all=state.activityLog||[]; const lastId=ss.lastSyncedId; let cut=all.length;
-    if(lastId){ const idx=all.findIndex(e=>e.id===lastId); if(idx!==-1) cut=idx; }
-    pendingCount=cut;
-  }
+  const pendingCount=activityLogPendingCountG();
+  const savedPct=activityLogSavedPercentG();
+  const permOk=!!linkedDirHandle && !folderPermissionNeedsActivation;
   const intervalOptions=[[15,'كل 15 ثانية'],[30,'كل 30 ثانية'],[60,'كل دقيقة'],[300,'كل 5 دقائق'],[900,'كل 15 دقيقة'],[3600,'كل ساعة']];
+  const typeCountsToday={}; const typeCountsAll={};
+  (state.activityLog||[]).forEach(e=>{ typeCountsAll[e.type]=(typeCountsAll[e.type]||0)+1; if(e.day===todayStr) typeCountsToday[e.type]=(typeCountsToday[e.type]||0)+1; });
   c.innerHTML = `
     <div class="view-title"><h1>🔄 السجل والمزامنة</h1></div>
     <div class="view-desc">سجل تفصيلي لحظي لكل إضافة وتعديل وحذف وصورة وعملية حفظ/مزامنة/استيراد/تصدير، مع نظام مزامنة قابل للتحكم الكامل إلى نفس مجلد التخزين المرتبط.</div>
@@ -7124,6 +7213,22 @@ async function renderActivityLogView(c){
       <div class="stat-card"><div class="num">${todayCount}</div><div class="lbl">سجلات اليوم</div></div>
       <div class="stat-card ${pendingCount?'crit':''}"><div class="num">${pendingCount}</div><div class="lbl">بانتظار المزامنة</div></div>
       <div class="stat-card good"><div class="num" style="font-size:14px">${ss.lastSyncAt?new Date(ss.lastSyncAt).toLocaleString('ar-EG'):'—'}</div><div class="lbl">آخر مزامنة للسجل</div></div>
+    </div>
+
+    <div class="panel">
+      <h3>💾 نسبة حفظ البرنامج من التعديلات</h3>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="flex:1;background:var(--panel3);border-radius:8px;height:16px;overflow:hidden;border:1px solid var(--border);">
+          <div style="height:100%;width:${savedPct}%;background:${savedPct>=99?'var(--green)':savedPct>=70?'var(--yellow)':'var(--red)'};transition:width .3s;"></div>
+        </div>
+        <div style="font-weight:700;font-size:15px;min-width:52px;text-align:left;">${savedPct}%</div>
+      </div>
+      <div style="font-size:11px;color:var(--dim2);margin-top:6px;">نسبة السجلات التي تمت مزامنتها فعليًا إلى المجلد من إجمالي التعديلات المسجّلة (${ss.totalLogged||0} إجمالي منذ البداية).</div>
+      <div style="font-size:11.5px;margin-top:8px;">
+        حالة الصلاحية: ${!linkedDirHandle?'<span style="color:var(--dim2);">🔴 لا يوجد مجلد مرتبط</span>':permOk?'<span style="color:var(--green);">🟢 مسموح بالكتابة</span>':'<span style="color:var(--red);">🔴 تحتاج تأكيد الصلاحية</span>'}
+        ${ss.lastError?`<br>آخر خطأ: <span style="color:var(--red);">${esc(ss.lastError)}</span>`:''}
+        ${ss.lastDurationMs?`<br>مدة آخر مزامنة: ${ss.lastDurationMs} مللي ثانية`:''}
+      </div>
     </div>
 
     <div class="panel">
@@ -7145,6 +7250,13 @@ async function renderActivityLogView(c){
           </select>
         </label>
       </div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:12px;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="syncLogAutoStart" ${s.autoRequestOnStart?'checked':''}> تفعيل المزامنة تلقائيًا عند فتح التطبيق</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="syncLogNotifyFail" ${s.notifyOnFailure!==false?'checked':''}> تنبيه فوري عند فشل المزامنة</label>
+        <label style="display:flex;align-items:center;gap:6px;">الاحتفاظ بالسجل محليًا (أيام، 0=بلا حد):
+          <input type="number" id="syncLogRetention" min="0" max="3650" step="1" value="${Number(s.retentionDays)||0}" style="width:80px;">
+        </label>
+      </div>
       <div style="margin-top:12px;">
         <div style="font-size:11.5px;color:var(--dim2);margin-bottom:5px;">أنواع العمليات المشمولة بالمزامنة:</div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;">
@@ -7154,9 +7266,18 @@ async function renderActivityLogView(c){
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
         <button class="btn primary small" id="saveSyncLogSettingsBtn">💾 حفظ إعدادات المزامنة</button>
         <button class="btn small" id="runSyncLogNowBtn">🔄 مزامنة السجل الآن</button>
+        <button class="btn small" id="grantFolderPermBtn">🔓 تفعيل صلاحية المجلد</button>
         <button class="btn small" id="exportActivityLogBtn">🧾 تصدير السجل كملف JSON</button>
         <button class="btn danger small" id="clearActivityLogBtn">🗑 مسح السجل بالكامل</button>
       </div>
+    </div>
+
+    <div class="panel">
+      <h3>📊 تفصيل حسب نوع العملية</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        <tr style="text-align:right;color:var(--dim2);"><th style="padding:4px;">النوع</th><th style="padding:4px;">اليوم</th><th style="padding:4px;">الإجمالي</th></tr>
+        ${ACTIVITY_TYPES_ALL.map(t=>`<tr><td style="padding:4px;">${ACTIVITY_TYPE_META[t].ico} ${ACTIVITY_TYPE_META[t].label}</td><td style="padding:4px;">${typeCountsToday[t]||0}</td><td style="padding:4px;">${typeCountsAll[t]||0}</td></tr>`).join('')}
+      </table>
     </div>
 
     <div class="panel">
@@ -7230,15 +7351,28 @@ async function renderActivityLogView(c){
       batchSize:Math.max(10,Number(document.getElementById('syncLogBatch').value)||300),
       partitionBy:document.getElementById('syncLogPartition').value||'day+type',
       includeTypes: includeTypes.length?includeTypes:ACTIVITY_TYPES_ALL.slice(),
+      autoRequestOnStart:document.getElementById('syncLogAutoStart').checked,
+      notifyOnFailure:document.getElementById('syncLogNotifyFail').checked,
+      retentionDays:Math.max(0,Number(document.getElementById('syncLogRetention').value)||0),
     };
     await persistSyncLogMetaNow();
     restartActivityLogScheduler();
+    applyLogRetentionG();
+    updateGlobalSyncBadge();
     toast('تم حفظ إعدادات المزامنة','ok');
     renderActivityLogView(c);
   };
   document.getElementById('runSyncLogNowBtn').onclick=async ()=>{
     toast('جارٍ مزامنة السجل...','ok');
     await runActivityLogSync(true);
+    renderActivityLogView(c);
+  };
+  document.getElementById('grantFolderPermBtn').onclick=async ()=>{
+    if(!linkedDirHandle){ toast('اربط مجلدًا أولًا.','warn'); return; }
+    const ok=await ensureFolderPermission(linkedDirHandle,true);
+    folderPermissionNeedsActivation=!ok;
+    updateGlobalSyncBadge();
+    toast(ok?'✅ تم تأكيد صلاحية المجلد':'لم تُمنح الصلاحية', ok?'ok':'err');
     renderActivityLogView(c);
   };
   document.getElementById('exportActivityLogBtn').onclick=()=>{
@@ -7250,9 +7384,10 @@ async function renderActivityLogView(c){
     if(!(state.activityLog||[]).length){ toast('لا يوجد سجل لمسحه','warn'); return; }
     if(!confirm('سيتم حذف السجل التفصيلي بالكامل من التطبيق (الملفات المُزامنة سابقًا في المجلد لن تُحذف). هل تريد المتابعة؟')) return;
     state.activityLog=[];
-    state.syncLogState={lastSyncedId:null,lastSyncAt:ss.lastSyncAt||null,filesWritten:ss.filesWritten||0,partitionStats:ss.partitionStats||{},totalSynced:ss.totalSynced||0};
+    state.syncLogState={lastSyncedId:null,lastSyncAt:ss.lastSyncAt||null,filesWritten:ss.filesWritten||0,partitionStats:ss.partitionStats||{},totalSynced:ss.totalSynced||0,totalLogged:0,lastError:null,lastDurationMs:0};
     persistActivityLogDebounced();
     await persistSyncLogMetaNow();
+    updateGlobalSyncBadge();
     toast('تم مسح السجل','ok');
     renderActivityLogView(c);
   };
