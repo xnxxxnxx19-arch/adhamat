@@ -9126,6 +9126,17 @@ renderSidebarTree = function(){
 .draw-canvas-wrap{border:1px solid var(--border);border-radius:9px;overflow:hidden;background:#fff;}
 .draw-canvas{display:block;width:100%;touch-action:none;cursor:crosshair;}
 
+/* أدوات سريعة للرسم/التحديد — خاصة بتتبع الأعطال */
+.ft-draw-quickbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;}
+.ft-quick-btn{width:34px;height:30px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;font-size:14px;font-weight:800;}
+.ft-quick-btn.ft-select-active{background:var(--amber);color:var(--amber-ink);border-color:var(--amber);box-shadow:0 0 0 2px rgba(242,169,60,.18);}
+.ft-quick-btn.ft-back-btn{font-size:16px;}
+.ft-color-mini{width:22px;height:22px;padding:0!important;border-radius:50%;border:2px solid var(--border-lt);cursor:pointer;flex:0 0 auto;box-shadow:0 0 0 1px rgba(0,0,0,.12);}
+.ft-color-mini:hover{transform:scale(1.12);border-color:var(--text);}
+.ft-color-mini.active{outline:2px solid var(--text);outline-offset:2px;}
+.ft-selected-hint{font-size:10.5px;color:var(--amber);font-weight:700;margin-inline-start:3px;white-space:nowrap;}
+.ft-text-label.selected{outline:2px dashed var(--blue);outline-offset:3px;border-radius:4px;background:rgba(77,163,255,.10);}
+
 .nb-mindmap{display:flex;flex-direction:column;gap:8px;outline:none;}
 .mm-toolbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;}
 .mm-props{display:flex;align-items:center;gap:8px;padding:8px;background:var(--panel3);border:1px solid var(--border);border-radius:9px;flex-wrap:wrap;}
@@ -9204,11 +9215,36 @@ renderSidebarTree = function(){
 .ft-world-img{display:block;user-select:none;-webkit-user-drag:none;position:absolute;top:0;left:0;}
 .ft-world-canvas{position:absolute;top:0;left:0;}
 .ft-markers-layer{position:absolute;top:0;left:0;}
-.ft-wrap.ft-fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;z-index:9999;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:8px;overflow:auto;box-sizing:border-box;max-width:none;}
-.ft-wrap.ft-fullscreen .ft-pages-strip{flex:0 0 auto;}
-.ft-wrap.ft-fullscreen .ft-stage-area{flex:1 1 auto;min-height:0;}
-.ft-wrap.ft-fullscreen .ft-stage-viewport{flex:1 1 auto;height:auto;min-height:0;}
-.ft-wrap.ft-fullscreen .ft-caption-wrap{flex:0 0 auto;max-height:22vh;overflow:auto;}
+.ft-wrap.ft-fullscreen{position:fixed;inset:0;width:100vw;height:100dvh;z-index:9999;background:var(--bg);display:flex;flex-direction:column;padding:4px;gap:4px;overflow:hidden;box-sizing:border-box;max-width:none;}
+.ft-wrap.ft-fullscreen .ft-pages-strip{flex:0 0 48px;height:48px;padding:2px 0;gap:5px;overflow-x:auto;overflow-y:hidden;}
+.ft-wrap.ft-fullscreen .ft-page-thumb{width:66px;height:44px;border-radius:6px;flex-direction:row;align-items:center;}
+.ft-wrap.ft-fullscreen .ft-page-thumb img{width:42px;height:40px;object-fit:cover;flex:0 0 42px;}
+.ft-wrap.ft-fullscreen .ft-page-thumb span{font-size:8px;padding:2px;max-width:22px;}
+.ft-wrap.ft-fullscreen .ft-page-add{width:66px;height:44px;min-height:44px;border-radius:6px;font-size:8px;padding:2px;}
+.ft-wrap.ft-fullscreen .ft-toolbar{flex:0 0 36px;min-height:36px;height:36px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:4px;padding:3px 4px;border-radius:7px;white-space:nowrap;}
+.ft-wrap.ft-fullscreen .ft-page-name{height:28px;padding:3px 6px;font-size:10px;flex:0 0 74px;min-width:74px;}
+.ft-wrap.ft-fullscreen .ft-toolbar .btn.icon-only{min-width:28px;width:28px;height:28px;font-size:13px;}
+.ft-wrap.ft-fullscreen .ft-layers-bar{flex:0 0 auto;max-width:45vw;gap:4px;overflow-x:auto;}
+.ft-wrap.ft-fullscreen .ft-layer-chip{padding:3px 5px;gap:3px;max-width:105px;font-size:9px;}
+.ft-wrap.ft-fullscreen .ft-layer-swatch{width:10px;height:10px;}
+.ft-wrap.ft-fullscreen .ft-layer-name{font-size:9px;max-width:42px;}
+.ft-wrap.ft-fullscreen .ft-layer-btn{font-size:10px;}
+.ft-wrap.ft-fullscreen .ft-zoom-controls{gap:2px;padding:2px;}
+.ft-wrap.ft-fullscreen .ft-zbtn{min-width:24px;height:24px;font-size:12px;padding:0 4px;}
+.ft-wrap.ft-fullscreen .ft-zlevel{font-size:9px;min-width:28px;}
+.ft-wrap.ft-fullscreen .ft-tool-select{width:34px;height:28px;padding:2px 0;font-size:12px;}
+.ft-wrap.ft-fullscreen .ft-draw-quickbar{gap:2px;padding:2px 3px;flex:0 0 auto;flex-wrap:nowrap;}
+.ft-wrap.ft-fullscreen .ft-quick-btn{width:27px;height:25px;font-size:12px;}
+.ft-wrap.ft-fullscreen .ft-color-mini{width:17px;height:17px;}
+.ft-wrap.ft-fullscreen .ft-selected-hint{display:none;}
+.ft-wrap.ft-fullscreen .ft-settings-pop.open{display:flex;flex:0 0 30px;height:30px;min-height:30px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:6px;padding:2px 5px;border-radius:7px;white-space:nowrap;}
+.ft-wrap.ft-fullscreen .ft-settings-pop.open .ft-draw-label{font-size:9px;}
+.ft-wrap.ft-fullscreen .ft-settings-pop.open input[type=range]{width:52px;}
+.ft-wrap.ft-fullscreen .ft-settings-pop.open input[type=number]{width:40px!important;}
+.ft-wrap.ft-fullscreen .ft-settings-pop.open .btn.small{font-size:9px;padding:3px 5px;height:24px;}
+.ft-wrap.ft-fullscreen .ft-stage-area{flex:1 1 auto;min-height:0;width:100%;height:auto;}
+.ft-wrap.ft-fullscreen .ft-stage-viewport{flex:1 1 auto;width:100%;height:100%;min-height:0;border-radius:6px;}
+.ft-wrap.ft-fullscreen .ft-caption-wrap{display:none;}
 
 .ft-marker{position:absolute;box-sizing:border-box;pointer-events:auto;}
 .ft-marker.shape-circle{border-radius:50%;}
@@ -10546,7 +10582,9 @@ function nbFaultPanel(body, s, item){
   let activeId = (ft.activePageId && ft.pages.some(p=>p.id===ft.activePageId)) ? ft.activePageId : (ft.pages[0]?ft.pages[0].id:null);
   let activeLayerId=null;
   let currentTool='pen';
-  let isFullscreen=false;
+  let selectMode=false;
+  let selectedShapeRef=null;
+  let isFullscreen=true;
   let settingsOpen=false;
   let ftOriginalParent=null, ftOriginalNext=null;
 
@@ -10658,11 +10696,51 @@ function nbFaultPanel(body, s, item){
         <option value="pan" title="تحريك فقط">🖐</option>
       `;
       toolSel.value=currentTool;
-      toolSel.onchange=()=>{ currentTool=toolSel.value; };
+      toolSel.onchange=()=>{ currentTool=toolSel.value; if(selectMode){ selectMode=false; selectedShapeRef=null; } updateDrawCursor(); renderTextLabels(); redrawCanvas(); };
       const settingsBtn=document.createElement('button'); settingsBtn.type='button'; settingsBtn.className='btn small icon-only'+(settingsOpen?' primary':''); settingsBtn.textContent='⚙️'; settingsBtn.title='إعدادات الرسم والطبقة';
       settingsBtn.onclick=()=>{ settingsOpen=!settingsOpen; render(); };
       toolbar.append(toolSel, settingsBtn);
+
+      /* زر التحديد + رجوع + ألوان سريعة: لا تغيّر أدوات الرسم الأصلية */
+      const quickBar=document.createElement('div'); quickBar.className='ft-draw-quickbar';
+      const selectBtn=document.createElement('button'); selectBtn.type='button';
+      selectBtn.className='btn small ft-quick-btn'+(selectMode?' ft-select-active':'');
+      selectBtn.textContent='↖'; selectBtn.title=selectMode?'وضع التحديد — اضغط للعودة للرسم':'تحديد وتحريك النصوص والخطوط والأشكال';
+      selectBtn.onclick=()=>{
+        if(selectMode){ selectMode=false; currentTool=toolSel.value; }
+        else { currentTool=toolSel.value; selectMode=true; selectedShapeRef=null; }
+        updateDrawCursor(); renderTextLabels(); redrawCanvas();
+        selectBtn.classList.toggle('ft-select-active',selectMode);
+        selectBtn.title=selectMode?'وضع التحديد — اضغط للعودة للرسم':'تحديد وتحريك النصوص والخطوط والأشكال';
+        selHint.textContent=selectMode?'تحديد: اختر عنصرًا واسحبه':'رسم';
+      };
+      const backBtn=document.createElement('button'); backBtn.type='button'; backBtn.className='btn small ft-quick-btn ft-back-btn';
+      backBtn.textContent='↶'; backBtn.title='رجوع / تراجع';
+      backBtn.onclick=()=>{
+        const layer=activeLayerNow(); if(!layer||!layer.content.drawing.shapes.length) return;
+        const popped=layer.content.drawing.shapes.pop();
+        const st=redoStacks.get(layer.id)||[]; st.push(popped); redoStacks.set(layer.id,st);
+        selectedShapeRef=null; nbScheduleSave(item); redrawCanvas(); renderTextLabels();
+      };
+      quickBar.append(selectBtn,backBtn);
+      const quickColors=['#ff3b30','#ff9500','#ffcc00','#34c759','#007aff','#af52de','#ffffff','#000000'];
+      quickColors.forEach(col=>{
+        const b=document.createElement('button'); b.type='button'; b.className='ft-color-mini';
+        b.style.background=col; b.title='اللون '+col;
+        if(col==='#ffffff') b.style.borderColor='var(--border-lt)';
+        b.onclick=()=>{
+          colorInput.value=col;
+          const sel=selectedShapeRef;
+          if(sel&&sel.shape){ sel.shape.color=col; nbScheduleSave(item); redrawCanvas(); renderTextLabels(); }
+          quickBar.querySelectorAll('.ft-color-mini').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+        };
+        quickBar.appendChild(b);
+      });
+      const selHint=document.createElement('span'); selHint.className='ft-selected-hint';
+      selHint.textContent=selectMode?'تحديد: اختر عنصرًا واسحبه':'رسم'; quickBar.appendChild(selHint);
+      toolbar.appendChild(quickBar);
     }
+
     root.appendChild(toolbar);
 
     if(mode==='edit'){
@@ -10779,6 +10857,56 @@ function nbFaultPanel(body, s, item){
       return { x:(clientX-rect.left)/s, y:(clientY-rect.top)/s };
     }
 
+    function updateDrawCursor(){
+      viewport.style.cursor=selectMode?'default':(currentTool==='pan'?'grab':'crosshair');
+      if(selectMode){ viewport.classList.add('ft-select-mode'); } else viewport.classList.remove('ft-select-mode');
+    }
+    function pointSegDist(px,py,ax,ay,bx,by){
+      const dx=bx-ax, dy=by-ay; const l2=dx*dx+dy*dy;
+      if(!l2) return Math.hypot(px-ax,py-ay);
+      let t=((px-ax)*dx+(py-ay)*dy)/l2; t=Math.max(0,Math.min(1,t));
+      return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
+    }
+    function shapeHitTest(sh,p,tol){
+      if(sh.type==='text'){
+        const fs=sh.fontSize||18, w=Math.max(22,(sh.text||'').length*fs*.62);
+        return p.x>=sh.x-tol && p.x<=sh.x+w+tol && p.y>=sh.y-tol && p.y<=sh.y+fs*1.35+tol;
+      }
+      if(sh.type==='freehand'){
+        const pts=sh.points||[]; for(let i=1;i<pts.length;i++) if(pointSegDist(p.x,p.y,pts[i-1].x,pts[i-1].y,pts[i].x,pts[i].y)<=tol) return true;
+        return pts.some(q=>Math.hypot(p.x-q.x,p.y-q.y)<=tol);
+      }
+      if(sh.type==='curve'){
+        let prev={x:sh.x1,y:sh.y1};
+        for(let i=1;i<=24;i++){ const t=i/24, u=1-t; const q={x:u*u*sh.x1+2*u*t*sh.cx+t*t*sh.x2,y:u*u*sh.y1+2*u*t*sh.cy+t*t*sh.y2};
+          if(pointSegDist(p.x,p.y,prev.x,prev.y,q.x,q.y)<=tol) return true; prev=q; } return false;
+      }
+      if('x1' in sh){
+        if(sh.type==='line'||sh.type==='arrow'||sh.type==='zigzag'||sh.dashed) return pointSegDist(p.x,p.y,sh.x1,sh.y1,sh.x2,sh.y2)<=tol+4;
+        const x1=Math.min(sh.x1,sh.x2),x2=Math.max(sh.x1,sh.x2),y1=Math.min(sh.y1,sh.y2),y2=Math.max(sh.y1,sh.y2);
+        if(sh.type==='circle'){ const cx=(x1+x2)/2,cy=(y1+y2)/2,rx=Math.max(1,(x2-x1)/2),ry=Math.max(1,(y2-y1)/2); const v=((p.x-cx)/rx)**2+((p.y-cy)/ry)**2; return sh.filled ? v<=1+(tol/Math.max(rx,ry)) : Math.abs(Math.sqrt(v)-1)<=tol/Math.max(1,Math.min(rx,ry)); }
+        return p.x>=x1-tol&&p.x<=x2+tol&&p.y>=y1-tol&&p.y<=y2+tol;
+      }
+      return false;
+    }
+    function findShapeAt(layer,pos){
+      const tol=12/currentScale(); const arr=layer&&layer.content&&layer.content.drawing&&layer.content.drawing.shapes||[];
+      for(let i=arr.length-1;i>=0;i--) if(shapeHitTest(arr[i],pos,tol)) return arr[i];
+      return null;
+    }
+    function moveShape(sh,dx,dy){
+      if(sh.type==='freehand'){ (sh.points||[]).forEach(p=>{p.x+=dx;p.y+=dy;}); return; }
+      if(sh.type==='text'){ sh.x+=dx; sh.y+=dy; return; }
+      if('x1' in sh){ sh.x1+=dx; sh.y1+=dy; sh.x2+=dx; sh.y2+=dy; if(sh.type==='curve'){ sh.cx+=dx; sh.cy+=dy; } }
+    }
+    function drawSelectionOverlay(sh){
+      ctx.save(); ctx.strokeStyle='#4da3ff'; ctx.fillStyle='rgba(77,163,255,.12)'; ctx.lineWidth=Math.max(2,2/currentScale()); ctx.setLineDash([6/currentScale(),4/currentScale()]);
+      if(sh.type==='freehand' && sh.points&&sh.points.length){ const xs=sh.points.map(p=>p.x),ys=sh.points.map(p=>p.y); ctx.strokeRect(Math.min(...xs)-5,currentScale()?Math.min(...ys)-5:0,Math.max(...xs)-Math.min(...xs)+10,Math.max(...ys)-Math.min(...ys)+10); }
+      else if(sh.type==='text'){ const fs=sh.fontSize||18,w=Math.max(22,(sh.text||'').length*fs*.62); ctx.strokeRect(sh.x-4,sh.y-4,w+8,fs*1.35+8); }
+      else if('x1' in sh){ const x=Math.min(sh.x1,sh.x2)-6,y=Math.min(sh.y1,sh.y2)-6,w=Math.abs(sh.x2-sh.x1)+12,h=Math.abs(sh.y2-sh.y1)+12; ctx.strokeRect(x,y,w,h); }
+      ctx.restore();
+    }
+
     /* في وضع العرض: الطبقات مخفية افتراضيًا، ولا يظهر رسم أو نص إلا للطبقة التي ضُغط عليها */
     function layerIsShown(h){
       if(h.visible===false) return false;
@@ -10791,7 +10919,7 @@ function nbFaultPanel(body, s, item){
       ctx.clearRect(0,0,natW,natH);
       page.hotspots.forEach(h=>{
         if(!layerIsShown(h)) return;
-        (h.content.drawing.shapes||[]).forEach(sh=>{ if(sh.type!=='text') nbDrawShape(ctx,sh); });
+        (h.content.drawing.shapes||[]).forEach(sh=>{ if(sh.type!=='text') nbDrawShape(ctx,sh); if(selectMode&&selectedShapeRef&&selectedShapeRef.shape===sh&&selectedShapeRef.layerId===h.id) drawSelectionOverlay(sh); });
       });
     }
 
@@ -10819,6 +10947,10 @@ function nbFaultPanel(body, s, item){
             lbl.addEventListener('pointerdown',(e)=>{
               if(e.target===del) return;
               e.stopPropagation(); e.preventDefault();
+              selectedShapeRef={layerId:h.id,shape:sh};
+              textLayer.querySelectorAll('.ft-text-label.selected').forEach(x=>x.classList.remove('selected'));
+              lbl.classList.add('selected');
+              redrawCanvas();
               lbl.setPointerCapture(e.pointerId);
               const startX=e.clientX, startY=e.clientY, ox=sh.x, oy=sh.y, sc=currentScale();
               let moved=false;
@@ -10835,6 +10967,7 @@ function nbFaultPanel(body, s, item){
               lbl.addEventListener('pointermove', onMove);
               lbl.addEventListener('pointerup', onUp);
             });
+            if(selectMode && selectedShapeRef && selectedShapeRef.shape===sh) lbl.classList.add('selected');
           }
           textLayer.appendChild(lbl);
         });
@@ -11026,6 +11159,17 @@ function nbFaultPanel(body, s, item){
       panDragMoved=false;
       if(activePointers.size===1){
         const canDraw = mode==='edit' && activeLayerId && currentTool!=='pan';
+        if(selectMode && mode==='edit' && activeLayerId){
+          const layer=activeLayerNow();
+          const pos=screenToNatural(e.clientX,e.clientY);
+          const hit=findShapeAt(layer,pos);
+          selectedShapeRef=hit?{layerId:layer.id,shape:hit}:null;
+          if(hit){
+            drawState={selecting:true,shape:hit,last:pos};
+            renderTextLabels(); redrawCanvas();
+          } else { renderTextLabels(); redrawCanvas(); }
+          return;
+        }
         if(canDraw){
           const layer=activeLayerNow();
           const pos=screenToNatural(e.clientX, e.clientY);
@@ -11054,6 +11198,11 @@ function nbFaultPanel(body, s, item){
       if(activePointers.size===1 && drawState){
         const pos=screenToNatural(e.clientX, e.clientY);
         const layer=activeLayerNow(); if(!layer) return;
+        if(drawState.selecting && drawState.shape){
+          const dx=pos.x-drawState.last.x, dy=pos.y-drawState.last.y;
+          moveShape(drawState.shape,dx,dy); drawState.last=pos;
+          redrawCanvas(); renderTextLabels(); return;
+        }
         if(drawState.erasing){ eraseNearActive(pos); return; }
         const width=parseInt(widthInput.value,10)||3;
         redrawCanvas();
@@ -11082,7 +11231,9 @@ function nbFaultPanel(body, s, item){
     });
     function releasePointer(e){
       activePointers.delete(e.pointerId);
-      if(drawState && !drawState.erasing){
+      if(drawState && drawState.selecting){
+        nbScheduleSave(item);
+      } else if(drawState && !drawState.erasing){
         const layer=activeLayerNow();
         if(layer){
           const pos=screenToNatural(e.clientX, e.clientY);
@@ -11126,6 +11277,7 @@ function nbFaultPanel(body, s, item){
     window.addEventListener('resize', ()=>{ if(natW){ computeBaseScaleAndCenter(); applyTransform(); } });
     document.addEventListener('keydown', function escFsHandler(e){ if(e.key==='Escape' && isFullscreen){ isFullscreen=false; render(); } });
 
+    updateDrawCursor();
     renderLayersBar();
     renderMarkers();
   }
