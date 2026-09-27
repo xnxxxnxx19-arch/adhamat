@@ -5212,6 +5212,103 @@ async function readJsonFile(handle,name,fallback=null){
   try{ const fh=await handle.getFileHandle(name); return JSON.parse(await (await fh.getFile()).text()); }
   catch(e){ return fallback; }
 }
+async function writeTextAtomic(handle,name,text){
+  const tmpName=name+'.tmp';
+  const tmp=await handle.getFileHandle(tmpName,{create:true});
+  const w=await tmp.createWritable();
+  try{ await w.write(text); await w.close(); }
+  catch(e){ try{await w.abort();}catch(_e){} throw e; }
+  const final=await handle.getFileHandle(name,{create:true});
+  const fw=await final.createWritable();
+  try{ await fw.write(text); await fw.close(); }
+  catch(e){ try{await fw.abort();}catch(_e){} throw e; }
+  try{ await handle.removeEntry(tmpName); }catch(e){}
+}
+
+/* =========================================================
+   إحصائيات المحتوى — عدّاد شامل لكل نوع محتوى داخل كل العناصر
+   (صور الشرح، مربعات الشرح، صور تتبع الأعطال، الملفات...الخ).
+   نفس الأرقام هنا تُستخدم في: (1) ملف txt يُكتب داخل مجلد
+   التخزين المرتبط عند كل مزامنة، و(2) لوحة الإحصائيات في
+   صفحة الإعدادات داخل البرنامج، حتى يتطابق العدّاد في المكانين.
+   ========================================================= */
+function computeContentStats(){
+  const s={
+    items:0, folders:0,
+    itemImages:0, itemDocs:0,
+    explanationBoxes:0, explanationImages:0, imageGroups:0,
+    codeBlocks:0, drawingShapes:0, mindmaps:0,
+    faultPages:0, faultHotspots:0, faultImages:0
+  };
+  s.items=(state.items||[]).length;
+  s.folders=(state.folders||[]).length;
+  for(const it of (state.items||[])){
+    s.itemImages += (it.imageIds||[]).length;
+    s.itemDocs += (it.docs||[]).length;
+    const nb=it.notebookData;
+    if(!nb) continue;
+    if(typeof nb.explanation==='string' && nb.explanation.trim()) s.explanationBoxes += 1;
+    s.explanationBoxes += (nb.explanations||[]).length;
+    s.explanationImages += (nb.images||[]).length;
+    s.imageGroups += (nb.imageGroups||[]).length;
+    s.codeBlocks += (nb.codes||[]).length;
+    s.drawingShapes += (nb.drawing && Array.isArray(nb.drawing.shapes)) ? nb.drawing.shapes.length : 0;
+    if(nb.mindmap) s.mindmaps += 1;
+    const ft=nb.faultTracking;
+    if(ft && Array.isArray(ft.pages)){
+      s.faultPages += ft.pages.length;
+      ft.pages.forEach(pg=>{
+        if(pg && pg.imageId) s.faultImages += 1;
+        (pg?.hotspots||[]).forEach(h=>{
+          s.faultHotspots += 1;
+          s.faultImages += (h?.content?.images||[]).length;
+        });
+      });
+    }
+  }
+  return s;
+}
+function fmtBytes(n){
+  if(!n || n<=0) return "0 KB";
+  if(n < 1024*1024) return (n/1024).toFixed(0)+" KB";
+  if(n < 1024*1024*1024) return (n/1024/1024).toFixed(1)+" MB";
+  return (n/1024/1024/1024).toFixed(2)+" GB";
+}
+function buildContentStatsText(stats, sizes){
+  sizes = sizes || {};
+  const lines=[];
+  lines.push("إحصائيات محتوى قاعدة بيانات الورشة");
+  lines.push("آخر تحديث: "+new Date().toLocaleString('ar-EG'));
+  lines.push("");
+  lines.push("── عام ──");
+  lines.push("عدد العناصر: "+stats.items);
+  lines.push("عدد المجلدات: "+stats.folders);
+  lines.push("عدد الصور الرئيسية/الإضافية للعناصر: "+stats.itemImages);
+  lines.push("عدد المستندات المرفقة بالعناصر: "+stats.itemDocs);
+  lines.push("");
+  lines.push("── الشرح والصور (دفتر الملاحظات) ──");
+  lines.push("عدد مربعات الشرح: "+stats.explanationBoxes);
+  lines.push("عدد الصور التوضيحية: "+stats.explanationImages);
+  lines.push("عدد مجموعات الصور: "+stats.imageGroups);
+  lines.push("");
+  lines.push("── الأكواد / الرسم / الخرائط الذهنية ──");
+  lines.push("عدد كتل الأكواد: "+stats.codeBlocks);
+  lines.push("عدد أشكال الرسم: "+stats.drawingShapes);
+  lines.push("عدد الخرائط الذهنية: "+stats.mindmaps);
+  lines.push("");
+  lines.push("── تتبع الأعطال ──");
+  lines.push("عدد صفحات تتبع الأعطال: "+stats.faultPages);
+  lines.push("عدد نقاط الأعطال (Hotspots): "+stats.faultHotspots);
+  lines.push("عدد الصور داخل تتبع الأعطال: "+stats.faultImages);
+  lines.push("");
+  lines.push("── إجمالي الملفات والمساحة ──");
+  lines.push("إجمالي عدد الملفات المخزّنة (صور/مستندات لكل الأنواع): "+(sizes.filesCount ?? "—"));
+  lines.push("الحجم التقريبي لمحتوى الملفات (صور/مستندات): "+(sizes.contentBytes!=null? fmtBytes(sizes.contentBytes) : "—"));
+  lines.push("الحجم التقريبي لصفحة البرنامج نفسه: "+(sizes.programBytes!=null? fmtBytes(sizes.programBytes) : "—"));
+  lines.push("الحجم الكلي التقريبي لقاعدة بيانات المتصفح (DB): "+(sizes.dbBytes!=null? fmtBytes(sizes.dbBytes) : "غير متاح في هذا المتصفح"));
+  lines.push("");
+  return lines.join("\n");
+}
 async function sha256Blob(blob){
   try{
     if(!window.crypto?.subtle) return null;
@@ -5399,6 +5496,22 @@ async function syncFolderStorageNow(){
       schemaVersion:1,revision:snapshot.savedAt,committedAt:Date.now(),
       state:"complete",assetCount:Object.keys(manifest.files).length
     });
+    // ملف نصي (txt) داخل نفس مجلد التخزين المرتبط، يحتوي على عدّاد كل نوع
+    // محتوى (صور شرح، مربعات شرح، صور تتبع أعطال، ملفات...) — يتحدّث تلقائيًا
+    // مع كل مزامنة، بنفس الأرقام المعروضة داخل البرنامج في صفحة الإعدادات.
+    try{
+      const contentStats=computeContentStats();
+      const contentBytes=Object.values(manifest.files).reduce((a,f)=>a+(f.size||0),0);
+      let dbBytes=null;
+      try{ if(navigator.storage && navigator.storage.estimate){ dbBytes=(await navigator.storage.estimate()).usage||0; } }catch(e){}
+      let programBytes=null;
+      try{ programBytes=new Blob([document.documentElement.outerHTML]).size; }catch(e){}
+      const statsText=buildContentStatsText(contentStats,{
+        filesCount:Object.keys(manifest.files).length,
+        contentBytes, dbBytes, programBytes
+      });
+      await writeTextAtomic(linkedDirHandle,"احصائيات-المحتوى.txt",statsText);
+    }catch(e){ console.warn("تعذر كتابة ملف إحصائيات المحتوى:",e); }
     await saveFolderRevision(linkedDirHandle,snapshot,manifest);
     try{
       await idbPut_real("meta",{key:"lastFolderSyncAt",value:Date.now()});
@@ -7393,8 +7506,22 @@ async function renderActivityLogView(c){
   };
 }
 
+async function wipeAllData(){
+  if(!confirm("سيتم حذف كل المجلدات والعناصر والصور نهائيًا من هذا المتصفح. متابعة؟")) return false;
+  if(!confirm("تأكيد أخير: هذا الإجراء لا يمكن التراجع عنه.")) return false;
+  state.folders = []; state.items = [];
+  await idbClear("folders"); await idbClear("items"); await idbClear("files");
+  state.objectUrls.forEach(u=>URL.revokeObjectURL(u)); state.objectUrls.clear();
+  await requestFolderSync();
+  toast("تم إفراغ قاعدة البيانات وحذف كل البيانات", "ok");
+  renderSidebarTree();
+  navigateTo({type:"home"});
+  return true;
+}
 async function renderSettingsView(c){
-  const filesCount = (await idbGetAll("files")).length;
+  const filesRecords = await idbGetAll("files");
+  const filesCount = filesRecords.length;
+  const contentBytes = filesRecords.reduce((a,r)=>a+(r.size||r.blob?.size||0),0);
   let approxBytes = 0;
   try{
     if(navigator.storage && navigator.storage.estimate){
@@ -7402,7 +7529,12 @@ async function renderSettingsView(c){
       approxBytes = est.usage || 0;
     }
   }catch(e){}
-  const sizeStr = approxBytes ? (approxBytes/1024/1024).toFixed(1)+" MB" : "غير متاح في هذا المتصفح";
+  let programBytes = 0;
+  try{ programBytes = new Blob([document.documentElement.outerHTML]).size; }catch(e){}
+  const sizeStr = approxBytes ? fmtBytes(approxBytes) : "غير متاح في هذا المتصفح";
+  const contentSizeStr = fmtBytes(contentBytes);
+  const programSizeStr = programBytes ? fmtBytes(programBytes) : "غير متاح";
+  const cs = computeContentStats();
 
   c.innerHTML = `
     <div class="view-title"><h1>⚙️ الإعدادات</h1></div>
@@ -7416,9 +7548,33 @@ async function renderSettingsView(c){
         <div class="stat-card info"><div class="num">${state.items.length}</div><div class="lbl">عناصر</div></div>
         <div class="stat-card"><div class="num">${state.folders.length}</div><div class="lbl">مجلدات</div></div>
         <div class="stat-card"><div class="num">${filesCount}</div><div class="lbl">ملفات (صور/مستندات)</div></div>
-        <div class="stat-card good"><div class="num" style="font-size:15px">${sizeStr}</div><div class="lbl">المساحة التقريبية المستخدمة</div></div>
       </div>
-      <div style="font-size:11.5px;color:var(--dim2)">IndexedDB طبقة تشغيل سريعة. عند ربط مجلد التخزين يصبح محتوى المجلد هو النسخة الخارجية الفعلية للمشروع، وكل حفظ/تعديل/حذف ومرفق تتم مزامنته معه تلقائيًا.</div>
+      <div class="stat-grid" style="margin-top:8px">
+        <div class="stat-card"><div class="num" style="font-size:14px">${programSizeStr}</div><div class="lbl">مساحة البرنامج (تقريبي)</div></div>
+        <div class="stat-card"><div class="num" style="font-size:14px">${contentSizeStr}</div><div class="lbl">مساحة المحتوى (صور/مستندات)</div></div>
+        <div class="stat-card good"><div class="num" style="font-size:14px">${sizeStr}</div><div class="lbl">إجمالي مساحة قاعدة البيانات (DB)</div></div>
+      </div>
+      <div style="font-size:11.5px;color:var(--dim2);margin-top:8px">IndexedDB طبقة تشغيل سريعة. عند ربط مجلد التخزين يصبح محتوى المجلد هو النسخة الخارجية الفعلية للمشروع، وكل حفظ/تعديل/حذف ومرفق تتم مزامنته معه تلقائيًا — بما في ذلك ملف نصي (txt) بإحصائيات المحتوى يُحدَّث تلقائيًا.</div>
+      <div style="margin-top:10px">
+        <button class="btn danger small" id="clearDbBtn">🧹 تفريغ قاعدة بيانات المتصفح (DB)</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>📊 إحصائيات المحتوى</h3>
+      <div style="font-size:11.5px;color:var(--dim2);margin-bottom:8px">نفس هذه الأرقام تُكتب تلقائيًا في ملف <code>احصائيات-المحتوى.txt</code> داخل مجلد التخزين المرتبط عند كل مزامنة.</div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="num">${cs.explanationBoxes}</div><div class="lbl">مربعات الشرح</div></div>
+        <div class="stat-card"><div class="num">${cs.explanationImages}</div><div class="lbl">صور الشرح التوضيحية</div></div>
+        <div class="stat-card"><div class="num">${cs.imageGroups}</div><div class="lbl">مجموعات الصور</div></div>
+        <div class="stat-card"><div class="num">${cs.codeBlocks}</div><div class="lbl">كتل الأكواد</div></div>
+        <div class="stat-card"><div class="num">${cs.drawingShapes}</div><div class="lbl">أشكال الرسم</div></div>
+        <div class="stat-card"><div class="num">${cs.mindmaps}</div><div class="lbl">الخرائط الذهنية</div></div>
+        <div class="stat-card"><div class="num">${cs.faultPages}</div><div class="lbl">صفحات تتبع الأعطال</div></div>
+        <div class="stat-card"><div class="num">${cs.faultHotspots}</div><div class="lbl">نقاط الأعطال</div></div>
+        <div class="stat-card"><div class="num">${cs.faultImages}</div><div class="lbl">صور تتبع الأعطال</div></div>
+        <div class="stat-card"><div class="num">${cs.itemImages}</div><div class="lbl">صور العناصر</div></div>
+        <div class="stat-card"><div class="num">${cs.itemDocs}</div><div class="lbl">مستندات العناصر</div></div>
+      </div>
     </div>
     <div class="panel">
       <h3>🗂 مجلد التخزين الفعلي والتزامن التلقائي</h3>
@@ -7464,17 +7620,8 @@ async function renderSettingsView(c){
   document.getElementById("unlinkFolderBtn").onclick = async ()=>{ await unlinkBackupFolder(); renderFolderLinkStatus(); };
   document.getElementById("exportBtn").onclick = exportProject;
   document.getElementById("importBtn").onclick = ()=> document.getElementById("hiddenImportInput").click();
-  document.getElementById("wipeBtn").onclick = async ()=>{
-    if(!confirm("سيتم حذف كل المجلدات والعناصر والصور نهائيًا من هذا المتصفح. متابعة؟")) return;
-    if(!confirm("تأكيد أخير: هذا الإجراء لا يمكن التراجع عنه.")) return;
-    state.folders = []; state.items = [];
-    await idbClear("folders"); await idbClear("items"); await idbClear("files");
-    state.objectUrls.forEach(u=>URL.revokeObjectURL(u)); state.objectUrls.clear();
-    await requestFolderSync();
-    toast("تم حذف كل البيانات", "ok");
-    renderSidebarTree();
-    navigateTo({type:"home"});
-  };
+  document.getElementById("wipeBtn").onclick = wipeAllData;
+  document.getElementById("clearDbBtn").onclick = wipeAllData;
 }
 
 /* =========================================================
