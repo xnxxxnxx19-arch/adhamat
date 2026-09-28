@@ -5425,7 +5425,7 @@ async function pruneFolderRevisions(handle){
     const names=[];
     for await(const [name,fh] of revDir.entries()) if(fh.kind==="directory" && /^rev_/.test(name)) names.push(name);
     names.sort().reverse();
-    for(const name of names.slice(5)) { try{ await revDir.removeEntry(name,{recursive:true}); }catch(e){} }
+    for(const name of names.slice(30)) { try{ await revDir.removeEntry(name,{recursive:true}); }catch(e){} }
   }catch(e){}
 }
 async function saveFolderRevision(handle,snapshot,manifest){
@@ -5486,7 +5486,7 @@ async function syncFolderStorageNow(){
     // تنظيف تلقائي: أي ملف داخل assets لم يعد مستخدمًا يحذف من المجلد الحقيقي.
     for await(const [fname,fh] of assets.entries()){
       if(fh.kind==="file" && !live.has(fname)){
-        try{ await assets.removeEntry(fname); }catch(e){ console.warn("تعذر حذف أصل قديم:",fname,e); }
+        console.warn("أصل غير مستخدم أُبقي:",fname);
       }
     }
 
@@ -11482,5 +11482,253 @@ window.nbMountNotebook = nbMountNotebook;
 })();
 </script>
 
+<script>
+/* ===== StrictStore: حفظ/تحميل صارم + سجل موثّق بسلسلة بصمات ===== */
+(function(){
+"use strict";
+const enc=new TextEncoder(),hex=b=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+const shaText=async t=>hex(await crypto.subtle.digest("SHA-256",enc.encode(t)));
+const shaBlob=async b=>hex(await crypto.subtle.digest("SHA-256",await b.arrayBuffer()));
+let jdb=null,chain=Promise.resolve(),last="GENESIS",lastJW=0;const cache=new Map();
+const jopen=()=>jdb?Promise.resolve(jdb):new Promise((ok,no)=>{const r=indexedDB.open("WorkshopJournalDB",1);r.onupgradeneeded=()=>r.result.createObjectStore("log",{keyPath:"seq",autoIncrement:true});r.onsuccess=()=>{jdb=r.result;ok(jdb)};r.onerror=()=>no(r.error)});
+const jtx=(m,fn)=>jopen().then(d=>new Promise((ok,no)=>{const t=d.transaction("log",m),q=fn(t.objectStore("log"));t.oncomplete=()=>ok(q&&q.result);t.onerror=()=>no(t.error)}));
+const ready=jtx("readonly",s=>s.getAll()).then(a=>{if(a.length)last=a[a.length-1].hash}).catch(()=>{});
+function J(action,detail){return chain=chain.then(async()=>{await ready;const e={ts:Date.now(),action,detail:detail||{},prev:last};e.hash=await shaText(e.prev+JSON.stringify([e.ts,e.action,e.detail]));await jtx("readwrite",s=>s.add(e));last=e.hash}).catch(e=>console.warn("journal",e))}
+async function verifyJournal(){const a=await jtx("readonly",s=>s.getAll());let p="GENESIS";for(const e of a){if(e.prev!==p||e.hash!==await shaText(p+JSON.stringify([e.ts,e.action,e.detail])))return{ok:false,count:a.length,badAt:e.seq};p=e.hash}return{ok:true,count:a.length}}
+const rd=async(d,n)=>(await d.getFileHandle(n)).getFile();
+async function verifyFolder(h,deep,post){
+ const P=[],W=[];let snap=null,man={files:{}},txt;
+ try{txt=await(await rd(h,"state.json")).text();snap=JSON.parse(txt)}catch(e){return{ok:false,P:["تعذر قراءة state.json: "+e.message],W,snap:null}}
+ if(!Array.isArray(snap.items)||!Array.isArray(snap.folders))P.push("بنية state.json غير صالحة");
+ const sha=await shaText(txt);
+ if(!post){let v=null;try{v=JSON.parse(await(await rd(h,"VERIFIED.json")).text())}catch(e){}
+  if(!v)W.push("النسخة غير موثّقة (لا يوجد VERIFIED.json)، ربما من إصدار قديم.");
+  else{if(v.stateSha256!==sha)P.push("بصمة state.json لا تطابق التوثيق (تلف أو تعديل خارجي)");
+   if(v.itemCount!==(snap.items||[]).length||v.folderCount!==(snap.folders||[]).length)P.push("عدد العناصر/المجلدات لا يطابق التوثيق")}}
+ try{man=JSON.parse(await(await rd(h,"asset-manifest.json")).text())}catch(e){P.push("تعذر قراءة asset-manifest.json")}
+ let A=null;try{A=await h.getDirectoryHandle("assets")}catch(e){}
+ const ids=new Set();
+ for(const[n,m]of Object.entries(man.files||{})){ids.add(m.id);
+  try{const f=await(await A.getFileHandle(n)).getFile();
+   if(f.size!==m.size)P.push("حجم مختلف: "+n);
+   else if(!m.sha256)P.push("لا توجد بصمة: "+n);
+   else{const c=cache.get(n);let s=m.sha256;if(deep||!(c&&c.size===f.size&&c.sha===m.sha256))s=await shaBlob(f);cache.set(n,{size:f.size,sha:s});if(s!==m.sha256)P.push("بصمة مختلفة (تالف): "+n)}
+  }catch(e){P.push("ملف مفقود: "+n)}}
+ const need=new Set();for(const it of snap.items||[]){(it.imageIds||[]).forEach(i=>need.add(i));(it.docs||[]).forEach(d=>d&&d.fileId&&need.add(d.fileId));if(it.mainImageId)need.add(it.mainImageId)}
+ let miss=0;need.forEach(i=>{if(!ids.has(i))miss++});if(miss)P.push(miss+" مرجع لملف غير موجود في النسخة");
+ return{ok:!P.length,P,W,snap,sha,man}}
+/* واجهة: شريط تنبيه + لوحة 🛡️ */
+let bar=null;function banner(m){if(!bar){bar=document.createElement("div");bar.style.cssText="position:fixed;top:0;left:0;right:0;z-index:99999;background:#b00020;color:#fff;padding:8px;font:14px sans-serif;text-align:center;display:none";bar.onclick=()=>bar.style.display="none";document.body.appendChild(bar)}bar.textContent=m||"";bar.style.display=m?"block":"none"}
+/* حفظ صارم: تحقق بالقراءة العكسية بعد كل مزامنة */
+const origSync=syncFolderStorageNow;
+syncFolderStorageNow=async function(){
+ await origSync();const h=linkedDirHandle;if(!h)return;
+ const r=await verifyFolder(h,false,true);
+ if(!r.ok){await J("save_verify_fail",{problems:r.P.slice(0,20)});banner("⛔ فشل التحقق بعد الحفظ: "+r.P[0]);throw new Error("فشل التحقق بعد الحفظ: "+r.P[0])}
+ const info={at:Date.now(),stateSha256:r.sha,itemCount:r.snap.items.length,folderCount:r.snap.folders.length,assetCount:Object.keys(r.man.files||{}).length};
+ await writeTextAtomic(h,"VERIFIED.json",JSON.stringify(info,null,2));
+ banner(null);await J("save_verified",info);
+ if(Date.now()-lastJW>60000){lastJW=Date.now();try{const s=await h.getDirectoryHandle(".system",{create:true});await writeTextAtomic(s,"journal.json",JSON.stringify(await jtx("readonly",x=>x.getAll())))}catch(e){console.warn(e)}}};
+/* تحميل صارم: لا يُمسح شيء قبل نجاح الفحص الكامل */
+const origRestore=restoreAllFromFolder;
+restoreAllFromFolder=async function(h){
+ const r=await verifyFolder(h,true);
+ await J("load_verify",{ok:r.ok,problems:r.P.slice(0,20),warnings:r.W});
+ if(!r.ok){banner("⛔ رُفض التحميل ("+r.P.length+" مشكلة) — افتح 🛡️");alert("رُفض التحميل ولم يتغير شيء:\n"+r.P.slice(0,8).join("\n"));throw new Error("STRICT_LOAD_REFUSED")}
+ if(r.W.length&&!confirm(r.W.join("\n")+"\nالفحص الباقي سليم. متابعة؟")){throw new Error("STRICT_LOAD_CANCELLED")}
+ await origRestore(h,r.snap);
+ const nf=(await idbGetAll_real("files")).length,exp=Object.keys(r.man.files||{}).length;
+ if(nf!==exp||state.items.length!==r.snap.items.length){await J("load_postcheck_fail",{nf,exp});banner("⚠️ عدم تطابق بعد التحميل — افتح 🛡️");alert("تحذير: عدد الملفات/العناصر بعد التحميل لا يطابق النسخة.")}
+ else await J("load_ok",{items:state.items.length,files:nf})};
+/* سجل كل عملية كتابة/حذف */
+const oP=idbPut,oD=idbDelete;
+idbPut=async function(s,v){const r=await oP.apply(this,arguments);if(s!=="meta")J("put",{store:s,id:v&&v.id});return r};
+idbDelete=async function(s,k){const r=await oD.apply(this,arguments);J("delete",{store:s,id:k});return r};
+J("session_start",{mode:typeof STORAGE_MODE!=="undefined"?STORAGE_MODE:"?"});
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist().then(g=>J("persist",{granted:g}))}catch(e){}
+function panel(){const o=document.createElement("div");o.style.cssText="position:fixed;inset:0;z-index:99998;background:#000c;display:flex;align-items:center;justify-content:center";
+ const b=document.createElement("div");b.dir="rtl";b.style.cssText="background:#1c1c1c;color:#eee;padding:12px;border-radius:10px;width:min(560px,94vw);max-height:88vh;overflow:auto;font:14px sans-serif";
+ const out=document.createElement("pre");out.style.cssText="white-space:pre-wrap;font-size:12px;max-height:50vh;overflow:auto";
+ const btn=(t,f)=>{const x=document.createElement("button");x.textContent=t;x.style.cssText="margin:3px;padding:8px";x.onclick=async()=>{out.textContent="...";try{out.textContent=await f()}catch(e){out.textContent="خطأ: "+e.message}};b.appendChild(x)};
+ btn("فحص المجلد (كامل)",async()=>{if(!linkedDirHandle)return"لا يوجد مجلد مرتبط.";const r=await verifyFolder(linkedDirHandle,true);await J("manual_verify",{ok:r.ok,problems:r.P.slice(0,20)});return(r.ok?"✅ سليم":"⛔ مشاكل:")+"\n"+r.P.concat(r.W).join("\n")});
+ btn("فحص السجل",async()=>{const v=await verifyJournal();return v.ok?"✅ السلسلة سليمة، "+v.count+" سجل":"⛔ كسر في السلسلة عند #"+v.badAt});
+ btn("آخر 100 عملية",async()=>(await jtx("readonly",s=>s.getAll())).slice(-100).map(e=>new Date(e.ts).toLocaleString("ar")+" | "+e.action+" | "+JSON.stringify(e.detail)).join("\n"));
+ btn("تنزيل السجل",async()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(await jtx("readonly",s=>s.getAll()))],{type:"application/json"}));a.download="journal.json";a.click();return"تم"});
+ btn("إغلاق",async()=>{o.remove();return""});b.appendChild(out);o.appendChild(b);document.body.appendChild(o)}
+const fab=document.createElement("button");fab.textContent="🛡️";fab.style.cssText="position:fixed;left:8px;bottom:8px;z-index:9999;width:40px;height:40px;border-radius:50%;border:0;opacity:.75";fab.onclick=panel;
+const add=()=>document.body.appendChild(fab);document.body?add():addEventListener("DOMContentLoaded",add);
+window.__S={J,shaText,shaBlob,banner};
+})();
+</script>
+<script>
+/* ===== LibraryStore v2: ملف لكل مجموعة/عنصر + فهرس موثّق + إحصائيات ===== */
+(function(){"use strict";
+const S=window.__S,sha=S.shaText,shaB=S.shaBlob,J=S.J;
+const slug=s=>String(s||"بدون-اسم").replace(/[\\/:*?"<>|\s.]+/g,"-").slice(0,40);
+const ext=n=>(/\.[A-Za-z0-9]{1,5}$/.exec(n||"")||[""])[0];
+const KINDS={images:"🖼️ صور",docs:"📄 مستندات",notebook:"📝 صور الشرح","fault-backgrounds":"🗺️ خلفيات الأعطال","fault-notes":"📍 صور نقاط الأعطال"};
+async function dir(h,path,mk){let d=h;for(const p of path.split("/").filter(Boolean))d=await d.getDirectoryHandle(p,{create:!!mk});return d}
+async function put(h,path,data){const i=path.lastIndexOf("/"),d=i<0?h:await dir(h,path.slice(0,i),1),f=await d.getFileHandle(path.slice(i+1),{create:true}),w=await f.createWritable();try{await w.write(data);await w.close()}catch(e){try{await w.abort()}catch(_){}throw e}}
+async function get(h,path){const i=path.lastIndexOf("/"),d=i<0?h:await dir(h,path.slice(0,i));return(await d.getFileHandle(path.slice(i+1))).getFile()}
+const rj=async(h,p)=>{try{return JSON.parse(await(await get(h,p)).text())}catch(e){return null}};
+function refs(it){const R=[],a=(i,k)=>i&&R.push([i,k]);(it.imageIds||[]).forEach(i=>a(i,"images"));(it.docs||[]).forEach(d=>d&&a(d.fileId,"docs"));(it.notebookData?.images||[]).forEach(x=>a(x.id,"notebook"));(it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});return R}
+let force=false,busy=false;
+async function libSave(h){
+ const files=new Map((await idbGetAll_real("files")).map(f=>[f.id,f])),old=force?{}:(await rj(h,"index.json"))||{};
+ const idx={schema:2,savedAt:Date.now(),groups:{},items:{},unassigned:{},meta:null},W=[],used=new Set();
+ const wt=async(path,txt,prev)=>{const s=await sha(txt);if(!prev||prev.sha!==s||force){await put(h,path,txt);W.push({path,sha:s})}return s};
+ const mt=JSON.stringify({settings:state.settings,categories:state.categories,categorySchemas:state.categorySchemas},null,2);
+ idx.meta={path:"meta.json",sha:await wt("meta.json",mt,old.meta)};
+ const RT="بدون-مجموعة",taken=new Set(["/"+RT,"/_unassigned","/.system"]),byId=new Map(state.folders.map(f=>[f.id,f])),gp={};
+ const uniq=(par,name,id)=>{let n=slug(name);if(taken.has(par+"/"+n))n+="~"+String(id).slice(-4);taken.add(par+"/"+n);return n};
+ const path=(f,d)=>{if(gp[f.id])return gp[f.id];const par=d<30&&f.parentId&&byId.has(f.parentId)?path(byId.get(f.parentId),d+1):"";return gp[f.id]=(par?par+"/":"")+uniq(par,f.name,f.id)};
+ const sorted=[...state.folders].sort((a,b)=>String(a.id)<String(b.id)?-1:1);sorted.forEach(f=>path(f,0));
+ for(const f of sorted){const p=gp[f.id],og=old.groups?.[f.id];idx.groups[f.id]={path:p,sha:await wt(p+"/group.json",JSON.stringify(f,null,2),og&&og.path===p?{sha:og.sha}:null),name:f.name,parentId:f.parentId||null}}
+ for(const it of state.items){
+  const par=gp[it.folderId]||RT,base=par+"/"+uniq(par,it.name,it.id),E={path:base,files:{},name:it.name,folderId:it.folderId||null},op=old.items?.[it.id],po=op&&op.path===base?op:null;
+  E.sha=await wt(base+"/item.json",JSON.stringify(it,null,2),po);
+  for(const[fid,k]of refs(it)){const f=files.get(fid);if(!f||E.files[fid])continue;used.add(fid);const p=base+"/"+k+"/"+fid+ext(f.name),pf=po?.files?.[fid];
+   let s;if(pf&&pf.size===f.size&&pf.upd===f.updatedAt&&!force)s=pf.sha;else{s=await shaB(f.blob);await put(h,p,f.blob);W.push({path:p,sha:s,size:f.size,blob:1})}
+   E.files[fid]={path:p,kind:k,size:f.size,sha:s,upd:f.updatedAt,name:f.name,mime:f.mime}}
+  await put(h,base+"/hashes.json",JSON.stringify(E.files,null,2));idx.items[it.id]=E}
+ for(const f of files.values())if(!used.has(f.id)){const p="_unassigned/"+f.id+ext(f.name),pf=old.unassigned?.[f.id];let s;if(pf&&pf.size===f.size&&pf.upd===f.updatedAt&&!force)s=pf.sha;else{s=await shaB(f.blob);await put(h,p,f.blob);W.push({path:p,sha:s,size:f.size,blob:1})}idx.unassigned[f.id]={path:p,size:f.size,sha:s,upd:f.updatedAt,name:f.name,mime:f.mime}}
+ idx.stats=stats(idx);const itxt=JSON.stringify(idx,null,2);await put(h,"index.json",itxt);W.push({path:"index.json",sha:await sha(itxt)});
+ for(const w of W){const f=await get(h,w.path);if(w.blob){if(f.size!==w.size||await shaB(f)!==w.sha)throw fail(w.path)}else if(await sha(await f.text())!==w.sha)throw fail(w.path)}
+ force=false;await J("lib_save_verified",{written:W.length,items:state.items.length,files:files.size});S.banner(null);return idx}
+function fail(p){force=true;J("lib_save_verify_fail",{path:p});S.banner("⛔ فشل التحقق بعد الحفظ: "+p);return new Error("فشل التحقق بعد الحفظ: "+p)}
+function stats(idx){const s={groups:Object.keys(idx.groups).length,items:Object.keys(idx.items).length,bytes:0,kinds:{},perGroup:{}};
+ for(const k in KINDS)s.kinds[k]={n:0,b:0};
+ for(const[id,E]of Object.entries(idx.items)){const g=E.folderId||"_root",pg=s.perGroup[g]||(s.perGroup[g]={name:idx.groups[g]?.name||"بدون مجموعة",path:idx.groups[g]?.path||"بدون-مجموعة",items:0,files:0,bytes:0});pg.items++;
+  for(const f of Object.values(E.files)){s.kinds[f.kind].n++;s.kinds[f.kind].b+=f.size;pg.files++;pg.bytes+=f.size;s.bytes+=f.size}}
+ s.unassigned=Object.keys(idx.unassigned).length;return s}
+async function libRead(h,deep){
+ const idx=await rj(h,"index.json");if(!idx)return null;const R={idx,folders:[],items:[],files:[],bad:[]},bad=(w,why)=>R.bad.push(w+": "+why);
+ const chk=async(p,s)=>{const t=await(await get(h,p)).text();if(await sha(t)!==s)throw new Error("بصمة مختلفة");return JSON.parse(t)};
+ try{R.meta=await chk("meta.json",idx.meta.sha)}catch(e){bad("meta.json",e.message)}
+ for(const[id,g]of Object.entries(idx.groups))try{R.folders.push(await chk(g.path+"/group.json",g.sha))}catch(e){bad("مجموعة "+g.name,e.message)}
+ for(const[id,E]of Object.entries(idx.items)){try{const it=await chk(E.path+"/item.json",E.sha),fs=[];
+   for(const[fid,f]of Object.entries(E.files)){const b=await get(h,f.path);if(b.size!==f.size)throw new Error("حجم مختلف "+f.path);if(deep&&await shaB(b)!==f.sha)throw new Error("ملف تالف "+f.path);fs.push({id:fid,blob:b,name:f.name,mime:f.mime||b.type||"",size:b.size,updatedAt:f.upd||Date.now()})}
+   R.items.push(it);R.files.push(...fs)}catch(e){bad("عنصر "+E.name,e.message)}}
+ for(const[id,f]of Object.entries(idx.unassigned||{}))try{const b=await get(h,f.path);if(b.size!==f.size)throw 0;R.files.push({id,blob:b,name:f.name,mime:f.mime||"",size:b.size,updatedAt:f.upd||Date.now()})}catch(e){bad("ملف غير مُسند",f.path)}
+ return R}
+
+async function apply(folders,items,files,meta){
+ await idbClear_real("folders");await idbClear_real("items");await idbClear_real("files");
+ for(const f of folders)await idbPut_real("folders",f);for(const f of files)await idbPut_real("files",f);for(const it of items)await idbPut_real("items",it);
+ if(meta?.settings){await idbPut_real("meta",{key:"settings",value:meta.settings});state.settings=Object.assign(state.settings,meta.settings)}
+ if(Array.isArray(meta?.categories))state.categories=meta.categories;if(Array.isArray(meta?.categorySchemas))state.categorySchemas=meta.categorySchemas;
+ state.folders=folders;state.items=items;force=true}
+/* ترحيل المجلدات القديمة: لا يمس الملفات القديمة أبدًا، ويبني النظام الجديد بجانبها */
+async function backupLegacy(h){const base=".system/legacy-backup/"+new Date().toISOString().replace(/[:.]/g,"-"),done=[];
+ const cp=async(src,dst)=>{const f=await get(h,src);await put(h,dst,f);const g=await get(h,dst);if(g.size!==f.size||await shaB(g)!==await shaB(f))throw new Error("نسخ احتياطي غير مطابق: "+src);done.push(src)};
+ for(const n of["state.json","project.json","asset-manifest.json","COMMIT"])try{await cp(n,base+"/"+n)}catch(e){if(/نسخ احتياطي/.test(e.message))throw e}
+ try{const dd=await dir(h,"data");for await(const[n,e]of dd.entries())if(e.kind==="file")await cp("data/"+n,base+"/data/"+n)}catch(e){if(/نسخ احتياطي/.test(e.message))throw e}
+ if(done.length)await J("legacy_backup",{base,done});return{base,done}}
+async function legacyRead(h){
+ const snap=await prevSnap(h);if(!snap)return null;
+ const refIds=new Set(snap.items.flatMap(it=>refs(it).map(x=>x[0])));
+ const rep={corrupt:[],unverified:0,missing:[],dupIds:0},files=[],present=new Set(),man=await readAssetManifest(h);
+ try{const A=await h.getDirectoryHandle("assets");for await(const[fn,fh]of A.entries()){if(fh.kind!=="file")continue;const fid=fileIdFromAssetName(fn,man)||guess(fn,refIds);
+  const b=await fh.getFile(),m=man.files?.[fn]||{};
+  if(m.size!=null&&m.size!==b.size){rep.corrupt.push(fn+" (حجم)");continue}
+  if(m.sha256){if(await shaB(b)!==m.sha256){rep.corrupt.push(fn+" (بصمة)");continue}}else rep.unverified++;
+  files.push({id:fid,blob:b,name:m.name||fn,mime:m.mime||b.type||"",size:b.size,updatedAt:m.updatedAt||Date.now()});present.add(fid)}}catch(e){}
+ const ids=new Set();for(const x of[...snap.folders,...snap.items]){if(ids.has(x.id))rep.dupIds++;ids.add(x.id)}
+ for(const it of snap.items){for(const[fid,k]of refs(it))if(!present.has(fid))rep.missing.push(it.name+": "+k+" "+fid);
+  it.imageIds=(it.imageIds||[]).filter(i=>present.has(i));if(it.mainImageId&&!present.has(it.mainImageId))it.mainImageId=it.imageIds[0]||null;
+  it.docs=(it.docs||[]).filter(d=>d?.fileId&&present.has(d.fileId));const nb=it.notebookData;if(nb?.images)nb.images=nb.images.filter(x=>present.has(x.id));
+  (nb?.faultTracking?.pages||[]).forEach(p=>{if(p.imageId&&!present.has(p.imageId))p.imageId=null;(p.hotspots||[]).forEach(hs=>{if(hs.content?.images)hs.content.images=hs.content.images.filter(x=>present.has(x.id))})})}
+ return{snap,files,rep}}
+async function migrate(h){
+ const r=await legacyRead(h);if(!r)throw new Error("لا توجد بيانات قابلة للقراءة في هذا المجلد");
+ const{snap,files,rep}=r;
+ if(!confirm("مجلد بإصدار قديم: "+snap.items.length+" عنصر، "+snap.folders.length+" مجموعة، "+files.length+" ملف."+(rep.corrupt.length?"\n⚠️ ملفات تالفة متجاهلة: "+rep.corrupt.length:"")+(rep.missing.length?"\n⚠️ مراجع لملفات مفقودة: "+rep.missing.length:"")+(rep.dupIds?"\n⚠️ معرّفات مكررة: "+rep.dupIds:"")+"\nملفاتك القديمة لن تُمس، وسيُبنى النظام الجديد بجانبها. متابعة؟"))throw new Error("STRICT_LOAD_CANCELLED");
+ const bk=await backupLegacy(h);
+ await apply(snap.folders,snap.items,files,{settings:snap.settings,categories:snap.categories,categorySchemas:snap.categorySchemas});
+ const idx=await libSave(h);
+ await put(h,".system/migration-"+Date.now()+".json",JSON.stringify({at:Date.now(),from:snap.schemaVersion||"legacy",report:rep,backup:bk,result:idx.stats},null,2));
+ await J("legacy_migrated",{items:snap.items.length,files:files.length,corrupt:rep.corrupt.length,missing:rep.missing.length});
+ alert("✅ تم الترحيل والتحقق: "+snap.items.length+" عنصر، "+files.length+" ملف."+(rep.corrupt.length||rep.missing.length?"\n⚠️ تالف: "+rep.corrupt.length+" | مراجع مفقودة: "+rep.missing.length+"\nالتفاصيل في .system/migration-*.json":"")+"\nالملفات القديمة كما هي، ونسخة منها في .system/legacy-backup.")}
+const prevSync=syncFolderStorageNow,prevRestore=restoreAllFromFolder,prevSnap=readFolderSnapshot;
+syncFolderStorageNow=async function(){if(busy||!linkedDirHandle)return;busy=true;folderSyncBusy=true;
+ try{if(!(await rj(linkedDirHandle,"index.json")))await backupLegacy(linkedDirHandle);
+  await libSave(linkedDirHandle);try{await idbPut_real("meta",{key:"lastFolderSyncAt",value:Date.now()})}catch(e){}}
+ catch(e){folderSyncError=e;throw e}finally{busy=false;folderSyncBusy=false}};
+readFolderSnapshot=async function(h){const r=await libRead(h,false);if(!r)return prevSnap(h);
+ return{schemaVersion:5,savedAt:r.idx.savedAt,folders:r.folders,items:r.items,settings:r.meta?.settings,categories:r.meta?.categories,categorySchemas:r.meta?.categorySchemas}};
+restoreAllFromFolder=async function(h,snap){const r=await libRead(h,true);if(!r)return migrate(h);
+ await J("lib_load_verify",{ok:!r.bad.length,bad:r.bad.slice(0,20),items:r.items.length});
+ if(!r.meta||!r.items.length&&Object.keys(r.idx.items).length){S.banner("⛔ رُفض التحميل — افتح 📊");alert("رُفض التحميل ولم يتغير شيء:\n"+r.bad.slice(0,8).join("\n"));throw new Error("STRICT_LOAD_REFUSED")}
+ if(r.bad.length&&!confirm("سيُحمَّل "+r.items.length+" عنصرًا سليمًا ويُعزل "+r.bad.length+" تالف:\n"+r.bad.slice(0,6).join("\n")+"\nمتابعة؟"))throw new Error("STRICT_LOAD_CANCELLED");
+ await apply(r.folders,r.items,r.files,r.meta);
+ await J("lib_load_ok",{items:r.items.length,files:r.files.length,quarantined:r.bad.length})};
+/* صفحة الإحصائيات */
+const NM={groups:"📁 المجموعات",items:"🔧 العناصر"};
+function mb(b){return b>1e6?(b/1e6).toFixed(1)+" MB":(b/1e3).toFixed(0)+" KB"}
+async function page(){
+ const h=linkedDirHandle,idx=h?await rj(h,"index.json"):null,st=idx?.stats;const o=document.createElement("div");o.style.cssText="position:fixed;inset:0;z-index:99998;background:#000d;overflow:auto;padding:10px";const b=document.createElement("div");b.dir="rtl";b.style.cssText="background:#1c1c1c;color:#eee;padding:12px;border-radius:10px;max-width:640px;margin:auto;font:14px sans-serif";o.appendChild(b);
+ const add=(t,tag)=>{const e=document.createElement(tag||"div");e.textContent=t;b.appendChild(e);return e};
+ add("📊 كل شيء بالأعداد","h2");if(!st){add("لا يوجد مجلد مرتبط أو لم يُحفظ بعد بالنظام الجديد.")}
+ else{const rows=[[NM.groups,st.groups],[NM.items,st.items],...Object.entries(st.kinds).map(([k,v])=>[KINDS[k],v.n+" ("+mb(v.b)+")"]),["📦 ملفات غير مُسندة",st.unassigned],["💾 الحجم الكلي",mb(st.bytes)]];
+  const g=add("","div");g.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px";rows.forEach(([a,c])=>{const d=document.createElement("div");d.style.cssText="background:#2a2a2a;padding:8px;border-radius:8px";d.innerHTML="<div style='opacity:.7;font-size:12px'></div><b style='font-size:18px'></b>";d.children[0].textContent=a;d.children[1].textContent=c;g.appendChild(d)});
+  add("حسب المجموعة (الموقع داخل المجلد)","h3");for(const v of Object.values(st.perGroup))add(v.name+" — "+v.items+" عنصر، "+v.files+" ملف، "+mb(v.bytes)+"\n"+v.path).style.cssText="white-space:pre-wrap;font-size:12px;border-bottom:1px solid #333;padding:4px 0";
+  add("آخر حفظ موثّق: "+new Date(idx.savedAt).toLocaleString("ar"))}
+ const out=add("","pre");out.style.cssText="white-space:pre-wrap;font-size:12px";
+ const bt=(t,f)=>{const x=add(t,"button");x.style.cssText="margin:4px;padding:8px";x.onclick=async()=>{try{out.textContent="...";out.textContent=await f()}catch(e){out.textContent="خطأ: "+e.message}}};
+ bt("فحص كامل",async()=>{const r=h&&await libRead(h,true);if(!r)return"لا يوجد.";await J("lib_manual_verify",{bad:r.bad.slice(0,20)});return r.bad.length?"⛔\n"+r.bad.join("\n"):"✅ كل الملفات سليمة"});
+ bt("حفظ كصورة PNG",async()=>{if(!st)return"لا بيانات.";const L=[["📊 إحصائيات المكتبة",""],["المجموعات",st.groups],["العناصر",st.items],...Object.entries(st.kinds).map(([k,v])=>[KINDS[k],v.n]),["الحجم",mb(st.bytes)],...Object.values(st.perGroup).map(v=>[v.name,v.items+" عنصر / "+v.files+" ملف"])],c=document.createElement("canvas");c.width=700;c.height=60+L.length*34;const x=c.getContext("2d");x.fillStyle="#1c1c1c";x.fillRect(0,0,700,c.height);x.fillStyle="#eee";x.font="20px sans-serif";x.direction="rtl";x.textAlign="right";L.forEach((r,i)=>{x.fillText(r[0],680,40+i*34);x.textAlign="left";x.fillText(String(r[1]),20,40+i*34);x.textAlign="right"});const a=document.createElement("a");a.href=c.toDataURL("image/png");a.download="library-stats.png";a.click();return"تم"});
+ bt("إغلاق",async()=>{o.remove();return""});document.body.appendChild(o)}
+
+const stem=n=>n.split("/").pop().replace(/\.[A-Za-z0-9]{1,5}$/,"");
+function guess(fn,ids){const st=stem(fn);if(ids.has(st))return st;for(const i of ids)if(st.startsWith(i+"_"))return i;return st}
+const MIME={jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",gif:"image/gif",webp:"image/webp",pdf:"application/pdf"};
+const nid=()=>"imp_"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+/* ===== استيراد ذكي: ZIP/JSON/مجلد بأي هيكل، مع تقرير تشخيص إن لم يُتعرف ===== */
+async function collect(list){const out=[];for(const f of list){if(/\.zip$/i.test(f.name)){const z=await JSZip.loadAsync(f);for(const[p,e]of Object.entries(z.files))if(!e.dir)out.push({path:p,get:()=>e.async("blob")})}else out.push({path:f.webkitRelativePath||f.name,get:async()=>f})}return out}
+async function sniff(E){
+ const r={folders:null,items:null,settings:null,cats:null,schemas:null,man:{},keys:[],notes:[]};
+ for(const e of E){if(!/\.json$/i.test(e.path))continue;let v;try{v=JSON.parse(await(await e.get()).text())}catch(_){r.notes.push("JSON تالف: "+e.path);continue}
+  const b=e.path.split("/").pop().toLowerCase();r.keys.push(e.path+" → "+(Array.isArray(v)?"مصفوفة["+v.length+"]":Object.keys(v||{}).slice(0,8).join(",")));
+  if(b==="asset-manifest.json")r.man=v;
+  else if(v&&Array.isArray(v.folders)&&Array.isArray(v.items)){r.folders=r.folders||v.folders;r.items=r.items||v.items;r.settings=r.settings||v.settings;r.cats=r.cats||v.categories;r.schemas=r.schemas||v.categorySchemas}
+  else if(b==="settings.json"&&v&&!Array.isArray(v))r.settings=r.settings||v;
+  else if(b==="categories.json"&&v){r.cats=r.cats||v.categories;r.schemas=r.schemas||v.categorySchemas}
+  else if(Array.isArray(v)&&v.length&&v[0]&&typeof v[0]==="object"&&v[0].id&&v[0].name){
+   if(b==="folders.json"||v[0].parentId!==undefined||v[0].fieldsTemplate)r.folders=r.folders||v;
+   else if(b==="items.json"||v[0].folderId!==undefined||v[0].imageIds)r.items=r.items||v}}
+ return r}
+async function smartImport(list){
+ const E=await collect(list);
+ if(E.some(e=>/(^|\/)project\/items_index\.json$/.test(e.path))&&list.length===1&&/\.zip$/i.test(list[0].name)){await importProject(list[0],confirm("موافق = دمج، إلغاء = استبدال")?"merge":"replace");return}
+ const r=await sniff(E);
+ if(!r.items||!r.folders&&!r.items.length){return"⛔ لم أتعرف على البيانات.\nملفات: "+E.length+"\n"+E.slice(0,40).map(e=>e.path).join("\n")+"\n\nمحتوى JSON:\n"+r.keys.slice(0,30).join("\n")+"\n"+r.notes.join("\n")+"\n\n(انسخ هذا التقرير وأرسله لي لأضيف صيغتك)"}
+ r.folders=r.folders||[];const items=r.items,refIds=new Set(items.flatMap(it=>refs(it).map(x=>x[0]))),files=[],have=new Set(),rep={inline:0,unassigned:0};
+ for(const it of items){if(!Array.isArray(it.imageIds))continue;const ids=[];for(const x of it.imageIds){if(typeof x==="string"&&x.startsWith("data:")){const b=await(await fetch(x)).blob(),id=nid();files.push({id,blob:b,name:id,mime:b.type,size:b.size,updatedAt:Date.now()});have.add(id);ids.push(id);rep.inline++}else ids.push(x)}it.imageIds=ids;if(!it.mainImageId&&ids.length)it.mainImageId=ids[0]}
+ for(const e of E){if(/\.json$/i.test(e.path))continue;const b=await e.get(),bn=e.path.split("/").pop(),m=r.man?.files?.[bn],fid=m?.id||guess(bn,refIds);if(have.has(fid))continue;
+  if(!refIds.has(fid))rep.unassigned++;have.add(fid);files.push({id:fid,blob:b,name:m?.name||bn,mime:m?.mime||MIME[(bn.split(".").pop()||"").toLowerCase()]||b.type||"application/octet-stream",size:b.size,updatedAt:m?.updatedAt||Date.now()})}
+ const miss=items.flatMap(it=>refs(it).filter(x=>!have.has(x[0])).map(x=>it.name+": "+x[1]));
+ if(!confirm("تم التعرّف: "+items.length+" عنصر، "+r.folders.length+" مجموعة، "+files.length+" ملف"+(rep.inline?" (منها "+rep.inline+" صورة مضمّنة)":"")+(rep.unassigned?"\n"+rep.unassigned+" ملف غير مرتبط بعنصر (سيُحفظ في _unassigned)":"")+(miss.length?"\n⚠️ مراجع لملفات مفقودة: "+miss.length:"")+"\n\nموافق = دمج مع الحالي (لا يُستبدل شيء موجود)\nإلغاء = تراجع"))return"أُلغي.";
+ const F=new Set(state.folders.map(f=>f.id)),I=new Set(state.items.map(i=>i.id)),cur=new Set((await idbGetAll_real("files")).map(f=>f.id));let nf=0,ni=0,nb=0;
+ for(const f of r.folders)if(!F.has(f.id)){await idbPut_real("folders",f);state.folders.push(f);nf++}
+ for(const f of files)if(!cur.has(f.id)){await idbPut_real("files",f);nb++}
+ for(const it of items)if(!I.has(it.id)){await idbPut_real("items",it);state.items.push(it);ni++}
+ if(Array.isArray(r.cats))for(const c of r.cats)if(!state.categories.includes(c))state.categories.push(c);
+ await J("smart_import",{items:ni,folders:nf,files:nb,missing:miss.length});
+ try{renderSidebarTree();navigateTo({type:"home"})}catch(e){}
+ try{if(linkedDirHandle)await syncFolderStorageNow()}catch(e){return"✅ استُورد "+ni+" عنصر لكن فشلت المزامنة: "+e.message}
+ return"✅ أُضيف "+ni+" عنصر و"+nf+" مجموعة و"+nb+" ملف"+(ni<items.length?"\n(تخطيت "+(items.length-ni)+" عنصرًا موجودًا بنفس المعرّف)":"")+(miss.length?"\n⚠️ مفقود:\n"+miss.slice(0,15).join("\n"):"")}
+function importPanel(){const o=document.createElement("div");o.style.cssText="position:fixed;inset:0;z-index:99998;background:#000d;overflow:auto;padding:10px";const b=document.createElement("div");b.dir="rtl";b.style.cssText="background:#1c1c1c;color:#eee;padding:12px;border-radius:10px;max-width:640px;margin:auto;font:14px sans-serif";o.appendChild(b);
+ const h=document.createElement("h2");h.textContent="📥 استيراد ذكي (ZIP / JSON / مجلد قديم)";b.appendChild(h);
+ const out=document.createElement("pre");out.style.cssText="white-space:pre-wrap;font-size:12px";
+ const inp=(t,dir)=>{const l=document.createElement("label");l.textContent=t;l.style.cssText="display:block;margin:8px 0;padding:10px;background:#2a2a2a;border-radius:8px";const i=document.createElement("input");i.type="file";i.multiple=true;if(dir)i.webkitdirectory=true;i.style.display="block";i.onchange=async()=>{const L=[...i.files];i.value="";if(!L.length)return;out.textContent="...";try{out.textContent=await smartImport(L)}catch(e){out.textContent="خطأ: "+e.message}};l.appendChild(i);b.appendChild(l)};
+ inp("اختر ملفات (ZIP أو JSON أو صور)");inp("أو اختر مجلدًا كاملًا",true);
+ const c=document.createElement("button");c.textContent="إغلاق";c.style.padding="8px";c.onclick=()=>o.remove();b.appendChild(c);b.appendChild(out);document.body.appendChild(o)}
+const ib=document.createElement("button");ib.className="nav-item";ib.innerHTML='<span class="ico">📥</span><span class="lbl">استيراد ذكي</span>';
+ib.onclick=()=>{document.getElementById("sidebar").classList.remove("open");document.getElementById("sidebarOverlay").classList.add("hidden");importPanel()};
+const nb=document.createElement("button");nb.className="nav-item";nb.innerHTML='<span class="ico">📊</span><span class="lbl">إحصائيات المكتبة</span>';
+nb.onclick=()=>{document.getElementById("sidebar").classList.remove("open");document.getElementById("sidebarOverlay").classList.add("hidden");page()};
+const sb=document.querySelector('.nav-item[data-nav="settings"]');sb?sb.after(nb):document.querySelector(".navlist").appendChild(nb);nb.after(ib);
+})();
+</script>
 </body>
 </html>
