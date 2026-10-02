@@ -6383,7 +6383,7 @@ async function boot(){
 
   // فحص خفيف للتأكد من أن المجلد ما زال متاحًا. المزامنة الأساسية تتم بعد كل عملية
   // حفظ/تعديل/حذف، وليس بالاعتماد على مؤقت فقط.
-  setInterval(()=>{ if(linkedDirHandle && !folderSyncBusy) requestFolderSync(); }, 5000);
+  setInterval(()=>{ if(linkedDirHandle && !folderSyncBusy){ if(window.__FS) window.__FS.tick(); else requestFolderSync(); } }, 15000);
 }
 
 async function saveSettings(){
@@ -11728,6 +11728,334 @@ ib.onclick=()=>{document.getElementById("sidebar").classList.remove("open");docu
 const nb=document.createElement("button");nb.className="nav-item";nb.innerHTML='<span class="ico">📊</span><span class="lbl">إحصائيات المكتبة</span>';
 nb.onclick=()=>{document.getElementById("sidebar").classList.remove("open");document.getElementById("sidebarOverlay").classList.add("hidden");page()};
 const sb=document.querySelector('.nav-item[data-nav="settings"]');sb?sb.after(nb):document.querySelector(".navlist").appendChild(nb);nb.after(ib);
+})();
+</script>
+<script>
+/* ===== FastSync v3: مزامنة لحظية تزايدية =====
+   نفس بنية المجلد بالظبط (index.json + مجلد لكل مجموعة/عنصر + hashes.json) ونفس صيغة التحميل،
+   لكن بدل ما كل مزامنة تفحص وتكتب كل العناصر، بقت:
+   1) تكتب بس اللي اتغيّر فعلًا (عنصر/صورة/مجموعة) — العنصر الجديد بيتكتب في نفس اللحظة تقريبًا.
+   2) أي طلب مزامنة وقت ما مزامنة شغالة بيتحط في الدور ومابيتجاهلش (كان بيضيع قبل كده).
+   3) requestFolderSync() بقت ما بتستناش المزامنة تخلص (كانت بتجمّد الواجهة: حذف/تعديل).
+   4) مفيش إعادة كتابة كاملة بعد التحميل، ومفيش فحص كامل كل 5 ثواني.
+   5) التحقق العميق (SHA) بقى في الخلفية بدل ما يعطّل الحفظ. */
+(function(){"use strict";
+const S=window.__S||{},J=S.J||function(){};
+const enc=new TextEncoder();
+const hex=b=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+const sha=S.shaText||(async t=>hex(await crypto.subtle.digest("SHA-256",enc.encode(t))));
+const shaB=S.shaBlob||(async b=>hex(await crypto.subtle.digest("SHA-256",await b.arrayBuffer())));
+const slug=s=>String(s||"بدون-اسم").replace(/[\\/:*?"<>|\s.]+/g,"-").slice(0,40);
+const ext=n=>(/\.[A-Za-z0-9]{1,5}$/.exec(n||"")||[""])[0];
+const KINDS={images:1,docs:1,notebook:1,"fault-backgrounds":1,"fault-notes":1};
+const RT="بدون-مجموعة";
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const DEBOUNCE=150, POOL=4, SCAN_EVERY=5*60*1000;
+
+const E={h:null,idx:null,dirty:new Set(),dirtyFiles:new Set(),deleted:new Set(),force:new Set(),
+  scan:true,allowEmpty:false,running:null,again:false,timer:null,retryT:null,retry:0,paused:0,
+  dirs:new Map(),vq:[],vt:null,pend:false,userAct:false,lastErr:null,lastScan:Date.now()};
+const prevSync=syncFolderStorageNow; // النسخة القديمة: بتُستخدم مرة واحدة بس لو المجلد لسه مفيهوش index.json
+
+function bind(){
+  if(!linkedDirHandle){E.h=null;return false}
+  if(linkedDirHandle!==E.h){E.h=linkedDirHandle;E.idx=null;E.dirs.clear();E.scan=true}
+  return true}
+
+/* ---------- عمليات الملفات (مع كاش للمجلدات عشان منعيدش المشي على الشجرة كل مرة) ---------- */
+async function dirOf(path,mk){
+  if(!path)return E.h;
+  let d=E.dirs.get(path);if(d)return d;
+  const i=path.lastIndexOf("/"),par=await dirOf(i<0?"":path.slice(0,i),mk);
+  d=await par.getDirectoryHandle(i<0?path:path.slice(i+1),{create:!!mk});
+  E.dirs.set(path,d);return d}
+async function put(path,data){
+  for(let a=0;;a++){
+    try{
+      const i=path.lastIndexOf("/"),d=await dirOf(i<0?"":path.slice(0,i),true),
+        f=await d.getFileHandle(path.slice(i+1),{create:true}),w=await f.createWritable();
+      try{await w.write(data);await w.close()}catch(e){try{await w.abort()}catch(_){}throw e}
+      return}
+    catch(e){if(a>=1)throw e;E.dirs.clear()}}}
+async function getf(path){
+  const i=path.lastIndexOf("/"),d=await dirOf(i<0?"":path.slice(0,i),false);
+  return (await d.getFileHandle(path.slice(i+1))).getFile()}
+const rj=async p=>{try{return JSON.parse(await(await getf(p)).text())}catch(e){return null}};
+const ulen=t=>enc.encode(t).length;
+async function wt(path,text,prev,W,id){ // يكتب JSON لو بصمته اتغيّرت، ويرجّع البصمة
+  const s=await sha(text);
+  if(prev!==s){
+    await put(path,text);
+    const f=await getf(path);if(f.size!==ulen(text))throw new Error("حجم غير مطابق: "+path);
+    W.push({path,sha:s,id})}
+  return s}
+async function loadIdx(){
+  const x=await rj("index.json");
+  if(!x||x.schema!==2||!x.items||!x.groups)return null;
+  x.unassigned=x.unassigned||{};return x}
+const allKeys=st=>new Promise((ok,no)=>{const q=tx(st).objectStore(st).getAllKeys();q.onsuccess=()=>ok(q.result||[]);q.onerror=()=>no(q.error)});
+async function pool(arr,n,fn){
+  let i=0;const errs=[];
+  await Promise.all(Array.from({length:Math.min(n,arr.length)},async()=>{
+    while(i<arr.length){const x=arr[i++];try{await fn(x)}catch(e){errs.push([x,e])}}}));
+  return errs}
+
+function refs(it){const R=[],a=(i,k)=>i&&R.push([i,k]);
+  (it.imageIds||[]).forEach(i=>a(i,"images"));(it.docs||[]).forEach(d=>d&&a(d.fileId,"docs"));
+  (it.notebookData?.images||[]).forEach(x=>a(x.id,"notebook"));
+  (it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});
+  return R}
+
+function stats(idx){
+  const s={groups:Object.keys(idx.groups).length,items:Object.keys(idx.items).length,bytes:0,kinds:{},perGroup:{}};
+  for(const k in KINDS)s.kinds[k]={n:0,b:0};
+  for(const[id,e]of Object.entries(idx.items)){
+    const g=e.folderId||"_root",pg=s.perGroup[g]||(s.perGroup[g]={name:idx.groups[g]?.name||"بدون مجموعة",path:idx.groups[g]?.path||RT,items:0,files:0,bytes:0});
+    pg.items++;
+    for(const f of Object.values(e.files)){const kk=s.kinds[f.kind]||(s.kinds[f.kind]={n:0,b:0});kk.n++;kk.b+=f.size;pg.files++;pg.bytes+=f.size;s.bytes+=f.size}}
+  s.unassigned=Object.keys(idx.unassigned).length;return s}
+
+/* ---------- مسارات المجموعات/العناصر: ثابتة (مابتتغيّرش غير لو الاسم/المجموعة اتغيّرت) ---------- */
+function makePaths(idx){
+  const taken=new Set(["/"+RT,"/_unassigned","/.system"]),gp={},old=idx.groups||{},
+    byId=new Map(state.folders.map(f=>[f.id,f]));
+  const claim=(par,name,id,oldp)=>{
+    const n=slug(name),mk=x=>par?par+"/"+x:x,a=mk(n),b=mk(n+"~"+String(id).slice(-4));
+    let p=(oldp&&(oldp===a||oldp===b)&&!taken.has("/"+oldp))?oldp:(!taken.has("/"+a)?a:b);
+    for(let k=2;taken.has("/"+p);k++)p=b+"-"+k;
+    taken.add("/"+p);return p};
+  const path=(f,d)=>{if(gp[f.id])return gp[f.id];
+    const par=d<30&&f.parentId&&byId.has(f.parentId)?path(byId.get(f.parentId),d+1):"";
+    return gp[f.id]=claim(par,f.name,f.id,old[f.id]&&old[f.id].path)};
+  [...state.folders].sort((a,b)=>String(a.id)<String(b.id)?-1:1).forEach(f=>path(f,0));
+  for(const e of Object.values(idx.items))taken.add("/"+e.path); // مسارات العناصر الموجودة محجوزة
+  const itemPath=it=>{
+    const par=gp[it.folderId]||RT,oe=idx.items[it.id];
+    if(oe){const a=par+"/"+slug(it.name),b=a+"~"+String(it.id).slice(-4);
+      if(oe.path===a||oe.path.startsWith(b))return oe.path}
+    return claim(par,it.name,it.id,null)};
+  return{gp,itemPath}}
+
+/* ---------- مزامنة عنصر واحد: item.json + ملفاته (الجديد/المتغيّر بس) ---------- */
+async function syncItem(it,base,idx,W,force,ctx){
+  const op=idx.items[it.id],po=op&&op.path===base?op:null,
+    Eo={path:base,files:{},name:it.name,folderId:it.folderId||null};
+  Eo.sha=await wt(base+"/item.json",JSON.stringify(it,null,2),po&&!force?po.sha:null,W,it.id);
+  let fch=!po;
+  for(const[fid,k]of refs(it)){
+    if(Eo.files[fid])continue;
+    const rec=await idbGet_real("files",fid);if(!rec||!rec.blob)continue;
+    const p=base+"/"+k+"/"+fid+ext(rec.name),pf=po&&po.files&&po.files[fid];
+    let s;
+    if(pf&&!force&&pf.path===p&&pf.size===rec.size&&pf.upd===rec.updatedAt)s=pf.sha;
+    else{
+      s=(await Promise.all([shaB(rec.blob),put(p,rec.blob)]))[0]; // الحساب والكتابة بالتوازي
+      const f=await getf(p);if(f.size!==rec.blob.size)throw new Error("حجم غير مطابق: "+p);
+      W.push({path:p,sha:s,size:rec.blob.size,blob:1,id:it.id});fch=true}
+    Eo.files[fid]={path:p,kind:k,size:rec.size,sha:s,upd:rec.updatedAt,name:rec.name,mime:rec.mime}}
+  if(!fch&&po&&JSON.stringify(po.files)!==JSON.stringify(Eo.files))fch=true;
+  if(fch){await put(base+"/hashes.json",JSON.stringify(Eo.files,null,2));ctx.c=true}
+  idx.items[it.id]=Eo}
+
+/* ---------- المرور الواحد ---------- */
+async function pass(){
+  if(!bind()||STORAGE_MODE==="memory")return;
+  if(!(await ensureFolderPermission(E.h,false)))throw new Error("folder-permission-required");
+  if(!E.idx){
+    E.idx=await loadIdx();
+    if(!E.idx){
+      let legacy=false;for(const n of["state.json","project.json"])try{await getf(n);legacy=true}catch(e){}
+      if(legacy){ // مجلد بإصدار قديم: الكود القديم بيعمل نسخة احتياطية للملفات القديمة (مرة واحدة)
+        await prevSync();E.idx=await loadIdx();
+        if(E.idx){E.scan=false;await stamp(E.idx.savedAt)}
+        return}
+      E.idx={schema:2,savedAt:0,groups:{},items:{},unassigned:{},meta:null};E.scan=true}} // مجلد فاضي: نبدأ بفهرس فاضي ونكتب بالنظام الجديد
+  const idx=E.idx,items=state.items,W=[],t0=Date.now(),ctx={c:false},
+    stateIds=new Set(items.map(i=>i.id));
+  if(!items.length&&!state.folders.length&&Object.keys(idx.items).length&&!E.allowEmpty)return; // حماية من الحالة الفاضية المؤقتة
+  const dItems=new Set(E.dirty),dFiles=new Set(E.dirtyFiles),doScan=E.scan,forced=new Set(E.force);
+  E.dirty.clear();E.dirtyFiles.clear();E.scan=false;E.force.clear();
+  if(doScan)E.lastScan=Date.now();
+  let changed=false;const fails=[],extra=new Set();
+  try{
+    /* 1) الإعدادات والمجموعات (صغيرة، بتتقارن بالبصمة) */
+    const mp=idx.meta&&idx.meta.sha,
+      ms=await wt("meta.json",JSON.stringify({settings:state.settings,categories:state.categories,categorySchemas:state.categorySchemas},null,2),mp,W);
+    if(ms!==mp)changed=true;idx.meta={path:"meta.json",sha:ms};
+    const{gp,itemPath}=makePaths(idx);
+    for(const f of state.folders){
+      const p=gp[f.id],og=idx.groups[f.id],
+        s=await wt(p+"/group.json",JSON.stringify(f,null,2),og&&og.path===p?og.sha:null,W);
+      if(!og||og.path!==p||og.sha!==s||og.name!==f.name||og.parentId!==(f.parentId||null))changed=true;
+      idx.groups[f.id]={path:p,sha:s,name:f.name,parentId:f.parentId||null}}
+    if(state.folders.length||E.allowEmpty)for(const id of Object.keys(idx.groups))if(!(id in gp)){delete idx.groups[id];changed=true}
+
+    /* 2) تحديد العناصر المطلوب مزامنتها: المتغيّرة/الجديدة/اللي مسارها اتغيّر (+ الكل لو فحص شامل) */
+    const paths=new Map(),work=[];
+    for(const it of items){
+      const oe=idx.items[it.id],p=itemPath(it);paths.set(it.id,p);
+      let need=doScan||!oe||oe.path!==p||dItems.has(it.id)||forced.has(it.id);
+      if(!need&&dFiles.size)for(const[fid]of refs(it))if(dFiles.has(fid)){need=true;break}
+      if(need)work.push(it)}
+    for(const id of dItems){ // عنصر اتحفظ في قاعدة البيانات ولسه ماتضافش لقائمة البرنامج
+      if(stateIds.has(id)||E.deleted.has(id))continue;
+      try{const it=await idbGet_real("items",id);
+        if(it){paths.set(id,itemPath(it));work.push(it);extra.add(id)}}catch(e){}}
+
+    /* 3) كتابة العناصر بالتوازي (أولوية: المتغيّر أولًا بحكم إن الباقي مش بيكتب حاجة) */
+    const errs=await pool(work,POOL,it=>syncItem(it,paths.get(it.id),idx,W,forced.has(it.id),ctx));
+    for(const[it,e]of errs){E.dirty.add(it.id);if(forced.has(it.id))E.force.add(it.id);fails.push((it.name||it.id)+": "+e.message);console.warn("FastSync item failed:",it.name,e)}
+    if(ctx.c||W.length)changed=true;
+
+    /* 4) العناصر المحذوفة */
+    for(const id of Object.keys(idx.items)){
+      if(stateIds.has(id)||extra.has(id))continue;
+      if(E.deleted.has(id)||E.allowEmpty||(doScan&&items.length)){delete idx.items[id];E.deleted.delete(id);changed=true}}
+
+    /* 5) ملفات غير مرتبطة بأي عنصر (في الفحص الشامل بس) */
+    if(doScan){
+      const used=new Set();for(const it of items)for(const[fid]of refs(it))used.add(fid);
+      const keep={};
+      for(const fid of await allKeys("files")){
+        if(used.has(fid))continue;
+        const rec=await idbGet_real("files",fid);if(!rec||!rec.blob)continue;
+        const p="_unassigned/"+fid+ext(rec.name),pf=idx.unassigned[fid];let s;
+        if(pf&&pf.size===rec.size&&pf.upd===rec.updatedAt&&pf.path===p)s=pf.sha;
+        else{s=(await Promise.all([shaB(rec.blob),put(p,rec.blob)]))[0];W.push({path:p,sha:s,size:rec.blob.size,blob:1,id:null});changed=true}
+        keep[fid]={path:p,size:rec.size,sha:s,upd:rec.updatedAt,name:rec.name,mime:rec.mime}}
+      if(Object.keys(keep).sort().join("|")!==Object.keys(idx.unassigned).sort().join("|"))changed=true;
+      idx.unassigned=keep}
+
+    /* 6) الفهرس — بيتكتب آخر حاجة وبس لو فيه تغيير فعلي */
+    if(changed){
+      idx.savedAt=Date.now();idx.stats=stats(idx);
+      const t=JSON.stringify(idx,null,2);await put("index.json",t);
+      const f=await getf("index.json");if(f.size!==ulen(t))throw new Error("حجم غير مطابق: index.json");
+      try{
+        await idbPut_real("meta",{key:"folderIdxAt",value:idx.savedAt});
+        await idbPut_real("meta",{key:"lastFolderSyncAt",value:Date.now()});
+        await idbPut_real("meta",{key:"lastFolderRevision",value:idx.savedAt})}catch(e){}
+      J("fast_sync",{written:W.length,items:work.length,ms:Date.now()-t0})}
+    if(!fails.length)E.allowEmpty=false;
+    if(!E.dirty.size&&!E.dirtyFiles.size&&!E.scan&&!fails.length&&E.pend){E.pend=false;try{await idbDelete_real("meta","folderSyncPending")}catch(e){}}
+  }catch(e){
+    dItems.forEach(x=>E.dirty.add(x));dFiles.forEach(x=>E.dirtyFiles.add(x));forced.forEach(x=>E.force.add(x));if(doScan)E.scan=true;
+    throw e}
+  queueVerify(W);
+  if(fails.length)throw new Error("فشل مزامنة "+fails.length+" عنصر: "+fails[0])}
+
+async function stamp(v){
+  try{await idbPut_real("meta",{key:"folderIdxAt",value:v});await idbDelete_real("meta","folderSyncPending")}catch(e){}
+  E.pend=false}
+
+/* ---------- التحقق العميق في الخلفية (بصمة SHA) بدون ما يعطّل الحفظ ---------- */
+function queueVerify(W){
+  const w=W.filter(x=>x.id&&(x.blob||x.path.endsWith("/item.json")));
+  if(!w.length)return;E.vq.push(...w);clearTimeout(E.vt);E.vt=setTimeout(drain,2500)}
+function superseded(w){
+  const e=E.idx&&E.idx.items[w.id];if(!e)return true;
+  if(w.blob){const fe=Object.values(e.files).find(x=>x.path===w.path);return !fe||fe.sha!==w.sha}
+  return e.path+"/item.json"!==w.path||e.sha!==w.sha}
+async function drain(){
+  if(E.running||E.dirty.size||E.dirtyFiles.size||E.paused){E.vt=setTimeout(drain,2500);return}
+  const w=E.vq.shift();if(!w)return;
+  try{
+    if(!superseded(w)){
+      const f=await getf(w.path);
+      const ok=w.blob?(f.size===w.size&&await shaB(f)===w.sha):(await sha(await f.text())===w.sha);
+      if(!ok)throw new Error("بصمة مختلفة")}}
+  catch(e){
+    J("fast_verify_fail",{path:w.path,err:String(e&&e.message||e)});
+    try{S.banner&&S.banner("⛔ فشل التحقق بعد الحفظ: "+w.path)}catch(_){}
+    E.force.add(w.id);E.dirty.add(w.id);schedule(0)}
+  E.vt=setTimeout(drain,E.vq.length?30:0)}
+
+/* ---------- الجدولة (دور واحد، مفيش طلب بيضيع) ---------- */
+const pending=()=>E.dirty.size||E.dirtyFiles.size||E.scan||E.force.size;
+function schedule(ms){if(!bind()||STORAGE_MODE==="memory")return;clearTimeout(E.timer);E.timer=setTimeout(()=>{run()},ms==null?DEBOUNCE:ms)}
+function backoff(){E.retry++;clearTimeout(E.retryT);E.retryT=setTimeout(()=>{E.retryT=null;run()},Math.min(30000,2000*E.retry))}
+function run(){
+  if(E.running){E.again=true;return E.running}
+  E.running=(async()=>{
+    try{
+      do{
+        E.again=false;
+        while(E.paused)await sleep(100);
+        folderSyncBusy=true;
+        try{await pass();E.retry=0;folderSyncError=null;E.lastErr=null}
+        catch(e){
+          folderSyncError=e;E.lastErr=e;console.warn("FastSync:",e);
+          if(e&&e.message==="folder-permission-required"){try{folderPermissionNeedsActivation=true}catch(_){}}
+          else backoff();
+          break}
+        finally{folderSyncBusy=false}
+      }while(E.again||(pending()&&!E.retryT))
+    }finally{E.running=null}})();
+  return E.running}
+
+/* ---------- استبدال دوال المزامنة القديمة ---------- */
+syncFolderStorageNow=async function(){ // مزامنة صريحة (ربط/دمج/استيراد): فحص شامل وبننتظر لحد ما تخلص
+  if(!bind()||STORAGE_MODE==="memory")return;
+  E.scan=true;E.lastErr=null;
+  for(let g=0;g<5;g++){await run();if(E.lastErr||!pending())break}
+  if(E.lastErr)throw E.lastErr};
+requestFolderSync=function(){ // بتجدول وترجع فورًا — الواجهة مابتستناش المزامنة
+  if(linkedDirHandle&&STORAGE_MODE!=="memory")schedule();
+  return Promise.resolve()};
+
+/* ---------- تتبّع التغييرات من طبقة التخزين ---------- */
+function setPending(){
+  if(E.pend)return;E.pend=true;
+  try{idbPut_real("meta",{key:"folderSyncPending",value:Date.now()}).catch(()=>{})}catch(e){}}
+const oPut=idbPut,oDel=idbDelete,oClr=idbClear;
+idbPut=async function(s,v){
+  const r=await oPut.apply(this,arguments);
+  try{if(bind()){
+    if(s==="items"&&v)E.dirty.add(v.id);
+    else if(s==="files"&&v)E.dirtyFiles.add(v.id);
+    if(s==="items"||s==="files"||s==="folders"||s==="meta"){setPending();schedule()}}}catch(e){}
+  return r};
+idbDelete=async function(s,k){
+  const r=await oDel.apply(this,arguments);
+  try{if(bind()){
+    if(s==="items"){E.deleted.add(k);E.dirty.delete(k)}
+    if(s==="items"||s==="folders"||s==="files"){setPending();schedule()}}}catch(e){}
+  return r};
+idbClear=async function(s){
+  const r=await oClr.apply(this,arguments);
+  try{if(bind()&&(s==="items"||s==="folders"||s==="files")){E.allowEmpty=true;E.scan=true;setPending();schedule()}}catch(e){}
+  return r};
+
+/* ---------- التحميل من المجلد: مايحصلش لو البرنامج بالفعل بنفس النسخة (أو أحدث) ---------- */
+const oSnap=readFolderSnapshot,oRestore=restoreAllFromFolder,oLink=linkBackupFolder,oPull=pullFolderData;
+readFolderSnapshot=async function(h){
+  if(!E.userAct&&state.items.length&&bind()&&h===E.h){
+    try{
+      const[pn,at,ix]=await Promise.all([idbGet_real("meta","folderSyncPending"),idbGet_real("meta","folderIdxAt"),rj("index.json")]);
+      const pend=!!(pn&&pn.value);
+      if(pend||(ix&&at&&at.value===ix.savedAt)){
+        E.scan=pend; // فيه تعديلات لسه ماتزامنتش => نفحص ونكمّلها، غير كده البرنامج محدّث
+        return{__same:true,schemaVersion:5,savedAt:ix?ix.savedAt:0,folders:state.folders,items:state.items,
+          settings:state.settings,categories:state.categories,categorySchemas:state.categorySchemas}}}
+    catch(e){}}
+  return oSnap.apply(this,arguments)};
+restoreAllFromFolder=async function(h,snap){
+  if(snap&&snap.__same)return; // البيانات الحالية هي نفس نسخة المجلد (أو أحدث منها وفيها تعديلات لسه هتتزامن)
+  bind();E.paused++;let ok=false;
+  try{const r=await oRestore.apply(this,arguments);ok=true;return r}
+  finally{
+    E.paused--;E.dirs.clear();E.idx=null;E.dirty.clear();E.dirtyFiles.clear();E.force.clear();E.deleted.clear();E.scan=!ok;
+    if(ok){try{E.idx=await loadIdx();if(E.idx)await stamp(E.idx.savedAt)}catch(e){}}}};
+linkBackupFolder=async function(){E.userAct=true;try{return await oLink.apply(this,arguments)}finally{E.userAct=false}};
+pullFolderData=async function(){E.userAct=true;try{return await oPull.apply(this,arguments)}finally{E.userAct=false}};
+
+/* ---------- نبضة خفيفة: بتكمّل أي شغل معلّق، وفحص شامل هادي كل فترة كشبكة أمان ---------- */
+window.__FS={
+  tick(){
+    if(!bind()||STORAGE_MODE==="memory"||E.running)return;
+    if(document.visibilityState==="visible"&&Date.now()-E.lastScan>SCAN_EVERY&&!E.dirty.size)E.scan=true;
+    if(pending()||E.lastErr){if(!E.retryT)schedule(0)}},
+  state:E};
 })();
 </script>
 </body>
