@@ -11955,7 +11955,7 @@ async function pass(){
       idx.unassigned=keep}
 
     if(sp)sp.stage("index");/* 6) الفهرس — بيتكتب آخر حاجة وبس لو فيه تغيير فعلي */
-    if(changed){
+    if(changed&&!(sp&&sp.holdAll())){
       idx.savedAt=Date.now();idx.stats=stats(idx);
       const t=JSON.stringify(idx,null,2);await put("index.json",t);
       const f=await getf("index.json");if(f.size!==ulen(t))throw new Error("حجم غير مطابق: index.json");
@@ -12659,7 +12659,9 @@ async function tick(){
   if(!S.host||!S.host.isConnected||!ST().view||ST().view.type!=="syncpipe"){S.host=null;return}
   try{const fs=FS(),E=fs&&fs.state;
     if(S.metaDirty||Date.now()-S.metaTs>15000||(E&&E.dirtyFiles.size&&Date.now()-S.metaTs>3000))await loadMeta();
-    S.R=buildRows();drawAll()}catch(e){console.warn("SyncPipe",e)}
+    S.R=buildRows();
+    if(S.R.rows.some(r=>r.status==="missing")&&Date.now()-S.metaTs>1200){await loadMeta();S.R=buildRows()}
+    drawAll()}catch(e){console.warn("SyncPipe",e)}
   const fs=FS();S.tm=setTimeout(tick,(fs&&fs.state.running)||S.inflight.size?900:2500)}
 function mount(c){
   clearTimeout(S.tm);S.host=c;
@@ -12718,6 +12720,801 @@ function onClick(e){
     return oB.apply(this,arguments)};
   const upd=()=>{const nb=document.getElementById("spNavCnt");if(nb)nb.textContent=S.holds.length?"⏸"+S.holds.length:""};
   upd();setInterval(upd,4000)})();
+})();
+</script>
+<script>
+/* ===== ImportDoctor: مركز تشخيص الاستيراد =====
+   بيفتح أي أرشيف/مجلد من الإصدارات القديمة (ZIP أو ZIP جوه ZIP أو مجلد أو JSON/صور سايبة)،
+   ويحدد لكل ملف وكل صورة: اتعرّف عليها ولا لأ، والسبب بالتفصيل، ويقترح إصلاح (اسم/امتداد/ربط/نسخة أكبر)،
+   وتقدر تعدّل أي حاجة يدويًا قبل ما تضغط «تنفيذ الاستيراد». مفيش حاجة بتتكتب في البيانات قبل التنفيذ. */
+(function(){"use strict";
+if(window.__ID)return;
+const ST=()=>typeof state!=="undefined"?state:{items:[],folders:[],view:{}};
+const H=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const N=n=>(Number(n)||0).toLocaleString("en-US");
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function fb(n){n=Number(n)||0;if(n<1024)return N(n)+" بايت";const u=["ك.ب","م.ب","ج.ب"];let v=n/1024,i=0;while(v>=1024&&i<2){v/=1024;i++}return (+v.toFixed(v>=100?0:1))+" "+u[i]}
+const toast2=(m,k,ms)=>{try{toast(m,k||"ok",ms)}catch(e){}};
+const KNOWN=new Set("jpg jpeg jpe png gif webp bmp tif tiff heic heif avif svg ico pdf doc docx xls xlsx ppt pptx odt ods txt rtf csv json zip rar 7z dwg dxf mp4 mov avi mp3 wav".split(" "));
+const SYS=/(^|\/)(__macosx|\.ds_store|thumbs\.db|desktop\.ini|\.trashes|\.system)(\/|$)|(^|\/)~\$|\.(tmp|bak|crdownload|part)$|(^|\/)\._/i;
+const IMGX=new Set(["jpg","jpeg","jpe","png","gif","webp","bmp","tif","tiff","heic","heif","avif","svg","ico"]);
+const MIME={jpg:"image/jpeg",png:"image/png",gif:"image/gif",webp:"image/webp",bmp:"image/bmp",tiff:"image/tiff",heic:"image/heic",avif:"image/avif",svg:"image/svg+xml",ico:"image/x-icon",pdf:"application/pdf",docx:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation",doc:"application/msword",xls:"application/vnd.ms-excel",ppt:"application/vnd.ms-powerpoint",rtf:"application/rtf",zip:"application/zip",txt:"text/plain",json:"application/json"};
+
+/* ---------------- أسماء ومسارات ---------------- */
+const safeDec=s=>{try{return decodeURIComponent(s)}catch(e){return s}};
+const normPath=p=>String(p||"").replace(/\\/g,"/").replace(/^\.\//,"").replace(/^\/+/,"").replace(/\/{2,}/g,"/");
+const baseOf=p=>normPath(p).split("/").pop();
+const extOf=n=>{const m=/\.([A-Za-z0-9]{1,5})$/.exec(n||"");return m?m[1].toLowerCase():""};
+const stemOf=n=>{const e=extOf(n);return e&&KNOWN.has(e)?String(n).slice(0,-(e.length+1)):String(n||"")};
+const dirOf=p=>{const q=normPath(p),i=q.lastIndexOf("/");return i<0?"":q.slice(0,i)};
+function nn(s){return safeDec(String(s||"")).normalize("NFKC").toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").replace(/[\s_\-.()\[\]{}]+/g," ").trim()}
+function dice(a,b){a=nn(a);b=nn(b);if(!a||!b)return 0;if(a===b)return 1;if(a.length<2||b.length<2)return 0;const g=s=>{const m=new Map();for(let i=0;i<s.length-1;i++){const k=s.substr(i,2);m.set(k,(m.get(k)||0)+1)}return m};
+  const x=g(a),y=g(b);let o=0;for(const[k,v]of x)if(y.has(k))o+=Math.min(v,y.get(k));return 2*o/(a.length+b.length-2)}
+const idLike=s=>typeof s==="string"&&/^[A-Za-z][A-Za-z0-9_-]{5,}$/.test(s);
+const uid2=p=>(p||"imp")+"_"+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+
+/* ---------------- فحص الملفات بالبايتات ---------------- */
+function sniff(h,head){
+  const a=h,asc=(o,s)=>s.split("").every((c,i)=>a[o+i]===c.charCodeAt(0));
+  if(a.length>=3&&a[0]===0xFF&&a[1]===0xD8&&a[2]===0xFF)return{t:"jpg",kind:"image"};
+  if(a.length>=8&&a[0]===0x89&&asc(1,"PNG"))return{t:"png",kind:"image"};
+  if(asc(0,"GIF8"))return{t:"gif",kind:"image"};
+  if(asc(0,"RIFF")&&asc(8,"WEBP"))return{t:"webp",kind:"image"};
+  if(asc(0,"BM")&&a.length>10&&a[6]===0&&a[7]===0&&a[8]===0&&a[9]===0)return{t:"bmp",kind:"image"};
+  if((a[0]===0x49&&a[1]===0x49&&a[2]===0x2A&&a[3]===0)||(a[0]===0x4D&&a[1]===0x4D&&a[2]===0&&a[3]===0x2A))return{t:"tiff",kind:"image"};
+  if(a[0]===0&&a[1]===0&&a[2]===1&&a[3]===0)return{t:"ico",kind:"image"};
+  if(asc(4,"ftyp")){const br=String.fromCharCode(a[8],a[9],a[10],a[11]);if(/^(heic|heix|heim|heis|hevc|hevx|mif1|msf1)/.test(br))return{t:"heic",kind:"image"};if(/^avi[fs]/.test(br))return{t:"avif",kind:"image"};return{t:"mp4",kind:"other"}}
+  if(asc(0,"%PDF"))return{t:"pdf",kind:"doc"};
+  if(a[0]===0x50&&a[1]===0x4B&&(a[2]===3||a[2]===5))return{t:"zip",kind:"doc"};
+  if(a[0]===0xD0&&a[1]===0xCF&&a[2]===0x11&&a[3]===0xE0)return{t:"ole",kind:"doc"};
+  if(asc(0,"{\\rtf"))return{t:"rtf",kind:"doc"};
+  const tx=(head||"").trimStart();
+  if(/<svg[\s>]/i.test(tx.slice(0,2000)))return{t:"svg",kind:"image"};
+  if(tx&&/^[\x09\x0A\x0D\x20-\x7E\u0600-\u06FF\uFEFF]/.test(tx)&&!/[\x00-\x08]/.test(tx.slice(0,200)))return{t:"text",kind:"other"};
+  return{t:"unknown",kind:"other"}}
+function health(t,u8,size){const w=[];
+  if(!size)return[["zero","الملف فاضي (حجمه صفر) — غالبًا اتقطع وقت التصدير أو النسخ."]];
+  const tail=u8.tail||new Uint8Array(0),has=(s,from)=>{const str=Array.from(tail.slice(Math.max(0,tail.length-from))).map(x=>String.fromCharCode(x)).join("");return str.includes(s)};
+  if(t==="jpg"){let ok=false;for(let i=tail.length-1;i>=Math.max(1,tail.length-64);i--)if(tail[i-1]===0xFF&&tail[i]===0xD9){ok=true;break}if(!ok)w.push(["trunc","صورة JPEG ناقصة (نهاية الملف مقطوعة) — ممكن تظهر نصها."])}
+  if(t==="png"&&!has("IEND",24))w.push(["trunc","صورة PNG ناقصة (مفيش علامة نهاية الملف)."]);
+  if(t==="gif"&&tail[tail.length-1]!==0x3B)w.push(["trunc","صورة GIF ناقصة."]);
+  if(t==="pdf"&&!has("%%EOF",1100))w.push(["trunc","ملف PDF ناقص (مفيش علامة نهاية) — ممكن مايتفتحش."]);
+  if(t==="webp"&&u8.head&&u8.head.length>=8){const sz=(u8.head[4]|u8.head[5]<<8|u8.head[6]<<16|u8.head[7]<<24)>>>0;if(sz+8>size)w.push(["trunc","صورة WEBP ناقصة (الحجم الفعلي أصغر من المعلن)."])}
+  return w}
+async function readInfo(blob){
+  const size=blob.size,head=new Uint8Array(await blob.slice(0,Math.min(size,4096)).arrayBuffer()),
+    tail=size>4096?new Uint8Array(await blob.slice(Math.max(0,size-1100)).arrayBuffer()):head;
+  head.head=head;head.tail=tail;
+  let txt="";try{txt=new TextDecoder("utf-8",{fatal:false}).decode(head.slice(0,2000))}catch(e){}
+  const s=sniff(head,txt);s.warns=health(s.t,{head,tail},size);return s}
+async function sha(blob){try{if(blob.size>120*1024*1024)return null;const b=await blob.arrayBuffer();const h=await crypto.subtle.digest("SHA-256",b);return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,"0")).join("")}catch(e){return null}}
+async function decode(blob){try{const bm=await createImageBitmap(blob);const r={w:bm.width,h:bm.height};try{bm.close()}catch(e){}return r}catch(e){return null}}
+const typeLabel=t=>({jpg:"JPEG",png:"PNG",gif:"GIF",webp:"WEBP",bmp:"BMP",tiff:"TIFF",heic:"HEIC",avif:"AVIF",ico:"ICO",svg:"SVG",pdf:"PDF",zip:"ZIP/Office",ole:"Office قديم",rtf:"RTF",text:"نص",mp4:"فيديو",unknown:"غير معروف"}[t]||t);
+const realExt=t=>({jpg:"jpg",png:"png",gif:"gif",webp:"webp",bmp:"bmp",tiff:"tiff",heic:"heic",avif:"avif",ico:"ico",svg:"svg",pdf:"pdf",rtf:"rtf"}[t]||"");
+const extOk=(t,e)=>{if(!e)return false;if(t==="jpg")return["jpg","jpeg","jpe"].includes(e);if(t==="tiff")return["tif","tiff"].includes(e);if(t==="heic")return["heic","heif"].includes(e);if(t==="zip")return["zip","docx","xlsx","pptx","odt","ods"].includes(e);if(t==="ole")return["doc","xls","ppt"].includes(e);if(t==="text")return true;if(t==="unknown")return true;return e===realExt(t)};
+
+/* ---------------- قراءة JSON بتسامح (BOM / تعليقات / فواصل زايدة / مقطوع) ---------------- */
+function looseParse(text){
+  const issues=[];let t=String(text||"");
+  if(t.charCodeAt(0)===0xFEFF){t=t.slice(1);issues.push("BOM في أول الملف")}
+  try{return{v:JSON.parse(t),issues}}catch(e){}
+  let o="",s=false,q="",i=0,cm=false,tc=false;
+  while(i<t.length){const c=t[i],n=t[i+1];
+    if(s){o+=c;if(c==="\\"){o+=n||"";i+=2;continue}if(c===q)s=false;i++;continue}
+    if(c==='"'){s=true;q=c;o+=c;i++;continue}
+    if(c==="/"&&n==="/"){cm=true;while(i<t.length&&t[i]!=="\n")i++;continue}
+    if(c==="/"&&n==="*"){cm=true;i+=2;while(i<t.length&&!(t[i]==="*"&&t[i+1]==="/"))i++;i+=2;continue}
+    if(c===","){let j=i+1;while(j<t.length&&/\s/.test(t[j]))j++;if(t[j]==="}"||t[j]==="]"){tc=true;i++;continue}}
+    o+=c;i++}
+  if(cm)issues.push("تعليقات جوه JSON");if(tc)issues.push("فواصل زايدة");
+  try{return{v:JSON.parse(o),issues}}catch(e){}
+  /* مقطوع: نقفل الأقواس عند آخر نقطة سليمة */
+  const stack=[];s=false;q="";let last=-1;
+  for(let k=0;k<o.length;k++){const c=o[k];
+    if(s){if(c==="\\"){k++;continue}if(c===q)s=false;continue}
+    if(c==='"'){s=true;q=c;continue}
+    if(c==="{"||c==="[")stack.push(c);
+    else if(c==="}"||c==="]"){stack.pop();last=k}
+    else if(c===","&&stack.length)last=k-1}
+  for(const cut of [o.length,last+1]){
+    if(cut<=0)continue;let b=o.slice(0,cut).replace(/[\s,]+$/,"");
+    const st=[];s=false;q="";
+    for(let k=0;k<b.length;k++){const c=b[k];if(s){if(c==="\\"){k++;continue}if(c===q)s=false;continue}if(c==='"'){s=true;q=c;continue}if(c==="{"||c==="[")st.push(c);else if(c==="}"||c==="]")st.pop()}
+    if(s)b=b.slice(0,b.lastIndexOf('"'));
+    b=b.replace(/[\s,]+$/,"").replace(/"[^"]*"\s*:\s*$/,"").replace(/[\s,]+$/,"");
+    const st2=[];s=false;q="";
+    for(let k=0;k<b.length;k++){const c=b[k];if(s){if(c==="\\"){k++;continue}if(c===q)s=false;continue}if(c==='"'){s=true;q=c;continue}if(c==="{"||c==="[")st2.push(c);else if(c==="}"||c==="]")st2.pop()}
+    const fixed=b+st2.reverse().map(c=>c==="{"?"}":"]").join("");
+    try{const v=JSON.parse(fixed);issues.push("الملف مقطوع من الآخر — اتسترجع الجزء السليم بس");return{v,issues,partial:true}}catch(e){}}
+  return{v:null,issues:["JSON تالف ومش ممكن إصلاحه تلقائيًا"],fail:true}}
+
+/* ---------------- الجلسة ---------------- */
+const S={busy:false,prog:null,ready:false,src:[],entries:[],files:[],jsons:[],items:new Map(),folders:new Map(),cats:null,schemas:null,settings:null,
+  fidPath:new Map(),problems:[],refs:[],conf:[],ix:null,
+  fo:new Map(),ro:new Map(),/* overrides: file id → {name,ext,ignore,assign,convert}, ref id → {fileId,ignore} */
+  ui:{tab:"sum",fs:"all",ft:"all",q:"",limit:50,rs:"bad",prev:new Set(),opt:{complete:true,replace:false}},
+  result:null,urls:new Map(),host:null};
+function resetSession(){S.urls.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});S.urls.clear();
+  Object.assign(S,{libIdx:null,ready:false,src:[],entries:[],files:[],jsons:[],items:new Map(),folders:new Map(),cats:null,schemas:null,settings:null,fidPath:new Map(),problems:[],refs:[],conf:[],ix:null,result:null});
+  S.fo=new Map();S.ro=new Map();S.ui.limit=50}
+const prob=(sev,code,msg,where)=>S.problems.push({sev,code,msg,where:where||""});
+const url=f=>{if(!S.urls.has(f.id))S.urls.set(f.id,URL.createObjectURL(f.blob));return S.urls.get(f.id)};
+
+/* ---------------- جمع الملفات (ZIP جوه ZIP / مجلد / ملفات) ---------------- */
+async function gather(list,onP){
+  const out=[],single=list.length===1;
+  const addZip=async(blob,name,prefix,depth)=>{
+    if(typeof JSZip==="undefined"){prob("err","NOZIP","مكتبة فك ZIP مش متاحة (محتاجة إنترنت للتحميل أول مرة) — الأرشيف «"+name+"» ماتفتحش.",name);return}
+    let z;try{z=await JSZip.loadAsync(blob)}catch(e){prob("err","BADZIP","أرشيف ZIP تالف أو محمي بكلمة سر: "+name+" ("+(e&&e.message||e)+")",name);return}
+    for(const[p,e]of Object.entries(z.files)){if(e.dir)continue;
+      const path=prefix+normPath(p);
+      if(/\.zip$/i.test(p)&&depth<3&&!SYS.test(path)){let b=null;try{b=await e.async("blob")}catch(x){}
+        if(b){const sig=new Uint8Array(await b.slice(0,4).arrayBuffer());
+          if(sig[0]===0x50&&sig[1]===0x4B){prob("warn","NESTED","أرشيف جوه أرشيف: "+path+" — اتفتح تلقائيًا (الاستيراد القديم كان بيعتبره ملف عادي ومابيشوفش اللي جواه).",path);
+            await addZip(b,path,path.replace(/\.zip$/i,"")+"/",depth+1);continue}}}
+      out.push({path,size:e._data&&e._data.uncompressedSize!=null?e._data.uncompressedSize:null,get:()=>e.async("blob"),from:name});
+      if(onP)onP(out.length)}};
+  for(const f of list){
+    if(/\.zip$/i.test(f.name)&&!f.webkitRelativePath){await addZip(f,f.name,single?"":f.name.replace(/\.zip$/i,"")+"/",0)}
+    else out.push({path:normPath(f.webkitRelativePath||f.name),size:f.size,get:async()=>f,from:"ملف مباشر"});
+    if(onP)onP(out.length)}
+  return out}
+
+/* ---------------- تصنيف JSON واستخراج البيانات ---------------- */
+function looksItem(o){return o&&typeof o==="object"&&!Array.isArray(o)&&(o.id!=null||o.name!=null)&&(o.name!=null||o.title!=null)&&("imageIds" in o||"docs" in o||"folderId" in o||"images" in o||"notebookData" in o||"category" in o||"manufacturer" in o||"model" in o||"fields" in o||"_images" in o)}
+function looksFolder(o){return o&&typeof o==="object"&&!Array.isArray(o)&&o.id!=null&&o.name!=null&&("parentId" in o||"fieldsTemplate" in o||"columns" in o)&&!("imageIds" in o)}
+function vTime(it){const x=it&&(it.updatedAt||it.modifiedAt||it.createdAt);const n=typeof x==="number"?x:Date.parse(x);return isFinite(n)?n:0}
+function addItem(it,src,dir,note){
+  if(!it||typeof it!=="object")return;
+  if(it.id==null||it.id===""){it.id=uid2("imp");prob("warn","NOID","عنصر «"+(it.name||it.title||"؟")+"» مالوش معرّف (id) — اتولّد له معرّف جديد.",src)}
+  it.id=String(it.id);if(it.name==null&&it.title!=null)it.name=it.title;
+  const e=S.items.get(it.id)||{versions:[]};e.versions.push({it,src,dir:dir||"",size:JSON.stringify(it).length,t:vTime(it)});S.items.set(it.id,e)}
+function extract(){
+  const fidPath=S.fidPath,man={};
+  for(const j of S.jsons){const v=j.value;if(v==null||typeof v!=="object")continue;const b=baseOf(j.path).toLowerCase(),d=dirOf(j.path);
+    if(b==="asset-manifest.json"&&v.files&&typeof v.files==="object"){for(const[fn,m]of Object.entries(v.files))if(m&&m.id)fidPath.set(String(m.id),{path:"assets/"+fn,dirHint:d,meta:m});j.role="manifest";continue}
+    if(b==="hashes.json"&&!Array.isArray(v)&&Object.values(v).some(x=>x&&x.path)){for(const[fid,m]of Object.entries(v))if(m&&m.path)fidPath.set(String(fid),{path:m.path,dirHint:d,meta:m});j.role="hashes";continue}
+    if(b==="index.json"&&v.items&&v.groups&&typeof v.items==="object"){
+      for(const[iid,e]of Object.entries(v.items)){for(const[fid,m]of Object.entries(e.files||{}))if(m&&m.path)fidPath.set(String(fid),{path:m.path,dirHint:"",meta:m});}
+      for(const[fid,m]of Object.entries(v.unassigned||{}))if(m&&m.path)fidPath.set(String(fid),{path:m.path,dirHint:"",meta:m});
+      S.libIdx=v;j.role="index";continue}
+    if(Array.isArray(v.folders)&&Array.isArray(v.items)){
+      v.folders.forEach(f=>{if(f&&f.id!=null&&!S.folders.has(String(f.id)))S.folders.set(String(f.id),f)});
+      v.items.forEach(it=>addItem(it,j.path,"",null));
+      if(v.settings&&!S.settings)S.settings=v.settings;if(Array.isArray(v.categories)&&!S.cats)S.cats=v.categories;if(v.categorySchemas&&!S.schemas)S.schemas=v.categorySchemas;
+      j.role="bundle";continue}
+    if(b==="items_index.json"||b==="manifest.json"||b==="export-warnings.json"){j.role="meta";continue}
+    if(b==="categories.json"){if(Array.isArray(v.categories)&&!S.cats)S.cats=v.categories;if(v.categorySchemas&&!S.schemas)S.schemas=v.categorySchemas;j.role="meta";continue}
+    if(b==="settings.json"&&!Array.isArray(v)){if(!S.settings)S.settings=v;j.role="meta";continue}
+    if(b==="meta.json"&&(v.settings||v.categories)){if(v.settings&&!S.settings)S.settings=v.settings;if(Array.isArray(v.categories)&&!S.cats)S.cats=v.categories;if(v.categorySchemas&&!S.schemas)S.schemas=v.categorySchemas;j.role="meta";continue}
+    if(Array.isArray(v)&&v.length&&v.every(x=>x&&typeof x==="object")){
+      const fl=/folder|group|مجموع|مجلد/i.test(b),il=/item|equip|عنصر|جهاز/i.test(b);
+      if(fl||(!il&&looksFolder(v[0])&&!looksItem(v[0]))){v.forEach(f=>{if(f&&f.id!=null&&!S.folders.has(String(f.id)))S.folders.set(String(f.id),f)});j.role="folders";continue}
+      if(il||looksItem(v[0])){v.forEach(it=>addItem(it,j.path,"",null));j.role="items";continue}}
+    if(looksFolder(v)&&(b==="group.json"||b==="folder.json")){if(!S.folders.has(String(v.id)))S.folders.set(String(v.id),v);j.role="group";continue}
+    if((b==="data.json"||b==="item.json"||looksItem(v))&&v&&!Array.isArray(v)&&(v.id!=null||v.name!=null)&&looksItem(v)){addItem(v,j.path,d,null);j.role="item";continue}
+    /* غلاف غير معروف: دوّر جواه على مصفوفات عناصر */
+    let found=false;const walk=(o,dep,key)=>{if(!o||typeof o!=="object"||dep>3)return;
+      if(Array.isArray(o)){if(o.length&&o.every(x=>x&&typeof x==="object")&&looksItem(o[0])){o.forEach(it=>addItem(it,j.path+" › "+key,"",null));found=true}
+        else if(o.length&&looksFolder(o[0])&&o.every(x=>x&&typeof x==="object")){o.forEach(f=>{if(f&&f.id!=null&&!S.folders.has(String(f.id)))S.folders.set(String(f.id),f)});found=true}
+        return}
+      for(const[k,x]of Object.entries(o))walk(x,dep+1,k)};
+    walk(v,0,"");
+    if(found){j.role="nested";prob("info","NESTED_DATA","ملف «"+j.path+"» فيه بيانات متداخلة بصيغة مش معتادة — اتلقطت بالبحث العميق.",j.path)}
+    else j.role="other"}
+  /* اختيار أحدث نسخة لكل عنصر */
+  for(const[id,e]of S.items){
+    e.versions.sort((a,b)=>b.t-a.t||b.size-a.size);e.cur=e.versions[0];
+    if(e.versions.length>1){const diff=e.versions.some(v=>JSON.stringify(v.it)!==JSON.stringify(e.cur.it));
+      if(diff)prob("warn","DUPID","العنصر «"+(e.cur.it.name||id)+"» موجود بـ "+e.versions.length+" نسخ مختلفة ("+e.versions.map(v=>v.src).join(" ، ")+") — اتاخدت الأحدث/الأكبر: "+e.cur.src,e.cur.src)}}}
+
+/* ---------------- استخراج مراجع الملفات من العناصر ---------------- */
+const LEG_IMG=/^(images?|photos?|pictures?|pics?|imgs?|gallery|img_?urls?|image_?urls?)$/i,LEG_DOC=/^(documents?|pdfs?|attachments?|manuals?|files?|datasheets?)$/i;
+const objVal=o=>{if(typeof o==="string")return{v:o};if(!o||typeof o!=="object")return null;
+  for(const k of["data","dataUrl","dataURL","base64"])if(typeof o[k]==="string"&&o[k].startsWith("data:"))return{v:o[k],name:o.name,cap:o.caption};
+  for(const k of["fileId","id","src","url","path","file","filename","fileName","key","name"])if(typeof o[k]==="string"&&o[k])return{v:o[k],name:o.name||o.title,cap:o.caption};return null};
+let rseq=0;
+async function dataBlob(u){try{return await(await fetch(u)).blob()}catch(e){return null}}
+async function collectRefs(item,it){
+  const out=[],push=r=>{r.rid="r"+(++rseq);r.itemId=item;out.push(r);return r};
+  const hints={};
+  const mk=(arr,key)=>(Array.isArray(arr)?arr:[]).forEach(x=>{if(x&&x.fileId&&x.filename)hints[x.fileId]=x.filename});
+  mk(it._images);mk(it._docs);mk(it._notebookImages);mk(it._faultImages);
+  const base={structured:true};
+  const seen=new Set();
+  (Array.isArray(it.imageIds)?it.imageIds:[]).forEach((x,i)=>{const ov=objVal(x);if(!ov)return;seen.add(ov.v);push({role:"image",value:ov.v,hint:hints[ov.v],ptr:"imageIds["+i+"]",inline:ov.v.startsWith("data:"),structured:true})});
+  if(Array.isArray(it._images))it._images.forEach((x,i)=>{if(x&&x.fileId&&!seen.has(x.fileId)){seen.add(x.fileId);push({role:"image",value:x.fileId,hint:x.filename,ptr:"_images["+i+"]",structured:false,fromMeta:true})}});
+  (Array.isArray(it.docs)?it.docs:[]).forEach((d,i)=>{const ov=d&&typeof d==="object"?{v:d.fileId||d.id||d.path||d.src||d.name,name:d.name}:objVal(d);if(!ov||!ov.v)return;seen.add(ov.v);push({role:"doc",value:String(ov.v),name:ov.name||d.name,hint:hints[ov.v],ptr:"docs["+i+"]",structured:true})});
+  if(Array.isArray(it._docs))it._docs.forEach((x,i)=>{if(x&&x.fileId&&!seen.has(x.fileId)){seen.add(x.fileId);push({role:"doc",value:x.fileId,name:x.name,hint:x.filename,ptr:"_docs["+i+"]",structured:false,fromMeta:true})}});
+  const nb=it.notebookData;
+  if(nb&&Array.isArray(nb.images))nb.images.forEach((x,i)=>{const ov=objVal(x);if(!ov)return;seen.add(ov.v);push({role:"nb",value:ov.v,name:ov.cap,hint:hints[ov.v],ptr:"notebookData.images["+i+"]",inline:ov.v.startsWith("data:"),structured:true})});
+  if(Array.isArray(it._notebookImages))it._notebookImages.forEach((x,i)=>{if(x&&x.fileId&&!seen.has(x.fileId)){seen.add(x.fileId);push({role:"nb",value:x.fileId,name:x.caption,hint:x.filename,ptr:"_notebookImages["+i+"]",structured:false,fromMeta:true})}});
+  const ft=nb&&nb.faultTracking;
+  if(ft&&Array.isArray(ft.pages))ft.pages.forEach((p,pi)=>{
+    if(p&&p.imageId)push({role:"ft-bg",value:String(p.imageId),hint:hints[p.imageId],ptr:"ft.pages["+pi+"].imageId",pi,structured:true});
+    ((p&&p.hotspots)||[]).forEach((h,hi)=>((h&&h.content&&h.content.images)||[]).forEach((x,ii)=>{if(x&&x.id)push({role:"ft-note",value:String(x.id),hint:hints[x.id],ptr:"ft.pages["+pi+"].hotspots["+hi+"].images["+ii+"]",pi,hi,ii,structured:true})}))});
+  if(Array.isArray(it._faultImages))it._faultImages.forEach(x=>{if(x&&x.fileId&&!seen.has(x.fileId)&&!out.some(r=>r.value===x.fileId)){seen.add(x.fileId);push({role:"ft-bg",value:x.fileId,hint:x.filename,ptr:"_faultImages",structured:false,fromMeta:true,orphanFt:true})}});
+  /* صيغ قديمة */
+  for(const[k,v]of Object.entries(it)){
+    if(k==="imageIds"||k==="docs"||k.startsWith("_"))continue;
+    const isI=LEG_IMG.test(k),isD=LEG_DOC.test(k);
+    if(!isI&&!isD)continue;
+    const arr=Array.isArray(v)?v:(typeof v==="string"&&v?[v]:[]);
+    arr.forEach((x,i)=>{const ov=objVal(x);if(!ov||!ov.v)return;push({role:isI?"image":"doc",value:ov.v,name:ov.name||ov.cap,ptr:k+"["+i+"]",legacyKey:k,inline:ov.v.startsWith("data:"),structured:false})})}
+  for(const k of["image","photo","picture","img","mainImage","thumbnail"]){const v=it[k];if(typeof v==="string"&&v&&!/^https?:/i.test(v)&&!out.some(r=>r.value===v)){push({role:"image",value:v,ptr:k,legacyKey:k,inline:v.startsWith("data:"),structured:false})}}
+  /* روابط http: مش هتتحمّل (مفيش إنترنت للمصدر) — نبلّغ */
+  for(const r of out)if(/^https?:\/\//i.test(r.value))r.remote=true;
+  return out}
+
+/* ---------------- مطابقة المراجع بالملفات ---------------- */
+function buildIndex(files){
+  const ix={byPath:new Map(),byBase:new Map(),byNBase:new Map(),byStem:new Map(),byNStem:new Map(),all:files},add=(m,k,f)=>{if(!k)return;(m.get(k)||m.set(k,[]).get(k)).push(f)};
+  for(const f of files){if(f.sys)continue;
+    ix.byPath.set(normPath(f.path).toLowerCase(),f);add(ix.byBase,f.name.toLowerCase(),f);add(ix.byNBase,nn(f.name),f);add(ix.byStem,f.stem.toLowerCase(),f);add(ix.byNStem,nn(f.stem),f)}
+  return ix}
+function ownerDirs(itemId){const e=S.items.get(itemId),d=[];if(!e)return d;for(const v of e.versions)if(v.dir)d.push(v.dir.toLowerCase());
+  if(S.libIdx&&S.libIdx.items&&S.libIdx.items[itemId])d.push(String(S.libIdx.items[itemId].path).toLowerCase());return d}
+function underOwner(f,itemId,dirs){const p=normPath(f.path).toLowerCase();return dirs.some(d=>p.startsWith(d+"/"))||p.includes("/"+String(itemId).toLowerCase()+"/")||p.startsWith(String(itemId).toLowerCase()+"/")}
+function kindMatch(f,role){const img=role==="image"||role==="nb"||role==="ft-bg"||role==="ft-note";return img?f.kind==="image":true}
+function resolveRef(r,ix){
+  const val=String(r.value||"").trim(),res={f:null,method:"",conf:"none",why:[],cands:[]};
+  if(!val){res.why.push("المرجع فاضي");return res}
+  if(r.remote){res.why.push("الصورة رابط على الإنترنت ("+val.slice(0,60)+") — مش ملف داخل الأرشيف.");res.remoteLink=true;return res}
+  if(r.inline&&r.virtualFile){res.f=r.virtualFile;res.method="inline";res.conf="exact";return res}
+  if(/^idbimg_/.test(val)){res.why.push("المرجع بيشاور على صورة كانت مخزنة في قاعدة بيانات المتصفح القديمة (idbimg_) ومش مصدّرة جوه الأرشيف.");return res}
+  const dirs=ownerDirs(r.itemId),role=r.role;
+  const pick=(arr,m,conf,why)=>{arr=(arr||[]).filter(f=>!f.sys);if(!arr.length)return false;
+    let a=arr.filter(f=>kindMatch(f,role));if(!a.length)a=arr;
+    if(a.length===1){res.f=a[0];res.method=m;res.conf=conf;if(why)res.why.push(why);return true}
+    const own=a.filter(f=>underOwner(f,r.itemId,dirs));
+    if(own.length===1){res.f=own[0];res.method=m+"+owner";res.conf="high";res.why.push("فيه "+a.length+" ملفات بنفس الاسم — اتاخد اللي جوه مجلد العنصر نفسه.");return true}
+    res.cands=a.map(f=>({f,score:.9,why:"بنفس الاسم"}));res.why.push("فيه "+a.length+" ملفات بنفس الاسم ومش واضح أنهي بتاعة العنصر — اختار يدويًا.");res.ambiguous=true;return false};
+  const fp=S.fidPath.get(val);
+  if(fp){const p=normPath(fp.path).toLowerCase();let f=ix.byPath.get(p);
+    if(!f&&fp.dirHint)f=ix.byPath.get((fp.dirHint+"/"+p).toLowerCase());
+    if(!f)f=ix.all.find(x=>!x.sys&&normPath(x.path).toLowerCase().endsWith("/"+p));
+    if(f){res.f=f;res.method="manifest";res.conf="exact";return res}
+    res.why.push("الفهرس بيقول إن الملف في «"+fp.path+"» لكن المسار ده مش موجود في الأرشيف.")}
+  if(r.hint){const h=normPath(r.hint).toLowerCase(),bases=[];
+    for(const d of dirs)bases.push((d+"/"+h).toLowerCase());bases.push(h);bases.push(("equipment/"+r.itemId+"/"+h).toLowerCase());
+    for(const b of bases){const f=ix.byPath.get(b);if(f){res.f=f;res.method="hint";res.conf="exact";return res}}
+    const f=ix.all.find(x=>!x.sys&&normPath(x.path).toLowerCase().endsWith("/"+h));if(f){res.f=f;res.method="hint";res.conf="high";return res}}
+  const nv=normPath(safeDec(val)).toLowerCase();
+  if(nv.includes("/")){const f=ix.byPath.get(nv);if(f){res.f=f;res.method="path";res.conf="exact";return res}
+    const sfx=ix.all.filter(x=>!x.sys&&normPath(x.path).toLowerCase().endsWith("/"+nv));
+    if(pick(sfx,"path-suffix","high","المسار مختلف شوية عن الأصل (جزء من المسار بس اتطابق)."))return res;if(res.ambiguous)return res}
+  const base=baseOf(val),stem=stemOf(base);
+  {const bl=ix.byBase.get(base.toLowerCase())||[];if(pick(bl,"name",bl.some(f=>f.name===base)?"exact":"high",bl.some(f=>f.name===base)?null:"الاسم اتطابق مع اختلاف في حالة الحروف."))return res;if(res.ambiguous)return res}
+  if(pick(ix.byStem.get(stem.toLowerCase()),"stem","high",extOf(base)?"الاسم اتطابق بس الامتداد مختلف.":"المرجع معرّف (ID) واتطابق مع اسم ملف."))return res;if(res.ambiguous)return res;
+  if(stem.length>=5){const pre=ix.all.filter(f=>!f.sys&&(f.stem.toLowerCase().startsWith(stem.toLowerCase()+"_")||f.stem.toLowerCase().startsWith(stem.toLowerCase()+"-")||f.stem.toLowerCase().startsWith(stem.toLowerCase()+" ")));
+    if(pick(pre,"id-prefix","high","اسم الملف = المعرّف + اسم أصلي (زي ما التصدير القديم كان بيعمل للمستندات)."))return res;if(res.ambiguous)return res}
+  if(pick(ix.byNBase.get(nn(base)),"normalized","high","الاسم اتطابق بعد توحيد الحروف (كبير/صغير، تشكيل عربي، همزات، ترميز %XX).")){return res}if(res.ambiguous)return res;
+  if(pick(ix.byNStem.get(nn(stem)),"normalized-stem","high","الاسم اتطابق بعد توحيد الحروف والامتداد.")){return res}if(res.ambiguous)return res;
+  /* اقتراحات تقريبية: مش بتتطبّق تلقائيًا */
+  const cs=[];for(const f of ix.all){if(f.sys||!kindMatch(f,role))continue;
+    let s=dice(f.stem,stem);if(nn(f.stem).includes(nn(stem))&&nn(stem).length>=4)s=Math.max(s,.8);
+    if(underOwner(f,r.itemId,dirs))s+=.1;
+    if(s>=.7)cs.push({f,score:Math.min(s,.99),why:"اسم قريب"})}
+  cs.sort((a,b)=>b.score-a.score);res.cands=cs.slice(0,8);
+  res.why.push(res.cands.length?"مفيش ملف بنفس الاسم — لكن فيه ملفات أسماؤها قريبة (اقتراحات).":"مفيش ملف بالاسم ده في الأرشيف خالص — الصورة مش مصدّرة أو اتحذفت أو اتسمّت باسم تاني تمامًا.");
+  return res}
+
+/* ---------------- التحليل الكامل ---------------- */
+function setProg(phase,done,total){S.prog={phase,done,total};if(S.host)drawProgress()}
+async function analyze(list){
+  resetSession();S.busy=true;S.src=list.map(f=>f.name||f.webkitRelativePath);setProg("جمع الملفات",0,0);
+  try{
+    S.entries=await gather(list,n=>{if(n%50===0)setProg("جمع الملفات",n,0)});
+    /* الملفات */
+    const files=[];let k=0;
+    for(const e of S.entries){
+      const path=normPath(e.path),name=baseOf(path);
+      const f={id:"f"+(++k),path,name,stem:stemOf(name),ext:extOf(name),size:e.size,from:e.from,sys:SYS.test(path),get:e.get};
+      files.push(f)}
+    S.files=files;
+    /* قراءة JSON أولًا */
+    const jsonFiles=files.filter(f=>f.ext==="json"&&!f.sys&&(f.size==null||f.size<150*1024*1024));
+    let i=0;for(const f of jsonFiles){setProg("قراءة ملفات البيانات",++i,jsonFiles.length);
+      let text="";try{const b=await f.get();f.size=b.size;text=await b.text()}catch(e){prob("err","READ","ماقدرتش أقرا الملف "+f.path,f.path);continue}
+      const p=looseParse(text);f.isJson=true;
+      if(p.fail){prob("err","JSON_BAD","ملف البيانات «"+f.path+"» تالف ومش ممكن إصلاحه تلقائيًا — الاستيراد القديم كان بيتجاهله وبيكمل من غير ما يقولك.",f.path);continue}
+      if(p.issues.length)prob(p.partial?"warn":"info",p.partial?"JSON_PARTIAL":"JSON_FIXED","«"+f.path+"»: "+p.issues.join("، ")+" — اتصلّح تلقائيًا (الاستيراد القديم كان هيفشل في قراءته).",f.path);
+      S.jsons.push({path:f.path,value:p.v,issues:p.issues,partial:p.partial})}
+    extract();
+    if(!S.items.size)prob("err","NOITEMS","ماقدرتش ألاقي أي عناصر (items) في الأرشيف. شوف تبويب الملفات لمعرفة إيه اللي اتلقط.","");
+    /* فحص كل ملف غير JSON */
+    const rest=files.filter(f=>!f.isJson);let d=0;
+    const work=async f=>{
+      if(f.sys){f.kind="system";setProg("فحص الملفات",++d,rest.length);return}
+      try{const b=await f.get();f.blob=b;f.size=b.size;
+        const s=await readInfo(b);f.t=s.t;f.kind=s.kind;f.warns=s.warns;
+        f.mime=MIME[realExt(s.t)||f.ext]||b.type||"application/octet-stream";
+        if(f.kind==="image"&&["jpg","png","gif","webp","bmp","avif","svg","ico"].includes(f.t)){const dm=await decode(b);if(dm){f.w=dm.w;f.h=dm.h}else if(f.size){f.warns.push(["decode","الصورة ماتفتحش في المتصفح (بايتاتها غير صالحة للعرض)."])}}
+        else if(f.t==="heic"||f.t==="tiff"){f.warns.push(["unsupported","صيغة "+typeLabel(f.t)+" المتصفح مابيعرضهاش — هتتحفظ كملف بس مش هتظهر كصورة (محتاجة تحويل خارجي)."])}
+        if(f.t==="svg")f.kind="image";
+        f.extMismatch=!extOk(f.t,f.ext)&&f.t!=="unknown"&&f.t!=="text";
+        f.hash=await sha(b)}
+      catch(e){f.kind="other";f.warns=[["read","مقدرتش اقرا الملف: "+(e&&e.message||e)]];f.t="unknown"}
+      setProg("فحص الملفات",++d,rest.length)};
+    let ci=0;const pool=Array.from({length:3},async()=>{while(ci<rest.length){const f=rest[ci++];await work(f)}});await Promise.all(pool);
+    /* ملفات مضمّنة base64 + مراجع */
+    setProg("ربط الصور بالعناصر",0,S.items.size);let n=0,inl=0;
+    S.refs=[];
+    for(const[id,e]of S.items){
+      const it=e.cur.it,rs=await collectRefs(id,it);
+      for(const r of rs){if(r.inline&&r.value.startsWith("data:")){const b=await dataBlob(r.value);
+          if(b&&b.size){const s=await readInfo(b),ex=realExt(s.t)||"bin";inl++;
+            const vf={id:"v"+(++k),path:"(مضمّنة داخل البيانات)/"+(it.name||id)+"/صورة-"+inl+"."+ex,name:"صورة-"+inl+"."+ex,stem:"صورة-"+inl,ext:ex,size:b.size,blob:b,kind:s.kind,t:s.t,warns:s.warns,virtual:true,from:"base64 داخل «"+(it.name||id)+"»",mime:b.type||MIME[ex]};
+            if(s.kind==="image"){const dm=await decode(b);if(dm){vf.w=dm.w;vf.h=dm.h}}
+            vf.hash=await sha(b);S.files.push(vf);r.virtualFile=vf}
+          else r.badInline=true}}
+      S.refs.push(...rs);setProg("ربط الصور بالعناصر",++n,S.items.size)}
+    if(inl)prob("info","INLINE","لقيت "+inl+" صورة مضمّنة (base64) جوه بيانات العناصر — الاستيراد القديم كان بيتجاهلها أو بيضيّعها لما يستبدل قايمة الصور.","");
+    S.ix=buildIndex(S.files);
+    for(const r of S.refs){r.res=resolveRef(r,S.ix)}
+    computeDerived();S.ready=true;
+    if(!S.files.some(f=>!f.sys&&!f.isJson))prob("warn","NOFILES","مفيش أي ملفات صور/مستندات في المصدر ده — بيانات العناصر بس.","");
+  }catch(e){console.error(e);prob("err","FATAL","حصل خطأ أثناء التحليل: "+(e&&e.message||e),"")}
+  finally{S.busy=false;S.prog=null;if(S.host)drawAll()}}
+
+/* ---------------- القرارات (تلقائي + تعديلاتك) ---------------- */
+const ov=(m,k)=>m.get(k)||{};
+function setOv(m,k,patch){const o=Object.assign({},m.get(k)||{},patch);m.set(k,o);return o}
+function refFile(r){const o=ov(S.ro,r.rid);
+  if(o.ignore)return{f:null,ignored:true};
+  if(o.fileId){const f=S.files.find(x=>x.id===o.fileId);return{f,manual:true}}
+  const x=r.res;if(x.f&&(x.conf==="exact"||x.conf==="high"))return{f:x.f,auto:true,conf:x.conf};
+  return{f:null}}
+function bad(f){return f.size===0||(f.warns||[]).some(w=>w[0]==="decode"||w[0]==="zero"||w[0]==="read")}
+function computeDerived(){
+  const files=S.files;files.forEach(f=>{f.refs=[];f.owner=null;f.variantOf=null});
+  for(const r of S.refs){const x=refFile(r);r.final=x;if(x.f)x.f.refs.push(r)}
+  /* تكرار بالمحتوى */
+  const byH=new Map();for(const f of files){if(!f.hash||f.sys)continue;(byH.get(f.hash)||byH.set(f.hash,[]).get(f.hash)).push(f)}
+  for(const g of byH.values()){if(g.length<2)continue;g.sort((a,b)=>b.refs.length-a.refs.length||a.path.length-b.path.length);for(let i=1;i<g.length;i++)g[i].dupOf=g[0];}
+  /* نسخ الصور (thumb/small/copy…) */
+  const VR=/([_\-.\s]*(thumb(nail)?s?|small|medium|large|big|mini|preview|resized?|copy|copie|edited|compressed|lowres|hires|original|orig|@\dx|\(\d+\)|\d{2,4}x\d{2,4}))+$/i;
+  const grp=new Map();
+  for(const f of files){if(f.sys||f.kind!=="image"||f.isJson)continue;const b=nn(f.stem.replace(VR,""));if(!b||b.length<3)continue;const key=dirOf(f.path).toLowerCase()+"|"+b;(grp.get(key)||grp.set(key,[]).get(key)).push(f)}
+  for(const g of grp.values()){if(g.length<2)continue;if(!g.some(f=>VR.test(f.stem))&&new Set(g.map(f=>f.hash)).size===g.length&&g.every(f=>f.refs.length))continue;
+    const px=f=>(f.w||0)*(f.h||0)||f.size;g.sort((a,b)=>px(b)-px(a));const best=g[0];best.variantBest=true;best.variants=g;
+    for(let i=1;i<g.length;i++){g[i].variantOf=best;g[i].variants=g}}
+  /* اقتراح مالك للملفات اليتيمة */
+  for(const f of files){if(f.sys||f.isJson||f.refs.length||f.kind==="system")continue;
+    let best=null;
+    for(const[id,e]of S.items){const dirs=ownerDirs(id);let sc=0,why="";
+      if(underOwner(f,id,dirs)){sc=3;why="موجود جوه مجلد العنصر في الأرشيف"}
+      else{const it=e.cur.it,segs=normPath(f.path).split("/").slice(0,-1).map(nn),nm=nn(it.name);if(nm&&segs.some(s=>s===nm||(nm.length>=4&&s.includes(nm))))sc=2,why="اسم مجلده شبه اسم العنصر";
+        else if(nm&&nm.length>=4&&nn(f.stem).includes(nm))sc=1.5,why="اسم الملف فيه اسم العنصر"}
+      if(sc&&(!best||sc>best.sc))best={id,sc,why}}
+    if(best){const p=normPath(f.path).toLowerCase();let role=f.kind==="image"?"image":"doc";
+      if(/\/(notebook_images|notebook)\//.test(p))role=f.kind==="image"?"nb":"doc";else if(/\/(documents|docs)\//.test(p))role="doc";else if(/\/(fault_images)\//.test(p))role="nb";
+      f.owner={itemId:best.id,role,sc:best.sc,why:best.why}}}
+  /* كل الملفات المرتبطة بمراجع تلقائية مضمونة */
+}
+function fstatus(f){
+  const o=ov(S.fo,f.id);
+  if(f.sys)return"system";if(o.ignore)return"ignored";
+  const used=f.refs.length>0;
+  if(bad(f))return"bad";
+  if(used){const fx=f.extMismatch||f.refs.some(r=>r.final.manual||r.res.conf!=="exact")||o.name||o.convert;return fx?"fix":"ok"}
+  if(o.assign)return"fix";
+  if(f.dupOf&&!o.assign)return"dup";
+  if(f.variantOf&&!o.assign)return"variant";
+  if(f.owner)return"suggest";
+  return"orphan"}
+function fileReasons(f){
+  const o=[];if(f.sys)return["ملف نظام (مش بيانات) — بيتتجاهل."];
+  for(const w of f.warns||[])o.push(w[1]);
+  if(f.extMismatch)o.push("الامتداد «."+(f.ext||"بدون")+"» مش بيطابق المحتوى الفعلي ("+typeLabel(f.t)+") — المتصفح/البرنامج ممكن مايعرضوش الملف صح.");
+  for(const r of f.refs){if(r.final.manual)o.push("اتربط يدويًا بـ «"+itemName(r.itemId)+"».");else if(r.res.why.length&&r.res.conf!=="exact")o.push(r.res.why[0])}
+  if(!f.refs.length){
+    if(f.dupOf)o.push("نسخة مطابقة بالحرف لملف تاني ("+f.dupOf.path+").");
+    if(f.variantOf)o.push("نسخة تانية من نفس الصورة (حجم/اسم مختلف) — الأكبر هي «"+f.variantOf.name+"».");
+    if(f.owner)o.push("مش مشار له من أي عنصر في البيانات، لكن غالبًا بتاع «"+itemName(f.owner.itemId)+"» ("+f.owner.why+").");
+    else if(!f.dupOf&&!f.variantOf)o.push("مش مشار له من أي عنصر في البيانات ومفيش مؤشر على صاحبه — الاستيراد القديم كان بيحطه في «_unassigned» بس.")}
+  if(f.dupName&&f.dupName>1)o.push("فيه "+f.dupName+" ملفات بنفس الاسم «"+f.name+"» في أماكن مختلفة — الاستيراد القديم كان بيحتفظ بأول واحد ويرمي الباقي من غير تنبيه.");
+  return o}
+function itemName(id){const e=S.items.get(id);return e?(e.cur.it.name||id):id}
+
+/* ---------------- ملخص ---------------- */
+function summary(){
+  const fs=S.files.filter(f=>!f.isJson),t={files:fs.length,sys:0,ok:0,fix:0,orphan:0,suggest:0,bad:0,dup:0,variant:0,ignored:0,extBad:0,bytes:0,collide:0};
+  const names=new Map();fs.forEach(f=>{if(!f.sys&&!f.virtual)names.set(f.name.toLowerCase(),(names.get(f.name.toLowerCase())||0)+1)});
+  fs.forEach(f=>{f.dupName=f.sys||f.virtual?0:names.get(f.name.toLowerCase());if(f.dupName>1)t.collide++;
+    const s=fstatus(f);t[s]=(t[s]||0)+1;if(f.extMismatch)t.extBad++;t.bytes+=f.size||0});
+  const r={all:S.refs.length,ok:0,auto:0,manual:0,missing:0,ignored:0,sugg:0};
+  S.refs.forEach(x=>{const y=x.final;if(y.ignored)r.ignored++;else if(y.f){r.ok++;if(y.manual)r.manual++;else if(x.res.conf!=="exact")r.auto++}else{r.missing++;if(x.res.cands&&x.res.cands.length)r.sugg++}});
+  return{f:t,r,items:S.items.size,folders:S.folders.size,json:S.jsons.length,prob:S.problems}}
+
+/* ---------------- التنفيذ ---------------- */
+function clone(o){try{return structuredClone(o)}catch(e){return JSON.parse(JSON.stringify(o))}}
+async function apply(){
+  const opt=S.ui.opt,rep={startedAt:Date.now(),items:[],folders:0,files:0,bytes:0,skipped:[],removed:[],errors:[],mode:opt.replace?"replace":(opt.complete?"complete":"new-only")};
+  const st=ST();
+  if(opt.replace){await idbClear_real("folders");await idbClear_real("items");await idbClear_real("files");st.folders=[];st.items=[]}
+  const existFiles=new Map();
+  try{for(const r of await idbGetAll_real("files"))existFiles.set(r.id,r)}catch(e){}
+  const usedFid=new Set(existFiles.keys()),shaOfExist=new Map();
+  const fidOfFile=new Map();/* file.id → app fid */
+  const written=[];
+  const getFid=async(f,prefer)=>{
+    if(fidOfFile.has(f.id))return fidOfFile.get(f.id);
+    let want=idLike(prefer)?prefer:(idLike(f.stem)?f.stem:uid2("file"));
+    if(usedFid.has(want)){const ex=existFiles.get(want);
+      if(ex&&ex.blob){if(!shaOfExist.has(want))shaOfExist.set(want,await sha(ex.blob));if(shaOfExist.get(want)&&shaOfExist.get(want)===f.hash){fidOfFile.set(f.id,want);return want}}
+      want=uid2("file")}
+    usedFid.add(want);fidOfFile.set(f.id,want);return want};
+  const itemSet=new Set(st.items.map(i=>i.id)),folderSet=new Set(st.folders.map(f=>f.id));
+  /* مجموعات */
+  for(const[id,f]of S.folders){if(folderSet.has(id))continue;const nf=clone(f);nf.id=id;try{await idbPut_real("folders",nf);st.folders.push(nf);folderSet.add(id);rep.folders++}catch(e){rep.errors.push("مجموعة "+(f.name||id)+": "+e.message)}}
+  /* تجهيز سجل الملف (اسم/امتداد/تحويل) */
+  const makeRec=async(f,fid)=>{
+    const o=ov(S.fo,f.id);let blob=f.blob,name=o.name||f.name,mime=f.mime;
+    const re=realExt(f.t);
+    if(o.convert&&f.kind==="image"){const tgt=o.convert==="jpeg"?"image/jpeg":"image/png";
+      try{const bm=await createImageBitmap(blob),cv=document.createElement("canvas");cv.width=bm.width;cv.height=bm.height;const cx=cv.getContext("2d");if(tgt==="image/jpeg"){cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height)}cx.drawImage(bm,0,0);try{bm.close()}catch(e){}
+        const nb=await new Promise(r=>cv.toBlob(r,tgt,.95));if(nb&&nb.size){blob=nb;mime=tgt;name=stemOf(name)+(tgt==="image/png"?".png":".jpg")}}catch(e){rep.errors.push("فشل تحويل "+f.path+": "+e.message)}}
+    else if(f.extMismatch&&re&&o.fixExt!==false){name=stemOf(name)+"."+re;mime=MIME[re]||mime}
+    if(extOf(name)===""&&re)name+="."+re;
+    try{blob=blob.slice(0,blob.size,mime)}catch(e){}
+    return{id:fid,blob,name,mime,size:blob.size,updatedAt:Date.now()}};
+  const orphanAssign=new Map();/* itemId → [{f,role}] */
+  for(const f of S.files){const o=ov(S.fo,f.id);if(f.sys||f.isJson||o.ignore)continue;
+    if(!f.refs.length){let a=o.assign;
+      if(!a&&f.owner&&f.owner.sc>=3&&!f.dupOf&&!f.variantOf&&!bad(f))a={itemId:f.owner.itemId,role:f.owner.role};/* مؤكد: جوه مجلد العنصر نفسه */
+      if(a&&a.itemId){(orphanAssign.get(a.itemId)||orphanAssign.set(a.itemId,[]).get(a.itemId)).push({f,role:a.role||"image"})}}}
+  /* العناصر */
+  const refsBy=new Map();S.refs.forEach(r=>{(refsBy.get(r.itemId)||refsBy.set(r.itemId,[]).get(r.itemId)).push(r)});
+  for(const[id,e]of S.items){
+    const src=e.cur.it,rs=refsBy.get(id)||[],R={id,name:src.name||id,added:{image:0,doc:0,nb:0,ft:0},removed:[],skipped:[],status:""};
+    try{
+      const exists=itemSet.has(id)&&!opt.replace;
+      if(exists&&!opt.complete){R.status="موجود بالفعل — اتخطّى";rep.items.push(R);continue}
+      const cur=exists?st.items.find(x=>x.id===id):null;
+      const it=clone(src);delete it._images;delete it._docs;delete it._notebookImages;delete it._faultImages;
+      const imgs=[],docs=[],nb=[];let mainFid=null;
+      const take=async r=>{const x=r.final;if(!x.f||x.f.size===0&&!x.f.blob){return null}
+        const fid=await getFid(x.f,r.value);
+        if(!fidOfFile.has("w:"+fid)){fidOfFile.set("w:"+fid,1);written.push({f:x.f,fid})}
+        return fid};
+      const lost=(r,why)=>{R.removed.push({role:r.role,value:r.value,why});rep.removed.push({item:R.name,role:r.role,value:r.value,why})};
+      for(const r of rs){
+        if(r.final.ignored){continue}
+        const fid=await take(r);
+        if(!fid){lost(r,r.res.why[0]||"مفيش ملف مطابق");continue}
+        if(r.role==="image"){imgs.push(fid);if(r.value===src.mainImageId||(r.ptr&&src.mainImageId&&r.hint&&r.hint===src.mainImageId))mainFid=mainFid||fid}
+        else if(r.role==="doc"){const d=(Array.isArray(src.docs)?src.docs:[]).find(x=>x&&typeof x==="object"&&(x.fileId===r.value||x.id===r.value||x.name===r.name));docs.push(Object.assign({},d&&typeof d==="object"?d:{},{id:(d&&d.id&&d.id!==r.value?d.id:uid2("doc")),name:(d&&d.name)||r.name||x_name(r),fileId:fid}))}
+        else if(r.role==="nb"){const d=(src.notebookData&&Array.isArray(src.notebookData.images)?src.notebookData.images:[]).find(x=>x&&x.id===r.value);nb.push(Object.assign({},d&&typeof d==="object"?d:{},{id:fid,caption:(d&&d.caption)||r.name||""}))}
+        else if(r.role==="ft-bg"||r.role==="ft-note"){r.newFid=fid}}
+      function x_name(r){const f=r.final.f;return ov(S.fo,f.id).name||f.name}
+      /* يتامى مربوطين */
+      for(const a of orphanAssign.get(id)||[]){const fid=await getFid(a.f,null);if(!fidOfFile.has("w:"+fid)){fidOfFile.set("w:"+fid,1);written.push({f:a.f,fid})}
+        if(a.role==="doc")docs.push({id:uid2("doc"),name:ov(S.fo,a.f.id).name||a.f.name,fileId:fid});else if(a.role==="nb"){nb.push({id:fid,caption:""})}else imgs.push(fid)}
+      /* بناء العنصر */
+      for(const k of Object.keys(it))if(LEG_IMG.test(k)||(LEG_DOC.test(k)&&k!=="docs")||["image","photo","picture","img","mainImage"].includes(k))delete it[k];
+      if(it.notebookData&&typeof it.notebookData==="object"){
+        const ft=it.notebookData.faultTracking;
+        if(ft&&Array.isArray(ft.pages)){const pg=ft.pages,mp=new Map();rs.filter(r=>r.role==="ft-bg"||r.role==="ft-note").forEach(r=>mp.set(r.ptr,r));
+          pg.forEach((p,pi)=>{if(p&&p.imageId){const r=mp.get("ft.pages["+pi+"].imageId");p.imageId=r&&r.newFid||null;if(r&&!r.newFid&&!r.final.ignored)R.removed.push({role:"ft-bg",value:r.value,why:r.res.why[0]||""})}
+            ((p&&p.hotspots)||[]).forEach((h,hi)=>{if(h&&h.content&&Array.isArray(h.content.images))h.content.images=h.content.images.map((im,ii)=>{const r=mp.get("ft.pages["+pi+"].hotspots["+hi+"].images["+ii+"]");return r&&r.newFid?Object.assign({},im,{id:r.newFid}):null}).filter(Boolean)})})}
+        it.notebookData.images=nb}
+      else if(nb.length){/* مفيش دفتر ملاحظات: نضيف الصور كصور عادية */imgs.push(...nb.map(x=>x.id))}
+      it.imageIds=imgs;it.docs=docs;
+      it.mainImageId=mainFid||(imgs[0]||null);
+      if(it.folderId&&!folderSet.has(String(it.folderId))){R.removed.push({role:"group",value:String(it.folderId),why:"المجموعة بتاعة العنصر مش موجودة — اتحط العنصر في الرئيسية."});it.folderId=null}
+      if(!it.folderId)it.folderId=it.folderId||null;
+      if(exists){
+        /* إكمال العنصر الموجود: نضيف بس اللي ناقص ومانمسحش حاجة */
+        const have=new Set();let addI=0,addD=0,addN=0;
+        const curRecs=new Map();for(const fid of[...(cur.imageIds||[]),...(cur.docs||[]).map(d=>d&&d.fileId),...((cur.notebookData&&cur.notebookData.images)||[]).map(x=>x&&x.id)]){if(!fid)continue;have.add(fid);const rc=existFiles.get(fid)||await idbGet_real("files",fid);if(rc&&rc.blob){existFiles.set(fid,rc);if(!shaOfExist.has(fid))shaOfExist.set(fid,await sha(rc.blob))}}
+        const haveH=new Set([...have].map(f=>shaOfExist.get(f)).filter(Boolean));
+        const wf=new Map(written.map(w=>[w.fid,w.f]));
+        const newOnly=async fid=>{if(have.has(fid))return false;const f=wf.get(fid);if(f&&f.hash&&haveH.has(f.hash)){R.skipped.push("«"+f.name+"» موجودة بالفعل (نفس المحتوى)");return false}if(f&&f.hash)haveH.add(f.hash);have.add(fid);return true};
+        const merged=clone(cur);merged.imageIds=Array.isArray(merged.imageIds)?merged.imageIds:[];merged.docs=Array.isArray(merged.docs)?merged.docs:[];
+        for(const fid of it.imageIds)if(await newOnly(fid)){merged.imageIds.push(fid);addI++}
+        for(const d of it.docs)if(await newOnly(d.fileId)){merged.docs.push(d);addD++}
+        if(it.notebookData&&Array.isArray(it.notebookData.images)&&it.notebookData.images.length){merged.notebookData=merged.notebookData||{};merged.notebookData.images=Array.isArray(merged.notebookData.images)?merged.notebookData.images:[];for(const x of it.notebookData.images)if(await newOnly(x.id)){merged.notebookData.images.push(x);addN++}}
+        if(!merged.mainImageId&&merged.imageIds.length)merged.mainImageId=merged.imageIds[0];
+        R.added={image:addI,doc:addD,nb:addN,ft:0};R.status=(addI+addD+addN)?"اتكمّل بـ "+(addI+addD+addN)+" ملف":"مفيش ناقص";
+        rep.items.push(R);R.merged=merged;continue}
+      R.added={image:imgs.length,doc:docs.length,nb:nb.length,ft:0};R.status="اتضاف";R.newItem=it;rep.items.push(R)
+    }catch(err){R.status="فشل";R.error=String(err&&err.message||err);rep.errors.push("عنصر "+R.name+": "+R.error);rep.items.push(R)}}
+  /* كتابة الملفات المطلوبة فعلًا (اللي اتسحبت فعلًا من عناصر اتضافت/اتكمّلت) */
+  const need=new Set();
+  for(const R of rep.items){const it=R.newItem||R.merged;if(!it)continue;
+    (it.imageIds||[]).forEach(x=>need.add(x));(it.docs||[]).forEach(d=>d&&need.add(d.fileId));((it.notebookData&&it.notebookData.images)||[]).forEach(x=>x&&need.add(x.id));
+    const ft=it.notebookData&&it.notebookData.faultTracking;if(ft&&ft.pages)ft.pages.forEach(p=>{if(p.imageId)need.add(p.imageId);((p.hotspots)||[]).forEach(h=>((h.content&&h.content.images)||[]).forEach(im=>im&&need.add(im.id)))})}
+  let wi=0;
+  for(const w of written){if(!need.has(w.fid)||existFiles.has(w.fid)&&existFiles.get(w.fid).blob&&shaOfExist.get(w.fid)===w.f.hash)continue;
+    try{setProg("كتابة الملفات",++wi,written.length);const rec=await makeRec(w.f,w.fid);await idbPut_real("files",rec);rep.files++;rep.bytes+=rec.size}catch(e){rep.errors.push("ملف "+w.f.path+": "+e.message)}}
+  for(const R of rep.items){
+    try{
+      if(R.newItem){await idbPut_real("items",R.newItem);st.items.push(R.newItem);itemSet.add(R.id)}
+      else if(R.merged){await idbPut_real("items",R.merged);const i=st.items.findIndex(x=>x.id===R.id);if(i>=0)st.items[i]=R.merged}}
+    catch(e){R.status="فشل";R.error=e.message;rep.errors.push("حفظ عنصر "+R.name+": "+e.message)}
+    delete R.newItem;delete R.merged}
+  if(Array.isArray(S.cats)){try{for(const c of S.cats)if(!st.categories.includes(c)){st.categories.push(c);if(S.schemas&&S.schemas[c])st.categorySchemas[c]=S.schemas[c]}
+    if(typeof saveCategoryMeta==="function")await saveCategoryMeta()}catch(e){}}
+  rep.finishedAt=Date.now();S.prog=null;
+  try{renderSidebarTree()}catch(e){}
+  try{const fs=window.__FS;if(fs&&fs.state&&linkedDirHandle){fs.state.scan=true;fs.kick(0)}}catch(e){}
+  try{logActivity("import",{entity:"system",entityId:"import_"+Date.now(),entityLabel:"استيراد بالتشخيص",summary:"استيراد "+rep.items.filter(x=>/اتضاف|اتكمّل/.test(x.status)).length+" عنصر و"+rep.files+" ملف"})}catch(e){}
+  S.result=rep;return rep}
+
+/* ---------------- التقرير ---------------- */
+function reportText(){
+  const s=summary(),L=[];L.push("تقرير تشخيص الاستيراد — "+new Date().toLocaleString("ar-EG"));L.push("المصدر: "+S.src.join("، "));L.push("");
+  L.push("عناصر: "+s.items+" | مجموعات: "+s.folders+" | ملفات: "+s.f.files+" ("+fb(s.f.bytes)+") | مراجع صور/مستندات: "+s.r.all);
+  L.push("متعرَّف عليه: "+s.f.ok+" | متعرَّف بعد تصحيح: "+s.f.fix+" | غير مربوط: "+(s.f.orphan+s.f.suggest)+" | تالف: "+s.f.bad+" | تكرار: "+s.f.dup+" | نسخ ثانية: "+s.f.variant);
+  L.push("مراجع: مربوطة "+s.r.ok+" (تلقائي بتصحيح "+s.r.auto+" / يدوي "+s.r.manual+") | ناقصة "+s.r.missing+" | متجاهلة "+s.r.ignored);L.push("");
+  L.push("== المشاكل ==");s.prob.forEach(p=>L.push("["+p.sev+"] "+p.msg));L.push("");
+  L.push("== المراجع الناقصة ==");S.refs.filter(r=>!r.final.f&&!r.final.ignored).forEach(r=>L.push("• "+itemName(r.itemId)+" | "+roleLabel(r.role)+" | "+r.ptr+" = "+r.value+"\n    السبب: "+r.res.why.join(" ")+(r.res.cands.length?"\n    اقتراحات: "+r.res.cands.map(c=>c.f.path).join(" | "):"")));L.push("");
+  L.push("== الملفات ==");S.files.filter(f=>!f.isJson).forEach(f=>{const st=fstatus(f);L.push("["+STL[st]+"] "+f.path+" — "+fb(f.size)+" — "+typeLabel(f.t)+(f.refs.length?" — مربوط بـ "+f.refs.map(r=>itemName(r.itemId)).join("، "):"")+(fileReasons(f).length?"\n    "+fileReasons(f).join("\n    "):""))});
+  if(S.result){L.push("");L.push("== نتيجة التنفيذ ==");L.push("وضع: "+S.result.mode+" | ملفات اتكتبت: "+S.result.files+" ("+fb(S.result.bytes)+")");
+    S.result.items.forEach(i=>L.push("• "+i.name+": "+i.status+(i.removed.length?" | اتشال "+i.removed.length+" مرجع ناقص":"")));S.result.errors.forEach(e=>L.push("⚠ "+e))}
+  return L.join("\n")}
+function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:type||"text/plain"}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),3000)}
+
+/* ---------------- الواجهة ---------------- */
+const STL={ok:"متعرَّف عليه",fix:"اتعرّف بعد تصحيح",orphan:"غير مربوط",suggest:"غير مربوط — فيه اقتراح",bad:"تالف",dup:"تكرار",variant:"نسخة تانية",ignored:"متجاهل",system:"ملف نظام"};
+const roleLabel=r=>({image:"صورة العنصر",doc:"مستند","nb":"صورة شرح","ft-bg":"خلفية أعطال","ft-note":"صورة نقطة عطل"}[r]||r);
+const CSS=`
+.idr-wrap{max-width:1100px}
+.idr-pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:12px}
+.idr-pick label.btn{display:block;text-align:center;cursor:pointer}
+.idr-pick input{display:none}
+.idr-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:12px 0;overflow-x:auto}
+.idr-tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:8px 12px;font-size:13px;white-space:nowrap}
+.idr-tabs button.on{color:var(--amber);border-bottom-color:var(--amber)}
+.idr-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+.idr-card{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:9px 11px;text-align:right;color:var(--text);cursor:pointer}
+.idr-card:hover{border-color:var(--amber)}.idr-card .n{font-family:var(--mono);font-size:20px;font-weight:600}.idr-card .l{font-size:11.5px;color:var(--dim)}
+.idr-card.g .n{color:var(--green)}.idr-card.y .n{color:var(--yellow)}.idr-card.r .n{color:var(--red)}.idr-card.b .n{color:var(--blue)}
+.idr-note{border-radius:10px;padding:8px 11px;font-size:12px;line-height:1.75;margin-bottom:7px;border:1px solid var(--border);background:var(--panel2)}
+.idr-note.err{border-color:var(--red);background:var(--red-dim)}.idr-note.warn{border-color:var(--yellow);background:var(--yellow-dim)}.idr-note.info{border-color:var(--blue);background:var(--blue-dim)}.idr-note.ok{border-color:var(--green);background:var(--green-dim)}
+.idr-row{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:9px 10px;margin-bottom:6px}
+.idr-row.st-bad,.idr-row.st-miss{border-color:var(--red)}.idr-row.st-fix,.idr-row.st-suggest,.idr-row.st-sugg{border-color:var(--yellow)}.idr-row.st-ok{border-color:var(--green)}
+.idr-top{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.idr-nm{font-size:13px;font-weight:600;word-break:break-all}
+.idr-sub{font-size:11.5px;color:var(--dim);margin-top:2px;line-height:1.6;word-break:break-word}
+.idr-path{font-family:var(--mono);font-size:11px;color:var(--dim2);direction:ltr;text-align:left;word-break:break-all;margin-top:2px}
+.idr-why{font-size:11.5px;color:var(--yellow);margin-top:3px;line-height:1.6}.idr-why.r{color:var(--red)}
+.idr-acts{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.idr-acts button,.idr-acts select,.idr-bulk button{background:var(--panel3);border:1px solid var(--border-lt);color:var(--text);border-radius:7px;padding:4px 9px;font-size:11.5px;width:auto;max-width:100%}
+.idr-acts button:hover,.idr-bulk button:hover{border-color:var(--amber);color:var(--amber)}
+.idr-chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11px;border:1px solid var(--border-lt);white-space:nowrap}
+.idr-chip.ok{color:var(--green);border-color:var(--green);background:var(--green-dim)}.idr-chip.fix,.idr-chip.suggest,.idr-chip.variant,.idr-chip.dup{color:var(--yellow);border-color:var(--yellow);background:var(--yellow-dim)}
+.idr-chip.bad,.idr-chip.miss{color:var(--red);border-color:var(--red);background:var(--red-dim)}.idr-chip.orphan,.idr-chip.ignored,.idr-chip.system{color:var(--dim)}
+.idr-flt{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px}
+.idr-bulk{display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:8px;margin-bottom:10px;font-size:12px}
+.idr-prev{max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border);margin-top:6px;display:block}
+.idr-bar{height:9px;border-radius:6px;background:var(--panel3);border:1px solid var(--border);overflow:hidden}.idr-bar i{display:block;height:100%;background:var(--amber)}
+.idr-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px}
+.idr-box{background:var(--panel);border:1px solid var(--border-lt);border-radius:14px;width:min(560px,100%);max-height:88vh;overflow:auto;padding:14px;direction:rtl}
+.idr-pickrow{display:flex;gap:8px;align-items:center;padding:7px;border:1px solid var(--border);border-radius:9px;margin-bottom:5px;cursor:pointer;background:var(--panel2)}
+.idr-pickrow:hover{border-color:var(--amber)}.idr-pickrow img{width:42px;height:42px;object-fit:cover;border-radius:6px;flex-shrink:0}
+.idr-opt{display:flex;flex-direction:column;gap:7px;margin:10px 0;font-size:12.5px}.idr-opt label{display:flex;gap:7px;align-items:flex-start;margin:0;color:var(--text);font-size:12.5px}.idr-opt input{width:auto;margin-top:3px}
+`;
+(function(){const s=document.createElement("style");s.id="importdoctor-css";s.textContent=CSS;document.head.appendChild(s)})();
+const chip=(c,t)=>`<span class="idr-chip ${c}">${t}</span>`;
+function drawProgress(){const el=document.getElementById("idrProg");if(!el)return;const p=S.prog;
+  el.innerHTML=p?`<div class="idr-note info"><b>${H(p.phase)}</b>${p.total?" — "+N(p.done)+" من "+N(p.total):p.done?" — "+N(p.done):""}${p.total?`<div class="idr-bar" style="margin-top:6px"><i style="width:${Math.min(100,p.done/p.total*100)}%"></i></div>`:""}</div>`:""}
+function causes(){
+  const s=summary(),c=[];
+  const cnt=(code)=>S.problems.filter(p=>p.code===code).length;
+  if(s.f.collide)c.push(["warn",N(s.f.collide)+" ملف ليهم اسم مكرر في أماكن مختلفة (زي 1.jpg في أكتر من عنصر). الاستيراد القديم كان بيحتفظ بأول واحد ويرمي الباقي بصمت — هنا كلهم بيتحفظوا."]);
+  if(s.f.extBad)c.push(["warn",N(s.f.extBad)+" ملف امتداده مش بيطابق محتواه الحقيقي (مثلًا PNG محفوظ باسم .jpg). المتصفح ممكن يفشل في عرضه أو يتعرف عليه غلط."]);
+  const inl=S.problems.find(p=>p.code==="INLINE");if(inl)c.push(["info",inl.msg]);
+  if(cnt("JSON_BAD"))c.push(["err",N(cnt("JSON_BAD"))+" ملف بيانات تالف مش ممكن قراءته."]);
+  if(cnt("JSON_FIXED")+cnt("JSON_PARTIAL"))c.push(["info",N(cnt("JSON_FIXED")+cnt("JSON_PARTIAL"))+" ملف JSON كان فيه عيب (BOM/فواصل زايدة/مقطوع) واتصلّح."]);
+  if(cnt("NESTED"))c.push(["info",N(cnt("NESTED"))+" أرشيف جوه أرشيف اتفتح."]);
+  if(s.f.orphan+s.f.suggest)c.push(["warn",N(s.f.orphan+s.f.suggest)+" ملف مش مشار له من أي عنصر — الاستيراد القديم كان بيرميه في _unassigned أو يتجاهله."]);
+  if(s.r.missing)c.push(["err",N(s.r.missing)+" مرجع صورة/مستند مالوش ملف مطابق ("+N(s.r.sugg)+" منهم فيه اقتراحات). شوف تبويب «المراجع الناقصة»."]);
+  if(s.f.bad)c.push(["err",N(s.f.bad)+" ملف تالف/فاضي."]);
+  if(s.r.auto)c.push(["ok",N(s.r.auto)+" مرجع اتربط تلقائيًا بعد تصحيح الاسم/المسار — ده اللي كان بيضيع قبل كده."]);
+  return c}
+function drawSummary(h){
+  const s=summary(),r=s.r,f=s.f;
+  const card=(cls,n,l,go)=>`<button class="idr-card ${cls}" data-act="go" data-v="${go}"><div class="n">${N(n)}</div><div class="l">${l}</div></button>`;
+  let o=`<div class="idr-cards">
+   ${card("b",s.items,"عنصر في المصدر","sum")}${card("b",f.files,"ملف ("+fb(f.bytes)+")","files|all")}
+   ${card("g",f.ok,"متعرَّف عليه مباشرة","files|ok")}${card("y",f.fix,"اتعرّف بعد تصحيح","files|fix")}
+   ${card("y",f.orphan+f.suggest,"غير مربوط بعنصر","files|orphan")}${card("r",f.bad,"تالف / فاضي","files|bad")}
+   ${card("y",f.dup+f.variant,"تكرار / نسخ ثانية","files|dup")}${card("r",r.missing,"مرجع صورة ناقص","refs|bad")}</div>`;
+  const cs=causes();o+=cs.length?cs.map(c=>`<div class="idr-note ${c[0]}">${c[1]}</div>`).join(""):`<div class="idr-note ok">كل الملفات والمراجع اتعرّف عليها من غير مشاكل.</div>`;
+  o+=`<div class="idr-bulk"><b>إصلاحات جماعية:</b>
+    <button data-act="bulk" data-v="fixext">🔧 صحّح كل الامتدادات الغلط</button>
+    <button data-act="bulk" data-v="suggest">🔗 طبّق أقرب اقتراح للمراجع الناقصة</button>
+    <button data-act="bulk" data-v="bigger">🖼️ استخدم أكبر نسخة لكل صورة</button>
+    <button data-act="bulk" data-v="ignbad">🚫 تجاهل التالف والفاضي</button>
+    <button data-act="bulk" data-v="igndup">🚫 تجاهل التكرار والنسخ الصغيرة</button>
+    <button data-act="bulk" data-v="reset">↺ ارجع للتلقائي</button></div>`;
+  o+=`<div class="panel"><h3>⚙️ التنفيذ</h3><div class="idr-opt">
+    <label><input type="checkbox" id="optComplete" ${S.ui.opt.complete?"checked":""}> أكمّل العناصر الموجودة بالفعل: أضيف الصور والملفات الناقصة بس (مفيش حاجة بتتمسح أو بتتبدّل). الاستيراد القديم كان بيتخطّى العنصر الموجود بالكامل.</label>
+    <label><input type="checkbox" id="optReplace" ${S.ui.opt.replace?"checked":""}> استبدال كل البيانات الحالية بمحتوى المصدر (خطر: بيمسح الموجود الأول).</label></div>
+    <div class="idr-sub">هيتضاف: ${N(s.items)} عنصر ممكن (الجديد بيتضاف كامل، الموجود بيتكمّل). لسه مفيش حاجة اتغيّرت.</div>
+    <div class="idr-acts"><button class="btn primary" data-act="apply" style="padding:9px 16px;font-size:13px">✅ تنفيذ الاستيراد</button>
+    <button data-act="rep" class="btn">📄 تنزيل التقرير (نص)</button><button data-act="repj" class="btn">🧾 تنزيل التقرير (JSON)</button></div></div>`;
+  h.innerHTML=o}
+function fileMatches(f){const u=S.ui,st=fstatus(f);
+  if(f.isJson)return false;
+  if(u.fs!=="all"){if(u.fs==="dup"){if(st!=="dup"&&st!=="variant")return false}else if(u.fs==="orphan"){if(st!=="orphan"&&st!=="suggest")return false}else if(st!==u.fs)return false}
+  if(u.ft!=="all"&&f.kind!==u.ft)return false;
+  const q=u.q.trim().toLowerCase();if(q&&!(f.path.toLowerCase().includes(q)||f.refs.some(r=>itemName(r.itemId).toLowerCase().includes(q))))return false;return true}
+function fileRow(f){
+  const st=fstatus(f),o=ov(S.fo,f.id),why=fileReasons(f),isImg=f.kind==="image"&&f.t!=="heic"&&f.t!=="tiff"&&!bad(f);
+  const acts=[];
+  if(st!=="system"){
+    acts.push(`<button data-act="ren" data-v="${f.id}">✏️ غيّر الاسم</button>`);
+    if(f.extMismatch&&realExt(f.t))acts.push(`<button data-act="fixext" data-v="${f.id}">🔧 صحّح الامتداد (.${realExt(f.t)})</button>`);
+    if(f.kind==="image"&&isImg&&!["jpg","png"].includes(f.t)||(f.kind==="image"&&f.t==="jpg"&&false))acts.push(`<button data-act="conv" data-v="${f.id}|png">🖼️ حوّل PNG</button><button data-act="conv" data-v="${f.id}|jpeg">🖼️ حوّل JPG</button>`);
+    if(!f.refs.length)acts.push(`<button data-act="assign" data-v="${f.id}">🔗 اربط بعنصر</button>`);
+    if(f.refs.some(r=>!r.final.manual===false)||o.assign)acts.push(`<button data-act="unlink" data-v="${f.id}">⛓️ فك الربط</button>`);
+    if(f.variantOf)acts.push(`<button data-act="usebig" data-v="${f.variantOf.id}">⬆️ استخدم الأكبر بدل ده</button>`);
+    if(isImg||f.kind==="image"&&f.blob&&f.t==="svg")acts.push(`<button data-act="prev" data-v="${f.id}">👁 معاينة</button>`);
+    acts.push(o.ignore?`<button data-act="unign" data-v="${f.id}">↩️ ارجع</button>`:`<button data-act="ign" data-v="${f.id}">🚫 تجاهل</button>`)}
+  const link=f.refs.length?f.refs.map(r=>H(itemName(r.itemId))+" ("+roleLabel(r.role)+")").join("، "):(o.assign?"هيتربط بـ «"+H(itemName(o.assign.itemId))+"» ("+roleLabel(o.assign.role)+")":"");
+  return`<div class="idr-row st-${st}"><div class="idr-top"><div style="min-width:0"><div class="idr-nm">${o.name?H(o.name)+' <small style="color:var(--dim)">(كان: '+H(f.name)+")</small>":H(f.name)}</div>
+    <div class="idr-sub">${fb(f.size)} · ${typeLabel(f.t)}${f.w?" · "+f.w+"×"+f.h:""}${f.ext?" · امتداد ."+H(f.ext):""}${link?" · "+link:""}</div>
+    <div class="idr-path">${H(f.path)}</div></div>${chip(st,STL[st])}</div>
+    ${why.map(w=>`<div class="idr-why ${st==="bad"?"r":""}">• ${H(w)}</div>`).join("")}
+    ${S.ui.prev.has(f.id)&&f.blob?`<img class="idr-prev" src="${url(f)}">`:""}
+    <div class="idr-acts">${acts.join("")}</div></div>`}
+function drawFiles(h){
+  const u=S.ui,opt=(v,l)=>`<option value="${v}" ${u.fs===v?"selected":""}>${l}</option>`;
+  const all=S.files.filter(fileMatches);
+  all.sort((a,b)=>{const o={bad:0,fix:1,suggest:2,orphan:3,dup:4,variant:4,ok:5,ignored:6,system:7};return(o[fstatus(a)]??9)-(o[fstatus(b)]??9)||a.path.localeCompare(b.path,"ar")});
+  const shown=all.slice(0,u.limit);
+  h.innerHTML=`<div class="idr-flt"><div><label>الحالة</label><select id="ffs">${opt("all","الكل")}${opt("ok","متعرَّف عليه")}${opt("fix","اتعرّف بعد تصحيح")}${opt("orphan","غير مربوط")}${opt("bad","تالف")}${opt("dup","تكرار / نسخ")}${opt("ignored","متجاهل")}${opt("system","ملفات نظام")}</select></div>
+    <div><label>النوع</label><select id="fft"><option value="all">الكل</option><option value="image" ${u.ft==="image"?"selected":""}>صور</option><option value="doc" ${u.ft==="doc"?"selected":""}>مستندات</option><option value="other" ${u.ft==="other"?"selected":""}>غير معروف</option></select></div>
+    <div><label>بحث (مسار أو عنصر)</label><input id="ffq" value="${H(u.q)}" placeholder="اكتب جزء من الاسم"></div></div>
+    <div class="idr-note">${N(all.length)} ملف</div>`+(shown.map(fileRow).join("")||`<div class="idr-note">مفيش ملفات بالفلتر ده.</div>`)+(all.length>shown.length?`<button class="btn" style="width:100%" data-act="more">عرض ${N(Math.min(50,all.length-shown.length))} كمان (فاضل ${N(all.length-shown.length)})</button>`:"")}
+function refRow(r){
+  const y=r.final,o=ov(S.ro,r.rid),x=r.res;let st,lab;
+  if(y.ignored){st="ignored";lab="متجاهل"}else if(y.f){st=y.manual||x.conf!=="exact"?"fix":"ok";lab=y.manual?"مربوط يدويًا":x.conf==="exact"?"مربوط":"مربوط بعد تصحيح"}else{st=x.cands.length?"sugg":"miss";lab=x.cands.length?"ناقص — فيه اقتراح":"ناقص"}
+  const sel=!y.f&&x.cands.length?`<select data-ref="${r.rid}"><option value="">— اختار اقتراح —</option>${x.cands.map(c=>`<option value="${c.f.id}">${H(c.f.path)} (${Math.round(c.score*100)}%)</option>`).join("")}</select>`:"";
+  return`<div class="idr-row st-${st==="miss"?"miss":st}"><div class="idr-top"><div style="min-width:0"><div class="idr-nm">${H(itemName(r.itemId))} — ${roleLabel(r.role)}</div>
+    <div class="idr-sub">الحقل: <span style="font-family:var(--mono)">${H(r.ptr)}</span></div><div class="idr-path">${H(String(r.value).slice(0,160))}${r.name?" — "+H(r.name):""}</div></div>${chip(st==="sugg"?"suggest":st,lab)}</div>
+    ${y.f?`<div class="idr-sub">الملف: <span style="font-family:var(--mono);direction:ltr;display:inline-block">${H(y.f.path)}</span>${x.why.length&&!y.manual?" — "+H(x.why[0]):""}</div>`:x.why.map(w=>`<div class="idr-why r">• ${H(w)}</div>`).join("")}
+    ${y.f&&y.f.variants&&y.f.variantOf==null&&false?"":""}
+    <div class="idr-acts">${sel}
+    <button data-act="refpick" data-v="${r.rid}">🔎 اختار ملف</button>
+    ${y.f&&y.f.variantOf?`<button data-act="refbig" data-v="${r.rid}">⬆️ استخدم الأكبر</button>`:""}
+    ${y.f&&y.f.variants&&!y.f.variantOf&&y.f.variants.length>1?"":""}
+    ${(y.manual||y.ignored)?`<button data-act="refreset" data-v="${r.rid}">↺ تلقائي</button>`:""}
+    ${y.ignored?"":`<button data-act="refign" data-v="${r.rid}">🚫 احذف المرجع</button>`}
+    ${y.f&&y.f.blob&&y.f.kind==="image"?`<button data-act="prev" data-v="${y.f.id}">👁 معاينة</button>`:""}</div>
+    ${y.f&&S.ui.prev.has(y.f.id)?`<img class="idr-prev" src="${url(y.f)}">`:""}</div>`}
+function drawRefs(h){
+  const u=S.ui,opt=(v,l)=>`<option value="${v}" ${u.rs===v?"selected":""}>${l}</option>`;
+  let a=S.refs.filter(r=>{const y=r.final;if(u.rs==="bad")return!y.f&&!y.ignored;if(u.rs==="fix")return y.f&&(y.manual||r.res.conf!=="exact");if(u.rs==="ok")return y.f&&!y.manual&&r.res.conf==="exact";if(u.rs==="ignored")return y.ignored;return true});
+  const shown=a.slice(0,u.limit);
+  h.innerHTML=`<div class="idr-flt"><div><label>عرض</label><select id="frs">${opt("bad","الناقصة")}${opt("fix","اللي اتصلّحت/اتربطت")}${opt("ok","سليمة")}${opt("ignored","المحذوفة")}${opt("all","الكل")}</select></div></div>
+    <div class="idr-note">${N(a.length)} مرجع. «الناقصة»: عنصر بيشاور على صورة/مستند ومالقيتش ملف ليه — لو سبتها كده هتتشال من العنصر وقت الاستيراد.</div>`+(shown.map(refRow).join("")||`<div class="idr-note ok">مفيش مراجع في الفئة دي.</div>`)+(a.length>shown.length?`<button class="btn" style="width:100%" data-act="more">عرض ${N(Math.min(50,a.length-shown.length))} كمان</button>`:"")}
+function drawProblems(h){
+  const P=S.problems;
+  h.innerHTML=(P.length?P.map(p=>`<div class="idr-note ${p.sev==="err"?"err":p.sev==="warn"?"warn":"info"}">${H(p.msg)}${p.where?`<div class="idr-path">${H(p.where)}</div>`:""}</div>`).join(""):`<div class="idr-note ok">مفيش مشاكل في ملفات البيانات.</div>`)+
+   `<div class="panel"><h3>ملفات البيانات اللي اتقرت (${S.jsons.length})</h3>${S.jsons.map(j=>`<div class="idr-sub"><span style="font-family:var(--mono);direction:ltr;display:inline-block">${H(j.path)}</span> — ${({manifest:"فهرس ملفات",hashes:"بصمات",index:"فهرس مكتبة",bundle:"حزمة بيانات",items:"عناصر",folders:"مجموعات",item:"عنصر",group:"مجموعة",meta:"إعدادات/فئات",nested:"بيانات متداخلة",other:"مش بيانات معروفة"})[j.role]||""}${j.issues&&j.issues.length?" — ⚠ "+H(j.issues.join("، ")):""}</div>`).join("")||"—"}</div>`}
+function drawResult(h){
+  const r=S.result;if(!r){h.innerHTML=`<div class="idr-note">لسه ماتنفّذش استيراد.</div>`;return}
+  const okc=r.items.filter(i=>/اتضاف|اتكمّل/.test(i.status)).length;
+  h.innerHTML=`<div class="idr-note ${r.errors.length?"warn":"ok"}">تم: ${N(okc)} عنصر اتضاف/اتكمّل، ${N(r.files)} ملف اتكتب (${fb(r.bytes)}). ${r.removed.length?N(r.removed.length)+" مرجع ناقص اتشال من العناصر.":""}</div>`+
+   r.errors.map(e=>`<div class="idr-note err">${H(e)}</div>`).join("")+
+   r.items.map(i=>`<div class="idr-row"><div class="idr-top"><div class="idr-nm">${H(i.name)}</div>${chip(/فشل/.test(i.status)?"bad":/اتخطّى/.test(i.status)?"ignored":"ok",H(i.status))}</div>
+    <div class="idr-sub">صور ${i.added.image} · مستندات ${i.added.doc} · صور شرح ${i.added.nb}</div>
+    ${i.removed.map(x=>`<div class="idr-why">• اتشال مرجع ${roleLabel(x.role)} «${H(String(x.value).slice(0,60))}»: ${H(x.why||"")}</div>`).join("")}
+    ${i.skipped.map(x=>`<div class="idr-sub">• ${H(x)}</div>`).join("")}</div>`).join("")+
+   `<div class="idr-acts"><button class="btn" data-act="rep">📄 تنزيل التقرير (نص)</button><button class="btn" data-act="repj">🧾 JSON</button></div>`}
+const TABS=[["sum","📊 الملخص"],["files","📄 الملفات"],["refs","🔗 المراجع الناقصة"],["prob","⚠️ المشاكل"],["res","✅ النتيجة"]];
+function drawAll(){
+  if(!S.host||!document.getElementById("idrBody"))return;
+  const body=document.getElementById("idrBody");
+  document.getElementById("idrTabs").innerHTML=S.ready?TABS.map(([k,l])=>`<button class="${S.ui.tab===k?"on":""}" data-act="tab" data-v="${k}">${l}</button>`).join(""):"";
+  drawProgress();
+  if(!S.ready){body.innerHTML=S.busy?"":`<div class="idr-note info">اختار المصدر: أرشيف ZIP (حتى لو جواه ZIP تاني)، أو مجلد نسخة قديمة كامل، أو ملفات JSON وصور سايبة. التحليل بيقرا بس — مفيش حاجة بتتغير في بياناتك لحد ما تضغط «تنفيذ الاستيراد».</div>`+(S.problems.length?S.problems.map(p=>`<div class="idr-note ${p.sev==="err"?"err":"warn"}">${H(p.msg)}</div>`).join(""):"");return}
+  summary();const t=S.ui.tab;
+  if(t==="sum")drawSummary(body);else if(t==="files")drawFiles(body);else if(t==="refs")drawRefs(body);else if(t==="prob")drawProblems(body);else drawResult(body)}
+function recompute(){computeDerived();drawAll()}
+
+/* ---------------- نوافذ الاختيار ---------------- */
+function modal(html,onMount){const m=document.createElement("div");m.className="idr-modal";m.innerHTML=`<div class="idr-box">${html}</div>`;m.onclick=e=>{if(e.target===m)m.remove()};document.body.appendChild(m);onMount&&onMount(m);return m}
+function pickFile(r){
+  const role=r.role,isImg=role!=="doc";
+  const list=q=>{const qq=q.trim().toLowerCase();let a=S.files.filter(f=>!f.sys&&!f.isJson&&(isImg?f.kind==="image":true)&&(!qq||f.path.toLowerCase().includes(qq)));
+    const base=stemOf(baseOf(String(r.value)));a.sort((x,y)=>dice(y.stem,base)-dice(x.stem,base));return a.slice(0,40)};
+  const m=modal(`<h3 style="margin:0 0 8px;font-size:14px">اختار ملف لـ «${H(itemName(r.itemId))}» — ${roleLabel(r.role)}</h3><div class="idr-sub" style="margin-bottom:8px">المطلوب: <span style="font-family:var(--mono);direction:ltr;display:inline-block">${H(String(r.value).slice(0,100))}</span></div><input id="idrq" placeholder="ابحث في الملفات..." style="margin-bottom:8px"><div id="idrl"></div>`,mm=>{
+    const draw=()=>{const L=mm.querySelector("#idrl");L.innerHTML=list(mm.querySelector("#idrq").value).map(f=>`<div class="idr-pickrow" data-id="${f.id}">${f.blob&&f.kind==="image"&&!bad(f)&&f.t!=="heic"&&f.t!=="tiff"?`<img src="${url(f)}">`:`<span style="font-size:22px">📄</span>`}<div style="min-width:0"><div class="idr-nm">${H(f.name)}</div><div class="idr-path">${H(f.path)}</div><div class="idr-sub">${fb(f.size)}</div></div></div>`).join("")||`<div class="idr-note">مفيش نتائج.</div>`;
+      L.querySelectorAll(".idr-pickrow").forEach(el=>el.onclick=()=>{setOv(S.ro,r.rid,{fileId:el.dataset.id,ignore:false});mm.remove();recompute()})};
+    mm.querySelector("#idrq").oninput=draw;draw()})}
+function pickItem(f){
+  const items=[...S.items.entries()].map(([id,e])=>({id,name:e.cur.it.name||id}));
+  const m=modal(`<h3 style="margin:0 0 8px;font-size:14px">اربط «${H(f.name)}» بعنصر</h3>
+   <label>الدور</label><select id="idrrole"><option value="${f.kind==="image"?"image":"doc"}">${f.kind==="image"?"صورة العنصر":"مستند"}</option>${f.kind==="image"?'<option value="nb">صورة شرح (دفتر الملاحظات)</option><option value="doc">مستند</option>':'<option value="image">صورة</option>'}</select>
+   <input id="idrq" placeholder="ابحث عن عنصر..." style="margin:8px 0"><div id="idrl"></div>`,mm=>{
+    const draw=()=>{const q=mm.querySelector("#idrq").value.trim().toLowerCase();
+      mm.querySelector("#idrl").innerHTML=items.filter(i=>!q||i.name.toLowerCase().includes(q)).slice(0,50).map(i=>`<div class="idr-pickrow" data-id="${H(i.id)}"><div class="idr-nm">${H(i.name)}</div></div>`).join("")||`<div class="idr-note">مفيش عناصر.</div>`;
+      mm.querySelectorAll("#idrl .idr-pickrow").forEach(el=>el.onclick=()=>{setOv(S.fo,f.id,{assign:{itemId:el.dataset.id,role:mm.querySelector("#idrrole").value},ignore:false});mm.remove();recompute()})};
+    mm.querySelector("#idrq").oninput=draw;draw()})}
+
+/* ---------------- التفاعل ---------------- */
+function bulk(kind){
+  let n=0;
+  if(kind==="fixext"){for(const f of S.files)if(f.extMismatch&&realExt(f.t)){setOv(S.fo,f.id,{fixExt:true});n++}
+    toast2("الامتدادات الغلط بتتصحّح تلقائيًا وقت التنفيذ ("+n+" ملف) — وبتبان في الملفات بعد التصحيح.")}
+  if(kind==="suggest"){for(const r of S.refs){if(!r.final.f&&!r.final.ignored&&r.res.cands&&r.res.cands.length){setOv(S.ro,r.rid,{fileId:r.res.cands[0].f.id});n++}}toast2("اتطبّق أقرب اقتراح على "+n+" مرجع — راجعهم في «اللي اتصلّحت».")}
+  if(kind==="bigger"){for(const r of S.refs){const f=r.final.f;if(f&&f.variantOf){setOv(S.ro,r.rid,{fileId:f.variantOf.id});n++}}toast2("اتبدّلت "+n+" صورة بأكبر نسخة.")}
+  if(kind==="ignbad"){for(const f of S.files)if(!f.sys&&!f.isJson&&f.size===0){setOv(S.fo,f.id,{ignore:true});n++}toast2("اتجاهل "+n+" ملف فاضي. (الصور المقطوعة جزئيًا مش بتتجاهل لأن ممكن تتعرض)")}
+  if(kind==="igndup"){for(const f of S.files)if(!f.refs.length&&(f.dupOf||f.variantOf)){setOv(S.fo,f.id,{ignore:true});n++}toast2("اتجاهل "+n+" نسخة.")}
+  if(kind==="reset"){S.fo=new Map();S.ro=new Map();toast2("رجعت للتلقائي.")}
+  recompute()}
+async function runApply(){
+  const s=summary();
+  if(S.ui.opt.replace&&!confirm("هيتم مسح كل البيانات الحالية (عناصر/مجموعات/ملفات) واستبدالها بالمصدر. متأكد؟"))return;
+  if(s.r.missing&&!confirm("فيه "+s.r.missing+" مرجع صورة/مستند ناقص — هيتشالوا من العناصر. تكمّل؟"))return;
+  const b=document.querySelector('[data-act="apply"]');if(b)b.disabled=true;S.busy=true;setProg("بيتنفّذ الاستيراد",0,0);
+  try{const rep=await apply();S.ui.tab="res";toast2("تم الاستيراد: "+rep.files+" ملف و"+rep.items.filter(x=>/اتضاف|اتكمّل/.test(x.status)).length+" عنصر"+(rep.errors.length?" (مع "+rep.errors.length+" تحذير)":""),rep.errors.length?"warn":"ok",6000)}
+  catch(e){console.error(e);toast2("فشل التنفيذ: "+(e&&e.message||e),"err")}
+  finally{S.busy=false;S.prog=null;drawAll()}}
+function onClick(e){
+  const b=e.target.closest("[data-act]");if(!b)return;const a=b.dataset.act,v=b.dataset.v,u=S.ui;
+  const F=id=>S.files.find(f=>f.id===id),R=id=>S.refs.find(r=>r.rid===id);
+  switch(a){
+    case"tab":u.tab=v;u.limit=50;break;
+    case"go":{const[t,s]=v.split("|");u.tab=t;if(t==="files")u.fs=s||"all";if(t==="refs")u.rs=s||"bad";u.limit=50;break}
+    case"more":u.limit+=50;break;
+    case"prev":u.prev.has(v)?u.prev.delete(v):u.prev.add(v);break;
+    case"ren":{const f=F(v),cur=ov(S.fo,v).name||f.name,n=prompt("الاسم الجديد (بالامتداد):",cur);if(n&&n.trim()){setOv(S.fo,v,{name:n.trim().replace(/[\\/:*?"<>|]/g,"_")});recompute()}return}
+    case"fixext":setOv(S.fo,v,{fixExt:true});toast2("الامتداد هيتصحّح وقت التنفيذ.");recompute();return;
+    case"conv":{const[id,t]=v.split("|");setOv(S.fo,id,{convert:t});toast2("هيتحوّل لـ "+(t==="png"?"PNG":"JPG")+" وقت التنفيذ.");recompute();return}
+    case"assign":pickItem(F(v));return;
+    case"unlink":{const f=F(v);setOv(S.fo,v,{assign:null});f.refs.forEach(r=>setOv(S.ro,r.rid,{ignore:true,fileId:null}));recompute();return}
+    case"ign":setOv(S.fo,v,{ignore:true});recompute();return;
+    case"unign":setOv(S.fo,v,{ignore:false});recompute();return;
+    case"usebig":{const big=F(v);S.refs.forEach(r=>{if(r.final.f&&r.final.f.variantOf&&r.final.f.variantOf.id===v)setOv(S.ro,r.rid,{fileId:v})});recompute();return}
+    case"refpick":pickFile(R(v));return;
+    case"refign":setOv(S.ro,v,{ignore:true,fileId:null});recompute();return;
+    case"refreset":S.ro.delete(v);recompute();return;
+    case"refbig":{const r=R(v);setOv(S.ro,v,{fileId:r.final.f.variantOf.id});recompute();return}
+    case"bulk":bulk(v);return;
+    case"apply":runApply();return;
+    case"rep":dl("import-report-"+new Date().toISOString().slice(0,10)+".txt",reportText());return;
+    case"repj":dl("import-report-"+new Date().toISOString().slice(0,10)+".json",JSON.stringify({summary:summary(),problems:S.problems,refs:S.refs.map(r=>({item:itemName(r.itemId),role:r.role,ptr:r.ptr,value:r.value,found:r.final.f?r.final.f.path:null,method:r.res.method,why:r.res.why})),files:S.files.filter(f=>!f.isJson).map(f=>({path:f.path,size:f.size,type:f.t,status:fstatus(f),reasons:fileReasons(f)})),result:S.result},null,2),"application/json");return;
+    case"newsrc":resetSession();drawAll();return}
+  drawAll()}
+function onInput(e){const t=e.target,u=S.ui;
+  if(t.id==="ffs"){u.fs=t.value;u.limit=50;drawAll()}else if(t.id==="fft"){u.ft=t.value;u.limit=50;drawAll()}
+  else if(t.id==="ffq"){u.q=t.value;u.limit=50;const p=t.selectionStart;drawAll();const n=document.getElementById("ffq");if(n){n.focus();try{n.setSelectionRange(p,p)}catch(x){}}}
+  else if(t.id==="frs"){u.rs=t.value;u.limit=50;drawAll()}
+  else if(t.id==="optComplete"){u.opt.complete=t.checked}else if(t.id==="optReplace"){u.opt.replace=t.checked}
+  else if(t.dataset&&t.dataset.ref&&t.value){setOv(S.ro,t.dataset.ref,{fileId:t.value});recompute()}
+  else if(t.id==="idrFiles"||t.id==="idrDir"){const l=[...t.files];t.value="";if(l.length)analyze(l)}}
+function mount(c){
+  S.host=c;
+  c.innerHTML=`<div class="idr-wrap"><div class="view-title"><h1>🩺 تشخيص الاستيراد</h1><div class="view-actions">${S.ready?'<button class="btn small" data-act="newsrc">مصدر جديد</button>':""}</div></div>
+    <div class="view-desc">بيفحص أرشيف أو مجلد من أي إصدار قديم، ويقولك كل ملف وكل صورة: اتعرّف عليها ولا لأ، ليه، وإزاي تصلّحها (الاسم، الامتداد، الربط، النسخة الأكبر) قبل ما تستورد.</div>
+    <div class="idr-pick"><label class="btn primary">📦 اختار ملفات (ZIP / JSON / صور)<input type="file" id="idrFiles" multiple accept=".zip,.json,image/*,.pdf,.doc,.docx,.xls,.xlsx,.heic,.tif,.tiff,.bmp,.avif"></label>
+     <label class="btn">📁 اختار مجلد كامل<input type="file" id="idrDir" webkitdirectory multiple></label></div>
+    <div id="idrProg"></div><div class="idr-tabs" id="idrTabs"></div><div id="idrBody"></div></div>`;
+  const w=c.firstElementChild;w.onclick=onClick;w.oninput=onInput;w.onchange=onInput;drawAll()}
+
+/* ---------------- ربط بالقائمة والتوجيه ---------------- */
+window.__ID={analyze,state:S,summary,fstatus,apply,looseParse,sniff,resolveRef,reportText,open(files){navigateTo({type:"impdoctor"});setTimeout(()=>analyze(files),50)}};
+(function(){
+  const nl=document.querySelector(".navlist");
+  if(nl&&!nl.querySelector('[data-nav="impdoctor"]')){
+    const b=document.createElement("button");b.className="nav-item";b.dataset.nav="impdoctor";b.innerHTML='<span class="ico">🩺</span><span class="lbl">تشخيص الاستيراد</span>';b.onclick=()=>navigateTo({type:"impdoctor"});
+    const a=nl.querySelector('[data-nav="syncpipe"]')||nl.querySelector('[data-nav="activitylog"]');a?a.after(b):nl.appendChild(b)}
+  /* زر «استيراد ذكي» القديم بقى يفتح التشخيص */
+  document.querySelectorAll(".nav-item").forEach(x=>{if(/استيراد ذكي/.test(x.textContent)){x.onclick=()=>{try{document.getElementById("sidebar").classList.remove("open");document.getElementById("sidebarOverlay").classList.add("hidden")}catch(e){}navigateTo({type:"impdoctor"})}}});
+  /* استيراد ZIP من الإعدادات يعدّي على التشخيص بدل المسار اللي كان بيضيّع الصور */
+  const inp=document.getElementById("hiddenImportInput");
+  if(inp)inp.addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];if(!f)return;e.stopImmediatePropagation();const l=[f];e.target.value="";toast2("الاستيراد بيعدّي على التشخيص الأول عشان ماتضيعش صور.");window.__ID.open(l)},true);
+  const oR=render;
+  render=function(){if(ST().view&&ST().view.type==="impdoctor"){const c=document.getElementById("viewContainer");if(c){mount(c)}return}S.host=null;return oR.apply(this,arguments)};
+  const oB=updateBreadcrumb;
+  updateBreadcrumb=function(){if(ST().view&&ST().view.type==="impdoctor"){const el=document.getElementById("breadcrumb");el.innerHTML='<b data-go="home">🏠 الرئيسية</b><span class="sep">/</span><b>🩺 تشخيص الاستيراد</b>';el.querySelectorAll("[data-go]").forEach(x=>{x.onclick=()=>navigateTo({type:"home"})});return}return oB.apply(this,arguments)}
+})();
 })();
 </script>
 <script>
