@@ -5938,7 +5938,7 @@ async function loadFileIntoElement(el,fileId){
     const url=await getFileBlobURL(fileId);
     if(!url || !el.isConnected) return;
     if(el.tagName==="IMG"){ el.src=url; el.classList.add("loaded"); }
-    else el.innerHTML=`<img src="${url}" alt="" loading="lazy">`;
+    else{ el.innerHTML=`<img src="${url}" alt="" loading="lazy">`; if(el.__siBtn) el.appendChild(el.__siBtn); }
   }catch(e){}
 }
 function observeLazyFileImage(container,fileId,alt=""){
@@ -6604,6 +6604,7 @@ function renderFolderGrid(container, folders, parentId){
     `;
     card.onclick = (e)=>{ if(e.target.closest(".fmenu")) return; navigateTo({type:"folder", id:f.id}); };
     card.querySelector(".fmenu").onclick = (e)=>{ e.stopPropagation(); openFolderModal(f.id, parentId); };
+    if(window.__SI) __SI.tag(card,{kind:'folder',folderId:f.id,pos:'bl'});
     grid.appendChild(card);
   });
   container.innerHTML = "";
@@ -6675,6 +6676,7 @@ async function renderItemGallery(holder, items){
       template.forEach(f=>{const val=it.fields?it.fields[f.id]:null;if(val==null||val==='')return;fieldsHtml+=`<div class="row"><span class="k">${esc(f.label)}</span><span class="v">${esc(val)}${f.unit?esc(f.unit):''}</span></div>`;});
       card.innerHTML=`<div class="item-thumb">🧰</div><div class="item-body"><div class="item-name">${esc(it.name)}</div><div class="item-model">${esc(it.model||'—')}</div><div class="item-fields">${fieldsHtml}</div>${(it.tags&&it.tags.length)?`<div class="item-tags">${it.tags.slice(0,4).map(t=>`<span class="tag-chip">#${esc(t)}</span>`).join('')}</div>`:''}${(it.indicators&&it.indicators.length)?renderIndicatorsHtml(it.indicators,true):''}</div>`;
       card.onclick=()=>navigateTo({type:'item',id:it.id});
+      if(window.__SI) __SI.tag(card,{kind:'item',itemId:it.id,pos:'tl'});
       frag.appendChild(card);
       if(it.mainImageId) observeLazyFileImage(card.querySelector('.item-thumb'),it.mainImageId);
     }
@@ -6697,7 +6699,7 @@ function renderItemList(holder, items){
     for(;cursor<end;cursor++){
       const it=items[cursor],row=document.createElement('div'); row.className='item-list-row';
       row.innerHTML=`<div class="ilr-thumb">🧰</div><div class="ilr-name">${esc(it.name)}</div><div class="ilr-model">${esc(it.model||'—')}</div><div class="ilr-badge">${renderIndicatorsHtml((it.indicators||[]).filter(x=>x.type==='badge').slice(0,1),false)}</div>`;
-      row.onclick=()=>navigateTo({type:'item',id:it.id}); frag.appendChild(row);
+      row.onclick=()=>navigateTo({type:'item',id:it.id}); if(window.__SI) __SI.tag(row,{kind:'item',itemId:it.id,pos:'cl'}); frag.appendChild(row);
       if(it.mainImageId) observeLazyFileImage(row.querySelector('.ilr-thumb'),it.mainImageId);
     }
     list.appendChild(frag); rendering=false;
@@ -6767,6 +6769,13 @@ async function renderItemDetail(c, itemId){
   document.getElementById("editItemBtn").onclick = ()=> openItemModal(it.id, it.folderId);
   document.getElementById("deleteItemBtn").onclick = ()=> confirmDeleteItem(it.id);
   nbMountNotebook(document.getElementById("csEmbedHolder"), it);
+  if(window.__SI){
+    const SI=window.__SI, heads=c.querySelectorAll(".sec-head");
+    SI.tag(c.querySelector(".detail-head"),{kind:"item",itemId:it.id,pos:"tl"});
+    SI.tag(c.querySelector(".panel"),{kind:"field",label:"المواصفات",itemId:it.id,pos:"out",fieldPath:"model / manufacturer / serial / partNumber / type / status / fields",get:()=>({model:it.model,manufacturer:it.manufacturer,serial:it.serial,partNumber:it.partNumber,type:it.type,status:it.status,fields:it.fields})});
+    const nbx=c.querySelector(".notes-box"); if(nbx) SI.tag(nbx,{kind:"field",label:"الملاحظات",itemId:it.id,pos:"out",fieldPath:"notes",get:()=>it.notes});
+    if(heads.length) SI.tag(heads[heads.length-1],{kind:"field",label:"دفتر الملاحظات التقني (كله)",itemId:it.id,pos:"cl",fieldPath:"notebookData",get:()=>it.notebookData});
+  }
 
   if(it.mainImageId){
     getFileBlobURL(it.mainImageId).then(url=>{
@@ -6774,6 +6783,7 @@ async function renderItemDetail(c, itemId){
         const box = document.getElementById("detailImgHolder");
         box.innerHTML = `<img src="${url}" alt="">`;
         box.querySelector("img").onclick = ()=> openLightbox(url);
+        if(window.__SI) __SI.tag(box,{kind:"file",fileId:it.mainImageId,itemId:it.id,pos:"br"});
       }
     });
   }
@@ -6786,6 +6796,7 @@ async function renderItemDetail(c, itemId){
       strip.appendChild(t);
       observeLazyFileImage(t,fid);
       t.onclick=async()=>{const u=await getFileBlobURL(fid);if(u)openLightbox(u);};
+      if(window.__SI) __SI.tag(t,{kind:"file",fileId:fid,itemId:it.id,pos:"br"});
     });
   }
   if(it.docs && it.docs.length){
@@ -6803,6 +6814,7 @@ async function renderItemDetail(c, itemId){
         const url = await getFileBlobURL(d.fileId);
         if(url){ const a=document.createElement("a"); a.href=url; a.download=d.name; a.click(); }
       };
+      if(window.__SI) __SI.tag(row,{kind:"file",fileId:d.fileId,itemId:it.id,pos:"out"});
       box.appendChild(row);
     });
   }
@@ -9860,6 +9872,7 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
     nbScheduleSave(item);
     rerenderList();
   };
+  if(window.__SI) __SI.tag(wrap,{kind:'field',label:()=>'مربع شرح إضافي'+(boxData.title?' «'+boxData.title+'»':''),itemId:item.id,pos:'out',fieldPath:'notebookData.explanations['+index+']',get:()=>boxData});
   return wrap;
 }
 
@@ -9901,6 +9914,7 @@ function nbTextPanel(body, s, item){
   mainExBody.append(preview, toolbarHolder, editor);
   mainExWrap.append(mainExHead, mainExBody);
   body.appendChild(mainExWrap);
+  if(window.__SI) __SI.tag(mainExWrap,{kind:'field',label:'مربع الشرح الرئيسي',itemId:item.id,pos:'out',fieldPath:'notebookData.explanation',get:()=>s.explanation});
 
   const exHead=document.createElement('div');
   exHead.className='nb-subhead';
@@ -9961,6 +9975,7 @@ function nbTextPanel(body, s, item){
     acts.append(groupSel, delBtn);
     card.append(img, cap, acts);
     navListRef.push({img, cap});
+    if(window.__SI) __SI.tag(card,{kind:'file',fileId:entry.id,itemId:item.id,pos:'tl',extra:()=>[['حجم وصف الصورة (نص داخل item.json)',__SI.fmt(__SI.bytes(entry.caption||''))]]});
     return card;
   }
   function renderGallery(){
@@ -10048,6 +10063,7 @@ function nbBuildCodeBlock(section, c, index, item, rerender){
     nbScheduleSave(item);
     rerender();
   };
+  if(window.__SI) __SI.tag(box,{kind:'field',label:'كتلة كود',itemId:item.id,pos:'out',fieldPath:'notebookData.codes['+index+']',get:()=>c});
   return box;
 }
 function nbCodePanel(body, s, item, rerender){
@@ -10269,7 +10285,8 @@ function nbBuildDrawingPanel(section, item){
 function nbDrawTab(body, s, item){
   const h=document.createElement('div'); h.className='nb-subhead'; h.innerHTML='<b>📐 الرسم التوضيحي</b>';
   body.appendChild(h);
-  body.appendChild(nbBuildDrawingPanel(s, item));
+  const dp=nbBuildDrawingPanel(s, item); body.appendChild(dp);
+  if(window.__SI) __SI.tag(dp,{kind:'field',label:'الرسم التوضيحي',itemId:item.id,pos:'out',fieldPath:'notebookData.drawing',get:()=>s.drawing});
 }
 
 /* ===== تبويب الخريطة الذهنية (نسخة مبسّطة شجرية بدل اللوحة الحرة الكاملة) ===== */
@@ -10582,7 +10599,8 @@ function nbBuildMindMapPanel(s, item){
 function nbMapTab(body, s, item){
   const h=document.createElement('div'); h.className='nb-subhead'; h.innerHTML='<b>🧠 الخريطة الذهنية</b><span style="font-size:10.5px;color:var(--dim2);font-weight:400;">اسحب لتحريك أي فكرة · دبل كليك للتعديل · Tab لإضافة تابع · Enter لإضافة شقيق</span>';
   body.appendChild(h);
-  body.appendChild(nbBuildMindMapPanel(s, item));
+  const mp=nbBuildMindMapPanel(s, item); body.appendChild(mp);
+  if(window.__SI) __SI.tag(mp,{kind:'field',label:'الخريطة الذهنية',itemId:item.id,pos:'out',fieldPath:'notebookData.mindmap',get:()=>s.mindmap});
 }
 
 /* ===== تبويب تتبع الأعطال (نظام طبقات + رسم مباشر على الصورة + تكبير باللمس) ===== */
@@ -10617,6 +10635,7 @@ function nbFtRenderContentReadonly(container, content){
       img.onclick=()=>nbOpenImageViewer(img.src, entry.caption||'');
       card.appendChild(img);
       if(entry.caption){ const cap=document.createElement('div'); cap.className='ft-view-caption'; cap.textContent=entry.caption; card.appendChild(cap); }
+      if(window.__SI) __SI.tag(card,{kind:'file',fileId:entry.id,pos:'tl'});
       gal.appendChild(card);
     });
     container.appendChild(gal);
@@ -10706,6 +10725,7 @@ function nbFtOpenEditor(hotspot, item, onChange){
       del.onclick=()=>{ hotspot.content.images.splice(i,1); nbScheduleSave(item); renderGallery(); };
       acts.appendChild(del);
       card.append(img,cap,acts); gallery.appendChild(card);
+      if(window.__SI) __SI.tag(card,{kind:'file',fileId:entry.id,itemId:item.id,pos:'tl'});
     });
     const addCard=document.createElement('label'); addCard.className='nb-photo-add'; addCard.textContent='＋ أضف صورة';
     const pick=document.createElement('input'); pick.type='file'; pick.accept='image/*'; pick.multiple=true;
@@ -10776,6 +10796,7 @@ function nbFaultPanel(body, s, item){
       const lbl=document.createElement('span'); lbl.textContent=p.name || ('صفحة '+(idx+1));
       thumb.append(img,lbl);
       thumb.onclick=()=>{ activeId=p.id; ft.activePageId=p.id; activeLayerId=null; mode='view'; nbScheduleSave(item); render(); };
+      if(window.__SI) __SI.tag(thumb,{kind:'file',fileId:p.imageId,itemId:item.id,pos:'tl',extra:()=>[['صفحة تتبع الأعطال',p.name||('صفحة '+(idx+1))],['عدد الطبقات',String((p.hotspots||[]).length)],['حجم بيانات الصفحة والطبقات (نص داخل item.json)',__SI.fmt(__SI.bytes(p))]]});
       pagesBar.appendChild(thumb);
     });
     const addPage=document.createElement('label'); addPage.className='ft-page-add'; addPage.textContent='＋ صفحة جديدة';
@@ -12055,7 +12076,211 @@ window.__FS={
     if(!bind()||STORAGE_MODE==="memory"||E.running)return;
     if(document.visibilityState==="visible"&&Date.now()-E.lastScan>SCAN_EVERY&&!E.dirty.size)E.scan=true;
     if(pending()||E.lastErr){if(!E.retryT)schedule(0)}},
-  state:E};
+  state:E,
+  info:{
+    async idx(){ if(!bind())return null; if(!E.idx){try{E.idx=await loadIdx()}catch(e){}} return E.idx },
+    handle:()=>bind()?E.h:null,
+    async size(p){ try{ return (await getf(p)).size }catch(e){ return null } },
+    pending:()=>!!(pending()||E.running)}};
+})();
+</script>
+<script>
+/* ===== StorageInfo: ترس صغير على كل عنصر/صورة/مستند/مربع شرح يعرض مكان تخزينه وحجمه ===== */
+(function(){"use strict";
+const enc=new TextEncoder();
+const bytes=o=>{try{return enc.encode(typeof o==="string"?o:JSON.stringify(o)).length}catch(e){return 0}};
+const fmt=n=>{n=Number(n)||0;
+  if(n<1024)return n+" بايت";
+  const u=["ك.ب","م.ب","ج.ب"];let v=n/1024,i=0;
+  while(v>=1024&&i<2){v/=1024;i++}
+  return v.toFixed(v>=100?0:v>=10?1:2)+" "+u[i]+" ("+n.toLocaleString("en-US")+" بايت)"};
+const KL={images:"صورة العنصر",docs:"مستند PDF",notebook:"صورة من دفتر الملاحظات","fault-backgrounds":"خلفية صفحة تتبع الأعطال","fault-notes":"صورة داخل طبقة عطل"};
+const ST=()=>window.state||(typeof state!=="undefined"?state:{items:[],folders:[]});
+
+/* ---------- CSS ---------- */
+const css=document.createElement("style");
+css.textContent=`
+.si-host{position:relative}
+.si-gear{position:absolute;z-index:6;width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(18,18,18,.74);color:#fff;font-size:12px;line-height:1;padding:0;cursor:pointer;opacity:.72;display:flex;align-items:center;justify-content:center;transition:.12s;font-family:sans-serif}
+.si-gear:hover,.si-gear:focus{opacity:1;background:var(--amber,#f2a93c);color:#000;outline:none}
+.si-tl{top:5px;left:5px}.si-tr{top:5px;right:5px}.si-bl{bottom:6px;left:6px}.si-br{bottom:6px;right:6px}
+.si-cl{left:6px;top:50%;margin-top:-10px}.si-out{top:-9px;left:-9px}
+.ft-page-thumb .si-gear{width:15px;height:15px;font-size:9px;top:2px;left:2px}
+.si-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;backdrop-filter:blur(2px)}
+.si-box{background:var(--panel,#1c1c1c);color:var(--text,#eee);border:1px solid var(--border,#444);border-radius:14px;width:min(520px,96vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.5);font-family:inherit}
+.si-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border,#444);font-size:14px}
+.si-x{background:none;border:none;color:var(--dim,#aaa);font-size:16px;cursor:pointer;padding:2px 6px}.si-x:hover{color:var(--text,#fff)}
+.si-body{padding:10px 14px 14px;overflow:auto;display:flex;flex-direction:column;gap:9px}
+.si-row{display:flex;flex-direction:column;gap:2px;padding-bottom:8px;border-bottom:1px dashed var(--border,#444)}
+.si-row:last-child{border-bottom:none;padding-bottom:0}
+.si-k{font-size:11px;color:var(--dim,#aaa)}
+.si-v{font-size:13px;word-break:break-word;line-height:1.55;display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.si-v span{flex:1 1 auto;min-width:0}
+.si-path{font-family:var(--mono,monospace);font-size:12px;direction:ltr;text-align:left;unicode-bidi:plaintext;word-break:break-all}
+.si-ok{color:#3ddc84}.si-warn{color:#ffb703}.si-bad{color:#ff6b6b}
+.si-copy{flex:0 0 auto;background:var(--panel2,#2a2a2a);color:var(--text,#eee);border:1px solid var(--border,#444);border-radius:6px;font-size:11px;padding:2px 8px;cursor:pointer}
+.si-copy:hover{border-color:var(--amber,#f2a93c)}
+`;
+document.head.appendChild(css);
+
+/* ---------- سياق المزامنة ---------- */
+async function ctx(){
+  const F=window.__FS&&window.__FS.info;let idx=null,h=null;
+  if(F){try{idx=await F.idx();h=F.handle()}catch(e){}}
+  return{F,idx,h,root:h?h.name:null,linked:!!h,pending:F?!!F.pending():false}}
+const full=(c,p)=>c.root?c.root+"/"+p:p;
+const diskSize=async(c,p)=>{try{return await c.F.size(p)}catch(e){return null}};
+const itemById=id=>ST().items.find(x=>x.id===id);
+const folderById=id=>ST().folders.find(x=>x.id===id);
+const folderPath=id=>{const n=[];let f=folderById(id),d=0;while(f&&d++<30){n.unshift(f.name);f=f.parentId?folderById(f.parentId):null}return n.join(" ‹ ")};
+function findFile(c,fid,itemId){
+  if(!c.idx)return null;
+  const tryE=id=>{const e=c.idx.items[id];return e&&e.files&&e.files[fid]?{rec:e.files[fid],ent:e}:null};
+  if(itemId){const r=tryE(itemId);if(r)return r}
+  for(const id in c.idx.items){const r=tryE(id);if(r)return r}
+  const u=c.idx.unassigned&&c.idx.unassigned[fid];
+  return u?{rec:u,ent:null,orphan:true}:null}
+function refsOf(it){const R=[],a=i=>i&&R.push(i);
+  (it.imageIds||[]).forEach(a);(it.docs||[]).forEach(d=>d&&a(d.fileId));
+  ((it.notebookData||{}).images||[]).forEach(x=>a(x&&x.id));
+  (((it.notebookData||{}).faultTracking||{}).pages||[]).forEach(p=>{a(p.imageId);(p.hotspots||[]).forEach(hs=>((hs.content||{}).images||[]).forEach(x=>a(x&&x.id)))});
+  return R}
+const idbRec=async fid=>{try{return typeof idbGet_real==="function"?await idbGet_real("files",fid):null}catch(e){return null}};
+const NOLINK="داخل المتصفح فقط (قاعدة بيانات IndexedDB) — لا يوجد مجلد مرتبط حاليًا";
+
+/* ---------- بناء الصفوف حسب النوع ---------- */
+async function rowsFile(c,d){
+  const R=[],rec0=await idbRec(d.fileId),f=findFile(c,d.fileId,d.itemId),it=itemById(d.itemId);
+  R.push(["النوع",f?(KL[f.rec.kind]||f.rec.kind):"ملف مرفق"]);
+  R.push(["الاسم",(f&&f.rec.name)||(rec0&&rec0.name)||"—"]);
+  R.push(["الصيغة",(f&&f.rec.mime)||(rec0&&rec0.mime)||"—"]);
+  if(it)R.push(["تابع للعنصر",it.name+(it.folderId?"  —  "+folderPath(it.folderId):"")]);
+  if(d.extra)for(const x of d.extra())R.push(x);
+  if(!c.linked){
+    R.push(["مكان التخزين",NOLINK,{cls:"warn"}]);
+    R.push(["الحجم",rec0&&rec0.blob?fmt(rec0.blob.size):"—"]);
+  }else if(f){
+    const p=full(c,f.rec.path),ds=await diskSize(c,f.rec.path);
+    R.push(["مكان التخزين",p,{path:1,copy:1}]);
+    R.push(["الحجم",fmt(f.rec.size)]);
+    R.push(["الحالة على القرص",ds==null?"⚠ غير موجود في المجلد!":ds===f.rec.size?"✓ موجود في المجلد بنفس الحجم":"⚠ الحجم على القرص مختلف ("+fmt(ds)+")",{cls:ds===f.rec.size?"ok":"bad"}]);
+    if(rec0&&rec0.blob&&rec0.blob.size!==f.rec.size)R.push(["الحجم داخل المتصفح",fmt(rec0.blob.size)+" — لم تتم مزامنة آخر نسخة بعد",{cls:"warn"}]);
+  }else if(rec0&&rec0.blob){
+    R.push(["مكان التخزين",c.pending?"لم يُكتب في المجلد بعد — في دور المزامنة الآن":"لم يُكتب في المجلد بعد",{cls:"warn"}]);
+    R.push(["الحجم (داخل المتصفح)",fmt(rec0.blob.size)]);
+  }else R.push(["الحالة","⚠ الملف غير موجود في قاعدة البيانات ولا في المجلد",{cls:"bad"}]);
+  return["معلومات تخزين الملف",R]}
+
+async function rowsItem(c,d){
+  const R=[],it=itemById(d.itemId);
+  if(!it)return["معلومات العنصر",[["الحالة","العنصر غير موجود",{cls:"bad"}]]];
+  R.push(["النوع","عنصر"]);R.push(["الاسم",it.name||"—"]);
+  if(it.folderId)R.push(["المجموعة",folderPath(it.folderId)]);
+  const refs=refsOf(it),e=c.idx&&c.idx.items[it.id];
+  if(!c.linked){
+    let tot=0;for(const fid of refs){const r=await idbRec(fid);if(r&&r.blob)tot+=r.blob.size}
+    R.push(["مكان التخزين",NOLINK,{cls:"warn"}]);
+    R.push(["عدد الملفات المرفقة",String(refs.length)]);
+    R.push(["حجم الملفات المرفقة",fmt(tot)]);
+    R.push(["حجم بيانات العنصر (نصوص)",fmt(bytes(it))]);
+    return["معلومات تخزين العنصر",R]}
+  if(!e){R.push(["مكان التخزين",c.pending?"لم يُكتب في المجلد بعد — في دور المزامنة الآن":"لم يُكتب في المجلد بعد",{cls:"warn"}]);R.push(["حجم بيانات العنصر (نصوص)",fmt(bytes(it))]);return["معلومات تخزين العنصر",R]}
+  const g=c.idx.groups[it.folderId];
+  R.push(["مكان مجلد العنصر",full(c,e.path),{path:1,copy:1}]);
+  if(g)R.push(["مجلد المجموعة",full(c,g.path),{path:1,copy:1}]);
+  const jd=await diskSize(c,e.path+"/item.json"),hs=await diskSize(c,e.path+"/hashes.json");
+  const by={};let ft=0,fn=0,missing=0;
+  for(const fid of refs){const r=e.files[fid];if(!r){missing++;continue}fn++;ft+=r.size;(by[r.kind]||(by[r.kind]={n:0,b:0})).n++;by[r.kind].b+=r.size}
+  R.push(["عدد الملفات المرفقة",fn+" ملف"+(missing?" (+"+missing+" لم يُكتب بعد)":""),missing?{cls:"warn"}:null]);
+  for(const k in by)R.push(["   • "+(KL[k]||k),by[k].n+" ملف — "+fmt(by[k].b)]);
+  R.push(["ملف item.json (كل النصوص والبيانات)",jd==null?"⚠ غير موجود في المجلد!":fmt(jd),jd==null?{cls:"bad"}:null]);
+  R.push(["حجم مجلد العنصر الكلي",fmt(ft+(jd||0)+(hs||0))]);
+  R.push(["الحالة",jd!=null&&!missing?"✓ العنصر وملفاته مكتوبة في المجلد":"⚠ بعض الملفات لم تُكتب بعد",{cls:jd!=null&&!missing?"ok":"warn"}]);
+  return["معلومات تخزين العنصر",R]}
+
+async function rowsFolder(c,d){
+  const R=[],f=folderById(d.folderId);
+  if(!f)return["معلومات المجموعة",[["الحالة","المجموعة غير موجودة",{cls:"bad"}]]];
+  R.push(["النوع","مجموعة / مجلد"]);R.push(["الاسم",folderPath(f.id)]);
+  const set=new Set([f.id]);let ch=true;
+  while(ch){ch=false;for(const x of ST().folders)if(x.parentId&&set.has(x.parentId)&&!set.has(x.id)){set.add(x.id);ch=true}}
+  const its=ST().items.filter(i=>set.has(i.folderId));
+  R.push(["عدد المجلدات الفرعية",String(set.size-1)]);R.push(["عدد العناصر (بما فيها الفرعية)",String(its.length)]);
+  if(!c.linked){R.push(["مكان التخزين",NOLINK,{cls:"warn"}]);return["معلومات تخزين المجموعة",R]}
+  const g=c.idx&&c.idx.groups[f.id];
+  if(!g){R.push(["مكان التخزين","لم يُكتب في المجلد بعد",{cls:"warn"}]);return["معلومات تخزين المجموعة",R]}
+  R.push(["مكان التخزين",full(c,g.path),{path:1,copy:1}]);
+  let tot=0,fn=0,seen=0;
+  for(const id in c.idx.items){const e=c.idx.items[id];if(!set.has(e.folderId))continue;seen++;for(const k in e.files){tot+=e.files[k].size;fn++}}
+  R.push(["عناصر مكتوبة في المجلد",seen+" من "+its.length,seen<its.length?{cls:"warn"}:{cls:"ok"}]);
+  R.push(["عدد الملفات المرفقة",String(fn)]);R.push(["حجم الملفات المرفقة",fmt(tot)]);
+  return["معلومات تخزين المجموعة",R]}
+
+async function rowsField(c,d){
+  const R=[],it=itemById(d.itemId),obj=d.get?d.get():d.obj,sz=bytes(obj==null?"":obj),e=c.idx&&c.idx.items[d.itemId];
+  const lab=typeof d.label==="function"?d.label():d.label;
+  R.push(["النوع",lab||"بيانات"]);
+  if(it)R.push(["تابع للعنصر",it.name+(it.folderId?"  —  "+folderPath(it.folderId):"")]);
+  if(typeof obj==="string")R.push(["عدد الأحرف",obj.length.toLocaleString("en-US")]);
+  R.push(["الحجم",fmt(sz)]);
+  if(d.fieldPath)R.push(["الموضع داخل الملف",d.fieldPath,{path:1}]);
+  if(d.extra)for(const x of d.extra())R.push(x);
+  if(!c.linked){R.push(["مكان التخزين","نص داخل بيانات العنصر في "+NOLINK,{cls:"warn"}]);}
+  else if(e){
+    const p=e.path+"/item.json",ds=await diskSize(c,p);
+    R.push(["مكان التخزين (ملف النصوص)",full(c,p),{path:1,copy:1}]);
+    R.push(["حجم ملف item.json كله",ds==null?"⚠ غير موجود في المجلد!":fmt(ds),ds==null?{cls:"bad"}:null]);
+  }else R.push(["مكان التخزين","نص داخل item.json — لم يُكتب في المجلد بعد",{cls:"warn"}]);
+  R.push(["ملاحظة","هذا نص (ليس ملفًا مستقلًا)، فيُحفظ داخل ملف item.json الخاص بالعنصر مع باقي بياناته."]);
+  return["معلومات تخزين "+(lab||"البيانات"),R]}
+
+/* ---------- النافذة ---------- */
+function openOverlay(){
+  const ov=document.createElement("div");ov.className="si-ov";ov.dir="rtl";
+  ov.innerHTML='<div class="si-box" role="dialog"><div class="si-head"><b class="si-title">⚙ معلومات التخزين</b><button type="button" class="si-x" title="إغلاق">✕</button></div><div class="si-body"><div class="si-row"><div class="si-v"><span>جارٍ الفحص...</span></div></div></div></div>';
+  const close=()=>{ov.remove();document.removeEventListener("keydown",onKey,true)};
+  const onKey=e=>{if(e.key==="Escape"){e.stopPropagation();close()}};
+  document.addEventListener("keydown",onKey,true);
+  ov.addEventListener("click",e=>{if(e.target===ov)close()});
+  ov.querySelector(".si-x").onclick=close;
+  document.body.appendChild(ov);return ov}
+function paint(ov,title,rows){
+  ov.querySelector(".si-title").textContent="⚙ "+title;
+  const body=ov.querySelector(".si-body");body.textContent="";
+  for(const r of rows){if(!r)continue;
+    const o=r[2]||{},row=document.createElement("div");row.className="si-row";
+    const k=document.createElement("div");k.className="si-k";k.textContent=r[0];
+    const v=document.createElement("div");v.className="si-v";
+    const s=document.createElement("span");s.textContent=r[1];
+    if(o.path){s.className="si-path";s.dir="ltr"}
+    if(o.cls)s.classList.add("si-"+o.cls);
+    v.appendChild(s);
+    if(o.copy){const b=document.createElement("button");b.type="button";b.className="si-copy";b.textContent="نسخ";
+      b.onclick=async()=>{try{await navigator.clipboard.writeText(r[1]);b.textContent="تم ✓"}catch(e){b.textContent="تعذّر"}setTimeout(()=>b.textContent="نسخ",1400)};
+      v.appendChild(b)}
+    row.append(k,v);body.appendChild(row)}}
+async function show(d){
+  if(!d)return;const ov=openOverlay();
+  try{
+    const c=await ctx();
+    const f={file:rowsFile,item:rowsItem,folder:rowsFolder,field:rowsField}[d.kind]||rowsField;
+    const[t,R]=await f(c,d);
+    if(c.linked&&c.pending)R.push(["المزامنة","⏳ فيه تعديلات في دور المزامنة — الأرقام قد تتغير خلال ثوانٍ",{cls:"warn"}]);
+    paint(ov,t,R);
+  }catch(e){paint(ov,"معلومات التخزين",[["خطأ",String(e&&e.message||e),{cls:"bad"}]])}}
+
+/* ---------- وضع الترس ---------- */
+function tag(el,desc){
+  if(!el)return;el.__si=desc;
+  if(el.__siBtn){if(!el.contains(el.__siBtn))el.appendChild(el.__siBtn);return}
+  let pos="";try{pos=el.isConnected?getComputedStyle(el).position:""}catch(e){}
+  if(!pos||pos==="static")el.classList.add("si-host");
+  const b=document.createElement("button");b.type="button";b.className="si-gear si-"+(desc.pos||"tl");
+  b.textContent="⚙";b.title="معلومات التخزين: المكان والحجم";b.setAttribute("aria-label","معلومات التخزين");
+  for(const ev of["mousedown","mouseup","pointerdown","pointerup","touchstart","touchend","dblclick","contextmenu"])b.addEventListener(ev,e=>e.stopPropagation());
+  b.addEventListener("click",e=>{e.stopPropagation();e.preventDefault();show(el.__si)});
+  el.__siBtn=b;el.appendChild(b)}
+window.__SI={tag,show,fmt,bytes};
 })();
 </script>
 </body>
