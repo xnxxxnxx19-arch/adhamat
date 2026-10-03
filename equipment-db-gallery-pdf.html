@@ -11795,7 +11795,7 @@ async function put(path,data){
     try{
       const i=path.lastIndexOf("/"),d=await dirOf(i<0?"":path.slice(0,i),true),
         f=await d.getFileHandle(path.slice(i+1),{create:true}),w=await f.createWritable();
-      try{await w.write(data);await w.close()}catch(e){try{await w.abort()}catch(_){}throw e}
+      try{const sp=window.__SP;await(sp&&sp.write?sp.write(w,data,path):w.write(data));await w.close()}catch(e){try{await w.abort()}catch(_){}throw e}
       return}
     catch(e){if(a>=1)throw e;E.dirs.clear()}}}
 async function getf(path){
@@ -11803,7 +11803,7 @@ async function getf(path){
   return (await d.getFileHandle(path.slice(i+1))).getFile()}
 const rj=async p=>{try{return JSON.parse(await(await getf(p)).text())}catch(e){return null}};
 const ulen=t=>enc.encode(t).length;
-async function wt(path,text,prev,W,id){ // يكتب JSON لو بصمته اتغيّرت، ويرجّع البصمة
+async function wt(path,text,prev,W,id){const sp=window.__SP;if(sp&&sp.holdJson(path,id))return prev; // يكتب JSON لو بصمته اتغيّرت، ويرجّع البصمة
   const s=await sha(text);
   if(prev!==s){
     await put(path,text);
@@ -11859,14 +11859,18 @@ function makePaths(idx){
 
 /* ---------- مزامنة عنصر واحد: item.json + ملفاته (الجديد/المتغيّر بس) ---------- */
 async function syncItem(it,base,idx,W,force,ctx){
+  const sp=window.__SP;if(sp&&sp.holdItem(it,base)){sp.skipItem(it);return}
   const op=idx.items[it.id],po=op&&op.path===base?op:null,
     Eo={path:base,files:{},name:it.name,folderId:it.folderId||null};
   Eo.sha=await wt(base+"/item.json",JSON.stringify(it,null,2),po&&!force?po.sha:null,W,it.id);
   let fch=!po;
   for(const[fid,k]of refs(it)){
     if(Eo.files[fid])continue;
+    const pf0=po&&po.files&&po.files[fid];
+    if(sp&&sp.holdFile(fid,it,k)){if(pf0)Eo.files[fid]=pf0;sp.skipFile(fid,it);continue}
     const rec=await idbGet_real("files",fid);if(!rec||!rec.blob)continue;
     const p=base+"/"+k+"/"+fid+ext(rec.name),pf=po&&po.files&&po.files[fid];
+    if(sp&&sp.holdPath(p)){if(pf0)Eo.files[fid]=pf0;sp.skipFile(fid,it);continue}
     let s;
     if(pf&&!force&&pf.path===p&&pf.size===rec.size&&pf.upd===rec.updatedAt)s=pf.sha;
     else{
@@ -11897,9 +11901,10 @@ async function pass(){
   const dItems=new Set(E.dirty),dFiles=new Set(E.dirtyFiles),doScan=E.scan,forced=new Set(E.force);
   E.dirty.clear();E.dirtyFiles.clear();E.scan=false;E.force.clear();
   if(doScan)E.lastScan=Date.now();
+  const sp=window.__SP;if(sp)sp.passStart({scan:doScan,items:items.length,dirtyItems:dItems.size,dirtyFiles:dFiles.size});
   let changed=false;const fails=[],extra=new Set();
   try{
-    /* 1) الإعدادات والمجموعات (صغيرة، بتتقارن بالبصمة) */
+    if(sp)sp.stage("meta");/* 1) الإعدادات والمجموعات (صغيرة، بتتقارن بالبصمة) */
     const mp=idx.meta&&idx.meta.sha,
       ms=await wt("meta.json",JSON.stringify({settings:state.settings,categories:state.categories,categorySchemas:state.categorySchemas},null,2),mp,W);
     if(ms!==mp)changed=true;idx.meta={path:"meta.json",sha:ms};
@@ -11911,7 +11916,7 @@ async function pass(){
       idx.groups[f.id]={path:p,sha:s,name:f.name,parentId:f.parentId||null}}
     if(state.folders.length||E.allowEmpty)for(const id of Object.keys(idx.groups))if(!(id in gp)){delete idx.groups[id];changed=true}
 
-    /* 2) تحديد العناصر المطلوب مزامنتها: المتغيّرة/الجديدة/اللي مسارها اتغيّر (+ الكل لو فحص شامل) */
+    if(sp)sp.stage("select");/* 2) تحديد العناصر المطلوب مزامنتها: المتغيّرة/الجديدة/اللي مسارها اتغيّر (+ الكل لو فحص شامل) */
     const paths=new Map(),work=[];
     for(const it of items){
       const oe=idx.items[it.id],p=itemPath(it);paths.set(it.id,p);
@@ -11923,17 +11928,18 @@ async function pass(){
       try{const it=await idbGet_real("items",id);
         if(it){paths.set(id,itemPath(it));work.push(it);extra.add(id)}}catch(e){}}
 
-    /* 3) كتابة العناصر بالتوازي (أولوية: المتغيّر أولًا بحكم إن الباقي مش بيكتب حاجة) */
+    if(sp){sp.stage("write");sp.sortWork(work)}/* 3) كتابة العناصر بالتوازي (أولوية: المتغيّر أولًا بحكم إن الباقي مش بيكتب حاجة) */
     const errs=await pool(work,POOL,it=>syncItem(it,paths.get(it.id),idx,W,forced.has(it.id),ctx));
-    for(const[it,e]of errs){E.dirty.add(it.id);if(forced.has(it.id))E.force.add(it.id);fails.push((it.name||it.id)+": "+e.message);console.warn("FastSync item failed:",it.name,e)}
+    for(const[it,e]of errs){E.dirty.add(it.id);if(sp)sp.itemFail(it,e);if(forced.has(it.id))E.force.add(it.id);fails.push((it.name||it.id)+": "+e.message);console.warn("FastSync item failed:",it.name,e)}
     if(ctx.c||W.length)changed=true;
+    if(sp)sp.itemsDone(work,errs);
 
-    /* 4) العناصر المحذوفة */
+    if(sp)sp.stage("del");/* 4) العناصر المحذوفة */
     for(const id of Object.keys(idx.items)){
       if(stateIds.has(id)||extra.has(id))continue;
       if(E.deleted.has(id)||E.allowEmpty||(doScan&&items.length)){delete idx.items[id];E.deleted.delete(id);changed=true}}
 
-    /* 5) ملفات غير مرتبطة بأي عنصر (في الفحص الشامل بس) */
+    if(sp)sp.stage("orphan");/* 5) ملفات غير مرتبطة بأي عنصر (في الفحص الشامل بس) */
     if(doScan){
       const used=new Set();for(const it of items)for(const[fid]of refs(it))used.add(fid);
       const keep={};
@@ -11941,13 +11947,14 @@ async function pass(){
         if(used.has(fid))continue;
         const rec=await idbGet_real("files",fid);if(!rec||!rec.blob)continue;
         const p="_unassigned/"+fid+ext(rec.name),pf=idx.unassigned[fid];let s;
+        if(sp&&sp.holdPath(p)){if(pf)keep[fid]=pf;continue}
         if(pf&&pf.size===rec.size&&pf.upd===rec.updatedAt&&pf.path===p)s=pf.sha;
         else{s=(await Promise.all([shaB(rec.blob),put(p,rec.blob)]))[0];W.push({path:p,sha:s,size:rec.blob.size,blob:1,id:null});changed=true}
         keep[fid]={path:p,size:rec.size,sha:s,upd:rec.updatedAt,name:rec.name,mime:rec.mime}}
       if(Object.keys(keep).sort().join("|")!==Object.keys(idx.unassigned).sort().join("|"))changed=true;
       idx.unassigned=keep}
 
-    /* 6) الفهرس — بيتكتب آخر حاجة وبس لو فيه تغيير فعلي */
+    if(sp)sp.stage("index");/* 6) الفهرس — بيتكتب آخر حاجة وبس لو فيه تغيير فعلي */
     if(changed){
       idx.savedAt=Date.now();idx.stats=stats(idx);
       const t=JSON.stringify(idx,null,2);await put("index.json",t);
@@ -11959,7 +11966,9 @@ async function pass(){
       J("fast_sync",{written:W.length,items:work.length,ms:Date.now()-t0})}
     if(!fails.length)E.allowEmpty=false;
     if(!E.dirty.size&&!E.dirtyFiles.size&&!E.scan&&!fails.length&&E.pend){E.pend=false;try{await idbDelete_real("meta","folderSyncPending")}catch(e){}}
+    if(sp)sp.passEnd({written:W.length,items:work.length,fails:fails.length});
   }catch(e){
+    if(sp)sp.passEnd({error:String(e&&e.message||e)});
     dItems.forEach(x=>E.dirty.add(x));dFiles.forEach(x=>E.dirtyFiles.add(x));forced.forEach(x=>E.force.add(x));if(doScan)E.scan=true;
     throw e}
   queueVerify(W);
@@ -11978,15 +11987,17 @@ function superseded(w){
   if(w.blob){const fe=Object.values(e.files).find(x=>x.path===w.path);return !fe||fe.sha!==w.sha}
   return e.path+"/item.json"!==w.path||e.sha!==w.sha}
 async function drain(){
-  if(E.running||E.dirty.size||E.dirtyFiles.size||E.paused){E.vt=setTimeout(drain,2500);return}
+  if(E.running||E.dirty.size||E.dirtyFiles.size||E.paused||(window.__SP&&window.__SP.holdAll())){E.vt=setTimeout(drain,2500);return}
   const w=E.vq.shift();if(!w)return;
   try{
     if(!superseded(w)){
       const f=await getf(w.path);
       const ok=w.blob?(f.size===w.size&&await shaB(f)===w.sha):(await sha(await f.text())===w.sha);
+      if(window.__SP)window.__SP.verified(w,!!ok);
       if(!ok)throw new Error("بصمة مختلفة")}}
   catch(e){
     J("fast_verify_fail",{path:w.path,err:String(e&&e.message||e)});
+    if(window.__SP)window.__SP.verified(w,false,e);
     try{S.banner&&S.banner("⛔ فشل التحقق بعد الحفظ: "+w.path)}catch(_){}
     E.force.add(w.id);E.dirty.add(w.id);schedule(0)}
   E.vt=setTimeout(drain,E.vq.length?30:0)}
@@ -12076,12 +12087,637 @@ window.__FS={
     if(!bind()||STORAGE_MODE==="memory"||E.running)return;
     if(document.visibilityState==="visible"&&Date.now()-E.lastScan>SCAN_EVERY&&!E.dirty.size)E.scan=true;
     if(pending()||E.lastErr){if(!E.retryT)schedule(0)}},
-  state:E,
+  state:E,kick:schedule,
+  plan(){if(!bind())return null;const idx=E.idx||{schema:2,items:{},groups:{},unassigned:{}},m=makePaths(idx);return{idx,gp:m.gp,itemPath:m.itemPath,refs,ext,RT,hasIdx:!!E.idx}},
   info:{
     async idx(){ if(!bind())return null; if(!E.idx){try{E.idx=await loadIdx()}catch(e){}} return E.idx },
     handle:()=>bind()?E.h:null,
     async size(p){ try{ return (await getf(p)).size }catch(e){ return null } },
     pending:()=>!!(pending()||E.running)}};
+})();
+</script>
+<script>
+/* ===== SyncPipe: خط المزامنة — عرض كامل لكل الملفات + تحكم (إيقاف / استئناف / ابدأ الآن) =====
+   - بيقرأ حالة محرك FastSync كما هي (window.__FS) ومابيغيّرش بنية المجلد ولا صيغة الملفات.
+   - المحرك بيسأل window.__SP قبل ما يكتب أي ملف: لو الملف/العنصر/المجموعة/الموقع موقوف بيتخطّاه
+     (والباقي بيكمّل عادي)، ولما تستأنف بيرجع يتحط في الدور.
+   - الإيقافات بتتحفظ في localStorage (مفتاح syncpipe.v1) عشان تفضل بعد إعادة فتح البرنامج. */
+(function(){"use strict";
+if(window.__SP)return;
+const LSK="syncpipe.v1",CHUNK=4*1024*1024,SCAN_EVERY=5*60*1000;
+const ST=()=>typeof state!=="undefined"?state:{items:[],folders:[],view:{}};
+const FS=()=>window.__FS;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const H=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const N=n=>(Number(n)||0).toLocaleString("en-US");
+const ext=n=>(/\.[A-Za-z0-9]{1,5}$/.exec(n||"")||[""])[0];
+function fb(n){n=Number(n)||0;if(n<1024)return N(n)+" بايت";const u=["ك.ب","م.ب","ج.ب"];let v=n/1024,i=0;while(v>=1024&&i<2){v/=1024;i++}return (+v.toFixed(v>=100?0:1))+" "+u[i]}
+function fdur(ms){ms=Number(ms)||0;if(ms<1000)return Math.round(ms)+" م.ث";const s=ms/1000;if(s<60)return s.toFixed(1)+" ث";const m=Math.floor(s/60);return m+" د "+Math.round(s%60)+" ث"}
+function fago(ts){if(!ts)return"—";const s=Math.max(0,(Date.now()-ts)/1000);if(s<5)return"دلوقتي";if(s<60)return"من "+Math.round(s)+" ثانية";if(s<3600)return"من "+Math.round(s/60)+" دقيقة";return new Date(ts).toLocaleString("ar-EG")}
+const KL={images:"صورة العنصر",docs:"مستند",notebook:"صورة شرح","fault-backgrounds":"خلفية صفحة أعطال","fault-notes":"صورة نقطة عطل",json:"بيانات العنصر",unassigned:"ملف بلا عنصر"};
+const KI={images:"🖼️",docs:"📄",notebook:"📝","fault-backgrounds":"🗺️","fault-notes":"📍",json:"🧾",unassigned:"📎"};
+const STAGE={meta:"١ الإعدادات والمجموعات",select:"٢ تحديد المطلوب مزامنته",write:"٣ كتابة العناصر والملفات",del:"٤ العناصر المحذوفة",orphan:"٥ ملفات بلا عنصر",index:"٦ كتابة الفهرس"};
+const ST_RANK={writing:0,failed:1,held:2,queued:3,idle:4,missing:5,saved:6};
+
+/* ---------------- الحالة ---------------- */
+const S={holds:[],staleItems:{},staleFiles:{},inflight:new Map(),hist:[],fails:new Map(),fileFails:new Map(),
+  verified:new Map(),verifyErr:new Map(),passes:[],cur:null,priority:new Set(),waiters:[],
+  meta:new Map(),metaTs:0,metaDirty:true,R:null,filtered:[],host:null,tm:null,
+  ui:{tab:"files",status:"all",kind:"all",gid:"",loc:"",q:"",limit:60,open:new Set(),logBytes:null}};
+try{const j=JSON.parse(localStorage.getItem(LSK)||"null");
+  if(j){S.holds=Array.isArray(j.holds)?j.holds:[];S.staleItems=j.si||{};S.staleFiles=j.sf||{}}}catch(e){}
+let saveT=null;
+function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(LSK,JSON.stringify({holds:S.holds,si:S.staleItems,sf:S.staleFiles}))}catch(e){}},300)}
+function wake(){S.waiters.splice(0).forEach(f=>{try{f()}catch(e){}})}
+
+/* ---------------- مجموعات وعناصر (كاش خفيف) ---------------- */
+let dTs=0,dKey=-1,dKids=new Map(),dCache=new Map();
+function descOf(gid){
+  const fl=ST().folders||[];
+  if(Date.now()-dTs>1000||dKey!==fl.length){dTs=Date.now();dKey=fl.length;dKids=new Map();dCache=new Map();
+    for(const f of fl){const p=f.parentId||"";(dKids.get(p)||dKids.set(p,[]).get(p)).push(f.id)}}
+  let s=dCache.get(gid);if(s)return s;
+  s=new Set();const walk=id=>{if(s.has(id))return;s.add(id);(dKids.get(id)||[]).forEach(walk)};walk(gid);
+  dCache.set(gid,s);return s}
+let iTs=0,iLen=-1,iMap=new Map(),fTs=0,fMap=new Map();
+function itemById(id){const it=ST().items||[];if(Date.now()-iTs>2000||iLen!==it.length){iTs=Date.now();iLen=it.length;iMap=new Map(it.map(x=>[x.id,x]))}return iMap.get(id)}
+function refs(it){const R=[],a=(i,k)=>i&&R.push([i,k]);
+  (it.imageIds||[]).forEach(i=>a(i,"images"));(it.docs||[]).forEach(d=>d&&a(d.fileId,"docs"));
+  (it.notebookData?.images||[]).forEach(x=>a(x.id,"notebook"));
+  (it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});
+  return R}
+function fidMap(){if(Date.now()-fTs>2000){fTs=Date.now();fMap=new Map();for(const it of ST().items||[])for(const[fid,k]of refs(it))if(!fMap.has(fid))fMap.set(fid,{it,k})}return fMap}
+const fidOf=p=>{const m=/([^/]+?)(?:\.[A-Za-z0-9]{1,5})?$/.exec(p||"");return m?m[1]:""};
+
+/* ---------------- منطق الإيقاف: صف افتراضي {gid,itemId,kind,fid,destPath} ---------------- */
+function covers(h,r){
+  switch(h.type){
+    case"all":return true;
+    case"group":return descOf(h.key).has(r.gid);
+    case"item":return h.key===r.itemId;
+    case"kind":return !!r.kind&&r.kind===h.key;
+    case"file":return !!r.fid&&r.fid===h.key;
+    case"path":{const p=r.destPath;return !!p&&(p===h.key||p.startsWith(h.key+"/"))}
+  }return false}
+function findCover(r,skip){for(const h of S.holds)if(h!==skip&&covers(h,r))return h;return null}
+function heldNow(path){
+  const fid=fidOf(path),m=fidMap().get(fid);
+  return !!findCover({gid:m?(m.it.folderId||"_root"):"\0",itemId:m?m.it.id:"\0",kind:m?m.k:null,fid,destPath:path})}
+async function waitHold(path){while(heldNow(path))await new Promise(r=>{S.waiters.push(r);setTimeout(r,2000)})}
+
+/* ---------------- الواجهة اللي المحرك بينادي عليها ---------------- */
+const SP=window.__SP={
+  holdAll:()=>S.holds.some(h=>h.type==="all"),
+  holdItem:(it,base)=>!!findCover({gid:it.folderId||"_root",itemId:it.id,kind:null,fid:null,destPath:base}),
+  holdFile:(fid,it,k)=>!!findCover({gid:it.folderId||"_root",itemId:it.id,kind:k,fid,destPath:null}),
+  holdPath:p=>!!findCover({gid:"\0",itemId:"\0",kind:null,fid:null,destPath:p}),
+  holdJson(path,id){if(path==="index.json")return false;const it=id?itemById(id):null;
+    return !!findCover({gid:it?(it.folderId||"_root"):"\0",itemId:it?it.id:"\0",kind:null,fid:null,destPath:path})},
+  skipItem(it){S.staleItems[it.id]=Date.now();if(S.cur)S.cur.skipItems.add(it.id);save()},
+  skipFile(fid,it){S.staleFiles[fid]=it.id;if(S.cur)S.cur.skipFiles.add(fid);save()},
+  itemFail(it,e){S.fails.set(it.id,{msg:String(e&&e.message||e),ts:Date.now()})},
+  itemsDone(work,errs){const bad=new Set(errs.map(x=>x[0].id));let ch=false;
+    for(const it of work){if(bad.has(it.id))continue;S.fails.delete(it.id);
+      if(S.staleItems[it.id]&&!(S.cur&&S.cur.skipItems.has(it.id))){delete S.staleItems[it.id];ch=true}
+      for(const[fid]of refs(it))if(S.staleFiles[fid]&&!(S.cur&&S.cur.skipFiles.has(fid))){delete S.staleFiles[fid];ch=true}}
+    if(ch)save()},
+  sortWork(work){if(S.priority.size)work.sort((a,b)=>(S.priority.has(b.id)?1:0)-(S.priority.has(a.id)?1:0))},
+  /* كتابة الملف على دفعات 4 م.ب: بتدّي نسبة تقدّم حقيقية، وبتسمح بالإيقاف في نص الكتابة */
+  async write(w,data,path){
+    if(!(typeof Blob!=="undefined"&&data instanceof Blob))return w.write(data);
+    const size=data.size,rec={path,size,done:0,start:Date.now(),pausedMs:0,state:"writing"};
+    S.inflight.set(path,rec);
+    try{
+      if(size<=CHUNK)await w.write(data);
+      else for(let o=0;o<size;o+=CHUNK){
+        if(heldNow(path)){rec.state="paused";const t=Date.now();await waitHold(path);rec.pausedMs+=Date.now()-t;rec.state="writing"}
+        await w.write(data.slice(o,Math.min(size,o+CHUNK)));rec.done=Math.min(size,o+CHUNK)}
+      rec.done=size;
+      S.hist.push({path,size,ms:Math.max(1,Date.now()-rec.start-rec.pausedMs),ts:Date.now()});
+      if(S.hist.length>400)S.hist.splice(0,100);
+      S.fileFails.delete(path)
+    }catch(e){S.fileFails.set(path,String(e&&e.message||e));throw e}
+    finally{S.inflight.delete(path)}},
+  passStart(i){S.cur=Object.assign({ts:Date.now(),t0:performance.now(),stages:{},stage:null,stageT:0,skipItems:new Set(),skipFiles:new Set()},i)},
+  stage(n){const c=S.cur;if(!c)return;const t=performance.now();if(c.stage)c.stages[c.stage]=(c.stages[c.stage]||0)+(t-c.stageT);c.stage=n;c.stageT=t},
+  passEnd(i){const c=S.cur;if(!c)return;SP.stage(null);
+    S.passes.push(Object.assign({},i,{ts:c.ts,scan:c.scan,items:c.items,dirtyItems:c.dirtyItems,dirtyFiles:c.dirtyFiles,stages:c.stages,total:performance.now()-c.t0,skipped:c.skipItems.size+c.skipFiles.size}));
+    if(S.passes.length>60)S.passes.shift();S.cur=null;S.priority.clear();S.metaDirty=true;save()},
+  verified(w,ok,err){S.verified.set(w.path,!!ok);if(!ok)S.verifyErr.set(w.path,String(err&&err.message||err||"بصمة مختلفة"))}
+};
+
+/* ---------------- بناء جدول كل الملفات ---------------- */
+async function loadMeta(){
+  try{const recs=await idbGetAll("files"),m=new Map();
+    for(const r of recs||[])if(r&&r.id)m.set(r.id,{name:r.name||"",size:r.size??(r.blob&&r.blob.size)??0,upd:r.updatedAt||0,has:!!r.blob});
+    S.meta=m;S.metaTs=Date.now();S.metaDirty=false}catch(e){S.metaTs=Date.now()}}
+function buildRows(){
+  const st=ST(),fs=FS(),P=fs&&fs.plan?fs.plan():null,E=fs&&fs.state||null;
+  const root=fs&&fs.info&&fs.info.handle?fs.info.handle():null;
+  const idx=P?P.idx:{items:{},unassigned:{}};
+  const items=st.items||[],folders=st.folders||[],fmap=new Map(folders.map(f=>[f.id,f]));
+  const gname=fid=>{if(!fid||!fmap.has(fid))return"بدون مجموعة";const o=[];let f=fmap.get(fid),d=0;while(f&&d++<30){o.unshift(f.name||"بدون اسم");f=f.parentId?fmap.get(f.parentId):null}return o.join(" › ")};
+  const vq=new Set(E?E.vq.map(w=>w.path):[]);
+  const rows=[],used=new Set(),metaOk=S.metaTs>0,now=Date.now();
+  const nofolder=!P;
+  const verOf=p=>{const v=S.verified.get(p);return v===true?"ok":v===false?"bad":vq.has(p)?"pending":null};
+  const queuedFor=(id,fid)=>!!(E&&(E.scan||E.running||E.dirty.has(id)||(fid&&E.dirtyFiles.has(fid))));
+  const finish=(r,saved,fail)=>{
+    const fl=S.inflight.get(r.destPath);
+    r.cover=findCover({gid:r.gid,itemId:r.itemId,kind:r.kind==="json"?null:r.kind,fid:r.fid,destPath:r.destPath});
+    if(fl){r.status=fl.state==="paused"?"held":"writing";r.done=fl.done;r.start=fl.start;r.live=fl}
+    else if(saved){r.status="saved";r.ver=r.destPath?verOf(r.destPath):null}
+    else if(r.cover)r.status="held";
+    else if(fail)r.status="failed";
+    else r.status=nofolder?"idle":(queuedFor(r.itemId,r.fid)?"queued":"idle");
+    if(fail)r.err=fail;return r};
+  for(const it of items){
+    const gid=it.folderId&&fmap.has(it.folderId)?it.folderId:"_root",gn=gname(gid==="_root"?null:gid),
+      base=P?P.itemPath(it):null,oe=idx.items[it.id],iname=it.name||"بدون اسم",fe=S.fails.get(it.id);
+    {const dest=base?base+"/item.json":null,saved=!!(oe&&oe.path===base&&!S.staleItems[it.id]&&!(E&&E.dirty.has(it.id)));
+      rows.push(finish({key:"j:"+it.id,kind:"json",fid:null,itemId:it.id,itemName:iname,gid,groupName:gn,name:"item.json",size:0,destPath:dest,base},saved,fe&&fe.msg))}
+    const seen=new Set();
+    for(const[fid,k]of refs(it)){
+      if(seen.has(fid))continue;seen.add(fid);used.add(fid);
+      const m=S.meta.get(fid),nm=(m&&m.name)||(it.docs||[]).find(d=>d&&d.fileId===fid)?.name||fid,
+        dest=base?base+"/"+k+"/"+fid+ext(m&&m.name):null,pf=oe&&oe.path===base&&oe.files&&oe.files[fid];
+      const r={key:"f:"+fid,kind:k,fid,itemId:it.id,itemName:iname,gid,groupName:gn,name:nm,size:(m&&m.size)||0,destPath:dest,base};
+      if(metaOk&&(!m||!m.has)){r.status="missing";r.cover=null;rows.push(r);continue}
+      const saved=!!(pf&&m&&pf.size===m.size&&pf.upd===m.upd&&pf.path===dest);
+      const fe2=S.fileFails.get(dest)||(fe&&fe.msg)||null;
+      rows.push(finish(r,saved,fe2))}}
+  if(metaOk)for(const[fid,m]of S.meta){
+    if(used.has(fid)||!m.has)continue;
+    const dest="_unassigned/"+fid+ext(m.name),pf=idx.unassigned&&idx.unassigned[fid];
+    rows.push(finish({key:"f:"+fid,kind:"unassigned",fid,itemId:"\0u",itemName:"—",gid:"\0",groupName:"ملفات بلا عنصر",name:m.name||fid,size:m.size,destPath:P?dest:null,base:"_unassigned"},
+      !!(pf&&pf.size===m.size&&pf.upd===m.upd&&pf.path===dest),S.fileFails.get(dest)||null))}
+  return{rows,P,E,linked:!!P,root:root?root.name:"",now,vq}}
+function totals(rows){
+  const t={all:rows.length,saved:0,verok:0,writing:0,queued:0,idle:0,held:0,failed:0,missing:0,bytes:0,savedBytes:0,waitBytes:0,heldBytes:0};
+  for(const r of rows){t[r.status]++;
+    if(r.status==="saved"&&r.ver==="ok")t.verok++;
+    if(r.kind==="json"||r.status==="missing")continue;
+    t.bytes+=r.size;
+    if(r.status==="saved")t.savedBytes+=r.size;
+    else if(r.status==="held")t.heldBytes+=r.size;
+    else t.waitBytes+=r.status==="writing"?Math.max(0,r.size-(r.done||0)):r.size}
+  return t}
+function rate(){const now=Date.now(),a=S.hist.filter(h=>now-h.ts<180000);if(!a.length)return 0;
+  let b=0,first=Infinity;for(const h of a){b+=h.size;first=Math.min(first,h.ts-h.ms)}
+  const sec=Math.max(2,(now-first)/1000);return b/sec}
+
+/* ---------------- أوامر التحكم ---------------- */
+function labelFor(t,v){
+  const st=ST();
+  if(t==="all")return"كل المزامنة";
+  if(t==="group")return v==="_root"?"المجموعة «بدون مجموعة»":"المجموعة «"+((st.folders||[]).find(f=>f.id===v)||{}).name+"»";
+  if(t==="item")return"العنصر «"+((itemById(v)||{}).name||v)+"»";
+  if(t==="kind")return"كل «"+(KL[v]||v)+"»";
+  if(t==="file"){const r=S.R&&S.R.rows.find(x=>x.fid===v);return"الملف «"+(r?r.name:v)+"»"}
+  return"الموقع "+v}
+function toast2(m,k){try{toast(m,k||"ok")}catch(e){}}
+function addHold(type,key,label){key=String(key);
+  if(S.holds.some(h=>h.type===type&&h.key===key))return false;
+  S.holds.push({id:"h"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),type,key,label:label||labelFor(type,key),since:Date.now()});return true}
+function commit(rq){wake();save();if(rq)requeue();refresh()}
+function requeue(){
+  const fs=FS();if(!fs||!fs.plan||!fs.plan())return;const E=fs.state,R=buildRows();
+  for(const r of R.rows)if(r.status==="queued"||r.status==="idle"||r.status==="failed"){
+    if(r.itemId&&r.itemId!=="\0u")E.dirty.add(r.itemId);
+    if(r.fid)E.dirtyFiles.add(r.fid);
+    if(r.kind==="unassigned")E.scan=true}
+  for(const id in S.staleItems)E.dirty.add(id);
+  for(const fid in S.staleFiles)E.dirtyFiles.add(fid);
+  fs.kick(0)}
+function scopeRows(t,v){
+  const R=S.R?S.R.rows:[];
+  switch(t){
+    case"all":return R;
+    case"group":{const d=descOf(v);return R.filter(r=>d.has(r.gid))}
+    case"item":return R.filter(r=>r.itemId===v);
+    case"file":return R.filter(r=>r.fid===v);
+    case"kind":return R.filter(r=>r.kind===v);
+    case"path":return R.filter(r=>r.destPath&&(r.destPath===v||r.destPath.startsWith(v+"/")));
+    case"filtered":return S.filtered}
+  return[]}
+function doPause(t,v){
+  if(t==="filtered"){let n=0;for(const r of S.filtered)if(r.fid&&r.kind!=="json"&&r.status!=="saved"&&r.status!=="missing"&&addHold("file",r.fid,"الملف «"+r.name+"»"))n++;
+    commit(false);toast2("اتوقّف "+N(n)+" ملف.");return}
+  if(addHold(t,v,t==="path"?"الموقع "+v:null)){commit(false);toast2("اتوقّف: "+labelFor(t,v))}}
+function doResume(t,v){
+  if(t==="all"){S.holds=[];commit(true);toast2("اتستأنفت المزامنة كلها.");return}
+  const scope=scopeRows(t,v),sc=new Set(scope),all=S.R?S.R.rows:[],blockers=[];let removed=0;
+  for(const h of S.holds.slice()){
+    if(!scope.some(r=>covers(h,r)))continue;
+    if(all.some(r=>!sc.has(r)&&covers(h,r))){blockers.push(h.label);continue}
+    S.holds.splice(S.holds.indexOf(h),1);removed++}
+  commit(true);
+  if(blockers.length)toast2("لسه موقوف بسبب إيقاف أكبر: "+[...new Set(blockers)].join("، ")+" — استأنفه من «الإيقافات الشغّالة».","warn");
+  else toast2(removed?"اتستأنف وبقى في الدور.":"مفيش إيقاف على النطاق ده.")}
+function doStart(t,v){
+  const fs=FS();if(!fs||!fs.plan||!fs.plan()){toast2("اربط مجلد التخزين الأول.","err");return}
+  const E=fs.state,rows=scopeRows(t,v);let n=0,blocked=0;
+  for(const r of rows){
+    if(r.status==="saved"||r.status==="missing"||r.status==="writing")continue;
+    if(r.cover){blocked++;continue}
+    if(r.itemId&&r.itemId!=="\0u"){S.priority.add(r.itemId);E.dirty.add(r.itemId)}
+    if(r.fid)E.dirtyFiles.add(r.fid);
+    if(r.kind==="unassigned")E.scan=true;n++}
+  fs.kick(0);refresh();
+  toast2(n?"بدأت المزامنة لـ "+N(n)+" ملف (بقوا أول الدور).":"مفيش حاجة منتظرة في النطاق ده.",n?"ok":"warn");
+  if(blocked)toast2(N(blocked)+" ملف موقوف — استأنفهم الأول.","warn")}
+function doRewrite(t,v){
+  const fs=FS();if(!fs||!fs.plan||!fs.plan())return;const E=fs.state,ids=new Set();
+  for(const r of scopeRows(t,v))if(r.itemId&&r.itemId!=="\0u"&&!r.cover)ids.add(r.itemId);
+  ids.forEach(id=>{E.force.add(id);E.dirty.add(id);S.priority.add(id)});
+  fs.kick(0);refresh();toast2(ids.size?"هيتعاد كتابة "+N(ids.size)+" عنصر بملفاته.":"مفيش عناصر قابلة لإعادة الكتابة.",ids.size?"ok":"warn")}
+function doScan(){const fs=FS();if(!fs||!fs.plan||!fs.plan()){toast2("اربط مجلد التخزين الأول.","err");return}fs.state.scan=true;fs.kick(0);toast2("بدأ فحص شامل.");refresh()}
+
+/* ---------------- رسم الصفحة ---------------- */
+const CSS=`
+.sp-wrap{max-width:1100px}
+.sp-pipe{display:flex;align-items:stretch;gap:0;margin:0 0 12px;overflow-x:auto;padding-bottom:4px}
+.sp-st{flex:1 0 118px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px 11px;cursor:pointer;min-width:118px;text-align:right;color:var(--text)}
+.sp-st:hover{border-color:var(--amber)}
+.sp-st .n{font-family:var(--mono);font-size:20px;font-weight:600}
+.sp-st .l{font-size:11.5px;color:var(--dim);margin-top:1px}
+.sp-st .s{font-size:10.5px;color:var(--dim2);margin-top:3px;line-height:1.5}
+.sp-st.on{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+.sp-arr{flex:0 0 22px;display:flex;align-items:center;justify-content:center;color:var(--dim2);font-size:13px}
+.sp-side{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.sp-side button{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:6px 11px;font-size:12px;color:var(--text)}
+.sp-side button b{font-family:var(--mono)}
+.sp-side button:hover{border-color:var(--amber)}
+.sp-bar{height:11px;border-radius:7px;background:var(--panel3);border:1px solid var(--border);overflow:hidden;display:flex;direction:rtl}
+.sp-bar i{display:block;height:100%}
+.sp-bar.sm{height:7px;margin-top:5px}
+.c-saved{background:var(--green)}.c-writing{background:var(--amber)}.c-queued{background:var(--blue)}.c-idle{background:var(--dim2)}.c-held{background:var(--yellow)}.c-failed{background:var(--red)}
+.sp-ctl{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.sp-note{border-radius:10px;padding:8px 11px;font-size:12px;line-height:1.7;margin-bottom:7px;border:1px solid var(--border);background:var(--panel2)}
+.sp-note.red{border-color:var(--red);background:var(--red-dim)}.sp-note.yellow{border-color:var(--yellow);background:var(--yellow-dim)}.sp-note.blue{border-color:var(--blue);background:var(--blue-dim)}
+.sp-holds{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.sp-hc{display:inline-flex;align-items:center;gap:6px;background:var(--yellow-dim);border:1px solid var(--yellow);color:var(--text);border-radius:999px;padding:3px 5px 3px 10px;font-size:11.5px}
+.sp-hc button{border:0;background:var(--panel);color:var(--text);border-radius:999px;font-size:11px;padding:2px 9px}
+.sp-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:12px;overflow-x:auto}
+.sp-tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:8px 13px;font-size:13px;white-space:nowrap}
+.sp-tabs button.on{color:var(--amber);border-bottom-color:var(--amber)}
+.sp-flt{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+.sp-flt label{margin:0 0 3px}
+.sp-bulk{display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:8px;margin-bottom:10px;font-size:12px}
+.sp-bulk .t{color:var(--dim);margin-inline-end:4px}
+.sp-row{display:grid;grid-template-columns:30px 1fr auto;gap:9px;align-items:start;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:9px 10px;margin-bottom:6px}
+.sp-row.st-failed,.sp-row.st-missing{border-color:var(--red)}.sp-row.st-held{border-color:var(--yellow)}.sp-row.st-writing{border-color:var(--amber)}
+.sp-ico{font-size:18px;text-align:center;padding-top:1px}
+.sp-name{font-size:13px;font-weight:600;word-break:break-all}
+.sp-name small{font-weight:400;color:var(--dim);font-size:11px;margin-inline-start:6px}
+.sp-sub{font-size:11.5px;color:var(--dim);margin-top:2px;line-height:1.55}
+.sp-path{font-family:var(--mono);font-size:11px;color:var(--dim2);margin-top:3px;direction:ltr;text-align:left;word-break:break-all}
+.sp-err{font-size:11.5px;color:var(--red);margin-top:3px;word-break:break-word}
+.sp-acts{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;margin-top:6px}
+.sp-acts button,.sp-bulk button,.sp-ctl button.m{background:var(--panel3);border:1px solid var(--border-lt);color:var(--text);border-radius:7px;padding:4px 9px;font-size:11.5px}
+.sp-acts button:hover,.sp-bulk button:hover{border-color:var(--amber);color:var(--amber)}
+.sp-acts button:disabled{opacity:.4;cursor:not-allowed}
+.sp-chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11px;border:1px solid var(--border-lt);white-space:nowrap}
+.sp-chip.saved{color:var(--green);border-color:var(--green);background:var(--green-dim)}
+.sp-chip.writing{color:var(--amber);border-color:var(--amber);background:var(--amber-dim)}
+.sp-chip.queued{color:var(--blue);border-color:var(--blue);background:var(--blue-dim)}
+.sp-chip.idle{color:var(--dim)}
+.sp-chip.held{color:var(--yellow);border-color:var(--yellow);background:var(--yellow-dim)}
+.sp-chip.failed,.sp-chip.missing{color:var(--red);border-color:var(--red);background:var(--red-dim)}
+.sp-side2{text-align:left;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.sp-node{display:grid;grid-template-columns:24px 1fr auto;gap:8px;align-items:start;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:8px 10px;margin:0 calc(var(--lv,0)*18px) 6px 0}
+.sp-node.held{border-color:var(--yellow)}
+.sp-tg{background:transparent;border:0;color:var(--dim);font-size:13px;padding:2px}
+.sp-nt{font-size:13px;font-weight:600;word-break:break-word}
+.sp-ns{font-size:11.5px;color:var(--dim);margin-top:2px}
+.sp-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.sp-tbl th,.sp-tbl td{border-bottom:1px solid var(--border);padding:6px 7px;text-align:right}
+.sp-tbl th{color:var(--dim);font-weight:600;font-size:11px}
+.sp-tbl td.m{font-family:var(--mono);direction:ltr;text-align:left}
+.sp-tw{overflow-x:auto}
+.sp-find{font-size:12.5px;line-height:1.8;margin:0;padding-inline-start:18px}
+.sp-find li{margin-bottom:6px}
+.sp-more{display:block;width:100%;padding:9px;margin-top:4px}
+@media(max-width:640px){.sp-row{grid-template-columns:26px 1fr}.sp-row .sp-side2{grid-column:2;align-items:flex-start;text-align:right;flex-direction:row;flex-wrap:wrap;gap:6px}.sp-node{grid-template-columns:22px 1fr}.sp-node .sp-side2{grid-column:2;flex-direction:row;flex-wrap:wrap;align-items:center}}
+`;
+(function(){const s=document.createElement("style");s.id="syncpipe-css";s.textContent=CSS;document.head.appendChild(s)})();
+
+const CH={saved:"محفوظ",writing:"بيتكتب",queued:"في الدور",idle:"منتظر الفحص",held:"موقوف",failed:"فشل",missing:"مفقود محليًا"};
+const chip=r=>{let t=CH[r.status];if(r.status==="saved"){t=r.ver==="ok"?"محفوظ ✓ متحقق":r.ver==="pending"?"محفوظ · قيد التحقق":r.ver==="bad"?"محفوظ · فشل التحقق":"محفوظ"}
+  return`<span class="sp-chip ${r.status}">${t}</span>`};
+function bar(t,cls){const a=t.all||1,seg=(k,c)=>t[k]?`<i class="c-${c}" style="width:${t[k]/a*100}%"></i>`:"";
+  return`<div class="sp-bar ${cls||""}">${seg("saved","saved")}${seg("writing","writing")}${seg("queued","queued")}${seg("idle","idle")}${seg("held","held")}${seg("failed","failed")}</div>`}
+
+function drawHead(R,t){
+  const E=R.E,fs=FS(),eng=!R.linked?"مفيش مجلد مرتبط":(E&&E.running)?"شغّال":"فاضي — مستني تعديل";
+  const stg=S.cur&&S.cur.stage?STAGE[S.cur.stage]:null;
+  const pct=t.all?Math.round((t.saved/t.all)*100):100,rt=rate(),eta=rt>0&&t.waitBytes>0?fdur(t.waitBytes/rt*1000):null;
+  const allHeld=S.holds.some(h=>h.type==="all"),f=S.ui.status;
+  const st=(k,n,l,s,flt)=>`<button class="sp-st ${f===flt?"on":""}" data-act="flt" data-v="${flt}"><div class="n">${N(n)}</div><div class="l">${l}</div><div class="s">${s}</div></button>`;
+  const arr='<div class="sp-arr">◀</div>';
+  const pend=t.queued+t.idle;
+  let h=`<div class="sp-pipe">
+    ${st(1,t.all,"في قاعدة المتصفح","كل الملفات المرتبطة بعناصر ("+fb(t.bytes)+")","all")}${arr}
+    ${st(2,pend,"في الدور / منتظر","منها "+N(t.idle)+" مستنية الفحص الشامل","pending")}${arr}
+    ${st(3,t.writing,"بيتكتب دلوقتي",E?"بالتوازي لحد 4 ملفات":"—","writing")}${arr}
+    ${st(4,t.saved,"اتحفظ في المجلد",fb(t.savedBytes),"saved")}${arr}
+    ${st(5,t.verok,"اتأكد منه بالبصمة","تحقق SHA في الخلفية","verified")}
+  </div>
+  <div class="sp-side">
+    <button data-act="flt" data-v="held">⏸ موقوف <b>${N(t.held)}</b></button>
+    <button data-act="flt" data-v="failed">⚠️ فشل <b>${N(t.failed)}</b></button>
+    <button data-act="flt" data-v="missing">❔ مفقود محليًا <b>${N(t.missing)}</b></button>
+    <button data-act="tab" data-v="diag">طابور التحقق: <b>${N(E?E.vq.length:0)}</b></button>
+  </div>
+  <div class="panel" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;margin-bottom:7px">
+      <b>${pct}% محفوظ (${N(t.saved)} من ${N(t.all)})</b>
+      <span style="color:var(--dim)">${fb(t.savedBytes)} من ${fb(t.bytes)}${eta?" · الباقي تقريبًا "+eta:""}${rt?" · "+fb(rt)+"/ث":""}</span></div>
+    ${bar(t)}
+    <div style="font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.8">
+      المحرك: <b style="color:var(--text)">${eng}</b>${stg?" — المرحلة: "+stg:""}
+      ${R.linked?`<br>بيتحفظ جوه المجلد: <b style="color:var(--text)">${H(R.root||"المجلد المرتبط")}</b> بالشكل <span style="font-family:var(--mono);direction:ltr;display:inline-block">المجموعة / العنصر / نوع الملف / اسم الملف</span>`:""}
+    </div></div>
+  <div class="sp-ctl">
+    ${allHeld?`<button class="btn primary" data-act="resume" data-t="all">▶ استئناف الكل</button>`:`<button class="btn" data-act="pause" data-t="all">⏸ إيقاف الكل</button>`}
+    ${S.holds.length&&!allHeld?`<button class="btn" data-act="resume" data-t="all">▶ استئناف الكل (شيل كل الإيقافات)</button>`:""}
+    <button class="btn primary" data-act="start" data-t="all">⚡ ابدأ الآن (كل المنتظر)</button>
+    <button class="btn" data-act="scan">🔍 فحص شامل</button>
+    <button class="btn" data-act="reload">↻ تحديث</button>
+  </div>`;
+  const notes=[];
+  if(!R.linked)notes.push(["red","مفيش مجلد تخزين مرتبط — الملفات في قاعدة المتصفح بس ومحدش بيكتبها على القرص. اربط مجلد من الإعدادات."]);
+  else{
+    if(typeof folderPermissionNeedsActivation!=="undefined"&&folderPermissionNeedsActivation)notes.push(["red","صلاحية الكتابة على المجلد محتاجة تأكيد — المزامنة واقفة لحد ما تسمح من الإعدادات أو بضغطة على أيقونة المزامنة."]);
+    if(E&&E.lastErr&&E.lastErr.message!=="folder-permission-required")notes.push(["red","آخر خطأ في المزامنة: "+E.lastErr.message+(E.retry?" — بيعيد المحاولة تلقائيًا (محاولة "+E.retry+")":"")]);
+    if(allHeld)notes.push(["yellow","⏸ المزامنة كلها موقوفة. التعديلات بتتحفظ في البرنامج بس ومش بتتكتب في المجلد لحد ما تستأنف."]);
+    else if(S.holds.length)notes.push(["yellow","⏸ فيه "+S.holds.length+" إيقاف شغّال. الملفات الموقوفة مش هتتكتب لحد ما تستأنفها."]);
+    if(t.idle>0&&!(E&&E.running)&&!allHeld){const left=E?Math.max(0,E.lastScan+SCAN_EVERY-Date.now()):0;
+      notes.push(["blue",N(t.idle)+" ملف مش في الدور النشط — بيتلقطوا في الفحص الشامل الجاي (بعد حوالي "+fdur(left)+")، أو دوس «ابدأ الآن» وهيبقوا أول الدور."])}
+    if(t.failed)notes.push(["red",N(t.failed)+" ملف فشلوا — شوف سبب الفشل في تبويب «الملفات» (فلتر: فشل)."]);
+    if(t.missing)notes.push(["red",N(t.missing)+" ملف العنصر بيشاور عليه لكن مش موجود في قاعدة المتصفح — المحرك بيتخطّاه ومش هيتكتب."])}
+  h+=notes.map(n=>`<div class="sp-note ${n[0]}">${n[1]}</div>`).join("");
+  if(S.holds.length)h+=`<div class="sp-holds">${S.holds.map(x=>`<span class="sp-hc">⏸ ${H(x.label)}<button data-act="unhold" data-v="${x.id}">▶ استئناف</button></span>`).join("")}</div>`;
+  document.getElementById("spHead").innerHTML=h}
+
+const TABS=[["files","📄 الملفات"],["tree","🗂️ المجموعات والمواقع"],["log","🔄 سجل النشاط"],["diag","🩺 ليه تقيل؟"]];
+function drawTabs(){document.getElementById("spTabs").innerHTML=TABS.map(([k,l])=>`<button class="${S.ui.tab===k?"on":""}" data-act="tab" data-v="${k}">${l}</button>`).join("")}
+
+/* ---- تبويب الملفات ---- */
+function groupOptions(){
+  const fl=ST().folders||[],ids=new Set(fl.map(f=>f.id)),kids=new Map();
+  fl.forEach(f=>{const p=f.parentId&&ids.has(f.parentId)?f.parentId:"";(kids.get(p)||kids.set(p,[]).get(p)).push(f)});
+  const o=['<option value="">كل المجموعات</option>','<option value="_root">بدون مجموعة</option>'];
+  const walk=(p,d)=>(kids.get(p)||[]).forEach(f=>{o.push(`<option value="${H(f.id)}" ${S.ui.gid===f.id?"selected":""}>${"— ".repeat(d)}${H(f.name||"بدون اسم")}</option>`);walk(f.id,d+1)});
+  walk("",0);return o.join("")}
+function drawFilters(){
+  const u=S.ui,sel=(v,l)=>`<option value="${v}" ${u.status===v?"selected":""}>${l}</option>`,ks=["all","images","docs","notebook","fault-backgrounds","fault-notes","json","unassigned"];
+  const R=S.R,gp=R&&R.P?Object.values(R.P.gp).sort():[];
+  document.getElementById("spFilters").innerHTML=`
+  <div class="sp-flt">
+    <div><label>الحالة</label><select id="fStatus">${sel("all","الكل")}${sel("pending","منتظر (في الدور + منتظر الفحص)")}${sel("writing","بيتكتب")}${sel("saved","محفوظ")}${sel("verified","محفوظ ومتحقق منه")}${sel("held","موقوف")}${sel("failed","فشل")}${sel("missing","مفقود محليًا")}</select></div>
+    <div><label>النوع</label><select id="fKind">${ks.map(k=>`<option value="${k}" ${u.kind===k?"selected":""}>${k==="all"?"كل الأنواع":KL[k]}</option>`).join("")}</select></div>
+    <div><label>المجموعة</label><select id="fGroup">${groupOptions()}</select></div>
+    <div><label>الموقع (جزء من مسار الحفظ)</label><input id="fLoc" list="spLocs" placeholder="مثال: بدون-مجموعة/مضخة" value="${H(u.loc)}" dir="ltr" style="text-align:left"><datalist id="spLocs">${gp.map(p=>`<option value="${H(p)}">`).join("")}<option value="_unassigned"></datalist></div>
+    <div><label>بحث بالاسم</label><input id="fQ" placeholder="اسم ملف أو عنصر" value="${H(u.q)}"></div>
+  </div>`}
+function applyFilter(){
+  const u=S.ui,q=u.q.trim().toLowerCase(),loc=u.loc.trim().replace(/^\/+|\/+$/g,"");
+  const g=u.gid?descOf(u.gid):null;
+  let a=(S.R?S.R.rows:[]).filter(r=>{
+    if(u.status!=="all"){
+      if(u.status==="pending"){if(r.status!=="queued"&&r.status!=="idle")return false}
+      else if(u.status==="verified"){if(!(r.status==="saved"&&r.ver==="ok"))return false}
+      else if(r.status!==u.status)return false}
+    if(u.kind!=="all"&&r.kind!==u.kind)return false;
+    if(g&&!g.has(r.gid))return false;
+    if(loc&&!(r.destPath&&(r.destPath===loc||r.destPath.startsWith(loc+"/")||r.destPath.startsWith(loc))))return false;
+    if(q&&!((r.name||"").toLowerCase().includes(q)||(r.itemName||"").toLowerCase().includes(q)))return false;
+    return true});
+  a.sort((x,y)=>ST_RANK[x.status]-ST_RANK[y.status]||String(x.groupName).localeCompare(String(y.groupName),"ar")||String(x.itemName).localeCompare(String(y.itemName),"ar"));
+  S.filtered=a;return a}
+function rowHtml(r,root){
+  const own=r.fid&&S.holds.find(h=>h.type==="file"&&h.key===r.fid),dis=r.status==="missing";
+  let prog="";
+  if(r.status==="writing"||(r.status==="held"&&r.live)){const p=r.size?Math.min(100,Math.round(r.done/r.size*100)):0,el=(Date.now()-r.start)/1000,sp=el>1?r.done/el:0;
+    prog=`<div class="sp-bar sm"><i class="c-${r.status==="writing"?"writing":"held"}" style="width:${p}%"></i></div><div class="sp-sub">${p}% — ${fb(r.done)} من ${fb(r.size)}${sp?" · "+fb(sp)+"/ث":""}${r.status==="held"?" · موقوف في النص":""}</div>`}
+  let held="";
+  if(r.status==="held"&&r.cover)held=`<div class="sp-sub" style="color:var(--yellow)">⏸ موقوف بسبب: ${H(r.cover.label)}</div>`;
+  const dest=r.destPath?(root?root+"/":"")+r.destPath:"— (مفيش مجلد مرتبط)";
+  const acts=[];
+  if(r.fid&&!dis&&r.status!=="saved"){
+    if(own)acts.push(`<button data-act="resume" data-t="file" data-v="${H(r.fid)}">▶ استئناف</button>`);
+    else if(r.cover)acts.push(`<button disabled title="${H(r.cover.label)}">⏸ موقوف من أعلى</button>`);
+    else acts.push(`<button data-act="pause" data-t="file" data-v="${H(r.fid)}">⏸ إيقاف</button>`)}
+  if(!dis&&r.status!=="saved"&&r.status!=="writing")acts.push(`<button data-act="start" data-t="${r.fid?"file":"item"}" data-v="${H(r.fid||r.itemId)}" ${r.cover?"disabled":""}>⚡ ابدأ الآن</button>`);
+  if(!dis&&r.itemId!=="\0u")acts.push(`<button data-act="rewrite" data-t="item" data-v="${H(r.itemId)}" title="إعادة كتابة العنصر وكل ملفاته">🔁 إعادة كتابة</button>`);
+  if(r.destPath)acts.push(`<button data-act="copy" data-v="${H(dest)}">📋 المسار</button>`);
+  const size=r.kind==="json"?"":" · "+fb(r.size);
+  return`<div class="sp-row st-${r.status}"><div class="sp-ico">${KI[r.kind]||"📄"}</div>
+    <div><div class="sp-name">${H(r.name)}<small>${KL[r.kind]||""}</small></div>
+    <div class="sp-sub">العنصر: ${H(r.itemName)} · المجموعة: ${H(r.groupName)}${size}</div>
+    <div class="sp-path">📁 ${H(dest)}</div>${prog}${held}${r.err?`<div class="sp-err">⚠️ ${H(r.err)}</div>`:""}
+    ${r.status==="missing"?`<div class="sp-err">الملف مش موجود في قاعدة بيانات المتصفح.</div>`:""}
+    ${r.ver==="bad"?`<div class="sp-err">فشل التحقق بالبصمة: ${H(S.verifyErr.get(r.destPath)||"")}</div>`:""}
+    <div class="sp-acts">${acts.join("")}</div></div>
+    <div class="sp-side2">${chip(r)}</div></div>`}
+function drawFiles(){
+  const R=S.R,a=applyFilter(),u=S.ui,shown=a.slice(0,u.limit);
+  const nf=a.filter(r=>r.fid&&r.kind!=="json"&&r.status!=="saved"&&r.status!=="missing").length;
+  const b=[`<span class="t">النتيجة: <b>${N(a.length)}</b> ملف</span>`,
+    `<button data-act="pause" data-t="filtered" ${nf?"":"disabled"}>⏸ إيقاف المعروض (${N(nf)})</button>`,
+    `<button data-act="resume" data-t="filtered">▶ استئناف المعروض</button>`,
+    `<button data-act="start" data-t="filtered">⚡ ابدأ المعروض</button>`];
+  if(u.gid)b.push(`<span class="t">| المجموعة:</span><button data-act="pause" data-t="group" data-v="${H(u.gid)}">⏸ إيقاف</button><button data-act="resume" data-t="group" data-v="${H(u.gid)}">▶ استئناف</button><button data-act="start" data-t="group" data-v="${H(u.gid)}">⚡ ابدأ</button>`);
+  const loc=u.loc.trim().replace(/^\/+|\/+$/g,"");
+  if(loc)b.push(`<span class="t">| الموقع:</span><button data-act="pause" data-t="path" data-v="${H(loc)}">⏸ إيقاف</button><button data-act="resume" data-t="path" data-v="${H(loc)}">▶ استئناف</button><button data-act="start" data-t="path" data-v="${H(loc)}">⚡ ابدأ</button>`);
+  if(u.kind!=="all"&&u.kind!=="json")b.push(`<span class="t">| النوع:</span><button data-act="pause" data-t="kind" data-v="${u.kind}">⏸ إيقاف كل «${KL[u.kind]}»</button><button data-act="resume" data-t="kind" data-v="${u.kind}">▶ استئناف</button>`);
+  document.getElementById("spList").innerHTML=`<div class="sp-bulk">${b.join("")}</div>`+
+    (shown.length?shown.map(r=>rowHtml(r,R.root)).join(""):`<div class="sp-note">مفيش ملفات بالفلتر ده.${R.rows.length?"":" (مفيش ملفات مرتبطة بعناصر لسه.)"}</div>`)+
+    (a.length>shown.length?`<button class="btn sp-more" data-act="more">عرض ${N(Math.min(60,a.length-shown.length))} كمان (فاضل ${N(a.length-shown.length)})</button>`:"")}
+
+/* ---- تبويب المجموعات والمواقع ---- */
+function tstat(rows){return totals(rows)}
+function drawTree(){
+  const R=S.R,rows=R.rows,st=ST(),fl=st.folders||[],items=st.items||[],ids=new Set(fl.map(f=>f.id));
+  const kids=new Map(),byG=new Map(),byI=new Map();
+  fl.forEach(f=>{const p=f.parentId&&ids.has(f.parentId)?f.parentId:"";(kids.get(p)||kids.set(p,[]).get(p)).push(f)});
+  rows.forEach(r=>{(byI.get(r.itemId)||byI.set(r.itemId,[]).get(r.itemId)).push(r)});
+  items.forEach(it=>{const g=it.folderId&&ids.has(it.folderId)?it.folderId:"_root";(byG.get(g)||byG.set(g,[]).get(g)).push(it)});
+  const memo=new Map(),gRows=gid=>{if(memo.has(gid))return memo.get(gid);let a=[];for(const it of byG.get(gid)||[])a=a.concat(byI.get(it.id)||[]);for(const f of kids.get(gid)||[])a=a.concat(gRows(f.id));memo.set(gid,a);return a};
+  const O=S.ui.open,P=R.P;
+  const ctrl=(type,key,pseudo)=>{
+    const own=S.holds.find(h=>h.type===type&&h.key===key),oth=findCover(pseudo,own);
+    if(own)return{own,btn:`<button data-act="resume" data-t="${type}" data-v="${H(key)}">▶ استئناف</button>`};
+    if(oth)return{oth,btn:`<button disabled title="${H(oth.label)}">⏸ موقوف من أعلى</button>`};
+    return{btn:`<button data-act="pause" data-t="${type}" data-v="${H(key)}">⏸ إيقاف</button>`}};
+  const node=(lv,tg,icon,title,sub,t,c,path,extra,key)=>`<div class="sp-node ${c.own||c.oth?"held":""}" style="--lv:${lv}">
+    <button class="sp-tg" data-act="toggle" data-v="${H(key||"")}">${tg===null?"":tg?"▾":"▸"}</button>
+    <div><div class="sp-nt">${icon} ${H(title)}</div><div class="sp-ns">${sub}</div>${bar(t,"sm")}${path?`<div class="sp-path">📁 ${H(path)}</div>`:""}
+    ${c.own?`<div class="sp-sub" style="color:var(--yellow)">⏸ موقوف</div>`:c.oth?`<div class="sp-sub" style="color:var(--yellow)">⏸ موقوف بسبب: ${H(c.oth.label)}</div>`:""}</div>
+    <div class="sp-side2"><div class="sp-acts" style="margin:0">${c.btn}${extra||""}</div></div></div>`;
+  const subtxt=t=>`${N(t.saved)}/${N(t.all)} محفوظ${t.writing?" · "+N(t.writing)+" بيتكتب":""}${t.queued+t.idle?" · "+N(t.queued+t.idle)+" منتظر":""}${t.held?" · "+N(t.held)+" موقوف":""}${t.failed?" · "+N(t.failed)+" فشل":""} · ${fb(t.bytes)}`;
+  const startBtn=(t,v)=>`<button data-act="start" data-t="${t}" data-v="${H(v)}">⚡ ابدأ</button>`;
+  const out=[];
+  const itemNode=(it,lv)=>{
+    const ir=byI.get(it.id)||[],t=tstat(ir),base=P?P.itemPath(it):null,key="i:"+it.id,open=O.has(key),gid=it.folderId&&ids.has(it.folderId)?it.folderId:"_root";
+    const c=ctrl("item",it.id,{gid,itemId:it.id,kind:null,fid:null,destPath:base});
+    out.push(node(lv,open,"📦",it.name||"بدون اسم",subtxt(t),t,c,base?(R.root?R.root+"/":"")+base:null,
+      startBtn("item",it.id)+`<button data-act="rewrite" data-t="item" data-v="${H(it.id)}">🔁</button><button data-act="goto" data-t="item" data-v="${H(it.name||"")}">📄 ملفاته</button>`,key));
+    if(open){const ks=new Map();ir.forEach(r=>{if(r.kind!=="json")(ks.get(r.kind)||ks.set(r.kind,[]).get(r.kind)).push(r)});
+      for(const[k,kr]of ks){const kt=tstat(kr),kp=base?base+"/"+k:null,kc=kp?ctrl("path",kp,{gid,itemId:it.id,kind:k,fid:null,destPath:kp}):{btn:""};
+        out.push(node(lv+1,null,KI[k]||"📁",KL[k]||k,subtxt(kt),kt,kc,kp?(R.root?R.root+"/":"")+kp:null,kp?startBtn("path",kp):"",""))}}};
+  const groupNode=(f,lv)=>{
+    const t=tstat(gRows(f.id)),key="g:"+f.id,open=O.has(key),gp=P&&P.gp[f.id];
+    const c=ctrl("group",f.id,{gid:f.id,itemId:"\0",kind:null,fid:null,destPath:gp||null});
+    out.push(node(lv,open,f.icon||"📁",f.name||"بدون اسم",subtxt(t),t,c,gp?(R.root?R.root+"/":"")+gp:null,startBtn("group",f.id)+`<button data-act="goto" data-t="group" data-v="${H(f.id)}">📄 ملفاتها</button>`,key));
+    if(open){for(const sf of kids.get(f.id)||[])groupNode(sf,lv+1);for(const it of byG.get(f.id)||[])itemNode(it,lv+1)}};
+  const rt=tstat(gRows("_root")),rc=ctrl("group","_root",{gid:"_root",itemId:"\0",kind:null,fid:null,destPath:"بدون-مجموعة"});
+  if((byG.get("_root")||[]).length){const key="g:_root",open=O.has(key);
+    out.push(node(0,open,"📁","بدون مجموعة",subtxt(rt),rt,rc,(R.root?R.root+"/":"")+"بدون-مجموعة",startBtn("group","_root")+`<button data-act="goto" data-t="group" data-v="_root">📄 ملفاتها</button>`,key));
+    if(open)for(const it of byG.get("_root"))itemNode(it,1)}
+  for(const f of kids.get("")||[])groupNode(f,0);
+  const ur=rows.filter(r=>r.kind==="unassigned");
+  if(ur.length){const t=tstat(ur),c=ctrl("path","_unassigned",{gid:"\0",itemId:"\0u",kind:"unassigned",fid:null,destPath:"_unassigned"});
+    out.push(node(0,null,"📎","ملفات بلا عنصر",subtxt(t)+" — بتتكتب في الفحص الشامل بس",t,c,(R.root?R.root+"/":"")+"_unassigned",startBtn("path","_unassigned"),""))}
+  document.getElementById("spList").innerHTML=`<div class="sp-note">الإيقاف على مجموعة بيشمل المجموعات الفرعية وكل عناصرها. إيقاف نوع داخل عنصر (صور / مستندات...) بيبقى إيقاف «موقع».</div>`+(out.join("")||`<div class="sp-note">مفيش مجموعات أو عناصر لسه.</div>`)}
+
+/* ---- تبويب سجل النشاط (مسار مزامنة تاني: activity-log/) ---- */
+function drawLog(){
+  const st=ST(),s=st.syncLogSettings||{},ss=st.syncLogState||{},all=st.activityLog||[];
+  const has=typeof activityLogPendingCountG==="function";
+  if(!has){document.getElementById("spList").innerHTML='<div class="sp-note">وحدة سجل النشاط مش متاحة.</div>';return}
+  const pend=activityLogPendingCountG(),pct=activityLogSavedPercentG(),linked=!!(S.R&&S.R.linked);
+  const types=new Set(s.includeTypes&&s.includeTypes.length?s.includeTypes:["add","edit","delete","image","save","sync","import","export"]);
+  let lastId=ss.lastSyncedId,cut=all.length;if(lastId){const i=all.findIndex(e=>e.id===lastId);if(i!==-1)cut=i}
+  const parts=new Map();
+  for(const e of all.slice(0,cut))if(types.has(e.type)){const k=activityLogPartitionKey(e);parts.set(k,(parts.get(k)||0)+1)}
+  const ps=ss.partitionStats||{},busy=typeof activityLogSyncBusy!=="undefined"&&activityLogSyncBusy;
+  const rows=[...parts].sort((a,b)=>b[1]-a[1]).slice(0,80).map(([k,n])=>`<tr><td class="m">activity-log/${H(k)}.jsonl</td><td>${N(n)}</td><td>${N((ps[k]||{}).count||0)}</td><td>${(ps[k]||{}).lastUpdated?fago(Date.parse(ps[k].lastUpdated)):"لسه"}</td></tr>`).join("");
+  document.getElementById("spList").innerHTML=`
+  <div class="sp-note">ده مسار مزامنة <b>مستقل</b> عن الصور والمستندات: بيكتب سجل التعديلات في <span style="font-family:var(--mono);direction:ltr;display:inline-block">${H(S.R&&S.R.root||"المجلد")}/activity-log/</span> على دفعات (${N(Number(s.batchSize)||300)} سجل) كل ${N(Number(s.intervalSec)||60)} ثانية.</div>
+  <div class="stat-grid">
+    <div class="stat-card info"><div class="num">${N(all.length)}</div><div class="lbl">سجلات محلية</div></div>
+    <div class="stat-card ${pend?"warn":"good"}"><div class="num">${N(pend)}</div><div class="lbl">بانتظار الكتابة</div></div>
+    <div class="stat-card ${pct>=99?"good":"warn"}"><div class="num">${pct}%</div><div class="lbl">نسبة اتحفظ</div></div>
+    <div class="stat-card"><div class="num" style="font-size:13px">${ss.lastSyncAt?new Date(ss.lastSyncAt).toLocaleString("ar-EG"):"—"}</div><div class="lbl">آخر مزامنة للسجل</div></div></div>
+  <div class="sp-ctl">
+    <span class="sp-chip ${s.enabled?"saved":"held"}">${!linked?"مفيش مجلد مرتبط":busy?"بيكتب دلوقتي":s.enabled?"شغّال تلقائي":"موقوف"}</span>
+    ${s.enabled?`<button class="btn" data-act="logpause">⏸ إيقاف مزامنة السجل</button>`:`<button class="btn primary" data-act="logresume">▶ تشغيل مزامنة السجل</button>`}
+    <button class="btn" data-act="lognow" ${linked?"":"disabled"}>⚡ اكتب الآن</button></div>
+  ${ss.lastError?`<div class="sp-note red">آخر خطأ: ${H(ss.lastError)}</div>`:""}
+  <div class="panel"><h3>الملفات اللي مستنية دورها (حسب التقسيم: ${H(s.partitionBy||"day+type")})</h3>
+    <div class="sp-tw"><table class="sp-tbl"><thead><tr><th>مكان الحفظ</th><th>منتظر</th><th>اتكتب قبل كده</th><th>آخر تحديث</th></tr></thead><tbody>${rows||'<tr><td colspan="4">مفيش سجلات منتظرة.</td></tr>'}</tbody></table></div>
+    <div class="sp-sub" style="margin-top:6px">الإيقاف هنا على مستوى مسار السجل كله (مش لكل ملف jsonl لوحده).</div></div>`}
+
+/* ---- تبويب التشخيص ---- */
+function drawDiag(){
+  const R=S.R,E=R.E,t=totals(R.rows),now=Date.now();
+  const ps=S.passes.slice(-12).reverse(),recent=S.passes.filter(p=>now-p.ts<300000);
+  const busyMs=recent.reduce((a,p)=>a+(p.total||0),0),busyPct=Math.min(100,Math.round(busyMs/300000*100));
+  const slow=S.hist.slice().sort((a,b)=>b.ms-a.ms).slice(0,8);
+  const vqB=E?E.vq.filter(w=>w.blob).reduce((a,w)=>a+(w.size||0),0):0;
+  const stNames=Object.keys(STAGE);
+  const prow=ps.map(p=>`<tr><td>${new Date(p.ts).toLocaleTimeString("ar-EG")}</td><td>${p.scan?"فحص شامل":"تزايدي"}</td><td>${N(p.items)} / ${N(p.dirtyItems)}</td><td>${p.error?'<span style="color:var(--red)">خطأ</span>':N(p.written)}</td>
+    <td>${fdur(p.total)}</td><td>${stNames.map(k=>p.stages&&p.stages[k]?`${STAGE[k].slice(2)}: ${fdur(p.stages[k])}`:"").filter(Boolean).join(" · ")||"—"}</td></tr>`).join("");
+  const srow=slow.map(h=>`<tr><td class="m">${H(h.path)}</td><td>${fb(h.size)}</td><td>${fdur(h.ms)}</td><td>${fb(h.size/(h.ms/1000))}/ث</td></tr>`).join("");
+  const ab=S.ui.logBytes;
+  const cnt=(S.ui.est?`${fb(S.ui.est.usage)} من ${fb(S.ui.est.quota)}`:"—");
+  document.getElementById("spList").innerHTML=`
+  <div class="stat-grid">
+    <div class="stat-card"><div class="num">${recent.length}</div><div class="lbl">مرات اشتغل فيها المحرك آخر 5 دقايق</div></div>
+    <div class="stat-card ${busyPct>40?"warn":""}"><div class="num">${busyPct}%</div><div class="lbl">من الوقت المحرك مشغول</div></div>
+    <div class="stat-card"><div class="num">${E?N(E.vq.length):0}</div><div class="lbl">ملفات مستنية التحقق (${fb(vqB)})</div></div>
+    <div class="stat-card"><div class="num" style="font-size:13px">${E?fdur(Math.max(0,E.lastScan+SCAN_EVERY-now)):"—"}</div><div class="lbl">باقي على الفحص الشامل الجاي</div></div></div>
+  <div class="panel"><h3>آخر مرات تشغيل المحرك (من ساعة ما فتحت البرنامج)</h3><div class="sp-tw"><table class="sp-tbl"><thead><tr><th>الوقت</th><th>النوع</th><th>عناصر / متغيّر</th><th>اتكتب</th><th>المدة</th><th>تفصيل المراحل</th></tr></thead><tbody>${prow||'<tr><td colspan="6">لسه ما اشتغلش المحرك في الجلسة دي.</td></tr>'}</tbody></table></div></div>
+  <div class="panel"><h3>أبطأ الملفات في الكتابة</h3><div class="sp-tw"><table class="sp-tbl"><thead><tr><th>المسار</th><th>الحجم</th><th>المدة</th><th>السرعة</th></tr></thead><tbody>${srow||'<tr><td colspan="4">مفيش ملفات اتكتبت في الجلسة دي.</td></tr>'}</tbody></table></div></div>
+  <div class="panel"><h3>التخزين وسجل النشاط</h3>
+    <div class="sp-sub">مساحة المتصفح المستخدمة: <b>${cnt}</b> · ملفات محلية: <b>${N(S.meta.size)}</b> · سجلات النشاط: <b>${N((ST().activityLog||[]).length)}</b> (الحد 20,000)
+    ${ab!=null?` · حجم السجل المحفوظ تقريبًا: <b>${fb(ab)}</b>`:""} <button class="btn small" data-act="logsize">قياس حجم سجل النشاط</button> <button class="btn small" data-act="estimate">قياس مساحة المتصفح</button></div></div>
+  <div class="panel"><h3>اللي ممكن يخلي البرنامج تقيل (من قراءة الكود، مش قياس)</h3><ol class="sp-find">
+    <li>كل ملف بيتكتب بيتقرا تاني بالكامل ويتحسب له SHA-256 في الخلفية للتأكد منه — يعني قراءة وكتابة مضاعفة لنفس الملف. الطابور دلوقتي ${E?N(E.vq.length):0} ملف.</li>
+    <li>حساب البصمة وقت الكتابة بيحمّل الملف كله في الذاكرة (ممكن 4 ملفات كبيرة مرة واحدة لأن المحرك بيكتب 4 بالتوازي) — المستندات الكبيرة هي الأثقل.</li>
+    <li>الفحص الشامل كل 5 دقايق (أو أول ما تفتح البرنامج) بيمر على كل العناصر ويقرأ سجل كل ملف من قاعدة المتصفح عشان يقارن الحجم والتاريخ، حتى لو مفيش حاجة اتغيّرت.</li>
+    <li>سجل النشاط بيتحفظ كله (لحد 20,000 سجل) في قاعدة البيانات بعد كل تعديل بـ 0.7 ثانية تقريبًا، وكل سجل جديد بيحرّك مزامنة السجل تاني.</li>
+    <li>كل عملية حفظ/حذف بتتسجل كمان في سجل التحقق (🛡️) بسلسلة بصمات.</li></ol>
+    <div class="sp-sub" style="margin-top:6px">الأرقام فوق بتتجمع من اللحظة اللي بتفتح فيها البرنامج، وبتوضح أنهي مرحلة بتاخد الوقت فعلًا عندك.</div></div>`}
+
+/* ---------------- التجميع والتشغيل ---------------- */
+function drawAll(){
+  const R=S.R;if(!R||!S.host)return;const t=totals(R.rows);
+  drawHead(R,t);drawTabs();
+  const act=document.activeElement,typing=act&&act.closest&&act.closest("#spFilters");
+  if(S.ui.tab==="files"){
+    const fe=document.getElementById("spFilters");if(!fe.dataset.on){drawFilters();fe.dataset.on="1"}
+    drawFiles()}
+  else{document.getElementById("spFilters").innerHTML="";document.getElementById("spFilters").dataset.on="";
+    if(S.ui.tab==="tree")drawTree();else if(S.ui.tab==="log")drawLog();else drawDiag()}
+  const n=S.holds.length,nb=document.getElementById("spNavCnt");if(nb)nb.textContent=n?"⏸"+n:""}
+function refresh(){if(!S.host)return;try{S.R=buildRows();drawAll()}catch(e){console.warn("SyncPipe",e)}}
+async function tick(){
+  clearTimeout(S.tm);
+  if(!S.host||!S.host.isConnected||!ST().view||ST().view.type!=="syncpipe"){S.host=null;return}
+  try{const fs=FS(),E=fs&&fs.state;
+    if(S.metaDirty||Date.now()-S.metaTs>15000||(E&&E.dirtyFiles.size&&Date.now()-S.metaTs>3000))await loadMeta();
+    S.R=buildRows();drawAll()}catch(e){console.warn("SyncPipe",e)}
+  const fs=FS();S.tm=setTimeout(tick,(fs&&fs.state.running)||S.inflight.size?900:2500)}
+function mount(c){
+  clearTimeout(S.tm);S.host=c;
+  c.innerHTML=`<div class="sp-wrap"><div class="view-title"><h1>🧭 خط المزامنة</h1></div>
+    <div class="view-desc">كل ملف في طريقه من قاعدة المتصفح لحد المجلد المرتبط: مين مستني دوره، مين بيتكتب، مين اتحفظ ومكانه فين، مع تحكم كامل بالإيقاف والاستئناف والبدء لملف أو مجموعة أو موقع أو الكل.</div>
+    <div id="spHead"></div><div class="sp-tabs" id="spTabs"></div><div id="spFilters"></div><div id="spList"></div></div>`;
+  const w=c.firstElementChild;w.onclick=onClick;w.oninput=onInput;w.onchange=onInput;S.metaDirty=true;tick()}
+function onInput(e){
+  const id=e.target.id,u=S.ui;let ch=true;
+  if(id==="fStatus")u.status=e.target.value;else if(id==="fKind")u.kind=e.target.value;else if(id==="fGroup")u.gid=e.target.value;
+  else if(id==="fLoc")u.loc=e.target.value;else if(id==="fQ")u.q=e.target.value;else ch=false;
+  if(ch){u.limit=60;drawFiles()}}
+function onClick(e){
+  const b=e.target.closest("[data-act]");if(!b||b.disabled)return;
+  const a=b.dataset.act,t=b.dataset.t,v=b.dataset.v,u=S.ui;
+  switch(a){
+    case"tab":u.tab=v;document.getElementById("spFilters").dataset.on="";break;
+    case"flt":u.tab="files";u.status=v;u.kind="all";u.gid="";u.loc="";u.q="";u.limit=60;document.getElementById("spFilters").dataset.on="";break;
+    case"more":u.limit+=60;break;
+    case"toggle":if(v){u.open.has(v)?u.open.delete(v):u.open.add(v)}break;
+    case"goto":u.tab="files";u.status="all";u.kind="all";u.limit=60;
+      if(t==="group"){u.gid=v;u.q=""}else{u.gid="";u.q=v}u.loc="";document.getElementById("spFilters").dataset.on="";break;
+    case"pause":if(t==="all")addHold("all","*","كل المزامنة");if(t==="all")commit(false);else doPause(t,v);return refresh();
+    case"resume":doResume(t,v);return;
+    case"start":doStart(t,v);return;
+    case"rewrite":doRewrite(t,v);return;
+    case"scan":doScan();return;
+    case"reload":S.metaDirty=true;toast2("بيتحدّث...");tick();return;
+    case"unhold":{const i=S.holds.findIndex(h=>h.id===v);if(i>=0){S.holds.splice(i,1);commit(true)}return}
+    case"copy":try{navigator.clipboard.writeText(v);toast2("اتنسخ المسار.")}catch(x){toast2("تعذّر النسخ.","err")}return;
+    case"logpause":{const s=ST().syncLogSettings;s.enabled=false;Promise.resolve(persistSyncLogMetaNow()).then(()=>{try{restartActivityLogScheduler();updateGlobalSyncBadge()}catch(x){}refresh()});toast2("اتوقفت مزامنة السجل.");return}
+    case"logresume":{const s=ST().syncLogSettings;s.enabled=true;Promise.resolve(persistSyncLogMetaNow()).then(()=>{try{restartActivityLogScheduler();updateGlobalSyncBadge()}catch(x){}return runActivityLogSync(true)}).then(refresh);return}
+    case"lognow":Promise.resolve(runActivityLogSync(true)).then(refresh);return;
+    case"logsize":try{u.logBytes=new Blob([JSON.stringify(ST().activityLog||[])]).size}catch(x){u.logBytes=null}break;
+    case"estimate":try{navigator.storage.estimate().then(x=>{u.est=x;refresh()})}catch(x){}return;
+  }
+  refresh()}
+
+/* ---------------- ربط الصفحة بالقائمة والتوجيه (نفس أسلوب باقي الصفحات) ---------------- */
+(function(){
+  const nl=document.querySelector(".navlist");
+  if(nl&&!nl.querySelector('[data-nav="syncpipe"]')){
+    const b=document.createElement("button");b.className="nav-item";b.dataset.nav="syncpipe";
+    b.innerHTML='<span class="ico">🧭</span><span class="lbl">خط المزامنة</span><span class="cnt" id="spNavCnt"></span>';
+    b.onclick=()=>navigateTo({type:"syncpipe"});
+    const al=nl.querySelector('[data-nav="activitylog"]');al?al.after(b):nl.appendChild(b)}
+  const oR=render;
+  render=function(){
+    if(ST().view&&ST().view.type==="syncpipe"){const c=document.getElementById("viewContainer");if(c)mount(c);return}
+    S.host=null;return oR.apply(this,arguments)};
+  const oB=updateBreadcrumb;
+  updateBreadcrumb=function(){
+    if(ST().view&&ST().view.type==="syncpipe"){const el=document.getElementById("breadcrumb");
+      el.innerHTML='<b data-go="home">🏠 الرئيسية</b><span class="sep">/</span><b>🧭 خط المزامنة</b>';
+      el.querySelectorAll("[data-go]").forEach(x=>{x.onclick=()=>navigateTo({type:"home"})});return}
+    return oB.apply(this,arguments)};
+  const upd=()=>{const nb=document.getElementById("spNavCnt");if(nb)nb.textContent=S.holds.length?"⏸"+S.holds.length:""};
+  upd();setInterval(upd,4000)})();
 })();
 </script>
 <script>
