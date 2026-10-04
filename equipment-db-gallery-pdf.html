@@ -11778,7 +11778,46 @@ const KINDS={images:1,docs:1,notebook:1,"fault-backgrounds":1,"fault-notes":1};
 const RT="بدون-مجموعة";
 /* مسار ملف العنصر: اسم مقروء (اسم العنصر + رقم) للصور المسمّاة تلقائيًا، وإلا المعرّف زي ما كان */
 function fpath(it,base,k,fid,name,used){const nm=window.__NM&&window.__NM.diskName?window.__NM.diskName(it,k,fid,name,used):null;return base+"/"+k+"/"+(nm||fid+ext(name))}
-async function rmf(path){const i=path.lastIndexOf("/"),d=await dirOf(i<0?"":path.slice(0,i),false);await d.removeEntry(path.slice(i+1))}
+/* ---------- طابور الحذف: أي ملف/مجلد قديم (صورة اتحذفت، اسم اتغيّر، عنصر/مجموعة اتحذفت) بيتسجّل في index.json وبيتمسح من القرص بعد ما الجديد يتكتب ---------- */
+function addTrash(idx,path,type,why){if(!idx||!path)return;idx.trash=idx.trash||[];
+  if(idx.trash.some(t=>t.path===path&&t.type===type))return;
+  idx.trash.push({path,type,why:why||"",ts:Date.now()});
+  const sp=window.__SP;if(sp&&sp.op)sp.op("queue-delete",path,{why,type})}
+async function rmPath(t){const p=t.path,i=p.lastIndexOf("/"),d=await dirOf(i<0?"":p.slice(0,i),false);
+  await d.removeEntry(p.slice(i+1),{recursive:t.type==="dir"});
+  for(const k of [...E.dirs.keys()])if(k===p||k.startsWith(p+"/"))E.dirs.delete(k)}
+async function runTrash(idx){
+  const sp=window.__SP,now=Date.now();let ch=false;
+  const live=new Set();
+  for(const g of Object.values(idx.groups||{}))live.add(g.path);
+  for(const e of Object.values(idx.items||{})){live.add(e.path);for(const f of Object.values(e.files||{}))live.add(f.path)}
+  for(const f of Object.values(idx.unassigned||{}))live.add(f.path);
+  const la=[...live],keep=[];
+  for(const t of idx.trash||[]){
+    if(sp&&sp.holdPath(t.path)){keep.push(t);continue}
+    if(t.err&&now-(t.at||0)<30000){keep.push(t);continue}
+    if(live.has(t.path)){ch=true;if(sp&&sp.op)sp.op("cancel-delete",t.path,{why:"المسار رجع مستخدم"});continue}
+    if(t.type==="dir"&&la.some(p=>p.startsWith(t.path+"/"))){t.err="لسه فيه عناصر شغّالة جواه — مؤجل لحد ما تخلص";t.at=now;keep.push(t);ch=true;continue}
+    try{await rmPath(t);ch=true;if(sp&&sp.op)sp.op("delete",t.path,{why:t.why,type:t.type})}
+    catch(e){
+      if(e&&e.name==="NotFoundError"){ch=true;if(sp&&sp.op)sp.op("delete",t.path,{why:t.why,type:t.type,note:"مكانش موجود أصلًا"})}
+      else{t.err=String(e&&e.message||e);t.at=now;keep.push(t);ch=true;if(sp&&sp.op)sp.op("delete-fail",t.path,{why:t.why,err:t.err})}}}
+  idx.trash=keep;return ch}
+/* فحص القرص: كل ملف/مجلد مش في الفهرس */
+async function audit(onP){
+  if(!bind())return null;const idx=E.idx||await loadIdx();if(!idx)return null;
+  const known=new Set(["index.json","meta.json"]),dirs=new Set();
+  const anc=p=>{let i;while((i=p.lastIndexOf("/"))>0){p=p.slice(0,i);dirs.add(p)}};
+  for(const g of Object.values(idx.groups)){known.add(g.path+"/group.json");anc(g.path+"/group.json")}
+  for(const e of Object.values(idx.items)){for(const n of["item.json","hashes.json"]){known.add(e.path+"/"+n);anc(e.path+"/"+n)}for(const f of Object.values(e.files||{})){known.add(f.path);anc(f.path)}}
+  for(const f of Object.values(idx.unassigned||{})){known.add(f.path);anc(f.path)}
+  const res=[];let n=0;
+  const walk=async(d,pre)=>{for await(const[name,hd]of d.entries()){const p=pre?pre+"/"+name:name;
+    if(!pre&&name===".system")continue;
+    if(hd.kind==="directory"){if(!dirs.has(p)){res.push({path:p,type:"dir"})}else await walk(hd,p)}
+    else if(!known.has(p)){let size=0;try{size=(await hd.getFile()).size}catch(e){}res.push({path:p,type:"file",size})}
+    if(onP&&++n%40===0)onP(n)}};
+  await walk(E.h,"");return res}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const DEBOUNCE=150, POOL=4, SCAN_EVERY=5*60*1000;
 
@@ -11805,6 +11844,7 @@ async function put(path,data){
       const i=path.lastIndexOf("/"),d=await dirOf(i<0?"":path.slice(0,i),true),
         f=await d.getFileHandle(path.slice(i+1),{create:true}),w=await f.createWritable();
       try{const sp=window.__SP;await(sp&&sp.write?sp.write(w,data,path):w.write(data));await w.close()}catch(e){try{await w.abort()}catch(_){}throw e}
+      {const sp=window.__SP;if(sp&&sp.op)sp.op("write",path,{size:data&&(data.size!=null?data.size:data.length)})}
       return}
     catch(e){if(a>=1)throw e;E.dirs.clear()}}}
 async function getf(path){
@@ -11822,7 +11862,7 @@ async function wt(path,text,prev,W,id){const sp=window.__SP;if(sp&&sp.holdJson(p
 async function loadIdx(){
   const x=await rj("index.json");
   if(!x||x.schema!==2||!x.items||!x.groups)return null;
-  x.unassigned=x.unassigned||{};return x}
+  x.unassigned=x.unassigned||{};x.trash=Array.isArray(x.trash)?x.trash:[];return x}
 const allKeys=st=>new Promise((ok,no)=>{const q=tx(st).objectStore(st).getAllKeys();q.onsuccess=()=>ok(q.result||[]);q.onerror=()=>no(q.error)});
 async function pool(arr,n,fn){
   let i=0;const errs=[];
@@ -11877,7 +11917,7 @@ async function syncItem(it,base,idx,W,force,ctx){
     if(Eo.files[fid])continue;
     const pf0=po&&po.files&&po.files[fid];
     if(sp&&sp.holdFile(fid,it,k)){if(pf0)Eo.files[fid]=pf0;sp.skipFile(fid,it);continue}
-    const rec=await idbGet_real("files",fid);if(!rec||!rec.blob)continue;
+    const rec=await idbGet_real("files",fid);if(!rec||!rec.blob){if(pf0)Eo.files[fid]=pf0;continue}
     const p=fpath(it,base,k,fid,rec.name,used),pf=po&&po.files&&po.files[fid];
     if(sp&&sp.holdPath(p)){if(pf0)Eo.files[fid]=pf0;sp.skipFile(fid,it);continue}
     let s;
@@ -11886,13 +11926,16 @@ async function syncItem(it,base,idx,W,force,ctx){
       s=(await Promise.all([shaB(rec.blob),put(p,rec.blob)]))[0]; // الحساب والكتابة بالتوازي
       const f=await getf(p);if(f.size!==rec.blob.size)throw new Error("حجم غير مطابق: "+p);
       W.push({path:p,sha:s,size:rec.blob.size,blob:1,id:it.id});fch=true;
-      if(pf&&pf.path&&pf.path!==p)stale.push(pf.path)}
+      if(pf&&pf.path&&pf.path!==p)stale.push([pf.path,"اسم الصورة اتغيّر"])}
     Eo.files[fid]={path:p,kind:k,size:rec.size,sha:s,upd:rec.updatedAt,name:rec.name,mime:rec.mime}}
   if(!fch&&po&&JSON.stringify(po.files)!==JSON.stringify(Eo.files))fch=true;
   if(fch){await put(base+"/hashes.json",JSON.stringify(Eo.files,null,2));ctx.c=true}
-  /* الاسم اتغيّر: امسح الملف القديم (بعد ما الجديد اتكتب واتأكد حجمه) عشان مايتكررش */
-  if(stale.length){const keepP=new Set(Object.values(Eo.files).map(x=>x.path));
-    for(const op0 of stale){if(keepP.has(op0)||!op0.startsWith(base+"/"))continue;try{await rmf(op0)}catch(e){}}}
+  /* تنضيف: اللي اتشال من العنصر أو اتغيّر اسمه يتسجّل للحذف (بعد ما الجديد يتكتب واتأكد حجمه) */
+  const keepP=new Set(Object.values(Eo.files).map(x=>x.path));
+  for(const[op0,why]of stale)if(!keepP.has(op0)&&op0.startsWith(base+"/"))addTrash(idx,op0,"file",why);
+  if(po){const rs=new Set(refs(it).map(x=>x[0]));
+    for(const[fid,pf]of Object.entries(po.files||{}))if(!rs.has(fid)&&pf&&pf.path&&!keepP.has(pf.path))addTrash(idx,pf.path,"file","اتحذف من العنصر «"+(it.name||"")+"»")}
+  if(op&&op.path&&op.path!==base)addTrash(idx,op.path,"dir","عنصر «"+(it.name||"")+"» اتغيّر اسمه أو مجموعته");
   idx.items[it.id]=Eo}
 
 /* ---------- المرور الواحد ---------- */
@@ -11907,7 +11950,7 @@ async function pass(){
         await prevSync();E.idx=await loadIdx();
         if(E.idx){E.scan=false;await stamp(E.idx.savedAt)}
         return}
-      E.idx={schema:2,savedAt:0,groups:{},items:{},unassigned:{},meta:null};E.scan=true}} // مجلد فاضي: نبدأ بفهرس فاضي ونكتب بالنظام الجديد
+      E.idx={schema:2,savedAt:0,groups:{},items:{},unassigned:{},meta:null,trash:[]};E.scan=true}} // مجلد فاضي: نبدأ بفهرس فاضي ونكتب بالنظام الجديد
   const idx=E.idx,items=state.items,W=[],t0=Date.now(),ctx={c:false},
     stateIds=new Set(items.map(i=>i.id));
   if(!items.length&&!state.folders.length&&Object.keys(idx.items).length&&!E.allowEmpty)return; // حماية من الحالة الفاضية المؤقتة
@@ -11915,7 +11958,7 @@ async function pass(){
   E.dirty.clear();E.dirtyFiles.clear();E.scan=false;E.force.clear();
   if(doScan)E.lastScan=Date.now();
   const sp=window.__SP;if(sp)sp.passStart({scan:doScan,items:items.length,dirtyItems:dItems.size,dirtyFiles:dFiles.size});
-  let changed=false;const fails=[],extra=new Set();
+  let changed=false;const fails=[],extra=new Set();const trashN0=(idx.trash=idx.trash||[]).length;
   try{
     if(sp)sp.stage("meta");/* 1) الإعدادات والمجموعات (صغيرة، بتتقارن بالبصمة) */
     const mp=idx.meta&&idx.meta.sha,
@@ -11926,8 +11969,9 @@ async function pass(){
       const p=gp[f.id],og=idx.groups[f.id],
         s=await wt(p+"/group.json",JSON.stringify(f,null,2),og&&og.path===p?og.sha:null,W);
       if(!og||og.path!==p||og.sha!==s||og.name!==f.name||og.parentId!==(f.parentId||null))changed=true;
+      if(og&&og.path&&og.path!==p)addTrash(idx,og.path,"dir","مجموعة «"+f.name+"» اتغيّر اسمها أو مكانها");
       idx.groups[f.id]={path:p,sha:s,name:f.name,parentId:f.parentId||null}}
-    if(state.folders.length||E.allowEmpty)for(const id of Object.keys(idx.groups))if(!(id in gp)){delete idx.groups[id];changed=true}
+    if(state.folders.length||E.allowEmpty)for(const id of Object.keys(idx.groups))if(!(id in gp)){if(idx.groups[id].path)addTrash(idx,idx.groups[id].path,"dir","مجموعة «"+(idx.groups[id].name||"")+"» اتحذفت");delete idx.groups[id];changed=true}
 
     if(sp)sp.stage("select");/* 2) تحديد العناصر المطلوب مزامنتها: المتغيّرة/الجديدة/اللي مسارها اتغيّر (+ الكل لو فحص شامل) */
     const paths=new Map(),work=[];
@@ -11950,7 +11994,9 @@ async function pass(){
     if(sp)sp.stage("del");/* 4) العناصر المحذوفة */
     for(const id of Object.keys(idx.items)){
       if(stateIds.has(id)||extra.has(id))continue;
-      if(E.deleted.has(id)||E.allowEmpty||(doScan&&items.length)){delete idx.items[id];E.deleted.delete(id);changed=true}}
+      if(E.deleted.has(id)||E.allowEmpty||(doScan&&items.length)){
+        if((E.deleted.has(id)||E.allowEmpty)&&idx.items[id].path)addTrash(idx,idx.items[id].path,"dir","عنصر «"+(idx.items[id].name||"")+"» اتحذف");
+        delete idx.items[id];E.deleted.delete(id);changed=true}}
 
     if(sp)sp.stage("orphan");/* 5) ملفات غير مرتبطة بأي عنصر (في الفحص الشامل بس) */
     if(doScan){
@@ -11965,8 +12011,10 @@ async function pass(){
         else{s=(await Promise.all([shaB(rec.blob),put(p,rec.blob)]))[0];W.push({path:p,sha:s,size:rec.blob.size,blob:1,id:null});changed=true}
         keep[fid]={path:p,size:rec.size,sha:s,upd:rec.updatedAt,name:rec.name,mime:rec.mime}}
       if(Object.keys(keep).sort().join("|")!==Object.keys(idx.unassigned).sort().join("|"))changed=true;
+      for(const[fid,pf]of Object.entries(idx.unassigned))if(!keep[fid]&&pf&&pf.path)addTrash(idx,pf.path,"file","ملف غير مسند اتحذف أو اتربط بعنصر");
       idx.unassigned=keep}
 
+    if((idx.trash||[]).length!==trashN0)changed=true;
     if(sp)sp.stage("index");/* 6) الفهرس — بيتكتب آخر حاجة وبس لو فيه تغيير فعلي */
     if(changed&&!(sp&&sp.holdAll())){
       idx.savedAt=Date.now();idx.stats=stats(idx);
@@ -11977,6 +12025,9 @@ async function pass(){
         await idbPut_real("meta",{key:"lastFolderSyncAt",value:Date.now()});
         await idbPut_real("meta",{key:"lastFolderRevision",value:idx.savedAt})}catch(e){}
       J("fast_sync",{written:W.length,items:work.length,ms:Date.now()-t0})}
+    if(sp)sp.stage("trash");/* 7) مسح القديم من القرص (بعد ما الفهرس الجديد اتحفظ) */
+    if(idx.trash.length&&!(sp&&sp.holdAll())){const tc=await runTrash(idx);
+      if(tc){const t2=JSON.stringify(idx,null,2);await put("index.json",t2)}}
     if(!fails.length)E.allowEmpty=false;
     if(!E.dirty.size&&!E.dirtyFiles.size&&!E.scan&&!fails.length&&E.pend){E.pend=false;try{await idbDelete_real("meta","folderSyncPending")}catch(e){}}
     if(sp)sp.passEnd({written:W.length,items:work.length,fails:fails.length});
@@ -12064,6 +12115,8 @@ idbDelete=async function(s,k){
   const r=await oDel.apply(this,arguments);
   try{if(bind()){
     if(s==="items"){E.deleted.add(k);E.dirty.delete(k)}
+    if(s==="files"&&E.idx){for(const[id,e]of Object.entries(E.idx.items||{}))if(e.files&&e.files[k])E.dirty.add(id);
+      const up=E.idx.unassigned&&E.idx.unassigned[k];if(up){addTrash(E.idx,up.path,"file","ملف غير مسند اتحذف");delete E.idx.unassigned[k]}}
     if(s==="items"||s==="folders"||s==="files"){setPending();schedule()}}}catch(e){}
   return r};
 idbClear=async function(s){
@@ -12099,8 +12152,15 @@ window.__FS={
   tick(){
     if(!bind()||STORAGE_MODE==="memory"||E.running)return;
     if(document.visibilityState==="visible"&&Date.now()-E.lastScan>SCAN_EVERY&&!E.dirty.size)E.scan=true;
+    const sp=window.__SP,tr=E.idx&&E.idx.trash;
+    if(tr&&tr.length&&!(sp&&sp.holdAll())&&tr.some(t=>!(sp&&sp.holdPath(t.path))&&(!t.err||Date.now()-(t.at||0)>30000))&&!E.retryT){schedule(0);return}
     if(pending()||E.lastErr){if(!E.retryT)schedule(0)}},
   state:E,kick:schedule,
+  trash:()=>(E.idx&&E.idx.trash)||[],
+  audit,
+  addTrash(path,type,why){if(!E.idx)return false;addTrash(E.idx,path,type,why);schedule(0);return true},
+  cancelTrash(path){if(!E.idx)return;E.idx.trash=(E.idx.trash||[]).filter(t=>t.path!==path);schedule(0)},
+  retryTrash(path){if(!E.idx)return;for(const t of E.idx.trash||[])if(!path||t.path===path){delete t.err;delete t.at}schedule(0)},
   plan(){if(!bind())return null;const idx=E.idx||{schema:2,items:{},groups:{},unassigned:{}},m=makePaths(idx);return{idx,gp:m.gp,itemPath:m.itemPath,refs,ext,RT,hasIdx:!!E.idx,diskPath:fpath}},
   info:{
     async idx(){ if(!bind())return null; if(!E.idx){try{E.idx=await loadIdx()}catch(e){}} return E.idx },
@@ -12129,14 +12189,14 @@ function fdur(ms){ms=Number(ms)||0;if(ms<1000)return Math.round(ms)+" م.ث";con
 function fago(ts){if(!ts)return"—";const s=Math.max(0,(Date.now()-ts)/1000);if(s<5)return"دلوقتي";if(s<60)return"من "+Math.round(s)+" ثانية";if(s<3600)return"من "+Math.round(s/60)+" دقيقة";return new Date(ts).toLocaleString("ar-EG")}
 const KL={images:"صورة العنصر",docs:"مستند",notebook:"صورة شرح","fault-backgrounds":"خلفية صفحة أعطال","fault-notes":"صورة نقطة عطل",json:"بيانات العنصر",unassigned:"ملف بلا عنصر"};
 const KI={images:"🖼️",docs:"📄",notebook:"📝","fault-backgrounds":"🗺️","fault-notes":"📍",json:"🧾",unassigned:"📎"};
-const STAGE={meta:"١ الإعدادات والمجموعات",select:"٢ تحديد المطلوب مزامنته",write:"٣ كتابة العناصر والملفات",del:"٤ العناصر المحذوفة",orphan:"٥ ملفات بلا عنصر",index:"٦ كتابة الفهرس"};
+const STAGE={meta:"١ الإعدادات والمجموعات",select:"٢ تحديد المطلوب مزامنته",write:"٣ كتابة العناصر والملفات",del:"٤ العناصر المحذوفة",orphan:"٥ ملفات بلا عنصر",index:"٦ كتابة الفهرس",trash:"٧ مسح القديم من القرص"};
 const ST_RANK={writing:0,failed:1,held:2,queued:3,idle:4,missing:5,saved:6};
 
 /* ---------------- الحالة ---------------- */
-const S={holds:[],staleItems:{},staleFiles:{},inflight:new Map(),hist:[],fails:new Map(),fileFails:new Map(),
+const S={ops:[],audit:null,holds:[],staleItems:{},staleFiles:{},inflight:new Map(),hist:[],fails:new Map(),fileFails:new Map(),
   verified:new Map(),verifyErr:new Map(),passes:[],cur:null,priority:new Set(),waiters:[],
   meta:new Map(),metaTs:0,metaDirty:true,R:null,filtered:[],host:null,tm:null,
-  ui:{tab:"files",status:"all",kind:"all",gid:"",loc:"",q:"",limit:60,open:new Set(),logBytes:null}};
+  ui:{opf:"all",tab:"files",status:"all",kind:"all",gid:"",loc:"",q:"",limit:60,open:new Set(),logBytes:null}};
 try{const j=JSON.parse(localStorage.getItem(LSK)||"null");
   if(j){S.holds=Array.isArray(j.holds)?j.holds:[];S.staleItems=j.si||{};S.staleFiles=j.sf||{}}}catch(e){}
 let saveT=null;
@@ -12211,6 +12271,7 @@ const SP=window.__SP={
       S.fileFails.delete(path)
     }catch(e){S.fileFails.set(path,String(e&&e.message||e));throw e}
     finally{S.inflight.delete(path)}},
+  op(t,path,i){S.ops.push(Object.assign({ts:Date.now(),t,path},i||{}));if(S.ops.length>600)S.ops.splice(0,200)},
   passStart(i){S.cur=Object.assign({ts:Date.now(),t0:performance.now(),stages:{},stage:null,stageT:0,skipItems:new Set(),skipFiles:new Set()},i)},
   stage(n){const c=S.cur;if(!c)return;const t=performance.now();if(c.stage)c.stages[c.stage]=(c.stages[c.stage]||0)+(t-c.stageT);c.stage=n;c.stageT=t},
   passEnd(i){const c=S.cur;if(!c)return;SP.stage(null);
@@ -12440,6 +12501,7 @@ function drawHead(R,t){
     <button data-act="flt" data-v="held">⏸ موقوف <b>${N(t.held)}</b></button>
     <button data-act="flt" data-v="failed">⚠️ فشل <b>${N(t.failed)}</b></button>
     <button data-act="flt" data-v="missing">❔ مفقود محليًا <b>${N(t.missing)}</b></button>
+    <button data-act="tab" data-v="del">🗑️ منتظر حذف من القرص: <b>${N((fs&&fs.trash?fs.trash():[]).length)}</b></button>
     <button data-act="tab" data-v="diag">طابور التحقق: <b>${N(E?E.vq.length:0)}</b></button>
   </div>
   <div class="panel" style="margin-bottom:12px">
@@ -12473,7 +12535,7 @@ function drawHead(R,t){
   if(S.holds.length)h+=`<div class="sp-holds">${S.holds.map(x=>`<span class="sp-hc">⏸ ${H(x.label)}<button data-act="unhold" data-v="${x.id}">▶ استئناف</button></span>`).join("")}</div>`;
   document.getElementById("spHead").innerHTML=h}
 
-const TABS=[["files","📄 الملفات"],["tree","🗂️ المجموعات والمواقع"],["log","🔄 سجل النشاط"],["diag","🩺 ليه تقيل؟"]];
+const TABS=[["files","📄 الملفات"],["tree","🗂️ المجموعات والمواقع"],["del","🗑️ الحذف والعمليات"],["log","🔄 سجل النشاط"],["diag","🩺 ليه تقيل؟"]];
 function drawTabs(){document.getElementById("spTabs").innerHTML=TABS.map(([k,l])=>`<button class="${S.ui.tab===k?"on":""}" data-act="tab" data-v="${k}">${l}</button>`).join("")}
 
 /* ---- تبويب الملفات ---- */
@@ -12624,6 +12686,40 @@ function drawLog(){
     <div class="sp-sub" style="margin-top:6px">الإيقاف هنا على مستوى مسار السجل كله (مش لكل ملف jsonl لوحده).</div></div>`}
 
 /* ---- تبويب التشخيص ---- */
+/* ---- تبويب الحذف والعمليات ---- */
+const OPL={write:["✍️","كتابة","var(--green)"],"queue-delete":["🗑️","اتسجّل للحذف","var(--yellow)"],delete:["✅🗑️","اتمسح من القرص","var(--red)"],"delete-fail":["⚠️","فشل المسح","var(--red)"],"cancel-delete":["↩️","اتلغى الحذف","var(--dim)"]};
+function drawDel(){
+  const fs=FS(),tr=fs&&fs.trash?fs.trash():[],A=S.ui.audit,allHeld=S.holds.some(h=>h.type==="all");
+  const trRows=tr.map(t=>{const held=SP.holdPath(t.path),own=S.holds.find(h=>h.type==="path"&&h.key===t.path);
+    return`<div class="sp-row ${t.err?"st-failed":held?"st-held":"st-queued"}" style="grid-template-columns:30px 1fr"><div class="sp-ico">${t.type==="dir"?"📁":"📄"}</div><div>
+      <div class="sp-name">${t.type==="dir"?"مجلد":"ملف"} <small>${H(t.why||"")}</small></div><div class="sp-path">📁 ${H(t.path)}</div>
+      ${t.err?`<div class="sp-err">⚠️ ${H(t.err)}</div>`:""}
+      <div class="sp-sub">${held?"⏸ موقوف — مش هيتمسح لحد ما تستأنف":"⌛ هيتمسح في المرور الجاي"}${t.ts?" · اتسجّل "+fago(t.ts):""}</div>
+      <div class="sp-acts"><button data-act="trashnow" data-v="${H(t.path)}">⚡ امسح دلوقتي</button>
+      ${own?`<button data-act="resume" data-t="path" data-v="${H(t.path)}">▶ استئناف</button>`:held?"":`<button data-act="pause" data-t="path" data-v="${H(t.path)}">⏸ إيقاف</button>`}
+      <button data-act="trashcancel" data-v="${H(t.path)}" title="سيب الملف على القرص">↩️ إلغاء الحذف (سيب الملف)</button></div></div></div>`}).join("");
+  const ops=S.ui.opf==="all"?S.ops:S.ops.filter(o=>o.t===S.ui.opf),shown=ops.slice(-120).reverse();
+  const opRows=shown.map(o=>{const m=OPL[o.t]||["•",o.t,"var(--dim)"];
+    return`<tr><td style="white-space:nowrap">${new Date(o.ts).toLocaleTimeString("ar-EG")}</td><td style="color:${m[2]};white-space:nowrap">${m[0]} ${m[1]}</td><td class="m" style="max-width:320px;word-break:break-all">${H(o.path)}</td><td>${H(o.why||o.err||o.note||(o.size!=null?fb(o.size):""))}</td></tr>`}).join("");
+  const fo=(v,l)=>`<option value="${v}" ${S.ui.opf===v?"selected":""}>${l}</option>`;
+  let aud="";
+  if(A&&A.busy)aud=`<div class="sp-note blue">⏳ بيفحص القرص... ${N(A.n||0)} عنصر اتفحص</div>`;
+  else if(A&&A.err)aud=`<div class="sp-note red">${H(A.err)}</div>`;
+  else if(A&&A.list){const L=A.list,bytes=L.reduce((a,x)=>a+(x.size||0),0);
+    aud=L.length?`<div class="sp-note yellow">لقيت <b>${N(L.length)}</b> ملف/مجلد زيادة على القرص مش مسجّلين في الفهرس${bytes?" (حوالي "+fb(bytes)+" من الملفات المنفردة)":""}. دول بقايا حذف أو إعادة تسمية قديمة. راجعهم قبل ما تمسح.</div>
+      <div class="sp-ctl"><button class="btn primary" data-act="auditdel">🗑️ مسح الكل (${N(L.length)})</button><button class="btn" data-act="auditclear">إخفاء القايمة</button></div>
+      ${L.slice(0,150).map(x=>`<div class="sp-row" style="grid-template-columns:30px 1fr auto"><div class="sp-ico">${x.type==="dir"?"📁":"📄"}</div><div><div class="sp-path" style="margin:0">${H(x.path)}</div><div class="sp-sub">${x.type==="dir"?"مجلد كامل زيادة":fb(x.size)}</div></div><div class="sp-acts" style="margin:0"><button data-act="auditone" data-v="${H(x.path)}" data-t="${x.type}">🗑️ امسح</button></div></div>`).join("")}${L.length>150?`<div class="sp-sub">...وفاضل ${N(L.length-150)} (هتتمسح مع «مسح الكل»)</div>`:""}`
+      :`<div class="sp-note blue">✅ القرص نضيف: كل الملفات والمجلدات مسجّلة في الفهرس.</div>`}
+  document.getElementById("spList").innerHTML=`
+  <div class="sp-note blue">لما تحذف صورة أو تغيّر اسم عنصر/صورة أو تحذف عنصر/مجموعة، الملف أو المجلد القديم بيتسجّل هنا ويتمسح من القرص بعد ما الجديد يتكتب ويتأكد حجمه. «إيقاف الكل» بيوقف المسح كمان.${allHeld?" <b>المزامنة كلها موقوفة حاليًا.</b>":""}</div>
+  <div class="panel"><h3>🗑️ منتظر مسح (${N(tr.length)})</h3>${trRows||`<div class="sp-sub">مفيش حاجة منتظرة المسح.</div>`}</div>
+  <div class="panel"><h3>🔍 فحص الملفات الزايدة على القرص</h3>
+    <div class="sp-sub" style="margin-bottom:8px">بيقارن مجلد المزامنة بالفهرس ويطلّع أي ملف/مجلد قديم فاضل من قبل كده (من حذف أو إعادة تسمية قبل الإصلاح). ما بيمسحش حاجة غير بعد موافقتك.</div>
+    <div class="sp-ctl" style="margin:0 0 8px"><button class="btn" data-act="audit" ${A&&A.busy?"disabled":""}>🔍 افحص القرص</button></div>${aud}</div>
+  <div class="panel"><h3>📜 سجل العمليات (من ساعة ما فتحت البرنامج)</h3>
+    <div class="sp-flt"><div><label>النوع</label><select id="opf">${fo("all","الكل")}${fo("write","كتابة")}${fo("queue-delete","اتسجّل للحذف")}${fo("delete","اتمسح")}${fo("delete-fail","فشل المسح")}</select></div></div>
+    <div class="sp-tw"><table class="sp-tbl"><thead><tr><th>الوقت</th><th>العملية</th><th>المسار</th><th>التفاصيل</th></tr></thead><tbody>${opRows||'<tr><td colspan="4">لسه مفيش عمليات.</td></tr>'}</tbody></table></div>
+    <div class="sp-sub" style="margin-top:6px">${N(ops.length)} عملية${ops.length>120?" (آخر 120)":""} · السجل بيتصفّر لما تقفل البرنامج.</div></div>`}
 function drawDiag(){
   const R=S.R,E=R.E,t=totals(R.rows),now=Date.now();
   const ps=S.passes.slice(-12).reverse(),recent=S.passes.filter(p=>now-p.ts<300000);
@@ -12664,7 +12760,7 @@ function drawAll(){
     const fe=document.getElementById("spFilters");if(!fe.dataset.on){drawFilters();fe.dataset.on="1"}
     drawFiles()}
   else{document.getElementById("spFilters").innerHTML="";document.getElementById("spFilters").dataset.on="";
-    if(S.ui.tab==="tree")drawTree();else if(S.ui.tab==="log")drawLog();else drawDiag()}
+    if(S.ui.tab==="tree")drawTree();else if(S.ui.tab==="log")drawLog();else if(S.ui.tab==="del")drawDel();else drawDiag()}
   const n=S.holds.length,nb=document.getElementById("spNavCnt");if(nb)nb.textContent=n?"⏸"+n:""}
 function refresh(){if(!S.host)return;try{S.R=buildRows();drawAll()}catch(e){console.warn("SyncPipe",e)}}
 async function tick(){
@@ -12684,6 +12780,7 @@ function mount(c){
   const w=c.firstElementChild;w.onclick=onClick;w.oninput=onInput;w.onchange=onInput;S.metaDirty=true;tick()}
 function onInput(e){
   const id=e.target.id,u=S.ui;let ch=true;
+  if(id==="opf"){u.opf=e.target.value;drawAll();return}
   if(id==="fStatus")u.status=e.target.value;else if(id==="fKind")u.kind=e.target.value;else if(id==="fGroup")u.gid=e.target.value;
   else if(id==="fLoc")u.loc=e.target.value;else if(id==="fQ")u.q=e.target.value;else ch=false;
   if(ch){u.limit=60;drawFiles()}}
@@ -12709,6 +12806,15 @@ function onClick(e){
     case"logresume":{const s=ST().syncLogSettings;s.enabled=true;Promise.resolve(persistSyncLogMetaNow()).then(()=>{try{restartActivityLogScheduler();updateGlobalSyncBadge()}catch(x){}return runActivityLogSync(true)}).then(refresh);return}
     case"lognow":Promise.resolve(runActivityLogSync(true)).then(refresh);return;
     case"logsize":try{u.logBytes=new Blob([JSON.stringify(ST().activityLog||[])]).size}catch(x){u.logBytes=null}break;
+    case"trashnow":{const f=FS();if(f){f.retryTrash(v);toast2("بيتمسح...")}setTimeout(refresh,800);return}
+    case"trashcancel":{const f=FS();if(f&&confirm("هتسيب الملف على القرص ومش هيتمسح. متأكد؟")){f.cancelTrash(v);toast2("اتلغى الحذف.")}refresh();return}
+    case"audit":{const f=FS();if(!f||!f.audit){return}
+      if(f.state.running||f.state.dirty.size||f.state.dirtyFiles.size||f.state.scan){toast2("المزامنة شغالة دلوقتي — استنى تخلص وجرّب تاني.","warn");return}
+      u.audit={busy:true,n:0};drawAll();
+      f.audit(n=>{u.audit.n=n;drawAll()}).then(l=>{u.audit=l?{list:l}:{err:"اربط مجلد المزامنة الأول."};drawAll()}).catch(e=>{u.audit={err:"فشل الفحص: "+(e&&e.message||e)};drawAll()});return}
+    case"auditclear":u.audit=null;break;
+    case"auditone":{const f=FS();if(f&&confirm("مسح «"+v+"» من القرص؟")){f.addTrash(v,t,"زيادة على القرص (فحص)");u.audit.list=u.audit.list.filter(x=>x.path!==v);toast2("اتسجّل للمسح.")}break}
+    case"auditdel":{const f=FS(),l=(u.audit&&u.audit.list)||[];if(f&&l.length&&confirm("هيتم مسح "+l.length+" ملف/مجلد من القرص نهائيًا (مش في سلة مهملات). متأكد؟")){for(const x of l)f.addTrash(x.path,x.type,"زيادة على القرص (فحص)");u.audit=null;toast2("اتسجّل المسح لـ "+l.length+" عنصر.")}break}
     case"estimate":try{navigator.storage.estimate().then(x=>{u.est=x;refresh()})}catch(x){}return;
   }
   refresh()}
