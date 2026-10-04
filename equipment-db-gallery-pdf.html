@@ -7915,6 +7915,7 @@ async function importProject(file, mode){
         delete newItem._images; delete newItem._docs; delete newItem._notebookImages; delete newItem._faultImages;
         await idbPut("items", newItem);
         state.items.push(newItem);
+        if(window.__NM){ try{ await window.__NM.normalizeItem(newItem); }catch(e){} }
         rep.itemsRestored++;
       }catch(e){ rep.itemsFailed.push({item:meta.name||meta.id, reason:String(e && e.message || e)}); }
     }));
@@ -11737,7 +11738,7 @@ async function smartImport(list){
  const F=new Set(state.folders.map(f=>f.id)),I=new Set(state.items.map(i=>i.id)),cur=new Set((await idbGetAll_real("files")).map(f=>f.id));let nf=0,ni=0,nb=0;
  for(const f of r.folders)if(!F.has(f.id)){await idbPut_real("folders",f);state.folders.push(f);nf++}
  for(const f of files)if(!cur.has(f.id)){await idbPut_real("files",f);nb++}
- for(const it of items)if(!I.has(it.id)){await idbPut_real("items",it);state.items.push(it);ni++}
+ for(const it of items)if(!I.has(it.id)){await idbPut_real("items",it);state.items.push(it);ni++;if(window.__NM)try{await window.__NM.normalizeItem(it)}catch(e){}}
  if(Array.isArray(r.cats))for(const c of r.cats)if(!state.categories.includes(c))state.categories.push(c);
  await J("smart_import",{items:ni,folders:nf,files:nb,missing:miss.length});
  try{renderSidebarTree();navigateTo({type:"home"})}catch(e){}
@@ -13246,6 +13247,10 @@ async function apply(){
       else if(R.merged){await idbPut_real("items",R.merged);const i=st.items.findIndex(x=>x.id===R.id);if(i>=0)st.items[i]=R.merged}}
     catch(e){R.status="فشل";R.error=e.message;rep.errors.push("حفظ عنصر "+R.name+": "+e.message)}
     delete R.newItem;delete R.merged}
+  if(window.__NM){setProg("توحيد أسماء الصور",0,rep.items.length);let q=0;
+    for(const R of rep.items){setProg("توحيد أسماء الصور",++q,rep.items.length);
+      if(!/اتضاف|اتكمّل/.test(R.status))continue;
+      const it=st.items.find(x=>x.id===R.id);if(it){try{R.renamed=await window.__NM.normalizeItem(it)}catch(e){}}}}
   if(Array.isArray(S.cats)){try{for(const c of S.cats)if(!st.categories.includes(c)){st.categories.push(c);if(S.schemas&&S.schemas[c])st.categorySchemas[c]=S.schemas[c]}
     if(typeof saveCategoryMeta==="function")await saveCategoryMeta()}catch(e){}}
   rep.finishedAt=Date.now();S.prog=null;
@@ -13531,7 +13536,7 @@ window.__ID={analyze,state:S,summary,fstatus,apply,looseParse,sniff,resolveRef,r
 </script>
 <script>
 /* ===== AutoName: تسمية الصور تلقائيًا = اسم العنصر + رقم =====
-   - بيشتغل على الصور الجديدة بس (صور العنصر، صور الشرح، صور الأعطال) وقت الحفظ.
+   - بيشتغل على أي صورة بتدخل البرنامج (صور العنصر، صور الشرح، صور الأعطال): رفع مباشر أو استيراد بأي طريقة.
    - المستندات (PDF/Word...) بتحتفظ باسمها الأصلي لأن اسمها بيفرق.
    - الترقيم متسلسل لكل عنصر: بياخد أعلى رقم موجود + 1 (الفجوات من صور اتمسحت مابتتملاش، وآخر رقم لو اتمسح ممكن يتعاد).
    - لو غيّرت اسم عنصر، أسماء صوره اللي بالنمط ده بتتحدّث معاه.
@@ -13551,7 +13556,9 @@ function baseOf(name){
 function extOf(orig,blob){
   const m=/\.([A-Za-z0-9]{1,5})$/.exec(orig||"");let e=m?m[1].toLowerCase():"";
   if(e==="jpeg"||e==="jpe")e="jpg";
-  if(!e||!/^(jpg|png|gif|webp|bmp|avif|heic|tiff|tif|svg|ico)$/.test(e))e=MIMEX[(blob&&blob.type||"").toLowerCase()]||e||"jpg";
+  const bt=MIMEX[(blob&&blob.type||"").toLowerCase()];
+  if(bt)e=bt;
+  else if(!e||!/^(jpg|png|gif|webp|bmp|avif|heic|tiff|tif|svg|ico)$/.test(e))e=e||"jpg";
   return e}
 function fidsOf(it){
   const a=[];
@@ -13566,8 +13573,16 @@ async function names(it){
   for(const id of fidsOf(it)){try{const r=await idbGet_real("files",id);if(r&&r.name)out.push(r.name)}catch(e){}}
   return out}
 /* namer: بيحجز أرقام جديدة لعنصر واحد (يُنشأ مرة قبل حفظ دفعة صور) */
-async function namer(it){
-  const base=baseOf(it&&it.name),have=await names(it||{}),max={};
+/* أساس الاسم: اسم العنصر؛ ولو فيه عنصر تاني بنفس الاسم بيتضاف ~ وآخر 4 حروف من المعرّف عشان الأسماء ماتتكررش بين العناصر */
+const VAR="(?:~[A-Za-z0-9]{1,6})?";
+function baseFor(it,have){
+  const b=baseOf(it&&it.name);
+  const rx=new RegExp("^"+esc(b)+"(~[A-Za-z0-9]{1,6})?-(?:"+esc(ROLE.nb)+"|"+esc(ROLE.ft)+")?\\d+\\.[A-Za-z0-9]{1,5}$","i");
+  for(const n of have||[]){const m=rx.exec(n);if(m)return b+(m[1]||"")}
+  const items=(typeof state!=="undefined"&&state.items)||[];
+  return items.some(x=>x&&it&&x.id!==it.id&&baseOf(x.name)===b)?b+"~"+String(it.id).slice(-4):b}
+async function namer(it,forceBase){
+  const have=await names(it||{}),base=forceBase||baseFor(it,have),max={};
   const rx=role=>new RegExp("^"+esc(base)+"-"+esc(ROLE[role])+"(\\d+)\\.[A-Za-z0-9]{1,5}$","i");
   for(const role of Object.keys(ROLE)){let m=0;const r=rx(role);
     for(const n of have){const x=r.exec(n);if(x)m=Math.max(m,parseInt(x[1],10))}max[role]=m}
@@ -13581,24 +13596,60 @@ async function namer(it){
 async function renameItem(it,oldName){
   if(!on()||!it||oldName==null)return 0;
   const ob=baseOf(oldName),nb=baseOf(it.name);if(ob===nb)return 0;
-  const rx=new RegExp("^"+esc(ob)+"-((?:"+esc(ROLE.nb)+"|"+esc(ROLE.ft)+")?\\d+\\.[A-Za-z0-9]{1,5})$","i");
+  const rx=new RegExp("^"+esc(ob)+"(~[A-Za-z0-9]{1,6})?-((?:"+esc(ROLE.nb)+"|"+esc(ROLE.ft)+")?\\d+\\.[A-Za-z0-9]{1,5})$","i");
   let n=0;
   for(const id of fidsOf(it)){try{
     const r=await idbGet_real("files",id);if(!r||!r.name)continue;
     const m=rx.exec(r.name);if(!m)continue;
-    await idbPut("files",Object.assign({},r,{name:nb+"-"+m[1]}));n++}catch(e){}}
+    await idbPut("files",Object.assign({},r,{name:nb+(m[1]||"")+"-"+m[2]}));n++}catch(e){}}
+  return n}
+/* توحيد أسماء كل صور العنصر (للمستورد والقديم): المطابق للنمط بيفضل، والباقي بياخد رقم جديد، والمكرر بيتغيّر */
+function jobsOf(it){
+  const j=[];
+  (it.imageIds||[]).forEach(id=>typeof id==="string"&&j.push([id,"img"]));
+  const nb=it.notebookData;
+  if(nb){(nb.images||[]).forEach(x=>x&&x.id&&j.push([x.id,"nb"]));
+    const ft=nb.faultTracking;
+    if(ft&&ft.pages)ft.pages.forEach(p=>{p&&p.imageId&&j.push([p.imageId,"ft"]);((p&&p.hotspots)||[]).forEach(h=>((h&&h.content&&h.content.images)||[]).forEach(x=>x&&x.id&&j.push([x.id,"ft"])))})}
+  return j}
+async function normalizeItem(it,forceBase){
+  if(!on()||!it)return 0;
+  const jobs=jobsOf(it),recs=new Map(),have=[];
+  for(const[fid]of jobs){if(recs.has(fid))continue;
+    try{const r=await idbGet_real("files",fid);if(r)recs.set(fid,r)}catch(e){}}
+  for(const r of recs.values())if(r.name)have.push(r.name);
+  const base=forceBase||baseFor(it,have),nm=await namer(it,base),
+    rx=new RegExp("^"+esc(base)+"-(?:"+esc(ROLE.nb)+"|"+esc(ROLE.ft)+")?\\d+\\.[A-Za-z0-9]{1,5}$","i"),
+    keepNames=new Set(),done=new Set(),todo=[];
+  for(const[fid,role]of jobs){if(done.has(fid))continue;done.add(fid);
+    const r=recs.get(fid);if(!r)continue;
+    const low=String(r.name||"").toLowerCase();
+    if(rx.test(r.name||"")&&!keepNames.has(low))keepNames.add(low);else todo.push([fid,role,r])}
+  let n=0;
+  for(const[fid,role,r]of todo){
+    try{const nn=nm[role](r.name||"",r.blob);await idbPut("files",Object.assign({},r,{name:nn}));n++}catch(e){}}
+  return n}
+async function normalizeAll(onP){
+  const items=((typeof state!=="undefined"&&state.items)||[]).slice(),groups=new Map();
+  for(const it of items){const b=baseOf(it.name);(groups.get(b)||groups.set(b,[]).get(b)).push(it)}
+  for(const g of groups.values())g.sort((a,b)=>String(a.id)<String(b.id)?-1:1);
+  let n=0,i=0;
+  for(const it of items){onP&&onP(++i,items.length);
+    const g=groups.get(baseOf(it.name));let fb=null;
+    if(g.length>1&&g[0].id!==it.id)fb=baseOf(it.name)+"~"+String(it.id).slice(-4);
+    n+=await normalizeItem(it,fb)}
   return n}
 /* اسم الملف جوه مجلد المزامنة: لو اسم الصورة بالنمط «اسم-العنصر-رقم» بيتكتب بيه، غير كده بيفضل معرّف الملف */
 function diskName(it,k,fid,name,used){
   if(!name||!it)return null;
-  const base=baseOf(it.name),m=new RegExp("^"+esc(base)+"-(?:"+esc(ROLE.nb)+"|"+esc(ROLE.ft)+")?\\d+\\.([A-Za-z0-9]{1,5})$","i").exec(name);
+  const base=baseOf(it.name),m=new RegExp("^"+esc(base)+VAR+"-(?:"+esc(ROLE.nb)+"|"+esc(ROLE.ft)+")?\\d+\\.([A-Za-z0-9]{1,5})$","i").exec(name);
   if(!m)return null;
   let n=name.slice(0,name.length-m[1].length-1)+"."+m[1].toLowerCase();
   if(used){const key=k+"/"+n.toLowerCase();
     if(used[key]&&used[key]!==fid){n=n.replace(/\.([A-Za-z0-9]+)$/,"~"+String(fid).slice(-4)+".$1")}
     used[k+"/"+n.toLowerCase()]=fid}
   return n}
-window.__NM={namer,renameItem,baseOf,on,setOn,fidsOf,diskName};
+window.__NM={namer,renameItem,baseOf,on,setOn,fidsOf,diskName,normalizeItem,normalizeAll,baseFor};
 
 /* ---- مفتاح التشغيل في صفحة الإعدادات ---- */
 (function(){
@@ -13611,9 +13662,20 @@ window.__NM={namer,renameItem,baseOf,on,setOn,fidsOf,diskName};
       const p=document.createElement("div");p.className="panel";p.id="autoNamePanel";
       p.innerHTML=`<h3>🏷️ تسمية الصور تلقائيًا</h3>
         <div style="font-size:12.5px;color:var(--dim2);margin-bottom:10px;line-height:1.8">أي صورة جديدة بتتحفظ بتاخد اسم العنصر + رقم متسلسل (مثال: <span style="font-family:var(--mono);direction:ltr;display:inline-block">${H2(window.__NM.baseOf("مضخة المياه"))}-01.jpg</span>)، وصور الشرح والأعطال بتاخد «شرح» و«عطل» قبل الرقم. المستندات بتفضل بأسمائها.</div>
-        <label style="display:flex;gap:8px;align-items:center;margin:0;color:var(--text);font-size:13px"><input type="checkbox" id="autoNameChk" style="width:auto" ${on()?"checked":""}> تفعيل التسمية التلقائية</label>`;
+        <label style="display:flex;gap:8px;align-items:center;margin:0 0 10px;color:var(--text);font-size:13px"><input type="checkbox" id="autoNameChk" style="width:auto" ${on()?"checked":""}> تفعيل التسمية التلقائية</label>
+        <button class="btn" id="autoNameAll">🏷️ توحيد أسماء كل الصور الموجودة</button>
+        <div style="font-size:11.5px;color:var(--dim);margin-top:6px;line-height:1.7">بيعدّل أسماء الصور القديمة (صور العناصر والشرح والأعطال) على نفس النمط ويمنع التكرار. ملفاتها في مجلد المزامنة هتتكتب بالاسم الجديد والقديم بيتمسح، فممكن ياخد وقت لو المكتبة كبيرة.</div>`;
       const danger=Array.from(c.querySelectorAll(".panel")).find(x=>x.querySelector("h3")&&x.querySelector("h3").textContent.includes("منطقة خطرة"));
       danger?c.insertBefore(p,danger):c.appendChild(p);
+      p.querySelector("#autoNameAll").onclick=async e=>{
+        const b=e.currentTarget;if(b.disabled)return;
+        if(!window.__NM.on()){try{toast("فعّل التسمية التلقائية الأول","warn")}catch(x){}return}
+        if(!confirm("هيتم توحيد أسماء كل الصور الموجودة. متأكد؟"))return;
+        b.disabled=true;const t0=b.textContent;
+        try{const n=await normalizeAll((i,t)=>{b.textContent="جاري... "+i+" / "+t});
+          try{toast("اتعدّلت أسماء "+n+" صورة","ok",5000)}catch(x){}}
+        catch(err){try{toast("فشل: "+(err&&err.message||err),"err")}catch(x){}}
+        finally{b.disabled=false;b.textContent=t0}};
       p.querySelector("#autoNameChk").onchange=e=>{setOn(e.target.checked);try{toast(e.target.checked?"التسمية التلقائية اشتغلت":"التسمية التلقائية اتقفلت","ok")}catch(x){}}
     }catch(e){}};
   function H2(s){return String(s).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}
