@@ -11775,6 +11775,9 @@ const slug=s=>String(s||"بدون-اسم").replace(/[\\/:*?"<>|\s.]+/g,"-").slic
 const ext=n=>(/\.[A-Za-z0-9]{1,5}$/.exec(n||"")||[""])[0];
 const KINDS={images:1,docs:1,notebook:1,"fault-backgrounds":1,"fault-notes":1};
 const RT="بدون-مجموعة";
+/* مسار ملف العنصر: اسم مقروء (اسم العنصر + رقم) للصور المسمّاة تلقائيًا، وإلا المعرّف زي ما كان */
+function fpath(it,base,k,fid,name,used){const nm=window.__NM&&window.__NM.diskName?window.__NM.diskName(it,k,fid,name,used):null;return base+"/"+k+"/"+(nm||fid+ext(name))}
+async function rmf(path){const i=path.lastIndexOf("/"),d=await dirOf(i<0?"":path.slice(0,i),false);await d.removeEntry(path.slice(i+1))}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const DEBOUNCE=150, POOL=4, SCAN_EVERY=5*60*1000;
 
@@ -11866,7 +11869,7 @@ function makePaths(idx){
 async function syncItem(it,base,idx,W,force,ctx){
   const sp=window.__SP;if(sp&&sp.holdItem(it,base)){sp.skipItem(it);return}
   const op=idx.items[it.id],po=op&&op.path===base?op:null,
-    Eo={path:base,files:{},name:it.name,folderId:it.folderId||null};
+    Eo={path:base,files:{},name:it.name,folderId:it.folderId||null},used={},stale=[];
   Eo.sha=await wt(base+"/item.json",JSON.stringify(it,null,2),po&&!force?po.sha:null,W,it.id);
   let fch=!po;
   for(const[fid,k]of refs(it)){
@@ -11874,17 +11877,21 @@ async function syncItem(it,base,idx,W,force,ctx){
     const pf0=po&&po.files&&po.files[fid];
     if(sp&&sp.holdFile(fid,it,k)){if(pf0)Eo.files[fid]=pf0;sp.skipFile(fid,it);continue}
     const rec=await idbGet_real("files",fid);if(!rec||!rec.blob)continue;
-    const p=base+"/"+k+"/"+fid+ext(rec.name),pf=po&&po.files&&po.files[fid];
+    const p=fpath(it,base,k,fid,rec.name,used),pf=po&&po.files&&po.files[fid];
     if(sp&&sp.holdPath(p)){if(pf0)Eo.files[fid]=pf0;sp.skipFile(fid,it);continue}
     let s;
     if(pf&&!force&&pf.path===p&&pf.size===rec.size&&pf.upd===rec.updatedAt)s=pf.sha;
     else{
       s=(await Promise.all([shaB(rec.blob),put(p,rec.blob)]))[0]; // الحساب والكتابة بالتوازي
       const f=await getf(p);if(f.size!==rec.blob.size)throw new Error("حجم غير مطابق: "+p);
-      W.push({path:p,sha:s,size:rec.blob.size,blob:1,id:it.id});fch=true}
+      W.push({path:p,sha:s,size:rec.blob.size,blob:1,id:it.id});fch=true;
+      if(pf&&pf.path&&pf.path!==p)stale.push(pf.path)}
     Eo.files[fid]={path:p,kind:k,size:rec.size,sha:s,upd:rec.updatedAt,name:rec.name,mime:rec.mime}}
   if(!fch&&po&&JSON.stringify(po.files)!==JSON.stringify(Eo.files))fch=true;
   if(fch){await put(base+"/hashes.json",JSON.stringify(Eo.files,null,2));ctx.c=true}
+  /* الاسم اتغيّر: امسح الملف القديم (بعد ما الجديد اتكتب واتأكد حجمه) عشان مايتكررش */
+  if(stale.length){const keepP=new Set(Object.values(Eo.files).map(x=>x.path));
+    for(const op0 of stale){if(keepP.has(op0)||!op0.startsWith(base+"/"))continue;try{await rmf(op0)}catch(e){}}}
   idx.items[it.id]=Eo}
 
 /* ---------- المرور الواحد ---------- */
@@ -12093,7 +12100,7 @@ window.__FS={
     if(document.visibilityState==="visible"&&Date.now()-E.lastScan>SCAN_EVERY&&!E.dirty.size)E.scan=true;
     if(pending()||E.lastErr){if(!E.retryT)schedule(0)}},
   state:E,kick:schedule,
-  plan(){if(!bind())return null;const idx=E.idx||{schema:2,items:{},groups:{},unassigned:{}},m=makePaths(idx);return{idx,gp:m.gp,itemPath:m.itemPath,refs,ext,RT,hasIdx:!!E.idx}},
+  plan(){if(!bind())return null;const idx=E.idx||{schema:2,items:{},groups:{},unassigned:{}},m=makePaths(idx);return{idx,gp:m.gp,itemPath:m.itemPath,refs,ext,RT,hasIdx:!!E.idx,diskPath:fpath}},
   info:{
     async idx(){ if(!bind())return null; if(!E.idx){try{E.idx=await loadIdx()}catch(e){}} return E.idx },
     handle:()=>bind()?E.h:null,
@@ -12241,11 +12248,11 @@ function buildRows(){
       base=P?P.itemPath(it):null,oe=idx.items[it.id],iname=it.name||"بدون اسم",fe=S.fails.get(it.id);
     {const dest=base?base+"/item.json":null,saved=!!(oe&&oe.path===base&&!S.staleItems[it.id]&&!(E&&E.dirty.has(it.id)));
       rows.push(finish({key:"j:"+it.id,kind:"json",fid:null,itemId:it.id,itemName:iname,gid,groupName:gn,name:"item.json",size:0,destPath:dest,base},saved,fe&&fe.msg))}
-    const seen=new Set();
+    const seen=new Set(),dused={};
     for(const[fid,k]of refs(it)){
       if(seen.has(fid))continue;seen.add(fid);used.add(fid);
       const m=S.meta.get(fid),nm=(m&&m.name)||(it.docs||[]).find(d=>d&&d.fileId===fid)?.name||fid,
-        dest=base?base+"/"+k+"/"+fid+ext(m&&m.name):null,pf=oe&&oe.path===base&&oe.files&&oe.files[fid];
+        dest=base?(P.diskPath?P.diskPath(it,base,k,fid,m&&m.name,dused):base+"/"+k+"/"+fid+ext(m&&m.name)):null,pf=oe&&oe.path===base&&oe.files&&oe.files[fid];
       const r={key:"f:"+fid,kind:k,fid,itemId:it.id,itemName:iname,gid,groupName:gn,name:nm,size:(m&&m.size)||0,destPath:dest,base};
       if(metaOk&&(!m||!m.has)){r.status="missing";r.cover=null;rows.push(r);continue}
       const saved=!!(pf&&m&&pf.size===m.size&&pf.upd===m.upd&&pf.path===dest);
@@ -13581,7 +13588,17 @@ async function renameItem(it,oldName){
     const m=rx.exec(r.name);if(!m)continue;
     await idbPut("files",Object.assign({},r,{name:nb+"-"+m[1]}));n++}catch(e){}}
   return n}
-window.__NM={namer,renameItem,baseOf,on,setOn,fidsOf};
+/* اسم الملف جوه مجلد المزامنة: لو اسم الصورة بالنمط «اسم-العنصر-رقم» بيتكتب بيه، غير كده بيفضل معرّف الملف */
+function diskName(it,k,fid,name,used){
+  if(!name||!it)return null;
+  const base=baseOf(it.name),m=new RegExp("^"+esc(base)+"-(?:"+esc(ROLE.nb)+"|"+esc(ROLE.ft)+")?\\d+\\.([A-Za-z0-9]{1,5})$","i").exec(name);
+  if(!m)return null;
+  let n=name.slice(0,name.length-m[1].length-1)+"."+m[1].toLowerCase();
+  if(used){const key=k+"/"+n.toLowerCase();
+    if(used[key]&&used[key]!==fid){n=n.replace(/\.([A-Za-z0-9]+)$/,"~"+String(fid).slice(-4)+".$1")}
+    used[k+"/"+n.toLowerCase()]=fid}
+  return n}
+window.__NM={namer,renameItem,baseOf,on,setOn,fidsOf,diskName};
 
 /* ---- مفتاح التشغيل في صفحة الإعدادات ---- */
 (function(){
