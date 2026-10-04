@@ -7256,7 +7256,7 @@ function openItemModal(itemId, folderId){
   document.getElementById("mSave").onclick = async ()=>{
     const name = document.getElementById("iName").value.trim();
     if(!name){ toast("اكتب اسم العنصر", "err"); document.querySelector('.mtab[data-tab="basic"]').click(); return; }
-    it.name = name;
+    const __oldName = it.name; it.name = name;
     it.model = document.getElementById("iModel").value.trim();
     it.manufacturer = document.getElementById("iManufacturer").value.trim();
     it.serial = document.getElementById("iSerial").value.trim();
@@ -7277,8 +7277,9 @@ function openItemModal(itemId, folderId){
     setSaveBadge("saving");
     try{
       const idMap = {};
+      const __nm = window.__NM ? await window.__NM.namer(it) : null;
       for(const p of state.pendingImages){
-        const fid = await storeFile(p.blob, p.name, p.blob.type);
+        const fid = await storeFile(p.blob, __nm ? __nm.img(p.name, p.blob) : p.name, p.blob.type);
         idMap[p.tempId] = fid;
         localImageIds.push(fid);
       }
@@ -7293,6 +7294,7 @@ function openItemModal(itemId, folderId){
       it.docs = localDocs;
 
       await idbPut("items", it);
+      if(editing && window.__NM){ try{ await window.__NM.renameItem(it, __oldName); }catch(e){} }
     } finally { setTimeout(()=>setSaveBadge("idle"), 350); }
 
     if(editing) state.items = state.items.map(x=>x.id===it.id? it : x);
@@ -10023,7 +10025,8 @@ function nbTextPanel(body, s, item){
       const files=[...(pick.files||[])];
       if(!files.length) return;
       addCard.textContent='جارٍ حفظ الصور...';
-      for(const f of files){ const id=await storeFile(f, f.name, f.type); s.images.push({id, caption:'', groupId:null}); }
+      const __nm=window.__NM?await window.__NM.namer(item):null;
+      for(const f of files){ const id=await storeFile(f, __nm?__nm.nb(f.name,f):f.name, f.type); s.images.push({id, caption:'', groupId:null}); }
       nbScheduleSave(item);
       renderGallery();
     };
@@ -10731,7 +10734,8 @@ function nbFtOpenEditor(hotspot, item, onChange){
     const pick=document.createElement('input'); pick.type='file'; pick.accept='image/*'; pick.multiple=true;
     pick.onchange=async()=>{
       const files=[...(pick.files||[])]; if(!files.length) return;
-      for(const f of files){ const id=await storeFile(f, f.name, f.type); hotspot.content.images.push({id, caption:''}); }
+      const __nm=window.__NM?await window.__NM.namer(item):null;
+      for(const f of files){ const id=await storeFile(f, __nm?__nm.ft(f.name,f):f.name, f.type); hotspot.content.images.push({id, caption:''}); }
       nbScheduleSave(item); renderGallery();
     };
     addCard.appendChild(pick); gallery.appendChild(addCard);
@@ -10804,8 +10808,9 @@ function nbFaultPanel(body, s, item){
     pagePick.onchange=async()=>{
       const files=[...(pagePick.files||[])]; if(!files.length) return;
       addPage.textContent='جارٍ الحفظ...';
+      const __nm=window.__NM?await window.__NM.namer(item):null;
       for(const f of files){
-        const id=await storeFile(f, f.name, f.type);
+        const id=await storeFile(f, __nm?__nm.ft(f.name,f):f.name, f.type);
         const pg={id:uid('ftpg'), name:'صفحة '+(ft.pages.length+1), imageId:id, hotspots:[]};
         ft.pages.push(pg);
         if(!activeId) activeId=pg.id;
@@ -13514,6 +13519,87 @@ window.__ID={analyze,state:S,summary,fstatus,apply,looseParse,sniff,resolveRef,r
   render=function(){if(ST().view&&ST().view.type==="impdoctor"){const c=document.getElementById("viewContainer");if(c){mount(c)}return}S.host=null;return oR.apply(this,arguments)};
   const oB=updateBreadcrumb;
   updateBreadcrumb=function(){if(ST().view&&ST().view.type==="impdoctor"){const el=document.getElementById("breadcrumb");el.innerHTML='<b data-go="home">🏠 الرئيسية</b><span class="sep">/</span><b>🩺 تشخيص الاستيراد</b>';el.querySelectorAll("[data-go]").forEach(x=>{x.onclick=()=>navigateTo({type:"home"})});return}return oB.apply(this,arguments)}
+})();
+})();
+</script>
+<script>
+/* ===== AutoName: تسمية الصور تلقائيًا = اسم العنصر + رقم =====
+   - بيشتغل على الصور الجديدة بس (صور العنصر، صور الشرح، صور الأعطال) وقت الحفظ.
+   - المستندات (PDF/Word...) بتحتفظ باسمها الأصلي لأن اسمها بيفرق.
+   - الترقيم متسلسل لكل عنصر: بياخد أعلى رقم موجود + 1 (الفجوات من صور اتمسحت مابتتملاش، وآخر رقم لو اتمسح ممكن يتعاد).
+   - لو غيّرت اسم عنصر، أسماء صوره اللي بالنمط ده بتتحدّث معاه.
+   - ملاحظة: ده اسم الصورة جوه البرنامج (في المعرض/التقارير/خط المزامنة)؛ مسار الحفظ في المجلد ماتغيّرش. */
+(function(){"use strict";
+if(window.__NM)return;
+const LSK="eqdb.autoname";
+const on=()=>{try{return localStorage.getItem(LSK)!=="0"}catch(e){return true}};
+const setOn=v=>{try{localStorage.setItem(LSK,v?"1":"0")}catch(e){}};
+const esc=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+const MIMEX={"image/jpeg":"jpg","image/jpg":"jpg","image/png":"png","image/gif":"gif","image/webp":"webp","image/bmp":"bmp","image/avif":"avif","image/heic":"heic","image/heif":"heic","image/tiff":"tiff","image/svg+xml":"svg"};
+const ROLE={img:"",nb:"شرح-",ft:"عطل-"};
+function baseOf(name){
+  let b=String(name||"").replace(/[\\/:*?"<>|\u0000-\u001f]/g,"").replace(/\s+/g,"-").replace(/-{2,}/g,"-").replace(/^[-.]+|[-.]+$/g,"");
+  if(b.length>60)b=b.slice(0,60).replace(/-+$/,"");
+  return b||"عنصر"}
+function extOf(orig,blob){
+  const m=/\.([A-Za-z0-9]{1,5})$/.exec(orig||"");let e=m?m[1].toLowerCase():"";
+  if(e==="jpeg"||e==="jpe")e="jpg";
+  if(!e||!/^(jpg|png|gif|webp|bmp|avif|heic|tiff|tif|svg|ico)$/.test(e))e=MIMEX[(blob&&blob.type||"").toLowerCase()]||e||"jpg";
+  return e}
+function fidsOf(it){
+  const a=[];
+  (it.imageIds||[]).forEach(x=>typeof x==="string"&&a.push(x));
+  const nb=it.notebookData;
+  if(nb){(nb.images||[]).forEach(x=>x&&x.id&&a.push(x.id));
+    const ft=nb.faultTracking;
+    if(ft&&ft.pages)ft.pages.forEach(p=>{p&&p.imageId&&a.push(p.imageId);((p&&p.hotspots)||[]).forEach(h=>((h&&h.content&&h.content.images)||[]).forEach(x=>x&&x.id&&a.push(x.id)))})}
+  return a}
+async function names(it){
+  const out=[];
+  for(const id of fidsOf(it)){try{const r=await idbGet_real("files",id);if(r&&r.name)out.push(r.name)}catch(e){}}
+  return out}
+/* namer: بيحجز أرقام جديدة لعنصر واحد (يُنشأ مرة قبل حفظ دفعة صور) */
+async function namer(it){
+  const base=baseOf(it&&it.name),have=await names(it||{}),max={};
+  const rx=role=>new RegExp("^"+esc(base)+"-"+esc(ROLE[role])+"(\\d+)\\.[A-Za-z0-9]{1,5}$","i");
+  for(const role of Object.keys(ROLE)){let m=0;const r=rx(role);
+    for(const n of have){const x=r.exec(n);if(x)m=Math.max(m,parseInt(x[1],10))}max[role]=m}
+  /* صور بالنمط الأساسي (بدون شرح/عطل) ماتتلخبطش مع اللي ليهم بادئة */
+  const next=(role,orig,blob)=>{
+    if(!on())return orig;
+    const n=++max[role],pad=n<10?"0"+n:String(n);
+    return base+"-"+ROLE[role]+pad+"."+extOf(orig,blob)};
+  return{img:(o,b)=>next("img",o,b),nb:(o,b)=>next("nb",o,b),ft:(o,b)=>next("ft",o,b),base}}
+/* بعد تغيير اسم العنصر: حدّث أسماء الصور اللي بالنمط القديم */
+async function renameItem(it,oldName){
+  if(!on()||!it||oldName==null)return 0;
+  const ob=baseOf(oldName),nb=baseOf(it.name);if(ob===nb)return 0;
+  const rx=new RegExp("^"+esc(ob)+"-((?:"+esc(ROLE.nb)+"|"+esc(ROLE.ft)+")?\\d+\\.[A-Za-z0-9]{1,5})$","i");
+  let n=0;
+  for(const id of fidsOf(it)){try{
+    const r=await idbGet_real("files",id);if(!r||!r.name)continue;
+    const m=rx.exec(r.name);if(!m)continue;
+    await idbPut("files",Object.assign({},r,{name:nb+"-"+m[1]}));n++}catch(e){}}
+  return n}
+window.__NM={namer,renameItem,baseOf,on,setOn,fidsOf};
+
+/* ---- مفتاح التشغيل في صفحة الإعدادات ---- */
+(function(){
+  if(typeof renderSettingsView!=="function")return;
+  const orig=renderSettingsView;
+  renderSettingsView=async function(c){
+    await orig(c);
+    try{
+      if(c.querySelector("#autoNamePanel"))return;
+      const p=document.createElement("div");p.className="panel";p.id="autoNamePanel";
+      p.innerHTML=`<h3>🏷️ تسمية الصور تلقائيًا</h3>
+        <div style="font-size:12.5px;color:var(--dim2);margin-bottom:10px;line-height:1.8">أي صورة جديدة بتتحفظ بتاخد اسم العنصر + رقم متسلسل (مثال: <span style="font-family:var(--mono);direction:ltr;display:inline-block">${H2(window.__NM.baseOf("مضخة المياه"))}-01.jpg</span>)، وصور الشرح والأعطال بتاخد «شرح» و«عطل» قبل الرقم. المستندات بتفضل بأسمائها.</div>
+        <label style="display:flex;gap:8px;align-items:center;margin:0;color:var(--text);font-size:13px"><input type="checkbox" id="autoNameChk" style="width:auto" ${on()?"checked":""}> تفعيل التسمية التلقائية</label>`;
+      const danger=Array.from(c.querySelectorAll(".panel")).find(x=>x.querySelector("h3")&&x.querySelector("h3").textContent.includes("منطقة خطرة"));
+      danger?c.insertBefore(p,danger):c.appendChild(p);
+      p.querySelector("#autoNameChk").onchange=e=>{setOn(e.target.checked);try{toast(e.target.checked?"التسمية التلقائية اشتغلت":"التسمية التلقائية اتقفلت","ok")}catch(x){}}
+    }catch(e){}};
+  function H2(s){return String(s).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}
 })();
 })();
 </script>
