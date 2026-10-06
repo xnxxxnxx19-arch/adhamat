@@ -14198,5 +14198,146 @@ function tag(el,desc){
 window.__SI={tag,show,fmt,bytes};
 })();
 </script>
+<script id="session-delta-system">
+(function(){
+"use strict";
+if(window.__SD)return;window.__SD=1;
+/* ===== ميزة الجلسة: تصدير/استيراد آخر مجموعة تعديلات (Delta) — طبقة مستقلة، لا تغيّر هيكل البيانات ===== */
+const ENT={items:"عنصر",folders:"مجلد",files:"ملف",cat:"الفئات"},ICO={add:"➕",edit:"✏️",delete:"🗑️"};
+const isP=v=>v&&typeof v==="object"&&!Array.isArray(v)&&!(v instanceof Blob);
+const sid=p=>p+"_"+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const clone=v=>JSON.parse(JSON.stringify(v));
+function st(v){if(v===undefined)return"u";if(v===null||typeof v!=="object")return JSON.stringify(v)??"null";if(Array.isArray(v))return"["+v.map(st).join(",")+"]";if(v instanceof Blob)return'"b'+v.size+'"';return"{"+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+":"+st(v[k])).join(",")+"}";}
+function hc(n,at){let a=0xdeadbeef,b=0x41c6ce57,c=0x1234abcd,d=0x9e3779b9;for(let i=0;i<n;i++){const x=at(i);a=Math.imul(a^x,2654435761);b=Math.imul(b^x,1597334677);c=Math.imul(c^x,2246822519);d=Math.imul(d^x,3266489917);}
+a=Math.imul(a^(a>>>16),2246822507);a^=Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507);b^=Math.imul(a^(a>>>13),3266489909);
+c=Math.imul(c^(c>>>16),2246822507);c^=Math.imul(d^(d>>>13),3266489909);d=Math.imul(d^(d>>>16),2246822507);d^=Math.imul(c^(c>>>13),3266489909);
+return((2097151&b)*4294967296+(a>>>0)).toString(36)+((2097151&d)*4294967296+(c>>>0)).toString(36)+"."+n.toString(36);}
+const H=s=>hc(s.length,i=>s.charCodeAt(i)),HB=u=>hc(u.length,i=>u[i]);
+/* وحدات التغيير: كل حقل (وكل عنصر داخل مصفوفة لها id) وحدة مستقلة بهاش */
+const MD=4,UK='["updatedAt"]';
+const idArr=a=>Array.isArray(a)&&a.length&&a.every(e=>isP(e)&&(typeof e.id==="string"||typeof e.id==="number"))&&new Set(a.map(e=>String(e.id))).size===a.length;
+function unit(o,sg,v){const s=st(v);o.set(JSON.stringify(sg),{sg,h:H(s),v,n:s.length,sh:s.length<=300?s:undefined});}
+function dec(v,sg,d,o){if(isP(v)&&d<MD){const ks=Object.keys(v).filter(k=>v[k]!==undefined).sort();if(ks.length){ks.forEach(k=>dec(v[k],sg.concat([k]),d+1,o));return;}}else if(idArr(v)){v.forEach(e=>unit(o,sg.concat([{id:String(e.id)}]),e));return;}unit(o,sg,v);}
+const um=r=>{const m=new Map();if(isP(r))Object.keys(r).filter(k=>r[k]!==undefined).sort().forEach(k=>dec(r[k],[k],1,m));return m;};
+const eh=o=>H(Object.keys(o).sort().map(k=>k+"="+o[k][0]).join("\n"));
+function snap(r,m,nm){m=m||um(r);const u={};let s=0;m.forEach((x,k)=>{u[k]=x.sh!==undefined?[x.h,x.sh]:[x.h];s+=x.n;});return{u,h:eh(u),n:nm||r.name||r.title||String(r.id),s,t:Number(r.updatedAt||r.createdAt)||0};}
+function diffU(bu,m){const o=[];m.forEach((x,k)=>{const b=bu[k];if(!b)o.push({k:"add",p:x.sg,ah:x.h,v:x.v,n:x.n});else if(b[0]!==x.h)o.push({k:"edit",p:x.sg,bh:b[0],bs:b[1],ah:x.h,v:x.v,n:x.n});});Object.keys(bu).forEach(k=>{if(!m.has(k))o.push({k:"delete",p:JSON.parse(k),bh:bu[k][0],bs:bu[k][1]});});return o;}
+const fp=f=>[f.size||(f.blob&&f.blob.size)||0,f.mime||"",f.name||"",f.updatedAt||0].join("|");
+/* تخزين الجلسات في قاعدة بيانات منفصلة تمامًا (لا تلمس WorkshopEquipmentDB) */
+let kdb;const kmem=new Map();
+const kopen=()=>kdb||(kdb=new Promise(r=>{try{const q=indexedDB.open("WorkshopEquipmentDB_Sessions",1);q.onupgradeneeded=()=>q.result.createObjectStore("kv",{keyPath:"key"});q.onsuccess=()=>r(q.result);q.onerror=q.onblocked=()=>r(null);}catch(e){r(null);}}));
+async function kget(k){const d=await kopen();if(!d)return kmem.get(k);return new Promise(r=>{const q=d.transaction("kv").objectStore("kv").get(k);q.onsuccess=()=>r(q.result&&q.result.value);q.onerror=()=>r();});}
+async function kset(k,v){const d=await kopen();if(!d){kmem.set(k,v);return;}return new Promise((r,j)=>{const t=d.transaction("kv","readwrite");t.objectStore("kv").put({key:k,value:v});t.oncomplete=r;t.onerror=()=>j(t.error);});}
+async function cur(){const[f,i,fl,c]=await Promise.all([idbGetAll("folders"),idbGetAll("items"),idbGetAll("files"),idbGet("meta","categoriesMeta")]);return{folders:f,items:i,files:fl,cat:c&&c.value||null};}
+/* حساب التغييرات منذ آخر نقطة مرجعية */
+async function delta(B,c){c=c||await cur();const ops=[],nx={folders:{},items:{},files:{},cat:null};let n=0;
+for(const e of["folders","items"])for(const r of c[e]){if(r==null||r.id==null)continue;const id=String(r.id),m=um(r),s=snap(r,m);nx[e][id]=s;
+if(B){const b=B[e][id];if(!b)ops.push({op:"add",e,id,name:s.n,rec:r,n:s.s,t:s.t});else if(b.h!==s.h)ops.push({op:"edit",e,id,name:s.n,us:diffU(b.u,m),t:s.t});}
+if(++n%25===0)await new Promise(r=>setTimeout(r));}
+if(c.cat){const m=um(c.cat),s=snap(c.cat,m,"الفئات والمواصفات");nx.cat=s;if(B){if(!B.cat)ops.push({op:"add",e:"cat",id:"cat",name:s.n,rec:c.cat,n:s.s});else if(B.cat.h!==s.h)ops.push({op:"edit",e:"cat",id:"cat",name:s.n,us:diffU(B.cat.u,m)});}}
+for(const f of c.files){const id=String(f.id),p=fp(f);nx.files[id]={fp:p,n:f.name||"",m:f.mime||"",s:f.size||0,t:f.updatedAt||0};
+if(B){const b=B.files[id];if(!b||b.fp!==p)ops.push({op:b?"edit":"add",e:"files",id,name:f.name||id,mime:f.mime,n:f.size||0,bfp:b&&b.fp,afp:p,t:f.updatedAt});}}
+if(B){for(const e of["folders","items"])for(const id in B[e])if(!nx[e][id])ops.push({op:"delete",e,id,name:B[e][id].n,bh:B[e][id].h});
+for(const id in B.files)if(!nx.files[id])ops.push({op:"delete",e:"files",id,name:B.files[id].n,bfp:B.files[id].fp,n:B.files[id].s});}
+return{ops,nx,c};}
+const by=n=>n>=1048576?(n/1048576).toFixed(1)+" MB":n>=1024?(n/1024).toFixed(1)+" KB":(n||0)+" B";
+const dt=t=>{if(!t)return"";try{return new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"});}catch(e){return String(t);}};
+const disp=v=>{let s=v===undefined?"—":typeof v==="string"?v:st(v);return s.length>80?s.slice(0,77)+"…":s;};
+const old=s=>{if(s===undefined)return undefined;try{return JSON.parse(s);}catch(e){return s;}};
+const lab=p=>p.map((s,i)=>typeof s==="string"?(i===0&&typeof galleryFieldLabel==="function"?galleryFieldLabel(s):s):"#"+s.id).join(" › ");
+const uline=u=>(u.k==="add"?"＋ ":u.k==="delete"?"－ ":"～ ")+lab(u.p)+": "+(u.k==="add"?"":disp(old(u.bs))+" ← ")+(u.k==="delete"?"(حُذف)":disp(u.v));
+function cnt(ops){const c={add:0,edit:0,delete:0};ops.forEach(o=>c[o.op]++);return c;}
+function report(ops,mf){const L=["تقرير الجلسة #"+mf.seq,"تاريخ الإنشاء: "+dt(mf.createdAt),"منذ: "+dt(mf.since),"الإجمالي: "+JSON.stringify(mf.counts)+" — حجم الملفات: "+by(mf.fileBytes),""];
+ops.forEach(o=>{L.push(ICO[o.op]+" "+ENT[o.e]+": "+o.name+(o.e==="files"?" ("+(o.mime||"")+" • "+by(o.size||o.n)+")":"")+(o.t?" • "+dt(o.t):""));(o.us||[]).forEach(u=>L.push("    "+uline(u)));});return L.join("\n");}
+async function dev(){let d=await kget("device");if(!d){d=sid("dev");await kset("device",d);}return d;}
+/* بناء حزمة الجلسة (ZIP): ops.json + manifest + ملفات الصور/المرفقات المتغيرة فقط */
+async function pack(B,d){const z=new JSZip(),fm=new Map(d.c.files.map(f=>[String(f.id),f])),ops=[];let fb=0,k=0;
+for(const o of d.ops){const x={op:o.op,e:o.e,id:o.id,name:o.name,t:o.t};if(o.rec)x.rec=o.rec;if(o.us)x.us=o.us.map(u=>({k:u.k,p:u.p,bh:u.bh,ah:u.ah,v:u.v}));if(o.bh)x.bh=o.bh;
+if(o.e==="files"){x.bfp=o.bfp;x.afp=o.afp;x.mime=o.mime;x.size=o.n;if(o.op!=="delete"){const f=fm.get(o.id);if(f&&f.blob){const u=new Uint8Array(await f.blob.arrayBuffer());x.ch=HB(u);x.bl="f"+(k++);x.meta=Object.assign({},f,{blob:undefined});z.file("session/files/"+x.bl,u,{binary:true,compression:"STORE"});fb+=u.length;}}}
+ops.push(x);}
+const mf={app:"workshop-equipment-db-session",format:1,id:sid("ses"),seq:B.seq+1,parentId:B.id,parentGenesis:!!B.genesis,createdAt:Date.now(),since:B.createdAt,device:await dev(),counts:cnt(d.ops),fileBytes:fb};
+z.file("session/manifest.json",JSON.stringify(mf,null,1));z.file("session/ops.json",JSON.stringify(ops));z.file("session/report.txt",report(d.ops.map(o=>Object.assign({},o,{size:o.n})),mf));
+return{blob:await z.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:4}}),mf};}
+/* استيراد: خطة (3-way بالهاش) ثم تطبيق */
+async function readPkg(file){const z=await JSZip.loadAsync(file).catch(()=>{throw new Error("الملف مش ZIP صالح");});const m=z.file("session/manifest.json");if(!m)throw new Error("ده مش ملف حزمة جلسة");const mf=JSON.parse(await m.async("string"));if(mf.app!=="workshop-equipment-db-session")throw new Error("حزمة غير معروفة");return{z,mf,ops:JSON.parse(await z.file("session/ops.json").async("string"))};}
+const ev=(us,lm)=>us.map(u=>{const key=JSON.stringify(u.p),l=lm.get(key),lh=l&&l.h;return Object.assign({},u,{key,l,s:lh===u.ah?"already":lh===u.bh?"apply":key===UK?"soft":"conflict"});});
+function plan(P,c){const L={folders:new Map(c.folders.map(r=>[String(r.id),r])),items:new Map(c.items.map(r=>[String(r.id),r])),files:new Map(c.files.map(r=>[String(r.id),r])),cat:new Map(c.cat?[["cat",c.cat]]:[])};
+return P.ops.map(o=>{const l=L[o.e].get(o.id)||null,r={o,l};
+if(o.e==="files"){const q=l&&fp(l);r.s=o.op==="delete"?(!l?"already":q===o.bfp?"apply":"conflict"):!l?"apply":q===o.afp?"already":(o.op==="edit"&&q===o.bfp)?"apply":"conflict";return r;}
+if(o.op==="delete"){const m=um(l||{}),u={};m.forEach((x,k)=>u[k]=[x.h]);r.s=!l?"already":eh(u)===o.bh?"apply":"conflict";return r;}
+if(o.op==="add"&&!l){r.s="apply";r.create=1;return r;}
+if(!l){r.s="missing";return r;}
+const lm=um(l),us=o.op==="add"?[...um(o.rec).values()].map(x=>({k:"add",p:x.sg,ah:x.h,v:x.v})):o.us;
+r.us=ev(us,lm);r.s=r.us.some(u=>u.s==="apply"||u.s==="soft")?"apply":r.us.some(u=>u.s==="conflict")?"conflict":"already";return r;});}
+function setU(n,u){const p=u.p,last=p[p.length-1];let c=n;for(let i=0;i<p.length-1;i++){const s=p[i];let nx;
+if(typeof s==="string"){if(!isP(c))return false;nx=c[s];if(nx===undefined){if(u.k==="delete")return true;nx=typeof p[i+1]==="string"?{}:[];c[s]=nx;}}
+else{if(!Array.isArray(c))return false;nx=c.find(e=>String(e.id)===s.id);if(!nx)return u.k==="delete";}c=nx;}
+if(typeof last==="string"){if(!isP(c))return false;if(u.k==="delete")delete c[last];else c[last]=clone(u.v);}
+else{if(!Array.isArray(c))return false;const i=c.findIndex(e=>String(e.id)===last.id);if(u.k==="delete"){if(i>=0)c.splice(i,1);}else if(i>=0)c[i]=clone(u.v);else c.push(clone(u.v));}return true;}
+const put=(e,r)=>e==="cat"?idbPut("meta",{key:"categoriesMeta",value:r}):idbPut(e,r);
+async function apply(P){const c=await cur(),pl=plan(P,c),R={create:0,merge:0,del:0,already:0,conflict:[],missing:0,fail:[],keep:[],files:0};
+let B=await kget("baseline");if(!B){B=(await delta(null,c)).nx;Object.assign(B,{id:sid("ses"),seq:0,genesis:true,createdAt:Date.now()});}
+let usedS;const used=async()=>{if(!usedS){usedS=new Set();const w=v=>{if(typeof v==="string")usedS.add(v);else if(v&&typeof v==="object")Object.values(v).forEach(w);};(await idbGetAll("items")).forEach(w);}return usedS;};
+for(const r of pl.sort((a,b)=>(a.o.op==="delete")-(b.o.op==="delete"))){const o=r.o;
+if(r.s==="already"){R.already++;continue;}if(r.s==="missing"){R.missing++;continue;}if(r.s==="conflict"){R.conflict.push(r);continue;}
+try{
+if(o.e==="files"){
+if(o.op==="delete"){if((await used()).has(o.id)){R.keep.push(o.name);continue;}await idbDelete("files",o.id);delete B.files[o.id];R.del++;}
+else{const f=P.z.file("session/files/"+o.bl);if(!f)throw new Error("ملف ناقص في الحزمة");const u=await f.async("uint8array");if(HB(u)!==o.ch)throw new Error("الملف تالف (فشل التحقق من البصمة)");
+await idbPut("files",Object.assign({},o.meta,{id:o.id,blob:new Blob([u],{type:o.mime||""})}));B.files[o.id]={fp:o.afp,n:o.name,m:o.mime||"",s:o.size,t:o.t||0};R.files++;}
+}else if(o.op==="delete"){
+if(o.e==="folders"){const it=await idbGetAll("items"),fo=await idbGetAll("folders");if(it.some(i=>String(i.folderId)===o.id)||fo.some(f=>String(f.parentId)===o.id)){R.keep.push(o.name);continue;}}
+await idbDelete(o.e,o.id);delete B[o.e][o.id];R.del++;
+}else if(r.create){await put(o.e,clone(o.rec));const s=snap(o.rec,null,o.e==="cat"?"الفئات والمواصفات":0);if(o.e==="cat")B.cat=s;else B[o.e][o.id]=s;R.create++;}
+else{const n=clone(r.l),us=r.us.filter(u=>u.s==="apply"||u.s==="soft").sort((a,b)=>(b.k==="delete")-(a.k==="delete")||a.p.length-b.p.length);
+us.forEach(u=>{if(u.key===UK&&u.s==="soft")n.updatedAt=Math.max(n.updatedAt||0,u.v||0);else if(!setU(n,u))R.fail.push(o.name+": "+lab(u.p));});
+await put(o.e,n);R.merge++;
+const b=o.e==="cat"?B.cat:B[o.e][o.id];if(b){const m=um(n);us.forEach(u=>{const x=m.get(u.key);if(u.k==="delete"){if(!x)delete b.u[u.key];}else if(x&&x.h===u.ah)b.u[u.key]=x.sh!==undefined?[x.h,x.sh]:[x.h];});b.h=eh(b.u);}}
+}catch(e){R.fail.push((o.name||o.id)+": "+(e.message||e));}}
+await kset("baseline",B);const ap=(await kget("applied"))||[];ap.push({id:P.mf.id,seq:P.mf.seq,at:Date.now(),dev:P.mf.device});await kset("applied",ap);await kset("pending",null);
+state.folders=await idbGetAll("folders");state.items=await idbGetAll("items");
+const cr=await idbGet("meta","categoriesMeta");if(cr&&cr.value){state.categories=cr.value.categories||[];state.categorySchemas=cr.value.categorySchemas||{};}
+state.objectUrls.forEach(u=>{try{URL.revokeObjectURL(u);}catch(e){}});state.objectUrls.clear();
+try{initGalleryAuditTracker();}catch(e){}try{renderSidebarTree();navigateTo({type:"home"});}catch(e){}
+try{logActivity("import",{entity:"system",entityId:"import_"+Date.now(),entityLabel:"استيراد حزمة جلسة #"+P.mf.seq,summary:"جلسة: "+R.create+" جديد، "+R.merge+" دمج، "+R.del+" حذف، "+R.files+" ملف"});}catch(e){}
+return R;}
+/* ===== الواجهة ===== */
+const say=(m,t)=>{try{toast(m,t);}catch(e){}};
+let ov,UI={d:null,P:null,pl:null};
+function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
+async function render(){const box=ov.querySelector(".sd-body");box.innerHTML="<div class='sd-m'>⏳ جارٍ فحص التغييرات…</div>";
+const B=await kget("baseline"),pend=await kget("pending"),hist=(await kget("history"))||[],ap=(await kget("applied"))||[];let h="";
+if(!B){h+="<div class='sd-m'>مفيش جلسة بدأت لسه. اضغط الزر لتثبيت الحالة الحالية كنقطة بداية — كل تعديل بعدها هيتسجّل.</div><button class='btn primary' id='sdStart'>▶️ ابدأ أول جلسة</button>";UI.d=null;}
+else{const d=UI.d=await delta(B),cn=cnt(d.ops),fb=d.ops.filter(o=>o.e==="files"&&o.op!=="delete").reduce((s,o)=>s+(o.n||0),0),jb=d.ops.reduce((s,o)=>s+(o.rec?o.n:(o.us||[]).reduce((q,u)=>q+(u.n||0),0)),0);
+h+="<div class='sd-m'>الجلسة #"+(B.seq+1)+" — بدأت: "+dt(B.createdAt)+"</div><div class='sd-c'><div><b>"+cn.add+"</b>➕ إضافة</div><div><b>"+cn.edit+"</b>✏️ تعديل</div><div><b>"+cn.delete+"</b>🗑️ حذف</div><div><b>"+by(fb)+"</b>ملفات</div><div><b>"+by(jb)+"</b>بيانات</div></div>";
+h+=d.ops.slice(0,100).map(o=>"<div class='sd-r'>"+ICO[o.op]+" <b>"+ENT[o.e]+"</b>: "+esc(o.name)+" <small>"+dt(o.t)+(o.e==="files"?" • "+by(o.n):"")+"</small>"+(o.us?"<div class='sd-u'>"+o.us.slice(0,6).map(u=>esc(uline(u))).join("<br>")+(o.us.length>6?"<br>… +"+(o.us.length-6)+" تغيير":"")+"</div>":"")+"</div>").join("")+(d.ops.length>100?"<div class='sd-m'>… و"+(d.ops.length-100)+" تغيير إضافي (كلها داخل الحزمة وتقرير report.txt)</div>":"");
+if(!d.ops.length)h+="<div class='sd-m'>✅ مفيش تغييرات من آخر جلسة.</div>";
+h+="<div class='sd-b'><button class='btn primary' id='sdExp'"+(d.ops.length?"":" disabled")+">📦 تصدير حزمة الجلسة</button><button class='btn' id='sdRef'>🔄 تحديث</button><button class='btn' id='sdSkip'>إنهاء بدون تصدير</button></div>";
+if(pend)h+="<div class='sd-m ok'>تم تصدير «"+esc(pend.file)+"» ("+by(pend.size)+"). بعد ما تتأكد إن الملف اتحفظ: <button class='btn primary' id='sdClose'>✅ إنهاء الجلسة وبدء جديدة</button></div>";}
+h+="<hr><b>📥 استيراد حزمة جلسة</b><div class='sd-b'><button class='btn' id='sdImp'>اختيار ملف الحزمة</button></div><div id='sdPlan'></div>";
+h+="<hr><b>🕘 السجل</b><div class='sd-m'>"+(hist.slice(-8).reverse().map(x=>"#"+x.seq+" • "+dt(x.at)+" • "+x.c.add+"/"+x.c.edit+"/"+x.c.delete+(x.ex?" • "+esc(x.ex):" • بدون تصدير")).join("<br>")||"—")+"</div><div class='sd-m'>حزم مستوردة: "+(ap.slice(-5).reverse().map(x=>"#"+x.seq+" ("+dt(x.at)+")").join("، ")||"—")+"</div>";
+box.innerHTML=h;const $=i=>box.querySelector("#"+i);
+if($("sdStart"))$("sdStart").onclick=async()=>{const n=(await delta(null)).nx;Object.assign(n,{id:sid("ses"),seq:0,genesis:true,createdAt:Date.now()});await kset("baseline",n);say("بدأت الجلسة","ok");render();};
+if($("sdRef"))$("sdRef").onclick=render;
+if($("sdExp"))$("sdExp").onclick=async()=>{try{say("جارٍ تجهيز الحزمة…");const d=await delta(B),p=await pack(B,d),f="equipment-session-"+p.mf.seq+"-"+new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")+".zip";dl(p.blob,f);await kset("pending",{id:p.mf.id,seq:p.mf.seq,nx:d.nx,c:p.mf.counts,file:f,size:p.blob.size});try{logActivity("export",{entity:"system",entityId:"export_"+Date.now(),entityLabel:"تصدير حزمة جلسة #"+p.mf.seq,summary:"تصدير "+d.ops.length+" تغيير ("+by(p.blob.size)+")"});}catch(e){}render();}catch(e){say("فشل التصدير: "+(e.message||e),"err");}};
+const fin=async(pn,ex)=>{const n=pn?pn.nx:(await delta(null)).nx;Object.assign(n,{id:pn?pn.id:sid("ses"),seq:B.seq+1,genesis:false,createdAt:Date.now()});await kset("baseline",n);hist.push({seq:B.seq+1,at:Date.now(),c:pn?pn.c:cnt((await delta(B)).ops),ex});await kset("history",hist);await kset("pending",null);render();};
+if($("sdClose"))$("sdClose").onclick=()=>fin(pend,pend.file);
+if($("sdSkip"))$("sdSkip").onclick=()=>{if(confirm("هتنتهي الجلسة من غير تصدير، والتغييرات دي مش هتظهر في أي حزمة بعد كده. متأكد؟"))fin(null,"");};
+$("sdImp").onclick=()=>{const i=document.createElement("input");i.type="file";i.accept=".zip";i.onchange=async()=>{if(!i.files[0])return;try{const P=UI.P=await readPkg(i.files[0]);UI.pl=plan(P,await cur());showPlan(P,UI.pl,ap,B,hist);}catch(e){say(e.message||String(e),"err");}};i.click();};}
+function showPlan(P,pl,ap,B,hist){const box=ov.querySelector("#sdPlan"),n=s=>pl.filter(r=>r.s===s).length,mf=P.mf,dup=ap.some(a=>a.id===mf.id),known=mf.parentGenesis||ap.some(a=>a.id===mf.parentId)||hist.some(x=>x.id===mf.parentId)||(B&&B.id===mf.parentId);
+let h="<div class='sd-m'>حزمة #"+mf.seq+" • "+dt(mf.createdAt)+" • "+mf.counts.add+"/"+mf.counts.edit+"/"+mf.counts.delete+" (إضافة/تعديل/حذف) • ملفات "+by(mf.fileBytes)+"</div>";
+if(dup)h+="<div class='sd-m bad'>⛔ الحزمة دي اتطبّقت هنا قبل كده — مفيش حاجة هتتكرر.</div>";
+else if(!known)h+="<div class='sd-m bad'>⚠️ الحزمة مبنية على جلسة سابقة مش مطبّقة هنا؛ ممكن تظهر تعارضات أو عناصر مفقودة.</div>";
+h+="<div class='sd-c'><div><b>"+n("apply")+"</b>هتتطبّق</div><div><b>"+n("already")+"</b>موجودة أصلًا</div><div><b>"+n("conflict")+"</b>تعارض (يتحفظ المحلي)</div><div><b>"+n("missing")+"</b>أصلها مفقود</div></div>";
+h+=pl.filter(r=>r.s==="conflict").slice(0,15).map(r=>"<div class='sd-r'>⚔️ "+ENT[r.o.e]+": "+esc(r.o.name)+"<div class='sd-u'>"+(r.us?r.us.filter(u=>u.s==="conflict").slice(0,3).map(u=>esc(lab(u.p)+": محلي "+disp(u.l&&u.l.v)+" | وارد "+disp(u.v))).join("<br>"):"اتعدّل محليًا بعد نقطة الأساس")+"</div></div>").join("");
+h+="<div class='sd-b'><button class='btn primary' id='sdGo'"+(dup||!n("apply")?" disabled":"")+">✔️ تطبيق ("+n("apply")+")</button></div><div class='sd-m'>التعارضات بتفضل على نسختك المحلية ومش بتتلمس. يُفضّل تصدير نسخة كاملة قبل أول استيراد.</div>";
+box.innerHTML=h;const g=box.querySelector("#sdGo");if(g)g.onclick=async()=>{g.disabled=true;try{say("جارٍ التطبيق…");const R=await apply(P);box.innerHTML="<div class='sd-m ok'>تم: "+R.create+" جديد • "+R.merge+" دمج • "+R.del+" حذف • "+R.files+" ملف • "+R.already+" موجود أصلًا • "+R.conflict.length+" تعارض اتحفظ محلي"+(R.keep.length?" • "+R.keep.length+" محذوف اتخطّى لأنه لسه مستخدم":"")+(R.fail.length?"<br>⚠️ "+R.fail.slice(0,5).map(esc).join("<br>"):"")+"</div>";}catch(e){say("فشل الاستيراد: "+(e.message||e),"err");}};}
+function open(){if(ov)ov.remove();ov=document.createElement("div");ov.className="sd-ov";ov.innerHTML="<div class='sd-box'><div class='sd-h'><b>🧾 الجلسة — تصدير واستيراد آخر التعديلات</b><button class='sd-x'>✕</button></div><div class='sd-body'></div></div>";document.body.appendChild(ov);const x=()=>{ov.remove();ov=null;};ov.querySelector(".sd-x").onclick=x;ov.onclick=e=>{if(e.target===ov)x();};render();}
+function init(){const s=document.createElement("style");s.textContent=".sd-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:12px}.sd-box{background:var(--panel);color:var(--text);border:1px solid var(--border-lt);border-radius:15px;width:100%;max-width:720px;max-height:94vh;display:flex;flex-direction:column}.sd-h{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--border)}.sd-x{background:var(--panel2);border:1px solid var(--border);color:var(--dim);width:28px;height:28px;border-radius:8px}.sd-body{padding:14px 16px;overflow-y:auto;font-size:13px}.sd-m{background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;margin:8px 0;line-height:1.7}.sd-m.ok{border-color:var(--green)}.sd-m.bad{border-color:var(--red)}.sd-c{display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:7px;margin:8px 0}.sd-c div{background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:8px;text-align:center;font-size:11px;color:var(--dim)}.sd-c b{display:block;font-size:17px;color:var(--text);font-family:var(--mono)}.sd-r{border-bottom:1px solid var(--border);padding:7px 2px}.sd-r small{color:var(--dim)}.sd-u{font-size:11.5px;color:var(--dim);margin-top:4px;word-break:break-word}.sd-b{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.sd-body hr{border:0;border-top:1px solid var(--border);margin:14px 0}";document.head.appendChild(s);
+const b=document.createElement("button");b.className="nav-item";b.innerHTML="<span class='ico'>🧾</span><span class='lbl'>الجلسة</span>";b.onclick=()=>{try{document.getElementById("sidebar").classList.remove("open");document.getElementById("sidebarOverlay").classList.add("hidden");}catch(e){}open();};
+const nl=document.querySelector(".navlist"),a=nl&&nl.querySelector('[data-nav="activitylog"]');a?a.after(b):nl&&nl.appendChild(b);}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
+})();
+</script>
 </body>
 </html>
