@@ -9375,6 +9375,7 @@ renderSidebarTree = function(){
 .ft-stage-viewport{position:relative;border:1px solid var(--border);border-radius:10px;background:var(--panel);overflow:hidden;height:min(80vh,900px);touch-action:none;flex:1 1 auto;}
 .ft-stage-world{position:absolute;top:0;left:0;transform-origin:0 0;}
 .ft-world-img{display:block;user-select:none;-webkit-user-drag:none;position:absolute;top:0;left:0;}
+.ft-live-canvas{pointer-events:none}
 .ft-world-canvas{position:absolute;top:0;left:0;}
 .ft-markers-layer{position:absolute;top:0;left:0;}
 .ft-wrap.ft-fullscreen{position:fixed;inset:0;width:100vw;height:100dvh;z-index:9999;background:var(--bg);display:flex;flex-direction:column;padding:4px;gap:4px;overflow:hidden;box-sizing:border-box;max-width:none;}
@@ -9482,10 +9483,12 @@ function ensureFaultTrackingData(s){
   }
   const ft = s.faultTracking;
   if(!Array.isArray(ft.pages)) ft.pages = [];
+  { let mp=0; ft.pages.forEach(p=>{ if(Number.isFinite(p&&p.no)) mp=Math.max(mp,p.no); }); ft.pages.forEach(p=>{ if(p && !Number.isFinite(p.no)) p.no=++mp; }); }
   ft.pages.forEach((p,pidx)=>{
     if(typeof p.name !== 'string') p.name = '';
     if(typeof p.caption !== 'string') p.caption = '';
     if(!Array.isArray(p.hotspots)) p.hotspots = [];
+    { let mh=0; p.hotspots.forEach(h=>{ if(Number.isFinite(h&&h.no)) mh=Math.max(mh,h.no); }); p.hotspots.forEach(h=>{ if(h && !Number.isFinite(h.no)) h.no=++mh; }); }
     p.hotspots.forEach((h,hidx)=>{
       if(typeof h.x !== 'number') h.x = 0.4;
       if(typeof h.y !== 'number') h.y = 0.4;
@@ -10097,6 +10100,7 @@ function nbResizeDrawCanvas(canvas, dstate){
   dstate.redraw();
 }
 function nbShapeRefPoints(sh){
+  if(sh.type==='poly') return window.__FD?window.__FD.refPoints(sh):(sh.points||[]);
   if(sh.type==='freehand') return sh.points||[];
   if(sh.type==='text') return [{x:sh.x,y:sh.y}];
   if(sh.type==='curve') return [{x:sh.x1,y:sh.y1},{x:sh.x2,y:sh.y2},{x:sh.cx,y:sh.cy}];
@@ -10128,9 +10132,13 @@ function nbDrawShape(ctx, sh){
   ctx.setLineDash(sh.dashed?[(sh.width||2)*2+4,(sh.width||2)*2+4]:[]);
   if(sh.type==='freehand'){
     if(!sh.points||sh.points.length<2){ ctx.restore(); return; }
-    ctx.beginPath(); ctx.moveTo(sh.points[0].x, sh.points[0].y);
-    for(let i=1;i<sh.points.length;i++) ctx.lineTo(sh.points[i].x, sh.points[i].y);
+    const P=sh.points, n=P.length;
+    ctx.beginPath(); ctx.moveTo(P[0].x, P[0].y);
+    if(n===2){ ctx.lineTo(P[1].x, P[1].y); }
+    else { for(let i=1;i<n-1;i++){ const mx=(P[i].x+P[i+1].x)/2, my=(P[i].y+P[i+1].y)/2; ctx.quadraticCurveTo(P[i].x,P[i].y,mx,my); } ctx.lineTo(P[n-1].x,P[n-1].y); }
     ctx.stroke();
+  } else if(sh.type==='poly'){
+    if(window.__FD) window.__FD.drawPoly(ctx, sh);
   } else if(sh.type==='line'){
     ctx.beginPath(); ctx.moveTo(sh.x1,sh.y1); ctx.lineTo(sh.x2,sh.y2); ctx.stroke();
   } else if(sh.type==='arrow'){
@@ -10726,7 +10734,7 @@ function nbFtOpenEditor(hotspot, item, onChange){
       cap.oninput=()=>{ entry.caption=cap.value; nbScheduleSave(item); };
       const acts=document.createElement('div'); acts.className='nb-photo-actions';
       const del=document.createElement('button'); del.type='button'; del.className='btn small danger'; del.textContent='🗑 حذف';
-      del.onclick=()=>{ hotspot.content.images.splice(i,1); nbScheduleSave(item); renderGallery(); };
+      del.onclick=()=>{ hotspot.content.images.splice(i,1); nbScheduleSave(item); renderGallery(); garbageCollectUnreferencedFiles().then(()=>requestFolderSync()); };
       acts.appendChild(del);
       card.append(img,cap,acts); gallery.appendChild(card);
       if(window.__SI) __SI.tag(card,{kind:'file',fileId:entry.id,itemId:item.id,pos:'tl'});
@@ -10812,7 +10820,7 @@ function nbFaultPanel(body, s, item){
       const __nm=window.__NM?await window.__NM.namer(item):null;
       for(const f of files){
         const id=await storeFile(f, __nm?__nm.ft(f.name,f):f.name, f.type);
-        const pg={id:uid('ftpg'), name:'صفحة '+(ft.pages.length+1), imageId:id, hotspots:[]};
+        const pg={id:uid('ftpg'), no:ft.pages.reduce((m,x)=>Math.max(m,Number.isFinite(x&&x.no)?x.no:0),0)+1, name:'صفحة '+(ft.pages.length+1), imageId:id, hotspots:[]};
         ft.pages.push(pg);
         if(!activeId) activeId=pg.id;
       }
@@ -10852,11 +10860,12 @@ function nbFaultPanel(body, s, item){
     toolbar.append(nameInput, modeBtns, layersBar, zoomCtrls);
 
     /* أداة الرسم + زرار الإعدادات (وضع التحرير فقط) — كل الإعدادات الثانوية داخل لوحة منسدلة واحدة */
-    let drawToolbar=null, toolSel=null, colorInput=null, widthInput=null, fontInput=null, fillInput=null;
+    let drawToolbar=null, toolSel=null, colorInput=null, widthInput=null, fontInput=null, fillInput=null, radiusInput=null, snapInput=null;
     if(mode==='edit'){
       toolSel=document.createElement('select'); toolSel.className='draw-tool ft-tool-select'; toolSel.title='أداة الرسم';
       toolSel.innerHTML=`
         <option value="pen" title="رسم حر">✏️</option>
+        <option value="poly" title="رسم حر بمسارات مستقيمة وزوايا منحنية">⌐</option>
         <option value="line" title="خط مستقيم">📏</option>
         <option value="arrow" title="سهم">➡️</option>
         <option value="dotted" title="خط منقط">┄</option>
@@ -10924,6 +10933,8 @@ function nbFaultPanel(body, s, item){
         <label class="ft-draw-label">السُمك<input type="range" class="draw-width" min="1" max="14" value="3" title="سُمك الخط"></label>
         <label class="ft-draw-label">الخط<input type="number" class="draw-fontsize" min="8" max="60" value="18" title="حجم الخط" style="width:52px;"></label>
         <label class="fill-toggle"><input type="checkbox" class="draw-fill"> تعبئة</label>
+        <label class="ft-draw-label" title="نصف قطر الزوايا في أداة المسار المستقيم (⌐)">الزاوية<input type="range" class="draw-radius" min="0" max="40" value="12"></label>
+        <label class="fill-toggle" title="يثبّت الأضلاع القريبة من الأفقي/الرأسي على الزاوية بالظبط"><input type="checkbox" class="draw-snap" checked> تثبيت أفقي/رأسي</label>
         <span class="ft-settings-sep"></span>
         <button type="button" class="btn small ft-undo-btn" title="تراجع عن آخر شكل في الطبقة">↩️ تراجع</button>
         <button type="button" class="btn small ft-redo-btn" title="إعادة آخر شكل تم التراجع عنه">↪️ إعادة</button>
@@ -10937,6 +10948,8 @@ function nbFaultPanel(body, s, item){
       widthInput=drawToolbar.querySelector('.draw-width');
       fontInput=drawToolbar.querySelector('.draw-fontsize');
       fillInput=drawToolbar.querySelector('.draw-fill');
+      radiusInput=drawToolbar.querySelector('.draw-radius');
+      snapInput=drawToolbar.querySelector('.draw-snap');
       drawToolbar.querySelector('.ft-hint-btn').onclick=()=>toast('إصبع واحد: يرسم على الطبقة المختارة (أو يحرّك الصورة مع أداة 🖐) · إصبعان: تكبير/تصغير وتحريك دائمًا · اسحب دائرة الطبقة لنقلها في أي وقت، والمقبض الملوّن لتغيير حجم منطقة اللمس، ودبل كليك لفتح خصائصها · مربعات الكتابة يمكن سحبها لتحريكها بعد كتابتها.','ok',8000);
       drawToolbar.querySelector('.ft-delpage-btn').onclick=(e)=>{
         if(!nbArmConfirm(e.currentTarget,'اضغط تاني لتأكيد الحذف')) return;
@@ -10956,9 +10969,10 @@ function nbFaultPanel(body, s, item){
     const world=document.createElement('div'); world.className='ft-stage-world';
     const worldImg=document.createElement('img'); worldImg.className='ft-world-img'; worldImg.draggable=false; worldImg.alt='صورة تتبع الأعطال';
     const canvas=document.createElement('canvas'); canvas.className='ft-world-canvas';
+    const live=document.createElement('canvas'); live.className='ft-world-canvas ft-live-canvas'; live.style.pointerEvents='none';
     const textLayer=document.createElement('div'); textLayer.className='ft-text-layer';
     const markersLayer=document.createElement('div'); markersLayer.className='ft-markers-layer';
-    world.append(worldImg, canvas, textLayer, markersLayer);
+    world.append(worldImg, canvas, live, textLayer, markersLayer);
     viewport.appendChild(world);
     stageArea.appendChild(viewport);
     root.appendChild(stageArea);
@@ -10988,6 +11002,7 @@ function nbFaultPanel(body, s, item){
     let natW=0, natH=0, baseScale=1, zoomFactor=1, tx=0, ty=0;
     const zlevelEl=zoomCtrls.querySelector('.ft-zlevel');
     const ctx=canvas.getContext('2d');
+    const lctx=live.getContext('2d');
     const redoStacks=new Map();
     function clearRedo(layerId){ redoStacks.delete(layerId); }
 
@@ -11046,6 +11061,7 @@ function nbFaultPanel(body, s, item){
         const fs=sh.fontSize||18, w=Math.max(22,(sh.text||'').length*fs*.62);
         return p.x>=sh.x-tol && p.x<=sh.x+w+tol && p.y>=sh.y-tol && p.y<=sh.y+fs*1.35+tol;
       }
+      if(sh.type==='poly') return window.__FD?window.__FD.hit(sh,p,tol):false;
       if(sh.type==='freehand'){
         const pts=sh.points||[]; for(let i=1;i<pts.length;i++) if(pointSegDist(p.x,p.y,pts[i-1].x,pts[i-1].y,pts[i].x,pts[i].y)<=tol) return true;
         return pts.some(q=>Math.hypot(p.x-q.x,p.y-q.y)<=tol);
@@ -11069,13 +11085,13 @@ function nbFaultPanel(body, s, item){
       return null;
     }
     function moveShape(sh,dx,dy){
-      if(sh.type==='freehand'){ (sh.points||[]).forEach(p=>{p.x+=dx;p.y+=dy;}); return; }
+      if(sh.type==='freehand'||sh.type==='poly'){ (sh.points||[]).forEach(p=>{p.x+=dx;p.y+=dy;}); return; }
       if(sh.type==='text'){ sh.x+=dx; sh.y+=dy; return; }
       if('x1' in sh){ sh.x1+=dx; sh.y1+=dy; sh.x2+=dx; sh.y2+=dy; if(sh.type==='curve'){ sh.cx+=dx; sh.cy+=dy; } }
     }
     function drawSelectionOverlay(sh){
       ctx.save(); ctx.strokeStyle='#4da3ff'; ctx.fillStyle='rgba(77,163,255,.12)'; ctx.lineWidth=Math.max(2,2/currentScale()); ctx.setLineDash([6/currentScale(),4/currentScale()]);
-      if(sh.type==='freehand' && sh.points&&sh.points.length){ const xs=sh.points.map(p=>p.x),ys=sh.points.map(p=>p.y); ctx.strokeRect(Math.min(...xs)-5,currentScale()?Math.min(...ys)-5:0,Math.max(...xs)-Math.min(...xs)+10,Math.max(...ys)-Math.min(...ys)+10); }
+      if((sh.type==='freehand'||sh.type==='poly') && sh.points&&sh.points.length){ const xs=sh.points.map(p=>p.x),ys=sh.points.map(p=>p.y); ctx.strokeRect(Math.min(...xs)-5,currentScale()?Math.min(...ys)-5:0,Math.max(...xs)-Math.min(...xs)+10,Math.max(...ys)-Math.min(...ys)+10); }
       else if(sh.type==='text'){ const fs=sh.fontSize||18,w=Math.max(22,(sh.text||'').length*fs*.62); ctx.strokeRect(sh.x-4,sh.y-4,w+8,fs*1.35+8); }
       else if('x1' in sh){ const x=Math.min(sh.x1,sh.x2)-6,y=Math.min(sh.y1,sh.y2)-6,w=Math.abs(sh.x2-sh.x1)+12,h=Math.abs(sh.y2-sh.y1)+12; ctx.strokeRect(x,y,w,h); }
       ctx.restore();
@@ -11171,6 +11187,7 @@ function nbFaultPanel(body, s, item){
             if(activeLayerId===h.id) activeLayerId = page.hotspots[0]?page.hotspots[0].id:null;
             clearRedo(h.id);
             nbScheduleSave(item); redrawCanvas(); renderTextLabels(); renderMarkers(); renderLayersBar();
+            garbageCollectUnreferencedFiles().then(()=>requestFolderSync());
           };
           chip.append(eyeBtn, editBtnL, delBtnL);
         }
@@ -11183,7 +11200,7 @@ function nbFaultPanel(body, s, item){
           const rect=viewport.getBoundingClientRect();
           const c=screenToNatural(rect.left+rect.width/2, rect.top+rect.height/2);
           const w=Math.min(0.07, natW?60/natW:0.07), h=Math.min(0.07, natH?60/natH:0.07);
-          const nh={ id:uid('fths'), name:'طبقة '+(page.hotspots.length+1), x:Math.min(Math.max((c.x/natW)-w/2,0),1-w), y:Math.min(Math.max((c.y/natH)-h/2,0),1-h), w, h, shape:'circle', color:FT_LAYER_COLORS[page.hotspots.length % FT_LAYER_COLORS.length], visible:true, content:{title:'',note:'',images:[],drawing:{shapes:[]}} };
+          const nh={ id:uid('fths'), no:page.hotspots.reduce((m,x)=>Math.max(m,Number.isFinite(x&&x.no)?x.no:0),0)+1, name:'طبقة '+(page.hotspots.length+1), x:Math.min(Math.max((c.x/natW)-w/2,0),1-w), y:Math.min(Math.max((c.y/natH)-h/2,0),1-h), w, h, shape:'circle', color:FT_LAYER_COLORS[page.hotspots.length % FT_LAYER_COLORS.length], visible:true, content:{title:'',note:'',images:[],drawing:{shapes:[]}} };
           page.hotspots.push(nh);
           activeLayerId=nh.id;
           nbScheduleSave(item); renderMarkers(); renderLayersBar();
@@ -11326,8 +11343,64 @@ function nbFaultPanel(body, s, item){
       };
     }
 
+    /* ===== محرك الرسم: ماوس + لمس + قلم =====
+       - لوحة حيّة منفصلة للرسمة الجارية: أثناء السحب مابنعيدش رسم باقي الأشكال خالص.
+       - كل الحركات الدقيقة بتتلقط (getCoalescedEvents) وبنتوقّع شوية لقدّام (getPredictedEvents) للتاتش والقلم.
+       - إطار واحد لكل رسم (requestAnimationFrame) ومكان الصورة بيتحسب مرة واحدة أول اللمسة.
+       - زر الماوس الأوسط/اليمين = تحريك الصورة، وكف اليد (لمس أثناء القلم) بيتتجاهل، وإصبعين = تكبير. */
+    let wRect=null, wScale=1, liveRaf=0, penDown=false;
+    function capView(){ wRect=world.getBoundingClientRect(); wScale=currentScale(); }
+    function toNat(cx,cy){ return {x:(cx-wRect.left)/wScale, y:(cy-wRect.top)/wScale}; }
+    function clearLive(){ if(natW) lctx.clearRect(0,0,natW,natH); }
+    function paintLive(){
+      liveRaf=0; clearLive();
+      const ds=drawState; if(!ds||!ds.tool) return;
+      const col=ds.color, w=ds.width;
+      if(ds.tool==='pen'){
+        const pts=ds.pred&&ds.pred.length?ds.points.concat(ds.pred):ds.points;
+        nbDrawShape(lctx,{type:'freehand',points:pts,color:col,width:w});
+      } else if(ds.tool==='poly'){
+        const raw=ds.pred&&ds.pred.length?ds.points.concat(ds.pred):ds.points;
+        lctx.save(); lctx.globalAlpha=.28; nbDrawShape(lctx,{type:'freehand',points:raw,color:col,width:Math.max(1,w*.6)}); lctx.restore();
+        const sn=window.__FD.snap(raw,wScale,ds.opt);
+        nbDrawShape(lctx,{type:'poly',points:sn.points,closed:sn.closed,radius:ds.radius,color:col,width:w});
+      } else if(ds.start&&ds.cur){
+        nbDrawShape(lctx,nbBuildLiveShape(ds.tool,ds.start,ds.cur,col,w,ds.fill));
+      }
+    }
+    function scheduleLive(){ if(!liveRaf) liveRaf=requestAnimationFrame(paintLive); }
+    function cancelLive(){ if(liveRaf){ cancelAnimationFrame(liveRaf); liveRaf=0; } clearLive(); }
+    function commitShape(layer,ds){
+      const sc=wScale; let shape=null;
+      if(ds.tool==='pen'){
+        let pts=ds.points; if(pts.length===1) pts=[pts[0],{x:pts[0].x,y:pts[0].y}];
+        shape={type:'freehand',points:pts,color:ds.color,width:ds.width};
+      } else if(ds.tool==='poly'){
+        const sn=window.__FD.snap(ds.points,sc,ds.opt);
+        if(sn.points.length>=2) shape={type:'poly',points:sn.points,closed:sn.closed,radius:ds.radius,color:ds.color,width:ds.width,filled:!!(ds.fill&&sn.closed)};
+      } else if(ds.start&&ds.cur){
+        const s=nbBuildLiveShape(ds.tool,ds.start,ds.cur,ds.color,ds.width,ds.fill);
+        if(Math.abs(s.x2-s.x1)>2/sc || Math.abs(s.y2-s.y1)>2/sc) shape=s;
+      }
+      if(shape){ layer.content.drawing.shapes.push(shape); clearRedo(layer.id); nbScheduleSave(item); }
+    }
+    viewport.addEventListener('contextmenu',(e)=>{ if(mode==='edit') e.preventDefault(); });
+    /* منع السحب الأصلي للمتصفح وتحديد النص فوق منطقة الرسم — كانوا بيلغوا الرسمة (pointercancel) بعد أول حركة */
+    viewport.style.userSelect='none'; viewport.style.webkitUserSelect='none';
+    viewport.addEventListener('dragstart',(e)=>e.preventDefault());
+    viewport.addEventListener('selectstart',(e)=>e.preventDefault());
     viewport.addEventListener('pointerdown',(e)=>{
       if(e.target.closest('.ft-marker') || e.target.closest('.ft-zoom-controls') || e.target.closest('.ft-text-label') || e.target.classList.contains('ft-inline-text-input')) return;
+      if(e.pointerType==='mouse' && e.button!==0){
+        if(e.button===1||e.button===2){
+          e.preventDefault(); viewport.setPointerCapture(e.pointerId);
+          activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+          panDragMoved=false; drawState=null; cancelLive(); startPan(e.clientX,e.clientY);
+        }
+        return;
+      }
+      if(e.pointerType==='touch' && penDown) return;
+      if(e.pointerType==='pen') penDown=true;
       viewport.setPointerCapture(e.pointerId);
       activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
       panDragMoved=false;
@@ -11346,7 +11419,7 @@ function nbFaultPanel(body, s, item){
         }
         if(canDraw){
           const layer=activeLayerNow();
-          const pos=screenToNatural(e.clientX, e.clientY);
+          capView(); const pos=toNat(e.clientX, e.clientY);
           if(currentTool==='text'){
             askInlineText(pos,(txt)=>{
               layer.content.drawing.shapes.push({type:'text',x:pos.x,y:pos.y,text:txt,color:colorInput.value,fontSize:parseInt(fontInput.value,10)||18});
@@ -11355,36 +11428,41 @@ function nbFaultPanel(body, s, item){
             drawState=null; return;
           }
           if(currentTool==='eraser'){ drawState={erasing:true}; eraseNearActive(pos); return; }
-          drawState={ tool:currentTool, start:pos, points: currentTool==='pen'?[pos]:null };
-          return;
+          const ds={tool:currentTool,id:e.pointerId,start:pos,cur:pos,color:colorInput.value,width:parseInt(widthInput.value,10)||3,fill:fillInput.checked,points:null,pred:null};
+          if(currentTool==='pen'||currentTool==='poly'){ ds.points=[pos]; ds.minD=0.6/wScale; }
+          if(currentTool==='poly'){ ds.radius=(parseInt(radiusInput.value,10)||0)*Math.max(1,natW)/1000; ds.opt={snap:snapInput.checked}; }
+          drawState=ds; scheduleLive(); return;
         }
         startPan(e.clientX, e.clientY);
       } else if(activePointers.size===2){
-        drawState=null; panDragStart=null;
+        drawState=null; cancelLive(); panDragStart=null;
         const pts=Array.from(activePointers.values());
         viewport._pinchStartDist=ptDist(pts[0],pts[1]);
         viewport._pinchStartZoom=zoomFactor;
       }
     });
     viewport.addEventListener('pointermove',(e)=>{
-      if(!activePointers.has(e.pointerId)) return;
-      activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+      const ap=activePointers.get(e.pointerId); if(!ap) return;
+      ap.x=e.clientX; ap.y=e.clientY;
       if(activePointers.size===1 && drawState){
-        const pos=screenToNatural(e.clientX, e.clientY);
-        const layer=activeLayerNow(); if(!layer) return;
         if(drawState.selecting && drawState.shape){
+          const pos=screenToNatural(e.clientX, e.clientY);
           const dx=pos.x-drawState.last.x, dy=pos.y-drawState.last.y;
           moveShape(drawState.shape,dx,dy); drawState.last=pos;
           redrawCanvas(); renderTextLabels(); return;
         }
-        if(drawState.erasing){ eraseNearActive(pos); return; }
-        const width=parseInt(widthInput.value,10)||3;
-        redrawCanvas();
-        if(drawState.tool==='pen'){
-          drawState.points.push(pos);
-          nbDrawShape(ctx,{type:'freehand',points:drawState.points,color:colorInput.value,width});
-        } else {
-          nbDrawShape(ctx, nbBuildLiveShape(drawState.tool, drawState.start, pos, colorInput.value, width, fillInput.checked));
+        if(drawState.erasing){ eraseNearActive(screenToNatural(e.clientX, e.clientY)); return; }
+        if(drawState.tool && e.pointerId===drawState.id && wRect){
+          const ds=drawState, co=e.getCoalescedEvents?e.getCoalescedEvents():null, evs=(co&&co.length)?co:[e];
+          for(const ev of evs){
+            const p=toNat(ev.clientX,ev.clientY); ds.cur=p;
+            if(ds.points){ const lp=ds.points[ds.points.length-1]; if(Math.hypot(p.x-lp.x,p.y-lp.y)>=ds.minD) ds.points.push(p); }
+          }
+          ds.pred=null;
+          if(ds.points && e.pointerType!=='mouse' && e.getPredictedEvents){
+            const pe=e.getPredictedEvents(); if(pe&&pe.length) ds.pred=pe.slice(0,3).map(ev=>toNat(ev.clientX,ev.clientY));
+          }
+          scheduleLive();
         }
       } else if(activePointers.size===1 && panDragStart){
         movePan(e.clientX, e.clientY);
@@ -11404,25 +11482,24 @@ function nbFaultPanel(body, s, item){
       }
     });
     function releasePointer(e){
+      if(e.pointerType==='pen') penDown=false;
+      if(!activePointers.has(e.pointerId)) return;
       activePointers.delete(e.pointerId);
-      if(drawState && drawState.selecting){
+      const ds=drawState;
+      if(ds && ds.selecting){
         nbScheduleSave(item);
-      } else if(drawState && !drawState.erasing){
+      } else if(ds && ds.tool && e.pointerId===ds.id){
         const layer=activeLayerNow();
         if(layer){
-          const pos=screenToNatural(e.clientX, e.clientY);
-          const width=parseInt(widthInput.value,10)||3;
-          if(drawState.tool==='pen'){
-            if(drawState.points && drawState.points.length>1){ layer.content.drawing.shapes.push({type:'freehand',points:drawState.points,color:colorInput.value,width}); clearRedo(layer.id); nbScheduleSave(item); }
-          } else {
-            const shape=nbBuildLiveShape(drawState.tool, drawState.start, pos, colorInput.value, width, fillInput.checked);
-            if(Math.abs(shape.x2-shape.x1)>2/currentScale() || Math.abs(shape.y2-shape.y1)>2/currentScale()){ layer.content.drawing.shapes.push(shape); clearRedo(layer.id); nbScheduleSave(item); }
+          if(e.type!=='pointercancel' && wRect){
+            const p=toNat(e.clientX,e.clientY); ds.cur=p;
+            if(ds.points){ const lp=ds.points[ds.points.length-1]; if(Math.hypot(p.x-lp.x,p.y-lp.y)>=ds.minD) ds.points.push(p); }
           }
+          commitShape(layer,ds);
         }
       }
-      drawState=null;
-      panDragStart=null;
-      redrawCanvas();
+      drawState=null; panDragStart=null;
+      cancelLive(); redrawCanvas();
       if(activePointers.size===1){
         const entry=Array.from(activePointers.entries())[0];
         startPan(entry[1].x, entry[1].y);
@@ -11430,7 +11507,7 @@ function nbFaultPanel(body, s, item){
     }
     viewport.addEventListener('pointerup', releasePointer);
     viewport.addEventListener('pointercancel', releasePointer);
-    viewport.addEventListener('pointerleave',(e)=>{ if(activePointers.has(e.pointerId)) releasePointer(e); });
+    viewport.addEventListener('pointerleave',(e)=>{ if(activePointers.has(e.pointerId) && e.pointerType!=='mouse') releasePointer(e); });
     viewport.addEventListener('dblclick',(e)=>{
       if(e.target.closest('.ft-marker') || e.target.closest('.ft-text-label')) return;
       if(!isFullscreen){ isFullscreen=true; render(); return; }
@@ -11442,6 +11519,7 @@ function nbFaultPanel(body, s, item){
       natW=worldImg.naturalWidth; natH=worldImg.naturalHeight;
       worldImg.style.width=natW+'px'; worldImg.style.height=natH+'px';
       canvas.width=natW; canvas.height=natH; canvas.style.width=natW+'px'; canvas.style.height=natH+'px';
+      live.width=natW; live.height=natH; live.style.width=natW+'px'; live.style.height=natH+'px';
       textLayer.style.width=natW+'px'; textLayer.style.height=natH+'px';
       markersLayer.style.width=natW+'px'; markersLayer.style.height=natH+'px';
       zoomFactor=1;
@@ -11777,7 +11855,39 @@ const ext=n=>(/\.[A-Za-z0-9]{1,5}$/.exec(n||"")||[""])[0];
 const KINDS={images:1,docs:1,notebook:1,"fault-backgrounds":1,"fault-notes":1};
 const RT="بدون-مجموعة";
 /* مسار ملف العنصر: اسم مقروء (اسم العنصر + رقم) للصور المسمّاة تلقائيًا، وإلا المعرّف زي ما كان */
-function fpath(it,base,k,fid,name,used){const nm=window.__NM&&window.__NM.diskName?window.__NM.diskName(it,k,fid,name,used):null;return base+"/"+k+"/"+(nm||fid+ext(name))}
+function fpath(it,base,k,fid,name,used){
+  if((k==="fault-backgrounds"||k==="fault-notes")&&used){const T=used.__ft||(used.__ft=ftTree(it,base,null,true)),c=T.byFid.get(fid);
+    if(c){const nm=window.__NM&&window.__NM.diskName?window.__NM.diskName(it,c.dir,fid,name,used):null;return c.dir+"/"+(nm||fid+ext(name))}}
+  const nm=window.__NM&&window.__NM.diskName?window.__NM.diskName(it,k,fid,name,used):null;return base+"/"+k+"/"+(nm||fid+ext(name))}
+/* ---------- تتبع الأعطال: مجلد لكل صفحة (صورتها + page.json + مجلد لكل طبقة فيه layer.json وصورها) ---------- */
+function slugP(s){return String(s||"").replace(/[\\/:*?"<>|\u0000-\u001f]/g,"").trim().replace(/\s+/g,"-").replace(/-{2,}/g,"-").replace(/^[-.]+|[-.]+$/g,"").slice(0,40)||"بدون-اسم"}
+const pad2=n=>n<10?"0"+n:String(n);
+function ftTree(it,base,prev,settle){
+  const ft=it.notebookData&&it.notebookData.faultTracking,out={pages:[],byFid:new Map(),map:{}};
+  if(!ft||!Array.isArray(ft.pages))return out;
+  prev=prev||{};const usedP=new Set();
+  ft.pages.forEach((p,pi)=>{if(!p)return;
+    const no=Number.isFinite(p.no)?p.no:pi+1,pid=p.id||("p"+pi);
+    let pd=(!settle&&prev[pid]&&prev[pid].startsWith(base+"/fault-tracking/"))?prev[pid]:base+"/fault-tracking/"+pad2(no)+"-"+slugP(p.name||("صفحة-"+no));
+    if(usedP.has(pd))pd+="~"+String(pid).slice(-4);usedP.add(pd);out.map[pid]=pd;
+    const P={page:p,no,dir:pd,layers:[]};
+    if(p.imageId&&!out.byFid.has(p.imageId))out.byFid.set(p.imageId,{dir:pd});
+    const usedL=new Set();
+    (p.hotspots||[]).forEach((h,hi)=>{if(!h)return;
+      const hn=Number.isFinite(h.no)?h.no:hi+1,hid=(p.id||pi)+":"+(h.id||("h"+hi));
+      let ld=(!settle&&prev[hid]&&prev[hid].startsWith(pd+"/layers/"))?prev[hid]:pd+"/layers/"+pad2(hn)+"-"+slugP(h.name||("طبقة-"+hn));
+      if(usedL.has(ld))ld+="~"+String(h.id||hi).slice(-4);usedL.add(ld);out.map[hid]=ld;
+      P.layers.push({h,no:hn,dir:ld});
+      ((h.content&&h.content.images)||[]).forEach(x=>{if(x&&x.id&&!out.byFid.has(x.id))out.byFid.set(x.id,{dir:ld+"/images"})})});
+    out.pages.push(P)});
+  return out}
+function ftPageJson(P,base,files){const p=P.page,rel=f=>f&&files[f]?files[f].path.slice(base.length+1):null;
+  return{schema:1,kind:"fault-page",id:p.id||null,no:P.no,name:p.name||"",caption:p.caption||"",
+    background:p.imageId?{fileId:p.imageId,path:rel(p.imageId)}:null,
+    layers:P.layers.map(L=>({id:L.h.id||null,no:L.no,name:L.h.name||"",folder:L.dir.slice(P.dir.length+1),color:L.h.color||null,visible:L.h.visible!==false,shapes:((L.h.content&&L.h.content.drawing&&L.h.content.drawing.shapes)||[]).length,images:((L.h.content&&L.h.content.images)||[]).length}))}}
+function ftLayerJson(P,L,base,files){const h=L.h,c=h.content||{},rel=f=>f&&files[f]?files[f].path.slice(base.length+1):null;
+  return{schema:1,kind:"fault-layer",id:h.id||null,no:L.no,pageId:P.page.id||null,name:h.name||"",color:h.color||null,visible:h.visible!==false,shape:h.shape||"circle",x:h.x,y:h.y,w:h.w,h:h.h,
+    content:{title:c.title||"",note:c.note||"",images:(c.images||[]).map(x=>({id:x&&x.id,caption:(x&&x.caption)||"",path:rel(x&&x.id)})),drawing:{shapes:(c.drawing&&c.drawing.shapes)||[]}}}}
 /* ---------- طابور الحذف: أي ملف/مجلد قديم (صورة اتحذفت، اسم اتغيّر، عنصر/مجموعة اتحذفت) بيتسجّل في index.json وبيتمسح من القرص بعد ما الجديد يتكتب ---------- */
 function addTrash(idx,path,type,why){if(!idx||!path)return;idx.trash=idx.trash||[];
   if(idx.trash.some(t=>t.path===path&&t.type===type))return;
@@ -11790,7 +11900,7 @@ async function runTrash(idx){
   const sp=window.__SP,now=Date.now();let ch=false;
   const live=new Set();
   for(const g of Object.values(idx.groups||{}))live.add(g.path);
-  for(const e of Object.values(idx.items||{})){live.add(e.path);for(const f of Object.values(e.files||{}))live.add(f.path)}
+  for(const e of Object.values(idx.items||{})){live.add(e.path);for(const f of Object.values(e.files||{}))live.add(f.path);for(const pth of Object.keys(e.ft||{}))live.add(pth);for(const d of e.ftdirs||[])live.add(d)}
   for(const f of Object.values(idx.unassigned||{}))live.add(f.path);
   const la=[...live],keep=[];
   for(const t of idx.trash||[]){
@@ -11809,12 +11919,13 @@ async function audit(onP){
   const known=new Set(["index.json","meta.json"]),dirs=new Set();
   const anc=p=>{let i;while((i=p.lastIndexOf("/"))>0){p=p.slice(0,i);dirs.add(p)}};
   for(const g of Object.values(idx.groups)){known.add(g.path+"/group.json");anc(g.path+"/group.json")}
-  for(const e of Object.values(idx.items)){for(const n of["item.json","hashes.json"]){known.add(e.path+"/"+n);anc(e.path+"/"+n)}for(const f of Object.values(e.files||{})){known.add(f.path);anc(f.path)}}
+  for(const e of Object.values(idx.items)){for(const n of["item.json","hashes.json"]){known.add(e.path+"/"+n);anc(e.path+"/"+n)}for(const f of Object.values(e.files||{})){known.add(f.path);anc(f.path)}for(const pth of Object.keys(e.ft||{})){known.add(pth);anc(pth)}}
   for(const f of Object.values(idx.unassigned||{})){known.add(f.path);anc(f.path)}
   const res=[];let n=0;
+  const hasFiles=async d=>{for await(const[,x]of d.entries()){if(x.kind==="file"||await hasFiles(x))return true}return false};
   const walk=async(d,pre)=>{for await(const[name,hd]of d.entries()){const p=pre?pre+"/"+name:name;
     if(!pre&&name===".system")continue;
-    if(hd.kind==="directory"){if(!dirs.has(p)){res.push({path:p,type:"dir"})}else await walk(hd,p)}
+    if(hd.kind==="directory"){if(!dirs.has(p)){if(await hasFiles(hd))res.push({path:p,type:"dir"})}else await walk(hd,p)}
     else if(!known.has(p)){let size=0;try{size=(await hd.getFile()).size}catch(e){}res.push({path:p,type:"file",size})}
     if(onP&&++n%40===0)onP(n)}};
   await walk(E.h,"");return res}
@@ -11912,6 +12023,7 @@ async function syncItem(it,base,idx,W,force,ctx){
   const op=idx.items[it.id],po=op&&op.path===base?op:null,
     Eo={path:base,files:{},name:it.name,folderId:it.folderId||null},used={},stale=[];
   Eo.sha=await wt(base+"/item.json",JSON.stringify(it,null,2),po&&!force?po.sha:null,W,it.id);
+  used.__ft=ftTree(it,base,po&&po.ftmap,!!(force||ctx.scan));
   let fch=!po;
   for(const[fid,k]of refs(it)){
     if(Eo.files[fid])continue;
@@ -11928,6 +12040,13 @@ async function syncItem(it,base,idx,W,force,ctx){
       W.push({path:p,sha:s,size:rec.blob.size,blob:1,id:it.id});fch=true;
       if(pf&&pf.path&&pf.path!==p)stale.push([pf.path,"اسم الصورة اتغيّر"])}
     Eo.files[fid]={path:p,kind:k,size:rec.size,sha:s,upd:rec.updatedAt,name:rec.name,mime:rec.mime}}
+  { /* مجلد لكل صفحة تتبع أعطال: page.json + لكل طبقة layer.json */
+    const T=used.__ft;Eo.ft={};Eo.ftdirs=[];Eo.ftmap=T.map;
+    for(const P of T.pages){Eo.ftdirs.push(P.dir);
+      const pp=P.dir+"/page.json";Eo.ft[pp]=await wt(pp,JSON.stringify(ftPageJson(P,base,Eo.files),null,2),po&&po.ft&&!force?po.ft[pp]:null,W,it.id);
+      for(const Lr of P.layers){Eo.ftdirs.push(Lr.dir);
+        const lp=Lr.dir+"/layer.json";Eo.ft[lp]=await wt(lp,JSON.stringify(ftLayerJson(P,Lr,base,Eo.files),null,2),po&&po.ft&&!force?po.ft[lp]:null,W,it.id)}}
+    if(JSON.stringify(po&&po.ft||{})!==JSON.stringify(Eo.ft)||JSON.stringify(po&&po.ftdirs||[])!==JSON.stringify(Eo.ftdirs))ctx.c=true}
   if(!fch&&po&&JSON.stringify(po.files)!==JSON.stringify(Eo.files))fch=true;
   if(fch){await put(base+"/hashes.json",JSON.stringify(Eo.files,null,2));ctx.c=true}
   /* تنضيف: اللي اتشال من العنصر أو اتغيّر اسمه يتسجّل للحذف (بعد ما الجديد يتكتب واتأكد حجمه) */
@@ -11935,6 +12054,11 @@ async function syncItem(it,base,idx,W,force,ctx){
   for(const[op0,why]of stale)if(!keepP.has(op0)&&op0.startsWith(base+"/"))addTrash(idx,op0,"file",why);
   if(po){const rs=new Set(refs(it).map(x=>x[0]));
     for(const[fid,pf]of Object.entries(po.files||{}))if(!rs.has(fid)&&pf&&pf.path&&!keepP.has(pf.path))addTrash(idx,pf.path,"file","اتحذف من العنصر «"+(it.name||"")+"»")}
+  if(po&&po.ft){for(const pth of Object.keys(po.ft))if(!(pth in Eo.ft))addTrash(idx,pth,"file","صفحة أو طبقة تتبع أعطال اتحذفت أو اتنقلت")}
+  if(po&&po.ftdirs&&po.ftdirs.length&&!Eo.ftdirs.length)addTrash(idx,base+"/fault-tracking","dir","اتحذفت كل صفحات تتبع الأعطال")
+  if(po&&po.ftdirs){const nd=new Set(Eo.ftdirs);for(const d of po.ftdirs)if(!nd.has(d))addTrash(idx,d,"dir","مجلد صفحة أو طبقة تتبع أعطال اتحذف أو اتنقل")}
+  if(po){for(const kd of["fault-backgrounds","fault-notes"]){const pre=base+"/"+kd+"/";
+    if(Object.values(po.files||{}).some(x=>x&&x.path&&x.path.startsWith(pre))&&!Object.values(Eo.files).some(x=>x.path.startsWith(pre)))addTrash(idx,base+"/"+kd,"dir","اتنقلت ملفات تتبع الأعطال لمجلدات الصفحات")}}
   if(op&&op.path&&op.path!==base)addTrash(idx,op.path,"dir","عنصر «"+(it.name||"")+"» اتغيّر اسمه أو مجموعته");
   idx.items[it.id]=Eo}
 
@@ -11951,12 +12075,12 @@ async function pass(){
         if(E.idx){E.scan=false;await stamp(E.idx.savedAt)}
         return}
       E.idx={schema:2,savedAt:0,groups:{},items:{},unassigned:{},meta:null,trash:[]};E.scan=true}} // مجلد فاضي: نبدأ بفهرس فاضي ونكتب بالنظام الجديد
-  const idx=E.idx,items=state.items,W=[],t0=Date.now(),ctx={c:false},
+  const idx=E.idx,items=state.items,W=[],t0=Date.now(),ctx={c:false,scan:false},
     stateIds=new Set(items.map(i=>i.id));
   if(!items.length&&!state.folders.length&&Object.keys(idx.items).length&&!E.allowEmpty)return; // حماية من الحالة الفاضية المؤقتة
   const dItems=new Set(E.dirty),dFiles=new Set(E.dirtyFiles),doScan=E.scan,forced=new Set(E.force);
   E.dirty.clear();E.dirtyFiles.clear();E.scan=false;E.force.clear();
-  if(doScan)E.lastScan=Date.now();
+  if(doScan)E.lastScan=Date.now();ctx.scan=doScan;
   const sp=window.__SP;if(sp)sp.passStart({scan:doScan,items:items.length,dirtyItems:dItems.size,dirtyFiles:dFiles.size});
   let changed=false;const fails=[],extra=new Set();const trashN0=(idx.trash=idx.trash||[]).length;
   try{
@@ -12161,7 +12285,7 @@ window.__FS={
   addTrash(path,type,why){if(!E.idx)return false;addTrash(E.idx,path,type,why);schedule(0);return true},
   cancelTrash(path){if(!E.idx)return;E.idx.trash=(E.idx.trash||[]).filter(t=>t.path!==path);schedule(0)},
   retryTrash(path){if(!E.idx)return;for(const t of E.idx.trash||[])if(!path||t.path===path){delete t.err;delete t.at}schedule(0)},
-  plan(){if(!bind())return null;const idx=E.idx||{schema:2,items:{},groups:{},unassigned:{}},m=makePaths(idx);return{idx,gp:m.gp,itemPath:m.itemPath,refs,ext,RT,hasIdx:!!E.idx,diskPath:fpath}},
+  plan(){if(!bind())return null;const idx=E.idx||{schema:2,items:{},groups:{},unassigned:{}},m=makePaths(idx);return{idx,gp:m.gp,itemPath:m.itemPath,refs,ext,RT,hasIdx:!!E.idx,diskPath:fpath,ftTree}},
   info:{
     async idx(){ if(!bind())return null; if(!E.idx){try{E.idx=await loadIdx()}catch(e){}} return E.idx },
     handle:()=>bind()?E.h:null,
@@ -12311,6 +12435,12 @@ function buildRows(){
     {const dest=base?base+"/item.json":null,saved=!!(oe&&oe.path===base&&!S.staleItems[it.id]&&!(E&&E.dirty.has(it.id)));
       rows.push(finish({key:"j:"+it.id,kind:"json",fid:null,itemId:it.id,itemName:iname,gid,groupName:gn,name:"item.json",size:0,destPath:dest,base},saved,fe&&fe.msg))}
     const seen=new Set(),dused={};
+    const T=(P&&P.ftTree)?P.ftTree(it,base,oe&&oe.path===base?oe.ftmap:null,false):null;
+    if(T){dused.__ft=T;
+      const jrow=(pth,nm)=>{const saved=!!(oe&&oe.path===base&&oe.ft&&oe.ft[pth]!==undefined&&!S.staleItems[it.id]&&!(E&&E.dirty.has(it.id)));
+        rows.push(finish({key:"j:"+pth,kind:"json",fid:null,itemId:it.id,itemName:iname,gid,groupName:gn,name:nm,size:0,destPath:pth,base},saved,fe&&fe.msg))};
+      for(const Pg of T.pages){jrow(Pg.dir+"/page.json","page.json — "+(Pg.page.name||("صفحة "+Pg.no)));
+        for(const Lr of Pg.layers)jrow(Lr.dir+"/layer.json","layer.json — "+(Lr.h.name||("طبقة "+Lr.no)))}}
     for(const[fid,k]of refs(it)){
       if(seen.has(fid))continue;seen.add(fid);used.add(fid);
       const m=S.meta.get(fid),nm=(m&&m.name)||(it.docs||[]).find(d=>d&&d.fileId===fid)?.name||fid,
@@ -13786,6 +13916,87 @@ window.__NM={namer,renameItem,baseOf,on,setOn,fidsOf,diskName,normalizeItem,norm
     }catch(e){}};
   function H2(s){return String(s).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}
 })();
+})();
+</script>
+<script>
+/* ===== FaultDraw: مسار مستقيم بزوايا منحنية (رسم حر → خطوط مستقيمة + كرفات) =====
+   - snap(points, scale, opt): بيشيل الرعشة والنقاط الزايدة (RDP بتسامح يتكيّف مع حجم الرسمة: الرسم الصغير يحتفظ بتفاصيله)،
+     وبيدمج الأضلاع القصيرة والمتوازية، وبيثبّت الأفقي/الرأسي، وبيقفل الشكل لو آخره قرّب من أوله.
+   - drawPoly(ctx, shape): بيرسم الأضلاع المستقيمة وعند كل زاوية قوس نصف قطره shape.radius (بيتقصّ تلقائيًا لو الضلع أقصر). */
+(function(){"use strict";
+if(window.__FD)return;
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function segDist(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;if(!l2)return dist(p,a);let t=((p.x-a.x)*dx+(p.y-a.y)*dy)/l2;t=Math.max(0,Math.min(1,t));return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy))}
+function rdp(pts,eps){const n=pts.length;if(n<3)return pts.slice();const keep=new Uint8Array(n);keep[0]=keep[n-1]=1;const st=[[0,n-1]];
+  while(st.length){const[a,b]=st.pop();let md=0,mi=-1;for(let i=a+1;i<b;i++){const d=segDist(pts[i],pts[a],pts[b]);if(d>md){md=d;mi=i}}
+    if(mi>0&&md>eps){keep[mi]=1;st.push([a,mi],[mi,b])}}
+  return pts.filter((_,i)=>keep[i])}
+function turn(a,b,c){const v1x=b.x-a.x,v1y=b.y-a.y,v2x=c.x-b.x,v2y=c.y-b.y,l1=Math.hypot(v1x,v1y),l2=Math.hypot(v2x,v2y);if(!l1||!l2)return 0;
+  let k=(v1x*v2x+v1y*v2y)/(l1*l2);k=Math.max(-1,Math.min(1,k));return Math.acos(k)*180/Math.PI}
+function snap(raw,scale,opt){
+  opt=opt||{};scale=scale||1;
+  const out0={points:[],closed:false};
+  if(!raw||!raw.length)return out0;
+  const minD=1.2/scale,pts=[];
+  for(const p of raw){if(!pts.length||dist(p,pts[pts.length-1])>=minD)pts.push({x:p.x,y:p.y})}
+  const last=raw[raw.length-1];if(dist(last,pts[pts.length-1])>1e-6)pts.push({x:last.x,y:last.y});
+  if(pts.length<2)return{points:pts,closed:false};
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,plen=0;
+  for(let i=0;i<pts.length;i++){const p=pts[i];x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x);y1=Math.max(y1,p.y);if(i)plen+=dist(p,pts[i-1])}
+  const diagPx=Math.hypot(x1-x0,y1-y0)*scale,epsPx=Math.min(7,Math.max(1.6,diagPx*0.02));
+  let q=rdp(pts,epsPx/scale);
+  let closed=false;
+  const gap=dist(pts[0],pts[pts.length-1]);
+  if(q.length>=4&&gap<=Math.max(14/scale,plen*0.06)){closed=true;q.pop()}
+  const minSeg=(opt.minSegPx||7)/scale,minTurn=opt.minTurn==null?10:opt.minTurn;
+  let guard=0,ch=true;
+  while(ch&&guard++<400){ch=false;const n=q.length,segs=closed?n:n-1,floor=closed?3:2;
+    if(n>floor){
+      for(let i=0;i<segs;i++){const a=q[i],b=q[(i+1)%n];
+        if(dist(a,b)<minSeg){
+          let rm;
+          if(!closed&&i===0)rm=0;else if(!closed&&i===n-2)rm=n-1;
+          else{const ia=(i-1+n)%n,ib=(i+2)%n,ta=turn(q[ia],a,b),tb=turn(a,b,q[ib]);rm=ta<tb?i:(i+1)%n}
+          q.splice(rm,1);ch=true;break}}
+      if(ch)continue;
+      const lo=closed?0:1,hi=closed?n:n-1;
+      for(let i=lo;i<hi;i++){const a=q[(i-1+n)%n],b=q[i],c=q[(i+1)%n];
+        if(turn(a,b,c)<minTurn){q.splice(i,1);ch=true;break}}}}
+  if(opt.snap!==false&&q.length>=2){
+    const tol=(opt.snapDeg||7)*Math.PI/180,n=q.length,segs=closed?n-1:n-1;
+    for(let i=0;i<segs;i++){const a=q[i],b=q[i+1],dx=b.x-a.x,dy=b.y-a.y,ang=Math.atan2(Math.abs(dy),Math.abs(dx));
+      if(ang<tol)b.y=a.y;else if(ang>Math.PI/2-tol)b.x=a.x}}
+  const res=[];for(const p of q){if(!res.length||dist(p,res[res.length-1])>1e-6)res.push(p)}
+  if(closed&&res.length>1&&dist(res[0],res[res.length-1])<1e-6)res.pop();
+  return{points:res,closed:closed&&res.length>=3}}
+function cornerR(a,b,c,r){
+  const ux=a.x-b.x,uy=a.y-b.y,vx=c.x-b.x,vy=c.y-b.y,lu=Math.hypot(ux,uy),lv=Math.hypot(vx,vy);
+  if(!lu||!lv||r<=0)return 0;
+  let k=(ux*vx+uy*vy)/(lu*lv);k=Math.max(-1,Math.min(1,k));
+  const tan=Math.sqrt((1-k)/(1+k+1e-9));
+  return Math.min(r,Math.min(lu,lv)/2*tan)}
+function drawPoly(ctx,sh){
+  const P=sh.points;if(!P||P.length<2)return;
+  const r=Math.max(0,+sh.radius||0),n=P.length,closed=!!sh.closed&&n>=3;
+  ctx.beginPath();
+  if(!closed){
+    ctx.moveTo(P[0].x,P[0].y);
+    for(let i=1;i<n-1;i++){const rr=cornerR(P[i-1],P[i],P[i+1],r);if(rr>0)ctx.arcTo(P[i].x,P[i].y,P[i+1].x,P[i+1].y,rr);else ctx.lineTo(P[i].x,P[i].y)}
+    ctx.lineTo(P[n-1].x,P[n-1].y);ctx.stroke()}
+  else{
+    const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2}),m0=mid(P[n-1],P[0]);
+    ctx.moveTo(m0.x,m0.y);
+    for(let i=0;i<n;i++){const v=P[i],nx=P[(i+1)%n],pv=P[(i-1+n)%n],rr=cornerR(pv,v,nx,r),m=mid(v,nx);
+      if(rr>0)ctx.arcTo(v.x,v.y,m.x,m.y,rr);else{ctx.lineTo(v.x,v.y);ctx.lineTo(m.x,m.y)}}
+    ctx.closePath();if(sh.filled)ctx.fill();else ctx.stroke()}}
+function hit(sh,p,tol){const P=sh.points||[];
+  for(let i=1;i<P.length;i++)if(segDist(p,P[i-1],P[i])<=tol)return true;
+  if(sh.closed&&P.length>2&&segDist(p,P[P.length-1],P[0])<=tol)return true;
+  return P.some(q=>dist(p,q)<=tol)}
+function refPoints(sh){const P=sh.points||[],out=P.slice();
+  const add=(a,b)=>{const n=Math.floor(dist(a,b)/30);for(let k=1;k<=n;k++){const t=k/(n+1);out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t})}};
+  for(let i=1;i<P.length;i++)add(P[i-1],P[i]);if(sh.closed&&P.length>2)add(P[P.length-1],P[0]);return out}
+window.__FD={snap,drawPoly,hit,refPoints,rdp,cornerR};
 })();
 </script>
 <script>
