@@ -14619,12 +14619,39 @@ function pickFileThen(cb){
   };
   document.body.appendChild(inp); inp.click();
 }
+/* منتقي مجلد خاص بالميزة (الأصلي داخل نطاق مغلق فمش متاح من برّه) */
+function pickFolder(opts){
+  const rows = [];
+  (function walk(pid, depth){ getChildFolders(pid).forEach(f=>{ rows.push({f, depth}); walk(f.id, depth+1); }); })(null, 0);
+  let html = "";
+  if(opts.allowRoot) html += `<div class="fp-row" data-id="__root__"><span class="fp-ico">🏠</span><span class="fp-name">(المستوى الرئيسي — بدون مجلد أب)</span></div>`;
+  html += rows.map(r=>`<div class="fp-row" data-id="${esc(r.f.id)}" style="padding-right:${r.depth*18+12}px"><span class="fp-ico">${esc(r.f.icon||"📁")}</span><span class="fp-name">${esc(r.f.name)}</span></div>`).join("");
+  if(!html) html = '<div style="padding:14px;color:var(--dim2)">لا توجد مجلدات — اعمل مجلد الأول</div>';
+  openModalShell(`
+    <div class="modal-head"><h2>${esc(opts.title)}</h2><button class="modal-close" id="pkgPickClose">✕</button></div>
+    <div class="modal-body">
+      <input id="pkgPickSearch" placeholder="ابحث عن مجلد..." style="margin-bottom:10px;width:100%;box-sizing:border-box;">
+      <div class="fp-list">${html}</div>
+    </div>
+    <div class="modal-foot"><div class="left"></div><div class="right"><button class="btn" id="pkgPickCancel">إلغاء</button></div></div>`, false);
+  document.getElementById("pkgPickClose").onclick = closeModal;
+  document.getElementById("pkgPickCancel").onclick = closeModal;
+  document.querySelectorAll(".fp-row[data-id]").forEach(row=>{
+    row.onclick = ()=>{ const id = row.dataset.id; closeModal(); opts.onPick(id==="__root__" ? null : id); };
+  });
+  document.getElementById("pkgPickSearch").addEventListener("input", e=>{
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll(".fp-row[data-id]").forEach(row=>{
+      const n = row.querySelector(".fp-name"); row.style.display = (!q || (n && n.textContent.toLowerCase().includes(q))) ? "" : "none";
+    });
+  });
+}
 /* destFolderId: مجلد محدد (من شاشة المجلد) — أو undefined عشان يسأل المستخدم */
 function startImport(destFolderId){
   pickFileThen((file, pk)=>{
     if(destFolderId!==undefined){ runImport(pk, destFolderId); return; }
     const isItem = pk.man.scope==="item";
-    openFolderPickerModal({
+    pickFolder({
       title: isItem ? `اختر المجلد اللي هيتحط فيه العنصر «${pk.man.label||""}»` : `اختر مكان المجلد «${pk.man.label||""}»`,
       allowRoot: !isItem,
       onPick: id => runImport(pk, id)
