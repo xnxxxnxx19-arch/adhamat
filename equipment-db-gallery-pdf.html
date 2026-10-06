@@ -14346,5 +14346,344 @@ const nl=document.querySelector(".navlist"),a=nl&&nl.querySelector('[data-nav="a
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
 </script>
+<script id="pkg-export-import">
+/* =========================================================
+   حزمة عنصر / مجلد — تصدير واستيراد كامل بدون أي تعديل
+   - التصدير: السجل نفسه كما هو (JSON) + كل الملفات الأصلية (صور، مستندات،
+     صور دفتر الملاحظات، صور تتبع الأعطال، أي مرجع ملف في أي مكان داخل العنصر)
+     بنفس الاسم والنوع والحجم، + مواصفات الفئة وقالب الحقول.
+   - الاستيراد: بيتضاف كنسخة جديدة (معرّفات جديدة داخليًا مع إعادة ربط كل
+     المراجع تلقائيًا) — مفيش أي حاجة موجودة عندك بتتغير أو بتتكتب فوقها،
+     ومفيش إعادة تسمية صور ولا تعديل تواريخ ولا ترتيب.
+   ========================================================= */
+(function(){
+"use strict";
+if(window.__PKG) return;
+
+const PKG_KIND = "eqdb-package";
+const PKG_VERSION = 1;
+const TOK = /[A-Za-z0-9_]+/g;
+const EMB_FILE = /file_[a-z0-9]+/g;
+const EMB_ANY = /(?:fld|itm|file)_[a-z0-9]+/g;
+
+const clone = v => JSON.parse(JSON.stringify(v));
+const stamp = () => new Date().toISOString().slice(0,10);
+const say = (m,t,ms) => { try{ toast(m,t,ms); }catch(e){ console.log(m); } };
+
+/* ---------- أدوات المراجع ---------- */
+function allFileIds(){
+  if(STORAGE_MODE==="memory") return Promise.resolve(new Set(memoryDB.files.keys()));
+  return new Promise((ok,no)=>{
+    const q = db.transaction("files").objectStore("files").getAllKeys();
+    q.onsuccess = ()=> ok(new Set(q.result||[]));
+    q.onerror = ()=> no(q.error);
+  });
+}
+function scanStr(s, set, out){
+  if(!s || s.startsWith("data:")) return;
+  const a = s.match(TOK);
+  if(a) for(const t of a) if(set.has(t)) out.add(t);
+  if(s.indexOf("file_")>-1){ const b = s.match(EMB_FILE); if(b) for(const t of b) if(set.has(t)) out.add(t); }
+}
+function scan(v, set, out){
+  if(typeof v==="string") return scanStr(v,set,out);
+  if(Array.isArray(v)){ for(const x of v) scan(x,set,out); return; }
+  if(v && typeof v==="object"){ for(const k of Object.keys(v)){ scanStr(k,set,out); scan(v[k],set,out); } }
+}
+function remapStr(s, map){
+  if(!s || s.startsWith("data:")) return s;
+  let r = s.replace(TOK, t => map.get(t) || t);
+  if(r.indexOf("_")>-1) r = r.replace(EMB_ANY, t => map.get(t) || t);
+  return r;
+}
+function remap(v, map){
+  if(typeof v==="string") return remapStr(v,map);
+  if(Array.isArray(v)) return v.map(x=>remap(x,map));
+  if(v && typeof v==="object"){
+    const o = {};
+    for(const k of Object.keys(v)) o[remapStr(k,map)] = remap(v[k],map);
+    return o;
+  }
+  return v;
+}
+function folderChain(folderId){
+  const names = []; let f = getFolder(folderId), guard = 0;
+  while(f && guard++<50){ names.unshift(f.name); f = f.parentId ? getFolder(f.parentId) : null; }
+  return names;
+}
+function subtreeFolders(rootId){
+  const out = []; const root = getFolder(rootId); if(!root) return out;
+  const q = [root];
+  while(q.length){ const f = q.shift(); out.push(f); getChildFolders(f.id).forEach(c=>q.push(c)); }
+  return out;
+}
+function download(blob, name){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- التصدير ---------- */
+async function build(scope, folders, items, ctx, label){
+  const zip = new JSZip();
+  const fileIdSet = await allFileIds();
+  const used = new Set();
+  scan(folders, fileIdSet, used);
+  scan(items, fileIdSet, used);
+
+  const filesMeta = [];
+  let bytes = 0;
+  for(const id of used){
+    const rec = await idbGet("files", id);
+    if(!rec || !rec.blob) continue;
+    const meta = Object.assign({}, rec); delete meta.blob;
+    meta.blobType = rec.blob.type || "";
+    meta.path = "files/" + id;
+    zip.file(meta.path, rec.blob, {compression:"STORE"});
+    bytes += rec.blob.size || 0;
+    filesMeta.push(meta);
+  }
+
+  const cats = {categories:[], categorySchemas:{}};
+  for(const c of new Set(items.map(i=>i.category).filter(Boolean))){
+    if((state.categories||[]).includes(c)){
+      cats.categories.push(c);
+      cats.categorySchemas[c] = clone(state.categorySchemas[c] || {description:"", specs:[]});
+    }
+  }
+
+  const manifest = {
+    kind: PKG_KIND, version: PKG_VERSION, app: "workshop-equipment-db",
+    scope, label, exportedAt: new Date().toISOString(),
+    rootFolderId: scope==="folder" ? folders[0].id : null,
+    rootItemId: scope==="item" ? items[0].id : null,
+    counts: {folders: folders.length, items: items.length, files: filesMeta.length, bytes}
+  };
+  zip.file("package/manifest.json", JSON.stringify(manifest,null,2));
+  zip.file("package/folders.json", JSON.stringify(folders));
+  zip.file("package/items.json", JSON.stringify(items));
+  zip.file("package/files.json", JSON.stringify(filesMeta));
+  zip.file("package/categories.json", JSON.stringify(cats));
+  zip.file("package/context.json", JSON.stringify(ctx||{}));
+  return {blob: await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:3}}), manifest};
+}
+
+async function exportItem(itemId){
+  const it = state.items.find(i=>i.id===itemId); if(!it) return;
+  say("جارٍ تجهيز حزمة العنصر...");
+  try{
+    const ctx = {fieldsTemplate: clone(getEffectiveFieldTemplate(it.folderId)||[]), folderPath: folderChain(it.folderId)};
+    const {blob, manifest} = await build("item", [], [clone(it)], ctx, it.name||"عنصر");
+    download(blob, `eqdb-item-${safeFileName(it.name||"item").slice(0,60)}-${stamp()}.zip`);
+    say(`تم تصدير العنصر بكل تفاصيله (${manifest.counts.files} ملف)`, "ok");
+    try{ logActivity("export",{entity:"item",entityId:it.id,entityLabel:it.name||it.id,summary:`تصدير حزمة عنصر: ${it.name||it.id}`}); }catch(e){}
+  }catch(err){ console.error(err); say("فشل التصدير: "+(err.message||err),"err"); }
+}
+async function exportFolder(folderId){
+  const root = getFolder(folderId); if(!root) return;
+  say("جارٍ تجهيز حزمة المجلد...");
+  try{
+    const fl = subtreeFolders(folderId), ids = new Set(fl.map(f=>f.id));
+    const its = state.items.filter(i=>ids.has(i.folderId));
+    const ctx = {folderPath: folderChain(root.parentId)};
+    const {blob, manifest} = await build("folder", clone(fl), clone(its), ctx, root.name||"مجلد");
+    download(blob, `eqdb-folder-${safeFileName(root.name||"folder").slice(0,60)}-${stamp()}.zip`);
+    say(`تم تصدير المجلد: ${manifest.counts.folders} مجلد، ${manifest.counts.items} عنصر، ${manifest.counts.files} ملف`, "ok", 4000);
+    try{ logActivity("export",{entity:"folder",entityId:root.id,entityLabel:root.name||root.id,summary:`تصدير حزمة مجلد: ${root.name||root.id} (${its.length} عنصر)`}); }catch(e){}
+  }catch(err){ console.error(err); say("فشل التصدير: "+(err.message||err),"err"); }
+}
+
+/* ---------- الاستيراد ---------- */
+async function readJson(zip, path, required){
+  const e = zip.file(path);
+  if(!e){ if(required) throw new Error("الحزمة ناقصة: "+path+" مفقود."); return null; }
+  try{ return JSON.parse(await e.async("string")); }
+  catch(x){ throw new Error("الملف "+path+" تالف."); }
+}
+async function openPackage(file){
+  let zip;
+  try{ zip = await JSZip.loadAsync(file); }catch(e){ throw new Error("الملف ده مش ZIP صالح."); }
+  if(!zip.file("package/manifest.json")){
+    if(zip.file("project/manifest.json")) throw new Error("ده ملف «نسخة كاملة» — استورده من زر «استيراد من ملف ZIP» في الإعدادات.");
+    throw new Error("الملف ده مش حزمة عنصر/مجلد من البرنامج ده.");
+  }
+  const man = await readJson(zip, "package/manifest.json", true);
+  if(man.kind!==PKG_KIND) throw new Error("نوع الحزمة غير معروف.");
+  if(Number(man.version)>PKG_VERSION) throw new Error("الحزمة دي من نسخة أحدث من البرنامج.");
+  return {zip, man};
+}
+async function mergeTemplate(destFolderId, tpl){
+  if(!Array.isArray(tpl) || !tpl.length) return 0;
+  const have = new Set((getEffectiveFieldTemplate(destFolderId)||[]).map(f=>f.id));
+  const missing = tpl.filter(f=>f && f.id && !have.has(f.id));
+  if(!missing.length) return 0;
+  let prov = getFolder(destFolderId), p = prov, guard = 0;
+  while(p && guard++<50){ if(p.fieldsTemplate && p.fieldsTemplate.length){ prov = p; break; } p = p.parentId ? getFolder(p.parentId) : null; }
+  prov.fieldsTemplate = (prov.fieldsTemplate||[]).concat(clone(missing));
+  await saveAndFlag("folders", prov);
+  return missing.length;
+}
+async function runImport(pk, destFolderId){
+  const {zip, man} = pk;
+  const made = {files:[], folders:[], items:[]};
+  const rep = {files:0, filesMissing:[], folders:0, items:0, cats:0, fields:0};
+  try{
+    say("جارٍ الاستيراد...");
+    const folders = (await readJson(zip,"package/folders.json",true)) || [];
+    const items = (await readJson(zip,"package/items.json",true)) || [];
+    const filesMeta = (await readJson(zip,"package/files.json",true)) || [];
+    const cats = await readJson(zip,"package/categories.json",false);
+    const ctx = (await readJson(zip,"package/context.json",false)) || {};
+    if(man.scope==="item" && !destFolderId) throw new Error("لازم تختار مجلد يتحط فيه العنصر.");
+
+    const map = new Map();
+    folders.forEach(f=>map.set(f.id, uid("fld")));
+    items.forEach(i=>map.set(i.id, uid("itm")));
+
+    /* 1) الملفات: نفس السجل بالظبط (الاسم/النوع/الحجم/التاريخ) بمعرّف جديد */
+    for(const m of filesMeta){
+      const e = zip.file(m.path || ("files/"+m.id));
+      if(!e){ rep.filesMissing.push(m.name||m.id); continue; }
+      const raw = await e.async("blob");
+      const blob = new Blob([raw], {type: m.blobType || m.mime || ""});
+      const rec = Object.assign({}, m); delete rec.path; delete rec.blobType;
+      const nid = uid("file");
+      rec.id = nid; rec.blob = blob;
+      await idbPut("files", rec);
+      made.files.push(nid); map.set(m.id, nid); rep.files++;
+    }
+
+    /* 2) الفئات: أي فئة مش موجودة عندك تتضاف بمواصفاتها، والموجودة تفضل زي ما هي */
+    if(cats && Array.isArray(cats.categories)){
+      cats.categories.forEach(c=>{
+        if(!state.categories.includes(c)){
+          state.categories.push(c);
+          state.categorySchemas[c] = (cats.categorySchemas||{})[c] || {description:"", specs:[]};
+          rep.cats++;
+        }
+      });
+      if(rep.cats) await saveCategoryMeta();
+    }
+
+    /* 3) المجلدات (الأب قبل الابن) */
+    const newFolders = folders.map(f=>remap(f,map));
+    const rootNewId = man.rootFolderId ? map.get(man.rootFolderId) : null;
+    for(const nf of newFolders){
+      if(nf.id===rootNewId) nf.parentId = destFolderId || null;
+      await idbPut("folders", nf);
+      made.folders.push(nf.id); state.folders.push(nf); rep.folders++;
+    }
+    if(destFolderId) state.expandedFolders.add(destFolderId);
+
+    /* 4) العناصر */
+    if(man.scope==="item") rep.fields = await mergeTemplate(destFolderId, ctx.fieldsTemplate);
+    for(const it of items){
+      const ni = remap(it,map);
+      if(man.scope==="item") ni.folderId = destFolderId;
+      await idbPut("items", ni);
+      made.items.push(ni.id); state.items.push(ni); rep.items++;
+    }
+
+    renderSidebarTree();
+    if(man.scope==="folder" && rootNewId) navigateTo({type:"folder", id:rootNewId});
+    else if(man.scope==="item" && made.items[0]) navigateTo({type:"item", id:made.items[0]});
+    else navigateTo({type:"home"});
+
+    const msg = [`تم استيراد «${man.label||""}» كما هو: ${rep.items} عنصر${rep.folders?`، ${rep.folders} مجلد`:""}، ${rep.files} ملف`];
+    if(rep.cats) msg.push(`+ ${rep.cats} فئة جديدة بمواصفاتها`);
+    if(rep.fields) msg.push(`+ ${rep.fields} حقل اتضاف لقالب المجلد عشان بيانات العنصر تظهر`);
+    if(rep.filesMissing.length) msg.push(`⚠️ ${rep.filesMissing.length} ملف ناقص من الحزمة`);
+    say(msg.join("\n"), rep.filesMissing.length?"err":"ok", 7000);
+    try{ logActivity("import",{entity:"system",entityId:"import_"+Date.now(),entityLabel:"استيراد حزمة "+(man.scope==="item"?"عنصر":"مجلد"),summary:`استيراد «${man.label||""}»: ${rep.items} عنصر، ${rep.folders} مجلد، ${rep.files} ملف`}); scheduleActivityLogSyncSoon(); }catch(e){}
+  }catch(err){
+    console.error(err);
+    /* تراجع كامل: مفيش استيراد نصفه */
+    for(const id of made.items){ try{ await idbDelete("items",id); }catch(e){} }
+    for(const id of made.folders){ try{ await idbDelete("folders",id); }catch(e){} }
+    for(const id of made.files){ try{ await idbDelete("files",id); }catch(e){} }
+    const si = new Set(made.items), sf = new Set(made.folders);
+    state.items = state.items.filter(i=>!si.has(i.id));
+    state.folders = state.folders.filter(f=>!sf.has(f.id));
+    try{ renderSidebarTree(); }catch(e){}
+    say("فشل الاستيراد (ومفيش حاجة اتغيرت): "+(err.message||err),"err",7000);
+  }
+}
+function pickFileThen(cb){
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = ".zip,application/zip"; inp.style.display = "none";
+  inp.onchange = async ()=>{
+    const f = inp.files && inp.files[0]; inp.remove(); if(!f) return;
+    try{ cb(f, await openPackage(f)); }
+    catch(err){ say(err.message||String(err),"err",6000); }
+  };
+  document.body.appendChild(inp); inp.click();
+}
+/* destFolderId: مجلد محدد (من شاشة المجلد) — أو undefined عشان يسأل المستخدم */
+function startImport(destFolderId){
+  pickFileThen((file, pk)=>{
+    if(destFolderId!==undefined){ runImport(pk, destFolderId); return; }
+    const isItem = pk.man.scope==="item";
+    openFolderPickerModal({
+      title: isItem ? `اختر المجلد اللي هيتحط فيه العنصر «${pk.man.label||""}»` : `اختر مكان المجلد «${pk.man.label||""}»`,
+      allowRoot: !isItem,
+      onPick: id => runImport(pk, id)
+    });
+  });
+}
+
+/* ---------- الأزرار ---------- */
+const _renderItemDetail = renderItemDetail;
+renderItemDetail = async function(c, itemId){
+  await _renderItemDetail(c, itemId);
+  const actions = c.querySelector(".view-actions");
+  if(actions && !actions.querySelector("#pkgExportItemBtn")){
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn small"; b.id = "pkgExportItemBtn";
+    b.textContent = "📤 تصدير العنصر";
+    b.onclick = ()=> exportItem(itemId);
+    const edit = actions.querySelector("#editItemBtn");
+    actions.insertBefore(b, edit || null);
+  }
+};
+const _renderFolderView = renderFolderView;
+renderFolderView = function(c, folderId){
+  _renderFolderView(c, folderId);
+  const actions = c.querySelector(".view-actions");
+  if(!actions || actions.querySelector("#pkgExportFolderBtn")) return;
+  const ex = document.createElement("button");
+  ex.type = "button"; ex.className = "btn small"; ex.id = "pkgExportFolderBtn";
+  ex.textContent = "📤 تصدير المجلد";
+  ex.onclick = ()=> exportFolder(folderId);
+  const im = document.createElement("button");
+  im.type = "button"; im.className = "btn small"; im.id = "pkgImportFolderBtn";
+  im.textContent = "📥 استيراد هنا";
+  im.onclick = ()=> startImport(folderId);
+  const edit = actions.querySelector("#editFolderBtn");
+  actions.insertBefore(ex, edit || null);
+  actions.insertBefore(im, edit || null);
+};
+const _renderSettingsView = renderSettingsView;
+renderSettingsView = async function(c){
+  await _renderSettingsView(c);
+  if(c.querySelector("#pkgPanel")) return;
+  const panel = document.createElement("div");
+  panel.className = "panel"; panel.id = "pkgPanel";
+  panel.innerHTML = `
+    <h3>🧩 حزمة عنصر / مجلد</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn primary" id="pkgImportBtn">📥 استيراد حزمة عنصر أو مجلد</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--dim2);line-height:1.8">التصدير من زر «📤 تصدير العنصر» داخل العنصر، أو «📤 تصدير المجلد» داخل المجلد (بكل المجلدات الفرعية). الحزمة بتشمل كل التفاصيل والصور والمستندات ودفتر الملاحظات بنفس شكلها بالظبط، والاستيراد بيضيف نسخة جديدة من غير ما يغيّر أي حاجة موجودة عندك.</div>`;
+  const anchor = c.querySelector("#exportBtn");
+  const host = anchor && anchor.closest(".panel");
+  if(host) host.insertAdjacentElement("afterend", panel); else c.appendChild(panel);
+  panel.querySelector("#pkgImportBtn").onclick = ()=> startImport(undefined);
+};
+
+window.__PKG = {exportItem, exportFolder, startImport, runImport, openPackage, build, remap, scan};
+})();
+
+</script>
 </body>
 </html>
