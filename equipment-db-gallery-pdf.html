@@ -11298,11 +11298,18 @@ function nbFaultPanel(body, s, item){
       input.style.left=pos.x+'px'; input.style.top=pos.y+'px';
       input.style.fontSize=fsz+'px';
       input.style.color=colorInput.value;
-      world.appendChild(input); input.focus();
-      function finish(commit){ const val=input.value.trim(); input.remove(); if(commit&&val) onDone(val); }
+      world.appendChild(input);
+      let finished=false;
+      const createdAt=Date.now();
+      function finish(commit){ if(finished) return; finished=true; const val=input.value.trim(); input.remove(); if(commit&&val) onDone(val); }
       input.addEventListener('pointerdown',(e)=>e.stopPropagation());
       input.addEventListener('keydown',(e)=>{ e.stopPropagation(); if(e.key==='Enter') finish(true); if(e.key==='Escape') finish(false); });
-      input.addEventListener('blur',()=>finish(true));
+      input.addEventListener('blur',()=>{
+        // بالماوس: حدث mousedown التالي لـ pointerdown يسحب الفوكس فيغلق الحقل فورًا؛ نعيد الفوكس بدل الإغلاق
+        if(!finished && Date.now()-createdAt<400){ setTimeout(()=>{ if(!finished) input.focus(); },0); return; }
+        finish(true);
+      });
+      setTimeout(()=>{ if(!finished) input.focus(); },0);
     }
     function eraseNearActive(pos){
       const layer=activeLayerNow(); if(!layer) return;
