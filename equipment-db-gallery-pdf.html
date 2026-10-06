@@ -14712,5 +14712,256 @@ window.__PKG = {exportItem, exportFolder, startImport, runImport, openPackage, b
 })();
 
 </script>
+<script id="deep-search">
+/* =========================================================
+   البحث الشامل — زرار بجانب خانة البحث: لما يتفعّل بيبحث في كل النصوص
+   داخل البرنامج (العناصر بكل حقولها وملاحظاتها ودفتر الملاحظات وتتبع الأعطال
+   والمستندات والروابط والوسوم، والمجلدات ووصفها وقوالب حقولها، والفئات)
+   ويعرض مكان الكلمة مع مقتطف مظلّل. للقراءة فقط — مابيعدّلش أي بيانات.
+   ========================================================= */
+(function(){
+"use strict";
+if(window.__DEEP) return;
+
+const AR_DIAC = /[\u064B-\u065F\u0670\u0640\u06D6-\u06ED]/g;
+function nrmChar(ch){
+  if(AR_DIAC.test(ch)){ AR_DIAC.lastIndex = 0; return ""; }
+  AR_DIAC.lastIndex = 0;
+  const c = ch.charCodeAt(0);
+  if(c>=0x660 && c<=0x669) return String(c-0x660);
+  if(c>=0x6F0 && c<=0x6F9) return String(c-0x6F0);
+  switch(ch){
+    case "أ": case "إ": case "آ": case "ٱ": return "ا";
+    case "ى": case "ئ": return "ي";
+    case "ة": return "ه";
+    case "ؤ": return "و";
+  }
+  return ch.toLowerCase();
+}
+function nrm(s){ let o=""; for(const ch of s) o += nrmChar(ch); return o; }
+function nrmMap(s){            /* نص مطبّع + خريطة لموضع كل حرف في النص الأصلي */
+  let t="", idx=[], i=0;
+  for(const ch of s){
+    const n = nrmChar(ch);
+    for(let k=0;k<n.length;k++){ t += n[k]; idx.push(i); }
+    i += ch.length;
+  }
+  return {t, idx};
+}
+
+/* ---------- استخراج النصوص ---------- */
+const SKIP_KEY = /^(id|ids|color|icon|order|columns|createdAt|updatedAt|path|size|showInCard|mime|blobType|svg|strokes|points|d|dataUrl|thumb|thumbnail|x|y|w|h|width|height|zoom|scale)$|(Id|Ids|At)$/;
+const NESTED_SKIP = /^(type|kind|shape|align|layout|mode)$/;
+const ID_LIKE = /^(?:file|itm|fld|doc|img|tmp)_[a-z0-9]+$/i;
+const LABELS = {name:"الاسم",model:"الموديل",manufacturer:"الشركة",serial:"الرقم التسلسلي",partNumber:"رقم القطعة",type:"النوع",status:"الحالة",
+  notes:"الملاحظات",tags:"الوسوم",category:"الفئة",docs:"المستندات",links:"الروابط",indicators:"المؤشرات",description:"الوصف",fieldsTemplate:"قالب الحقول"};
+const NB_LABELS = {faultTracking:"تتبع الأعطال", images:"صور الدفتر", pages:"صفحات الدفتر"};
+
+function plain(s){
+  if(/<[a-z!\/][^>]*>/i.test(s)){
+    s = s.replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr)\s*\/?>/gi,"\n").replace(/<[^>]+>/g," ");
+    s = s.replace(/&nbsp;/g," ").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,"&");
+  }
+  return s.replace(/[ \t\u00A0]+/g," ").replace(/\n\s*\n+/g,"\n").trim();
+}
+function labelFor(it, path){
+  const top = path[0];
+  if(top==="fields" && path[1]){
+    try{ const f = (getEffectiveFieldTemplate(it.folderId)||[]).find(x=>x.id===path[1]); if(f && f.label) return f.label; }catch(e){}
+    return "حقل";
+  }
+  if(top==="notebookData") return "دفتر الملاحظات" + (path[1] ? " › " + (NB_LABELS[path[1]]||path[1]) : "");
+  return LABELS[top] || top || "نص";
+}
+function collect(owner, obj, segs){
+  (function walk(v, path){
+    if(v==null) return;
+    if(typeof v==="string"){
+      if(!v || v.startsWith("data:") || v.startsWith("blob:") || ID_LIKE.test(v) || /^#[0-9a-f]{3,8}$/i.test(v)) return;
+      if(v.length>300 && /^[A-Za-z0-9+\/=\s]+$/.test(v)) return;
+      const t = plain(v.length>30000 ? v.slice(0,30000) : v);
+      if(t) segs.push({label: labelFor(owner, path), text: t});
+      return;
+    }
+    if(typeof v==="number"){ if(path[0]==="fields") segs.push({label: labelFor(owner,path), text:String(v)}); return; }
+    if(Array.isArray(v)){ for(const x of v) walk(x, path); return; }
+    if(typeof v==="object"){
+      for(const k of Object.keys(v)){
+        if(SKIP_KEY.test(k)) continue;
+        if(path.length>0 && NESTED_SKIP.test(k)) continue;
+        walk(v[k], path.concat(k));
+      }
+    }
+  })(obj, []);
+}
+let IDX = null;
+function buildIndex(){
+  const owners = [];
+  state.items.forEach(it=>{
+    const segs=[]; collect(it, it, segs);
+    owners.push({kind:"item", id:it.id, name:it.name||"(بدون اسم)", path:getFolderPath(it.folderId).map(f=>f.name).join(" / "), segs});
+  });
+  state.folders.forEach(f=>{
+    const segs=[]; collect({folderId:f.id}, {name:f.name, description:f.description, fieldsTemplate:f.fieldsTemplate}, segs);
+    owners.push({kind:"folder", id:f.id, name:f.name||"(مجلد)", path:getFolderPath(f.parentId).map(x=>x.name).join(" / "), segs});
+  });
+  (state.categories||[]).forEach(c=>{
+    const sc = (state.categorySchemas||{})[c] || {};
+    const segs=[{label:"اسم الفئة", text:c}]; collect({}, {description:sc.description, specs:sc.specs}, segs);
+    owners.push({kind:"category", id:c, name:c, path:"الفئات", segs});
+  });
+  owners.forEach(o=>{ o.norm = o.segs.map(s=>nrm(s.text)); o.all = o.norm.join("\u0001"); });
+  IDX = {owners, at:Date.now(), n:state.items.length+":"+state.folders.length};
+  return IDX;
+}
+function index(force){
+  if(!IDX || force || Date.now()-IDX.at>3000 || IDX.n!==state.items.length+":"+state.folders.length) return buildIndex();
+  return IDX;
+}
+
+/* ---------- المطابقة والمقتطفات ---------- */
+function snippet(text, terms){
+  const {t, idx} = nrmMap(text);
+  const hits = [];
+  terms.forEach(term=>{ let p=t.indexOf(term); while(p>-1 && hits.length<200){ hits.push([p,p+term.length]); p=t.indexOf(term,p+term.length); } });
+  if(!hits.length) return null;
+  hits.sort((a,b)=>a[0]-b[0]);
+  const first = hits[0];
+  const oStart = Math.max(0, idx[first[0]]-45);
+  const lastN = Math.min(first[1]+85, t.length);
+  const oEnd = Math.min(text.length, (idx[lastN-1]!==undefined ? idx[lastN-1]+1 : text.length));
+  const ranges = [];
+  hits.forEach(([a,b])=>{
+    const s = idx[a], e = idx[b-1]+1;
+    if(e>oStart && s<oEnd){
+      const r=[Math.max(s,oStart), Math.min(e,oEnd)];
+      const last = ranges[ranges.length-1];
+      if(last && r[0]<=last[1]) last[1]=Math.max(last[1],r[1]); else ranges.push(r);
+    }
+  });
+  let html = oStart>0?"…":"", pos=oStart;
+  ranges.forEach(([s,e])=>{ html += esc(text.slice(pos,s)).replace(/\n/g," ↵ ") + "<mark>" + esc(text.slice(s,e)) + "</mark>"; pos=e; });
+  html += esc(text.slice(pos,oEnd)).replace(/\n/g," ↵ ") + (oEnd<text.length?"…":"");
+  const distinct = terms.filter(term=>t.includes(term)).length;
+  return {html, distinct};
+}
+function search(q, maxOwners, maxSnips){
+  const terms = nrm(q).split(/\s+/).filter(Boolean);
+  if(!terms.length) return [];
+  const out = [];
+  for(const o of index().owners){
+    if(!terms.every(t=>o.all.includes(t))) continue;
+    const sn = [];
+    o.segs.forEach((s,i)=>{
+      if(!terms.some(t=>o.norm[i].includes(t))) return;
+      const r = snippet(s.text, terms); if(r) sn.push({label:s.label, html:r.html, distinct:r.distinct, i});
+    });
+    sn.sort((a,b)=> b.distinct-a.distinct || a.i-b.i);
+    const nameHit = nrm(o.name).split(/\s+/).length && terms.every(t=>nrm(o.name).includes(t));
+    out.push({o, sn:sn.slice(0,maxSnips), more:Math.max(0,sn.length-maxSnips), score:(nameHit?1000:0)+sn.length+(sn[0]?sn[0].distinct*10:0)});
+    if(out.length>=maxOwners*3) break;
+  }
+  out.sort((a,b)=>b.score-a.score);
+  return out.slice(0,maxOwners);
+}
+function openOwner(o){
+  if(o.kind==="item") navigateTo({type:"item", id:o.id});
+  else if(o.kind==="folder") navigateTo({type:"folder", id:o.id});
+  else navigateTo({type:"settings"});
+}
+function cardHtml(r, i){
+  const ico = r.o.kind==="item" ? "🔧" : r.o.kind==="folder" ? "📁" : "🏷️";
+  return `<div class="sres-item deep-res" data-i="${i}">
+    <div class="deep-top"><div class="sres-name">${ico} ${esc(r.o.name)}</div><div class="sres-loc">${esc(r.o.path)}</div></div>
+    ${r.sn.map(s=>`<div class="dsn"><span class="dsn-l">${esc(s.label)}</span><span class="dsn-t">${s.html}</span></div>`).join("")}
+    ${r.more?`<div class="dsn-more">+ ${r.more} موضع تاني</div>`:""}
+  </div>`;
+}
+
+/* ---------- الواجهة ---------- */
+const st = document.createElement("style");
+st.textContent = `
+#deepSearchBtn{position:absolute;left:4px;top:4px;bottom:4px;min-width:30px;border:1px solid var(--border-lt);background:var(--panel2);color:var(--dim);border-radius:7px;cursor:pointer;font-size:13px;line-height:1;padding:0 6px;}
+#deepSearchBtn.on{background:var(--amber);color:var(--amber-ink);border-color:var(--amber);font-weight:700;}
+#searchInput.deep-on{border-color:var(--amber);}
+.search-results.deep{position:fixed;max-height:72vh;overflow:auto;z-index:60;}
+.deep-hd{padding:8px 12px;font-size:11px;color:var(--amber);border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel3);}
+.deep-res{flex-direction:column;align-items:stretch;gap:5px;cursor:pointer;}
+.deep-top{display:flex;justify-content:space-between;gap:10px;align-items:center;}
+.dsn{display:flex;gap:8px;align-items:baseline;font-size:12px;color:var(--dim);line-height:1.7;}
+.dsn-l{flex:none;font-size:10px;color:var(--amber);border:1px solid var(--border-lt);border-radius:6px;padding:0 6px;white-space:nowrap;}
+.dsn-t{min-width:0;overflow-wrap:anywhere;color:var(--text,inherit);}
+.dsn-more{font-size:10.5px;color:var(--dim2);}
+mark{background:rgba(255,193,7,.38);color:inherit;border-radius:3px;padding:0 1px;}
+.deep-page .sres-item{border:1px solid var(--border);border-radius:10px;margin-bottom:10px;background:var(--panel);}
+`;
+document.head.appendChild(st);
+
+const input = document.getElementById("searchInput");
+const box = document.getElementById("searchResults");
+const wrap = input.closest(".search-wrap");
+const btn = document.createElement("button");
+btn.type="button"; btn.id="deepSearchBtn"; btn.textContent="📚";
+btn.title = "بحث شامل في كل النصوص داخل البرنامج"; btn.setAttribute("aria-label","بحث شامل");
+wrap.appendChild(btn);
+input.style.paddingLeft = "44px";
+const DEF_PH = input.placeholder;
+window.__deepSearch = false;
+
+function placeBox(){
+  const r = wrap.getBoundingClientRect();
+  const w = Math.min(580, window.innerWidth-16);
+  const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+  box.style.cssText = `left:${left}px;top:${r.bottom+6}px;width:${w}px;right:auto;`;
+}
+function showDeepDropdown(q){
+  const res = search(q, 25, 2);
+  box.classList.remove("hidden"); box.classList.add("deep"); placeBox();
+  if(!res.length){ box.innerHTML = `<div class="sres-empty">مفيش أي نص فيه «${esc(q)}» في البرنامج كله</div>`; return; }
+  box.innerHTML = `<div class="deep-hd">🔎 ${res.length}${res.length>=25?"+":""} نتيجة في كل النصوص — Enter لعرض الكل</div>` + res.map(cardHtml).join("");
+  box.querySelectorAll(".deep-res").forEach(el=>{
+    el.onclick = ()=>{ const r = res[+el.dataset.i]; box.classList.add("hidden"); openOwner(r.o); };
+  });
+}
+function resetBox(){ box.classList.remove("deep"); box.style.cssText=""; }
+
+btn.onclick = (e)=>{
+  e.preventDefault(); e.stopPropagation();
+  window.__deepSearch = !window.__deepSearch;
+  btn.classList.toggle("on", window.__deepSearch);
+  input.classList.toggle("deep-on", window.__deepSearch);
+  input.placeholder = window.__deepSearch ? "بحث شامل في كل النصوص داخل البرنامج..." : DEF_PH;
+  box.classList.add("hidden"); resetBox();
+  if(window.__deepSearch) index(true);
+  input.focus();
+  const q = input.value.trim();
+  if(q) runSearch(q);
+  else if(state.view.type==="search") render();
+  try{ toast(window.__deepSearch ? "البحث الشامل شغّال — بيدوّر في كل النصوص" : "رجع البحث العادي", "ok", 2200); }catch(err){}
+};
+window.addEventListener("resize", ()=>{ if(box.classList.contains("deep") && !box.classList.contains("hidden")) placeBox(); });
+
+const _runSearch = runSearch;
+runSearch = function(q){
+  if(!window.__deepSearch){ resetBox(); return _runSearch(q); }
+  showDeepDropdown(q);
+};
+const _renderSearchView = renderSearchView;
+renderSearchView = function(c, q){
+  if(!window.__deepSearch) return _renderSearchView(c, q);
+  const res = search(q, 300, 4);
+  c.innerHTML = `
+    <div class="view-title"><h1>📚 بحث شامل</h1><span class="sub">"${esc(q)}" — ${res.length} نتيجة في كل النصوص</span></div>
+    <div class="deep-page" id="deepHolder"></div>`;
+  const h = document.getElementById("deepHolder");
+  if(!res.length){ h.innerHTML = `<div class="empty-state"><div class="ico">🔎</div><div class="t">مفيش أي نص فيه «${esc(q)}» في البرنامج كله</div></div>`; return; }
+  h.innerHTML = res.map(cardHtml).join("");
+  h.querySelectorAll(".deep-res").forEach(el=>{ el.onclick = ()=> openOwner(res[+el.dataset.i].o); });
+};
+
+window.__DEEP = {search, index, nrm};
+})();
+
+</script>
 </body>
 </html>
