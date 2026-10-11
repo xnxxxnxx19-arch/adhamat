@@ -5181,6 +5181,7 @@ function referencedFileIds(){
     const ft=nb?.faultTracking;
     (ft?.pages||[]).forEach(pg=>{
       if(pg?.imageId) ids.add(pg.imageId);
+      if(pg?.pcb?.imageIdB) ids.add(pg.pcb.imageIdB);
       (pg?.hotspots||[]).forEach(h=> (h?.content?.images||[]).forEach(x=>x?.id&&ids.add(x.id)));
     });
   }
@@ -5259,6 +5260,7 @@ function computeContentStats(){
       s.faultPages += ft.pages.length;
       ft.pages.forEach(pg=>{
         if(pg && pg.imageId) s.faultImages += 1;
+        if(pg && pg.pcb && pg.pcb.imageIdB) s.faultImages += 1;
         (pg?.hotspots||[]).forEach(h=>{
           s.faultHotspots += 1;
           s.faultImages += (h?.content?.images||[]).length;
@@ -5412,6 +5414,7 @@ async function restoreAllFromFolder(handle,snap){
     const ft=it.notebookData?.faultTracking;
     if(ft?.pages) ft.pages.forEach(pg=>{
       if(pg.imageId && !present.has(pg.imageId)) pg.imageId=null;
+      if(pg.pcb && pg.pcb.imageIdB && !present.has(pg.pcb.imageIdB)) pg.pcb.imageIdB=null;
       (pg.hotspots||[]).forEach(h=>{ if(h.content?.images) h.content.images=h.content.images.filter(x=>present.has(x.id)); });
     });
     await idbPut_real("items",it);
@@ -7701,6 +7704,7 @@ async function exportProject(){
       const ftFileIds = [];
       ftPages.forEach(p=>{
         if(p.imageId) ftFileIds.push(p.imageId);
+        if(p.pcb && p.pcb.imageIdB) ftFileIds.push(p.pcb.imageIdB);
         (p.hotspots||[]).forEach(h=>{
           ((h.content&&h.content.images)||[]).forEach(im=> ftFileIds.push(im.id));
         });
@@ -7896,6 +7900,7 @@ async function importProject(file, mode){
         if(Array.isArray(newFaultTracking.pages)){
           newFaultTracking.pages.forEach(p=>{
             if(p.imageId) p.imageId = ftIdMap[p.imageId] || null;
+            if(p.pcb && p.pcb.imageIdB) p.pcb.imageIdB = ftIdMap[p.pcb.imageIdB] || null;
             (p.hotspots||[]).forEach(h=>{
               if(h.content && Array.isArray(h.content.images)){
                 h.content.images = h.content.images.map(im=> Object.assign({}, im, {id: ftIdMap[im.id] || im.id})).filter(im=> im.id);
@@ -9441,6 +9446,30 @@ renderSidebarTree = function(){
 .ft-caption-wrap{display:flex;flex-direction:column;gap:6px;}
 .ft-caption-editor{min-height:70px;}
 .ft-caption-view{background:var(--panel3);border:1px solid var(--border);border-radius:9px;padding:10px 12px;}
+/* ===== دمج وجهي لوحة الدائرة (علوي / سفلي) ===== */
+.ft-stage-area{position:relative;}
+.ft-pcb-b{position:absolute;pointer-events:none;}
+.ft-pcb-b img{display:block;width:100%;height:100%;user-select:none;-webkit-user-drag:none;}
+.ft-pcb-frame{position:absolute;inset:0;box-sizing:border-box;border:calc(2px*var(--inv,1)) dashed #ff9500;display:none;pointer-events:none;}
+.ft-pcb-b.outlined .ft-pcb-frame{display:block;}
+.ft-pcb-picks{position:absolute;top:0;left:0;pointer-events:none;}
+.ft-pcb-pick{position:absolute;box-sizing:border-box;width:calc(28px*var(--inv,1));height:calc(28px*var(--inv,1));margin:calc(-14px*var(--inv,1)) 0 0 calc(-14px*var(--inv,1));border:calc(2px*var(--inv,1)) solid var(--c,#3ddc84);border-radius:50%;}
+.ft-pcb-pick::before,.ft-pcb-pick::after{content:'';position:absolute;background:var(--c,#3ddc84);}
+.ft-pcb-pick::before{left:50%;top:-35%;bottom:-35%;width:calc(1.5px*var(--inv,1));margin-left:calc(-.75px*var(--inv,1));}
+.ft-pcb-pick::after{top:50%;left:-35%;right:-35%;height:calc(1.5px*var(--inv,1));margin-top:calc(-.75px*var(--inv,1));}
+.ft-pcb-pick>i{position:absolute;left:100%;top:-70%;margin-left:calc(3px*var(--inv,1));font-style:normal;font-weight:700;font-size:calc(14px*var(--inv,1));color:var(--c,#3ddc84);text-shadow:0 0 3px #000,0 0 3px #000;}
+.ft-pcb-dock{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);width:min(96%,780px);max-height:50%;overflow:auto;z-index:30;display:none;flex-direction:column;gap:7px;padding:7px 9px;background:color-mix(in srgb,var(--panel2) 95%,transparent);border:1px solid var(--amber-dim);border-radius:12px;box-shadow:0 6px 22px rgba(0,0,0,.5);direction:rtl;box-sizing:border-box;}
+.ft-pcb-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.ft-pcb-fader{flex-wrap:nowrap;direction:ltr;}
+.ft-pcb-slider{flex:1 1 auto;min-width:90px;height:26px;accent-color:var(--amber);cursor:pointer;}
+.ft-pcb-pct{font-size:11px;min-width:36px;text-align:center;color:var(--dim);font-weight:700;direction:ltr;}
+.ft-pcb-grp{display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:4px 6px;border:1px solid var(--border);border-radius:9px;background:var(--panel3);}
+.ft-pcb-grp-t{font-size:10px;color:var(--dim2);font-weight:700;margin-inline-end:2px;}
+.ft-pcb-note{font-size:11px;color:var(--dim);line-height:1.55;flex:1 1 200px;}
+.ft-pcb-dock input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 4px;font-size:11px;}
+.ft-pcb-dock .btn.small{padding:4px 8px;font-size:11px;white-space:nowrap;}
+.ft-pcb-dock .btn[disabled]{opacity:.45;pointer-events:none;}
+.ft-pcb-facebadge{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:25;pointer-events:none;display:none;background:rgba(0,0,0,.62);color:#fff;font-size:11px;padding:3px 11px;border-radius:12px;white-space:nowrap;}
 </style>
 
 <script id="native-technical-notebook">
@@ -9477,6 +9506,26 @@ function ensureNotebookData(item){
   return s;
 }
 /* بيانات "تتبع الأعطال": صفحات (كل صفحة = صورة) وكل صفحة تحتوي نقاطًا تفاعلية غير محدودة العدد */
+/* بيانات دمج وجهي اللوحة: page.pcb = {imageIdB, fade, grayA, grayB, flipAH, flipAV, flipBH, flipBV, b:{dx,dy,s,rot}} */
+function nbFtNormPcb(p){
+  if(!p || p.pcb==null){ if(p && 'pcb' in p) delete p.pcb; return null; }
+  if(typeof p.pcb!=='object' || Array.isArray(p.pcb)){ delete p.pcb; return null; }
+  const c=p.pcb;
+  if(typeof c.imageIdB!=='string' || !c.imageIdB) c.imageIdB=null;
+  c.fade=(Number.isFinite(c.fade)) ? Math.max(0,Math.min(1,c.fade)) : 0.5;
+  ['grayA','grayB','flipAH','flipAV','flipBH','flipBV'].forEach(k=>{ if(typeof c[k]!=='boolean') c[k]=false; });
+  if(!c.b || typeof c.b!=='object' || Array.isArray(c.b)) c.b={};
+  const b=c.b;
+  if(!Number.isFinite(b.dx)) b.dx=0;
+  if(!Number.isFinite(b.dy)) b.dy=0;
+  if(!Number.isFinite(b.s) || b.s<=0) b.s=1;
+  if(!Number.isFinite(b.rot)) b.rot=0;
+  return c;
+}
+function nbFtGetPcb(p){
+  if(!p.pcb || typeof p.pcb!=='object' || Array.isArray(p.pcb)) p.pcb={imageIdB:null, fade:0.5, flipBH:true};
+  return nbFtNormPcb(p);
+}
 function ensureFaultTrackingData(s){
   if(!s.faultTracking || typeof s.faultTracking !== 'object' || Array.isArray(s.faultTracking)){
     s.faultTracking = {pages:[], activePageId:null};
@@ -9488,6 +9537,7 @@ function ensureFaultTrackingData(s){
     if(typeof p.name !== 'string') p.name = '';
     if(typeof p.caption !== 'string') p.caption = '';
     if(!Array.isArray(p.hotspots)) p.hotspots = [];
+    nbFtNormPcb(p);
     { let mh=0; p.hotspots.forEach(h=>{ if(Number.isFinite(h&&h.no)) mh=Math.max(mh,h.no); }); p.hotspots.forEach(h=>{ if(h && !Number.isFinite(h.no)) h.no=++mh; }); }
     p.hotspots.forEach((h,hidx)=>{
       if(typeof h.x !== 'number') h.x = 0.4;
@@ -9503,6 +9553,7 @@ function ensureFaultTrackingData(s){
       if(typeof h.content.note !== 'string') h.content.note = '';
       if(!Array.isArray(h.content.images)) h.content.images = [];
       if(!h.content.drawing || !Array.isArray(h.content.drawing.shapes)) h.content.drawing = {shapes:[]};
+      if(!Array.isArray(h.content.drawing.shapesB)) h.content.drawing.shapesB = [];
     });
   });
   return ft;
@@ -10619,7 +10670,7 @@ function nbMapTab(body, s, item){
 const FT_LAYER_COLORS = ["#f2a93c","#4da3ff","#3ddc84","#ff5d5d","#c77dff","#ffb703","#2ec4b6","#e07be0"];
 function nbFtHasContent(h){
   const c=h.content||{};
-  return !!((c.title&&c.title.trim())||(c.note&&c.note.trim())||(c.images&&c.images.length)||(c.drawing&&c.drawing.shapes&&c.drawing.shapes.length));
+  return !!((c.title&&c.title.trim())||(c.note&&c.note.trim())||(c.images&&c.images.length)||(c.drawing&&((c.drawing.shapes&&c.drawing.shapes.length)||(c.drawing.shapesB&&c.drawing.shapesB.length))));
 }
 function nbFtCloseOnEsc(overlay, close){
   function onKey(e){ if(e.key==='Escape') close(); }
@@ -10652,7 +10703,7 @@ function nbFtRenderContentReadonly(container, content){
     });
     container.appendChild(gal);
   }
-  if(content.drawing && content.drawing.shapes && content.drawing.shapes.length){
+  if(content.drawing && ((content.drawing.shapes && content.drawing.shapes.length) || (content.drawing.shapesB && content.drawing.shapesB.length))){
     const note=document.createElement('div'); note.style.cssText='color:var(--dim2);font-size:11px;';
     note.textContent='📐 تحتوي هذه الطبقة على رسم مباشر فوق الصورة — شاهده في وضع العرض على الصورة نفسها.';
     container.appendChild(note);
@@ -10767,6 +10818,7 @@ function nbFaultPanel(body, s, item){
   let isFullscreen=true;
   let settingsOpen=false;
   let ftOriginalParent=null, ftOriginalNext=null;
+  let pcbDockOpen=null, pcbAdvOpen=false, pcbTool=null, pcbAlign=null;
 
   const help=document.createElement('div'); help.className='nb-help';
   help.textContent='أضف صورًا للجهاز، وأنشئ طبقة لكل نقطة عطل (دائرة قابلة للتحريك)، وارسم أسهمًا/خطوطًا/مسارات ونصوصًا مباشرة فوق الصورة داخل الطبقة المختارة. في وضع العرض تكون كل الطبقات مخفية، واضغط على نقطة محددة لإظهار محتواها فقط. كبّر وصغّر الصورة بإصبعين (Pinch) أو بعجلة الفأرة.';
@@ -10808,7 +10860,7 @@ function nbFaultPanel(body, s, item){
       if(p.imageId) getFileBlobURL(p.imageId).then(u=>{ if(u) img.src=u; });
       const lbl=document.createElement('span'); lbl.textContent=p.name || ('صفحة '+(idx+1));
       thumb.append(img,lbl);
-      thumb.onclick=()=>{ activeId=p.id; ft.activePageId=p.id; activeLayerId=null; mode='view'; nbScheduleSave(item); render(); };
+      thumb.onclick=()=>{ activeId=p.id; ft.activePageId=p.id; activeLayerId=null; mode='view'; pcbDockOpen=null; nbScheduleSave(item); render(); };
       if(window.__SI) __SI.tag(thumb,{kind:'file',fileId:p.imageId,itemId:item.id,pos:'tl',extra:()=>[['صفحة تتبع الأعطال',p.name||('صفحة '+(idx+1))],['عدد الطبقات',String((p.hotspots||[]).length)],['حجم بيانات الصفحة والطبقات (نص داخل item.json)',__SI.fmt(__SI.bytes(p))]]});
       pagesBar.appendChild(thumb);
     });
@@ -10857,7 +10909,18 @@ function nbFaultPanel(body, s, item){
     const zoomCtrls=document.createElement('div'); zoomCtrls.className='ft-zoom-controls';
     zoomCtrls.innerHTML=`<button type="button" class="ft-zbtn" data-act="zout" title="تصغير">−</button><span class="ft-zlevel">100%</span><button type="button" class="ft-zbtn" data-act="zin" title="تكبير">+</button><button type="button" class="ft-zbtn" data-act="zreset" title="إعادة الضبط لملء الإطار">⤢</button><button type="button" class="ft-zbtn ft-zbtn-fs" data-act="zfull" title="ملء الشاشة">${isFullscreen?'🗗':'⛶'}</button>`;
 
-    toolbar.append(nameInput, modeBtns, layersBar, zoomCtrls);
+    pcbTool=null; pcbAlign=null;
+    if(pcbDockOpen===null) pcbDockOpen=!!(page.pcb && page.pcb.imageIdB);
+    const pcbBtn=document.createElement('button'); pcbBtn.type='button';
+    pcbBtn.className='btn small icon-only'+(pcbDockOpen?' primary':'');
+    pcbBtn.textContent='🔀'; pcbBtn.title='دمج وجهي اللوحة (علوي / سفلي) وشريط التلاشي';
+    pcbBtn.onclick=()=>{
+      pcbDockOpen=!pcbDockOpen;
+      if(!pcbDockOpen){ pcbTool=null; pcbAlign=null; renderPicks(); applyPcb(); updateDrawCursor(); }
+      pcbBtn.classList.toggle('primary',!!pcbDockOpen);
+      buildPcbDock(); applyPcb();
+    };
+    toolbar.append(nameInput, modeBtns, pcbBtn, layersBar, zoomCtrls);
 
     /* أداة الرسم + زرار الإعدادات (وضع التحرير فقط) — كل الإعدادات الثانوية داخل لوحة منسدلة واحدة */
     let drawToolbar=null, toolSel=null, colorInput=null, widthInput=null, fontInput=null, fillInput=null, radiusInput=null, snapInput=null;
@@ -10900,9 +10963,9 @@ function nbFaultPanel(body, s, item){
       const backBtn=document.createElement('button'); backBtn.type='button'; backBtn.className='btn small ft-quick-btn ft-back-btn';
       backBtn.textContent='↶'; backBtn.title='رجوع / تراجع';
       backBtn.onclick=()=>{
-        const layer=activeLayerNow(); if(!layer||!layer.content.drawing.shapes.length) return;
-        const popped=layer.content.drawing.shapes.pop();
-        const st=redoStacks.get(layer.id)||[]; st.push(popped); redoStacks.set(layer.id,st);
+        const layer=activeLayerNow(); if(!layer||!faceShapes(layer).length) return;
+        const popped=faceShapes(layer).pop();
+        const st=redoStacks.get(layer.id+SK())||[]; st.push(popped); redoStacks.set(layer.id+SK(),st);
         selectedShapeRef=null; nbScheduleSave(item); redrawCanvas(); renderTextLabels();
       };
       quickBar.append(selectBtn,backBtn);
@@ -10956,7 +11019,7 @@ function nbFaultPanel(body, s, item){
         const idx=ft.pages.findIndex(p=>p.id===page.id);
         if(idx!==-1) ft.pages.splice(idx,1);
         activeId = ft.pages[0] ? ft.pages[0].id : null;
-        ft.activePageId=activeId; activeLayerId=null;
+        ft.activePageId=activeId; activeLayerId=null; pcbDockOpen=null;
         nbScheduleSave(item);
         garbageCollectUnreferencedFiles().then(()=>requestFolderSync());
         render();
@@ -10972,7 +11035,13 @@ function nbFaultPanel(body, s, item){
     const live=document.createElement('canvas'); live.className='ft-world-canvas ft-live-canvas'; live.style.pointerEvents='none';
     const textLayer=document.createElement('div'); textLayer.className='ft-text-layer';
     const markersLayer=document.createElement('div'); markersLayer.className='ft-markers-layer';
-    world.append(worldImg, canvas, live, textLayer, markersLayer);
+    const pcbWrap=document.createElement('div'); pcbWrap.className='ft-pcb-b'; pcbWrap.style.display='none';
+    const pcbImg=document.createElement('img'); pcbImg.draggable=false; pcbImg.alt='الوجه السفلي للوحة';
+    const pcbFrame=document.createElement('div'); pcbFrame.className='ft-pcb-frame';
+    pcbWrap.append(pcbImg, pcbFrame);
+    const pcbPickLayer=document.createElement('div'); pcbPickLayer.className='ft-pcb-picks';
+    const canvasB=document.createElement('canvas'); canvasB.className='ft-world-canvas';
+    world.append(worldImg, pcbWrap, canvas, canvasB, live, textLayer, pcbPickLayer, markersLayer);
     viewport.appendChild(world);
     stageArea.appendChild(viewport);
     root.appendChild(stageArea);
@@ -11002,9 +11071,10 @@ function nbFaultPanel(body, s, item){
     let natW=0, natH=0, baseScale=1, zoomFactor=1, tx=0, ty=0;
     const zlevelEl=zoomCtrls.querySelector('.ft-zlevel');
     const ctx=canvas.getContext('2d');
+    const ctxB=canvasB.getContext('2d');
     const lctx=live.getContext('2d');
     const redoStacks=new Map();
-    function clearRedo(layerId){ redoStacks.delete(layerId); }
+    function clearRedo(layerId){ redoStacks.delete(layerId+SK()); }
 
     function computeBaseScaleAndCenter(){
       const rect=viewport.getBoundingClientRect();
@@ -11019,6 +11089,7 @@ function nbFaultPanel(body, s, item){
     function applyTransform(){
       const scale=baseScale*zoomFactor;
       world.style.transform=`translate(${tx}px, ${ty}px) scale(${scale})`;
+      world.style.setProperty('--inv', String(1/scale));
       zlevelEl.textContent=Math.round(zoomFactor*100)+'%';
     }
     function currentScale(){ return baseScale*zoomFactor; }
@@ -11038,7 +11109,13 @@ function nbFaultPanel(body, s, item){
     zoomCtrls.querySelector('[data-act="zout"]').onclick=()=>zoomBy(1/1.35);
     zoomCtrls.querySelector('[data-act="zreset"]').onclick=()=>{ zoomFactor=1; computeBaseScaleAndCenter(); applyTransform(); };
     zoomCtrls.querySelector('[data-act="zfull"]').onclick=()=>{ isFullscreen=!isFullscreen; render(); };
-    viewport.addEventListener('wheel',(e)=>{ e.preventDefault(); zoomBy(e.deltaY<0?1.15:1/1.15, e.clientX, e.clientY); }, {passive:false});
+    viewport.addEventListener('wheel',(e)=>{ e.preventDefault();
+      if(pcbTool==='move' && pcbHasB() && (e.shiftKey||e.altKey)){
+        const d=((e.deltaY||e.deltaX)<0)?1:-1, bb=page.pcb.b;
+        if(e.shiftKey) bb.rot=pcbNormDeg(bb.rot+d*0.5); else bb.s=Math.max(0.05,bb.s*(d>0?1.01:1/1.01));
+        applyPcb(); pcbSyncFields(); pcbSave(); return;
+      }
+      zoomBy(e.deltaY<0?1.15:1/1.15, e.clientX, e.clientY); }, {passive:false});
 
     function screenToNatural(clientX, clientY){
       const rect=world.getBoundingClientRect();
@@ -11047,6 +11124,7 @@ function nbFaultPanel(body, s, item){
     }
 
     function updateDrawCursor(){
+      if(pcbTool){ viewport.style.cursor=(pcbTool==='move')?'move':'crosshair'; return; }
       viewport.style.cursor=selectMode?'default':(currentTool==='pan'?'grab':'crosshair');
       if(selectMode){ viewport.classList.add('ft-select-mode'); } else viewport.classList.remove('ft-select-mode');
     }
@@ -11080,7 +11158,7 @@ function nbFaultPanel(body, s, item){
       return false;
     }
     function findShapeAt(layer,pos){
-      const tol=12/currentScale(); const arr=layer&&layer.content&&layer.content.drawing&&layer.content.drawing.shapes||[];
+      const tol=12/currentScale(); const arr=(layer&&layer.content&&layer.content.drawing)?faceShapes(layer):[];
       for(let i=arr.length-1;i>=0;i--) if(shapeHitTest(arr[i],pos,tol)) return arr[i];
       return null;
     }
@@ -11089,7 +11167,8 @@ function nbFaultPanel(body, s, item){
       if(sh.type==='text'){ sh.x+=dx; sh.y+=dy; return; }
       if('x1' in sh){ sh.x1+=dx; sh.y1+=dy; sh.x2+=dx; sh.y2+=dy; if(sh.type==='curve'){ sh.cx+=dx; sh.cy+=dy; } }
     }
-    function drawSelectionOverlay(sh){
+    function drawSelectionOverlay(sh){ drawSelectionOverlayOn(pcbEditFace()==='B'?ctxB:ctx, sh); }
+    function drawSelectionOverlayOn(ctx,sh){
       ctx.save(); ctx.strokeStyle='#4da3ff'; ctx.fillStyle='rgba(77,163,255,.12)'; ctx.lineWidth=Math.max(2,2/currentScale()); ctx.setLineDash([6/currentScale(),4/currentScale()]);
       if((sh.type==='freehand'||sh.type==='poly') && sh.points&&sh.points.length){ const xs=sh.points.map(p=>p.x),ys=sh.points.map(p=>p.y); ctx.strokeRect(Math.min(...xs)-5,currentScale()?Math.min(...ys)-5:0,Math.max(...xs)-Math.min(...xs)+10,Math.max(...ys)-Math.min(...ys)+10); }
       else if(sh.type==='text'){ const fs=sh.fontSize||18,w=Math.max(22,(sh.text||'').length*fs*.62); ctx.strokeRect(sh.x-4,sh.y-4,w+8,fs*1.35+8); }
@@ -11106,10 +11185,13 @@ function nbFaultPanel(body, s, item){
 
     function redrawCanvas(){
       if(!natW || !natH) return;
-      ctx.clearRect(0,0,natW,natH);
+      ctx.clearRect(0,0,natW,natH); ctxB.clearRect(0,0,natW,natH);
+      const ef=pcbEditFace();
       page.hotspots.forEach(h=>{
         if(!layerIsShown(h)) return;
-        (h.content.drawing.shapes||[]).forEach(sh=>{ if(sh.type!=='text') nbDrawShape(ctx,sh); if(selectMode&&selectedShapeRef&&selectedShapeRef.shape===sh&&selectedShapeRef.layerId===h.id) drawSelectionOverlay(sh); });
+        const d=h.content.drawing;
+        (d.shapes||[]).forEach(sh=>{ if(sh.type!=='text') nbDrawShape(ctx,sh); if(selectMode&&ef==='A'&&selectedShapeRef&&selectedShapeRef.shape===sh&&selectedShapeRef.layerId===h.id) drawSelectionOverlayOn(ctx,sh); });
+        (d.shapesB||[]).forEach(sh=>{ if(sh.type!=='text') nbDrawShape(ctxB,sh); if(selectMode&&ef==='B'&&selectedShapeRef&&selectedShapeRef.shape===sh&&selectedShapeRef.layerId===h.id) drawSelectionOverlayOn(ctxB,sh); });
       });
     }
 
@@ -11117,19 +11199,22 @@ function nbFaultPanel(body, s, item){
       textLayer.innerHTML='';
       page.hotspots.forEach(h=>{
         if(!layerIsShown(h)) return;
-        (h.content.drawing.shapes||[]).forEach(sh=>{
+        const efc=pcbEditFace();
+        ['A','B'].forEach(face=>{ (face==='A'?(h.content.drawing.shapes||[]):(h.content.drawing.shapesB||[])).forEach(sh=>{
           if(sh.type!=='text') return;
+          const canEdit=(mode==='edit' && face===efc);
           const lbl=document.createElement('div');
-          lbl.className='ft-text-label'+(mode==='edit'?' editable':'');
+          lbl.className='ft-text-label'+(canEdit?' editable':'');
+          lbl.dataset.face=face; lbl.style.opacity=String(pcbDrawOp(face));
           lbl.textContent=sh.text;
           lbl.style.left=sh.x+'px'; lbl.style.top=sh.y+'px';
           lbl.style.color=sh.color||'#1e2519';
           lbl.style.fontSize=(sh.fontSize||18)+'px';
-          if(mode==='edit'){
+          if(canEdit){
             const del=document.createElement('button'); del.type='button'; del.className='ft-text-del'; del.textContent='✕';
             del.onclick=(e)=>{
               e.stopPropagation();
-              const shapes=h.content.drawing.shapes; const i=shapes.indexOf(sh);
+              const shapes=(face==='B')?h.content.drawing.shapesB:h.content.drawing.shapes; const i=shapes.indexOf(sh);
               if(i!==-1) shapes.splice(i,1);
               clearRedo(h.id); nbScheduleSave(item); renderTextLabels();
             };
@@ -11160,7 +11245,7 @@ function nbFaultPanel(body, s, item){
             if(selectMode && selectedShapeRef && selectedShapeRef.shape===sh) lbl.classList.add('selected');
           }
           textLayer.appendChild(lbl);
-        });
+        }); });
       });
     }
 
@@ -11200,7 +11285,7 @@ function nbFaultPanel(body, s, item){
           const rect=viewport.getBoundingClientRect();
           const c=screenToNatural(rect.left+rect.width/2, rect.top+rect.height/2);
           const w=Math.min(0.07, natW?60/natW:0.07), h=Math.min(0.07, natH?60/natH:0.07);
-          const nh={ id:uid('fths'), no:page.hotspots.reduce((m,x)=>Math.max(m,Number.isFinite(x&&x.no)?x.no:0),0)+1, name:'طبقة '+(page.hotspots.length+1), x:Math.min(Math.max((c.x/natW)-w/2,0),1-w), y:Math.min(Math.max((c.y/natH)-h/2,0),1-h), w, h, shape:'circle', color:FT_LAYER_COLORS[page.hotspots.length % FT_LAYER_COLORS.length], visible:true, content:{title:'',note:'',images:[],drawing:{shapes:[]}} };
+          const nh={ id:uid('fths'), no:page.hotspots.reduce((m,x)=>Math.max(m,Number.isFinite(x&&x.no)?x.no:0),0)+1, name:'طبقة '+(page.hotspots.length+1), x:Math.min(Math.max((c.x/natW)-w/2,0),1-w), y:Math.min(Math.max((c.y/natH)-h/2,0),1-h), w, h, shape:'circle', color:FT_LAYER_COLORS[page.hotspots.length % FT_LAYER_COLORS.length], visible:true, content:{title:'',note:'',images:[],drawing:{shapes:[],shapesB:[]}} };
           page.hotspots.push(nh);
           activeLayerId=nh.id;
           nbScheduleSave(item); renderMarkers(); renderLayersBar();
@@ -11313,7 +11398,7 @@ function nbFaultPanel(body, s, item){
     }
     function eraseNearActive(pos){
       const layer=activeLayerNow(); if(!layer) return;
-      const shapes=layer.content.drawing.shapes;
+      const shapes=faceShapes(layer);
       let bestIdx=-1, bestDist=26/currentScale();
       shapes.forEach((sh,i)=>{
         nbShapeRefPoints(sh).forEach(p=>{ const d=Math.hypot(p.x-pos.x,p.y-pos.y); if(d<bestDist){ bestDist=d; bestIdx=i; } });
@@ -11331,21 +11416,21 @@ function nbFaultPanel(body, s, item){
 
     if(drawToolbar){
       drawToolbar.querySelector('.ft-undo-btn').onclick=()=>{
-        const layer=activeLayerNow(); if(!layer||!layer.content.drawing.shapes.length) return;
-        const popped=layer.content.drawing.shapes.pop();
-        const st=redoStacks.get(layer.id)||[]; st.push(popped); redoStacks.set(layer.id, st);
+        const layer=activeLayerNow(); if(!layer||!faceShapes(layer).length) return;
+        const popped=faceShapes(layer).pop();
+        const st=redoStacks.get(layer.id+SK())||[]; st.push(popped); redoStacks.set(layer.id+SK(), st);
         nbScheduleSave(item); redrawCanvas(); renderTextLabels();
       };
       drawToolbar.querySelector('.ft-redo-btn').onclick=()=>{
         const layer=activeLayerNow(); if(!layer) return;
-        const st=redoStacks.get(layer.id)||[]; if(!st.length) return;
-        layer.content.drawing.shapes.push(st.pop());
+        const st=redoStacks.get(layer.id+SK())||[]; if(!st.length) return;
+        faceShapes(layer).push(st.pop());
         nbScheduleSave(item); redrawCanvas(); renderTextLabels();
       };
       drawToolbar.querySelector('.ft-clear-btn').onclick=(e)=>{
         const layer=activeLayerNow(); if(!layer) return;
         if(!nbArmConfirm(e.currentTarget,'تأكيد المسح؟')) return;
-        layer.content.drawing.shapes=[]; clearRedo(layer.id);
+        layer.content.drawing[SK()]=[]; clearRedo(layer.id);
         nbScheduleSave(item); redrawCanvas(); renderTextLabels();
       };
     }
@@ -11389,7 +11474,7 @@ function nbFaultPanel(body, s, item){
         const s=nbBuildLiveShape(ds.tool,ds.start,ds.cur,ds.color,ds.width,ds.fill);
         if(Math.abs(s.x2-s.x1)>2/sc || Math.abs(s.y2-s.y1)>2/sc) shape=s;
       }
-      if(shape){ layer.content.drawing.shapes.push(shape); clearRedo(layer.id); nbScheduleSave(item); }
+      if(shape){ faceShapes(layer).push(shape); clearRedo(layer.id); nbScheduleSave(item); }
     }
     viewport.addEventListener('contextmenu',(e)=>{ if(mode==='edit') e.preventDefault(); });
     /* منع السحب الأصلي للمتصفح وتحديد النص فوق منطقة الرسم — كانوا بيلغوا الرسمة (pointercancel) بعد أول حركة */
@@ -11412,6 +11497,17 @@ function nbFaultPanel(body, s, item){
       activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
       panDragMoved=false;
       if(activePointers.size===1){
+        if(pcbTool==='move' && pcbHasB()){
+          const pos0=screenToNatural(e.clientX,e.clientY), b0=page.pcb.b;
+          if(e.shiftKey){
+            const cx=natW/2+b0.dx, cy=natH/2+b0.dy;
+            drawState={pcbRot:true,cx,cy,a0:Math.atan2(pos0.y-cy,pos0.x-cx),rot0:b0.rot};
+            return;
+          }
+          drawState={pcbMove:true,start:pos0,dx0:b0.dx,dy0:b0.dy};
+          return;
+        }
+        if(pcbTool==='pick'){ drawState={pcbPick:true}; startPan(e.clientX,e.clientY); return; }
         const canDraw = mode==='edit' && activeLayerId && currentTool!=='pan';
         if(selectMode && mode==='edit' && activeLayerId){
           const layer=activeLayerNow();
@@ -11429,7 +11525,7 @@ function nbFaultPanel(body, s, item){
           capView(); const pos=toNat(e.clientX, e.clientY);
           if(currentTool==='text'){
             askInlineText(pos,(txt)=>{
-              layer.content.drawing.shapes.push({type:'text',x:pos.x,y:pos.y,text:txt,color:colorInput.value,fontSize:parseInt(fontInput.value,10)||18});
+              faceShapes(layer).push({type:'text',x:pos.x,y:pos.y,text:txt,color:colorInput.value,fontSize:parseInt(fontInput.value,10)||18});
               clearRedo(layer.id); nbScheduleSave(item); redrawCanvas(); renderTextLabels();
             });
             drawState=null; return;
@@ -11444,6 +11540,9 @@ function nbFaultPanel(body, s, item){
       } else if(activePointers.size===2){
         drawState=null; cancelLive(); panDragStart=null;
         const pts=Array.from(activePointers.values());
+        if(pcbTool==='move' && pcbHasB()){
+          drawState={pcbGesture:true,q0:screenToNatural(pts[0].x,pts[0].y),q1:screenToNatural(pts[1].x,pts[1].y),b0:Object.assign({},page.pcb.b)};
+        }
         viewport._pinchStartDist=ptDist(pts[0],pts[1]);
         viewport._pinchStartZoom=zoomFactor;
       }
@@ -11452,6 +11551,17 @@ function nbFaultPanel(body, s, item){
       const ap=activePointers.get(e.pointerId); if(!ap) return;
       ap.x=e.clientX; ap.y=e.clientY;
       if(activePointers.size===1 && drawState){
+        if(drawState.pcbMove){
+          const pos=screenToNatural(e.clientX,e.clientY), b=page.pcb.b;
+          b.dx=drawState.dx0+(pos.x-drawState.start.x); b.dy=drawState.dy0+(pos.y-drawState.start.y);
+          applyPcb(); pcbSyncFields(); return;
+        }
+        if(drawState.pcbRot){
+          const pos=screenToNatural(e.clientX,e.clientY), a=Math.atan2(pos.y-drawState.cy,pos.x-drawState.cx);
+          page.pcb.b.rot=pcbNormDeg(drawState.rot0+(a-drawState.a0)*180/Math.PI);
+          applyPcb(); pcbSyncFields(); return;
+        }
+        if(drawState.pcbPick){ movePan(e.clientX,e.clientY); return; }
         if(drawState.selecting && drawState.shape){
           const pos=screenToNatural(e.clientX, e.clientY);
           const dx=pos.x-drawState.last.x, dy=pos.y-drawState.last.y;
@@ -11474,6 +11584,13 @@ function nbFaultPanel(body, s, item){
       } else if(activePointers.size===1 && panDragStart){
         movePan(e.clientX, e.clientY);
       } else if(activePointers.size===2){
+        if(drawState && drawState.pcbGesture){
+          const gp=Array.from(activePointers.values());
+          const p0=screenToNatural(gp[0].x,gp[0].y), p1=screenToNatural(gp[1].x,gp[1].y);
+          const nb=pcbCompose(drawState.b0,p0,p1,drawState.q0,drawState.q1);
+          if(nb){ Object.assign(page.pcb.b,nb); applyPcb(); pcbSyncFields(); }
+          return;
+        }
         const pts=Array.from(activePointers.values());
         const dist=ptDist(pts[0],pts[1]);
         const mid=ptMid(pts[0],pts[1]);
@@ -11495,6 +11612,10 @@ function nbFaultPanel(body, s, item){
       const ds=drawState;
       if(ds && ds.selecting){
         nbScheduleSave(item);
+      } else if(ds && (ds.pcbMove || ds.pcbRot || ds.pcbGesture)){
+        nbScheduleSave(item);
+      } else if(ds && ds.pcbPick){
+        if(e.type==='pointerup' && !panDragMoved) pcbPickAt(screenToNatural(e.clientX,e.clientY));
       } else if(ds && ds.tool && e.pointerId===ds.id){
         const layer=activeLayerNow();
         if(layer){
@@ -11509,7 +11630,9 @@ function nbFaultPanel(body, s, item){
       cancelLive(); redrawCanvas();
       if(activePointers.size===1){
         const entry=Array.from(activePointers.entries())[0];
-        startPan(entry[1].x, entry[1].y);
+        if(ds && ds.pcbGesture && pcbTool==='move' && pcbHasB()){
+          drawState={pcbMove:true,start:screenToNatural(entry[1].x,entry[1].y),dx0:page.pcb.b.dx,dy0:page.pcb.b.dy};
+        } else startPan(entry[1].x, entry[1].y);
       }
     }
     viewport.addEventListener('pointerup', releasePointer);
@@ -11522,15 +11645,287 @@ function nbFaultPanel(body, s, item){
       applyTransform();
     });
 
+    /* ===== دمج وجهي لوحة الدائرة: علوي (= صورة الصفحة) + سفلي مع شريط تلاشي، محاذاة، عكس، أبيض/أسود ===== */
+    const pcbDock=document.createElement('div'); pcbDock.className='ft-pcb-dock';
+    stageArea.appendChild(pcbDock);
+    const pcbFaceBadge=document.createElement('div'); pcbFaceBadge.className='ft-pcb-facebadge'; stageArea.appendChild(pcbFaceBadge);
+    let pcbBUrlFor=null, bNatW=0, bNatH=0, pcbUI={}, pcbLastFace=null;
+    const PCB_STEPS=[
+      '١/٤ — اضغط على نقطة مميزة في الوجه العلوي (مثل مركز ثقب أو رِجل مكوّن)',
+      '٢/٤ — اضغط على نفس النقطة في الوجه السفلي',
+      '٣/٤ — اضغط على نقطة ثانية بعيدة عن الأولى في الوجه العلوي',
+      '٤/٤ — اضغط على نفس النقطة الثانية في الوجه السفلي'
+    ];
+    /* وجه التحرير الحالي: يتبع شريط التلاشي (أكثر من 50% = السفلي). الرسم الجديد يُحفظ في نفس الطبقة لكن على وجه الصورة الحالية */
+    function pcbEditFace(){ const pc=page.pcb; return (pc && pc.imageIdB && pc.fade>0.5)?'B':'A'; }
+    function SK(){ return pcbEditFace()==='B'?'shapesB':'shapes'; }
+    function faceShapes(h){ const d=h.content.drawing; const k=SK(); if(!Array.isArray(d[k])) d[k]=[]; return d[k]; }
+    function pcbDrawFade(){ const pc=page.pcb; if(!pc || !pc.imageIdB) return 0; if(pcbAlign) return (pcbAlign.step%2===1)?1:0; return pc.fade; }
+    function pcbDrawOp(face){ const f=pcbDrawFade(); return face==='B'?f:1-f; }
+    function pcbHasB(){ return !!(page.pcb && page.pcb.imageIdB && bNatW && natW); }
+    function pcbSave(){ nbScheduleSave(item); }
+    function pcbSyncFields(){ if(pcbUI.sync) pcbUI.sync(); }
+    function pcbNormDeg(d){ const r=((d+180)%360+360)%360-180; return Math.round(r*10000)/10000; }
+
+    function loadPcbImage(){
+      const pc=page.pcb;
+      if(!pc || !pc.imageIdB){ pcbImg.removeAttribute('src'); bNatW=0; bNatH=0; pcbBUrlFor=null; return; }
+      if(pcbBUrlFor===pc.imageIdB) return;
+      const want=pc.imageIdB; pcbBUrlFor=want;
+      getFileBlobURL(want).then(u=>{ if(u && page.pcb && page.pcb.imageIdB===want) pcbImg.src=u; });
+    }
+    pcbImg.addEventListener('load',()=>{ bNatW=pcbImg.naturalWidth; bNatH=pcbImg.naturalHeight; applyPcb(); buildPcbDock(); });
+    pcbImg.addEventListener('error',()=>{ bNatW=0; bNatH=0; applyPcb(); });
+
+    function applyPcb(){
+      const pc=page.pcb;
+      const opA=pcbDrawOp('A'), opB=pcbDrawOp('B'), ef=pcbEditFace();
+      canvas.style.opacity=String(opA); canvasB.style.opacity=String(opB);
+      live.style.opacity=String(ef==='B'?opB:opA);
+      textLayer.querySelectorAll('.ft-text-label').forEach(l=>{ l.style.opacity=String(l.dataset.face==='B'?opB:opA); });
+      pcbFaceBadge.style.display=(pc && pc.imageIdB && mode==='edit')?'block':'none';
+      pcbFaceBadge.textContent=(ef==='B')?'✏️ الرسم الآن على الوجه السفلي':'✏️ الرسم الآن على الوجه العلوي';
+      if(ef!==pcbLastFace){ pcbLastFace=ef; selectedShapeRef=null; redrawCanvas(); renderTextLabels(); }
+      worldImg.style.transformOrigin='50% 50%';
+      worldImg.style.transform=(pc&&(pc.flipAH||pc.flipAV))?`scale(${pc.flipAH?-1:1},${pc.flipAV?-1:1})`:'';
+      worldImg.style.filter=(pc&&pc.grayA)?'grayscale(1)':'';
+      if(natW){ pcbPickLayer.style.width=natW+'px'; pcbPickLayer.style.height=natH+'px'; }
+      const has=pcbHasB();
+      pcbWrap.style.display=has?'block':'none';
+      if(!has){ worldImg.style.opacity=''; return; }
+      const step=pcbAlign?pcbAlign.step:-1;
+      const fade=step<0 ? pc.fade : (step%2===1 ? 1 : 0);
+      worldImg.style.opacity=(step>=0 && step%2===1)?'0':'';
+      const fit=Math.min(natW/bNatW, natH/bNatH), bw=bNatW*fit, bh=bNatH*fit;
+      pcbWrap.style.width=bw+'px'; pcbWrap.style.height=bh+'px';
+      pcbWrap.style.left=((natW-bw)/2)+'px'; pcbWrap.style.top=((natH-bh)/2)+'px';
+      const b=pc.b;
+      pcbWrap.style.transformOrigin='50% 50%';
+      pcbWrap.style.transform=`translate(${b.dx}px,${b.dy}px) rotate(${b.rot}deg) scale(${b.s*(pc.flipBH?-1:1)},${b.s*(pc.flipBV?-1:1)})`;
+      pcbImg.style.opacity=String(fade);
+      pcbImg.style.filter=pc.grayB?'grayscale(1)':'';
+      pcbWrap.classList.toggle('outlined', pcbTool==='move' || !!(pcbDockOpen && pcbAdvOpen));
+    }
+
+    function renderPicks(){
+      pcbPickLayer.innerHTML='';
+      if(!pcbAlign) return;
+      pcbAlign.pts.forEach((p,i)=>{
+        if(!p) return;
+        const isB=(i%2===1);
+        const m=document.createElement('div'); m.className='ft-pcb-pick';
+        m.style.left=p.x+'px'; m.style.top=p.y+'px';
+        m.style.setProperty('--c', isB?'#ff9500':'#3ddc84');
+        const lb=document.createElement('i'); lb.textContent=String(Math.floor(i/2)+1);
+        m.appendChild(lb); pcbPickLayer.appendChild(m);
+      });
+    }
+
+    async function pcbSetImage(file){
+      if(!file) return;
+      try{
+        const __nm=window.__NM?await window.__NM.namer(item):null;
+        const id=await storeFile(file, __nm?__nm.ft(file.name,file):file.name, file.type);
+        const pc=nbFtGetPcb(page); const old=pc.imageIdB; pc.imageIdB=id;
+        pcbBUrlFor=null; bNatW=0; bNatH=0; loadPcbImage();
+        pcbDockOpen=true; pcbBtn.classList.add('primary');
+        pcbSave();
+        if(old && old!==id) garbageCollectUnreferencedFiles().then(()=>requestFolderSync());
+        buildPcbDock();
+      }catch(err){ toast('تعذر حفظ صورة الوجه السفلي','err'); }
+    }
+    function pcbRemove(){
+      const pc=page.pcb; if(!pc) return;
+      pc.imageIdB=null; pc.grayA=false; pc.flipAH=false; pc.flipAV=false;
+      pcbTool=null; pcbAlign=null; pcbBUrlFor=null; bNatW=0; bNatH=0;
+      pcbImg.removeAttribute('src'); renderPicks(); updateDrawCursor();
+      pcbSave(); applyPcb(); buildPcbDock();
+      garbageCollectUnreferencedFiles().then(()=>requestFolderSync());
+    }
+
+    /* محاذاة بنقطتين: تحويل تشابه (إزاحة + تكبير + دوران) يطابق نقطتين من السفلي مع نظيرتيهما في العلوي */
+    function pcbCompose(base,a1,a2,b1,b2){
+      const vb={x:b2.x-b1.x,y:b2.y-b1.y}, va={x:a2.x-a1.x,y:a2.y-a1.y};
+      const lb=Math.hypot(vb.x,vb.y), la=Math.hypot(va.x,va.y);
+      if(lb<8 || la<8) return null;
+      const k=la/lb, th=Math.atan2(va.y,va.x)-Math.atan2(vb.y,vb.x);
+      const cs=Math.cos(th), sn=Math.sin(th);
+      const c={x:natW/2,y:natH/2};
+      const rel={x:c.x+base.dx-b1.x, y:c.y+base.dy-b1.y};
+      return {dx:a1.x+k*(cs*rel.x-sn*rel.y)-c.x, dy:a1.y+k*(sn*rel.x+cs*rel.y)-c.y, s:base.s*k, rot:pcbNormDeg(base.rot+th*180/Math.PI)};
+    }
+    function pcbSolveAlign(a1,a2,b1,b2){
+      const nb=pcbCompose(page.pcb.b,a1,a2,b1,b2); if(!nb) return false;
+      Object.assign(page.pcb.b,nb); return true;
+    }
+    function pcbStartAlign(){
+      if(!pcbHasB()) return;
+      pcbTool='pick'; pcbAlign={step:0,pts:[]};
+      renderPicks(); applyPcb(); updateDrawCursor(); buildPcbDock();
+    }
+    function pcbCancelAlign(){
+      pcbAlign=null; if(pcbTool==='pick') pcbTool=null;
+      renderPicks(); applyPcb(); updateDrawCursor(); buildPcbDock();
+    }
+    function pcbPickAt(pos){
+      if(!pcbAlign) return;
+      pcbAlign.pts[pcbAlign.step]=pos; renderPicks(); buildPcbDock();
+    }
+    function pcbConfirmPick(){
+      if(!pcbAlign || !pcbAlign.pts[pcbAlign.step]) return;
+      if(pcbAlign.step<3){ pcbAlign.step++; applyPcb(); renderPicks(); buildPcbDock(); return; }
+      const [a1,b1,a2,b2]=pcbAlign.pts;
+      if(!pcbSolveAlign(a1,a2,b1,b2)){
+        toast('النقطتان قريبتان جدًا من بعض — اختر نقطتين أبعد','err');
+        pcbAlign={step:2,pts:[a1,b1]}; applyPcb(); renderPicks(); buildPcbDock(); return;
+      }
+      pcbAlign=null; pcbTool=null;
+      renderPicks(); applyPcb(); updateDrawCursor(); pcbSave(); buildPcbDock();
+      toast('تمت محاذاة الوجه السفلي مع العلوي','ok');
+    }
+    function pcbBackPick(){
+      if(!pcbAlign || pcbAlign.step===0) return;
+      pcbAlign.pts.length=pcbAlign.step; pcbAlign.step--;
+      applyPcb(); renderPicks(); buildPcbDock();
+    }
+
+    function buildPcbDock(){
+      pcbDock.innerHTML=''; pcbUI={};
+      pcbDock.style.display=pcbDockOpen?'flex':'none';
+      if(!pcbDockOpen) return;
+      const pc=page.pcb;
+      const mk=(tag,cls,txt)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; };
+      const btn=(label,title,fn,active)=>{
+        const b=mk('button','btn small'+(active?' primary':''),label); b.type='button'; if(title) b.title=title; b.onclick=fn; return b;
+      };
+      const holdBtn=(label,title,fn)=>{
+        const b=mk('button','btn small',label); b.type='button'; if(title) b.title=title;
+        let t=null, iv=null;
+        const stop=()=>{ clearTimeout(t); clearInterval(iv); t=null; iv=null; };
+        b.addEventListener('pointerdown',(e)=>{ e.preventDefault(); fn(); t=setTimeout(()=>{ iv=setInterval(fn,50); },350); });
+        ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,stop));
+        return b;
+      };
+      const grp=(title)=>{ const g=mk('div','ft-pcb-grp'); if(title) g.appendChild(mk('span','ft-pcb-grp-t',title)); return g; };
+
+      /* لا يوجد وجه سفلي بعد */
+      if(!pc || !pc.imageIdB){
+        const row=mk('div','ft-pcb-row');
+        const note=mk('div','ft-pcb-note','الوجه العلوي = صورة هذه الصفحة. حمّل صورة الوجه السفلي للوحة لدمج الوجهين بشريط تلاشي ومحاذاة دقيقة. الرسم والطبقات تبقى فوق الصورتين وتُحفظ مع الصفحة.');
+        const lab=mk('label','btn small primary','＋ تحميل صورة الوجه السفلي');
+        const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.style.display='none';
+        inp.onchange=()=>{ const f=inp.files&&inp.files[0]; inp.value=''; pcbSetImage(f); };
+        lab.appendChild(inp); row.append(note, lab); pcbDock.appendChild(row);
+        return;
+      }
+
+      /* معالج المحاذاة بنقطتين */
+      if(pcbAlign){
+        const s=pcbAlign.step, have=!!pcbAlign.pts[s];
+        const row=mk('div','ft-pcb-row');
+        row.appendChild(mk('div','ft-pcb-note',PCB_STEPS[s]));
+        const ok=btn('✓ تأكيد','تأكيد النقطة والانتقال للخطوة التالية',pcbConfirmPick,have); ok.disabled=!have;
+        const back=btn('↩ رجوع','الرجوع للخطوة السابقة',pcbBackPick,false); back.disabled=(s===0);
+        row.append(ok, back, btn('✕ إلغاء','إلغاء المحاذاة',pcbCancelAlign,false));
+        pcbDock.appendChild(row);
+        pcbDock.appendChild(mk('div','ft-pcb-note','اضغط مرة أخرى لتغيير مكان النقطة قبل التأكيد. كبّر الصورة (عجلة الفأرة أو إصبعين) لدقة أعلى، واسحب بإصبع واحد للتحريك.'));
+        return;
+      }
+
+      /* شريط التلاشي */
+      const fr=mk('div','ft-pcb-row ft-pcb-fader');
+      const pct=mk('span','ft-pcb-pct',Math.round(pc.fade*100)+'%');
+      const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='100'; slider.step='1';
+      slider.className='ft-pcb-slider'; slider.value=String(Math.round(pc.fade*100)); slider.title='شريط التلاشي: يسار = العلوي، يمين = السفلي';
+      const setFade=(v)=>{ const p2=page.pcb; p2.fade=Math.max(0,Math.min(1,v)); slider.value=String(Math.round(p2.fade*100)); pct.textContent=Math.round(p2.fade*100)+'%'; applyPcb(); pcbSave(); };
+      slider.oninput=()=>{ const p2=page.pcb; p2.fade=slider.value/100; pct.textContent=slider.value+'%'; applyPcb(); pcbSave(); };
+      fr.append(btn('علوي','عرض الوجه العلوي فقط',()=>setFade(0),false), slider, btn('سفلي','عرض الوجه السفلي فقط',()=>setFade(1),false), pct,
+                btn('✋','تحريك وتدوير وتكبير الوجه السفلي بالإيماءات',()=>{ pcbTool=(pcbTool==='move')?null:'move'; updateDrawCursor(); applyPcb(); buildPcbDock(); },pcbTool==='move'),
+                btn('⚙️','إعدادات الدمج والمحاذاة والعكس',()=>{ pcbAdvOpen=!pcbAdvOpen; buildPcbDock(); applyPcb(); },pcbAdvOpen));
+      pcbDock.appendChild(fr);
+      if(pcbTool==='move'){
+        const mr=mk('div','ft-pcb-row');
+        mr.append(mk('div','ft-pcb-note','وضع تحريك السفلي (الرسم متوقف): اسحب بإصبع للنقل، وبإصبعين للتدوير والتكبير والنقل معًا. بالماوس: Shift+سحب للتدوير، Shift+عجلة تدوير دقيق، Alt+عجلة تكبير. للتكبير العادي للصورة استخدم + و −.'),
+                  btn('✓ تم','إنهاء وضع التحريك',()=>{ pcbTool=null; updateDrawCursor(); applyPcb(); buildPcbDock(); },false));
+        pcbDock.appendChild(mr);
+      }
+      if(!bNatW) pcbDock.appendChild(mk('div','ft-pcb-note','جارٍ تحميل صورة الوجه السفلي… (لو ما ظهرت، استبدلها من ⚙️)'));
+      if(!pcbAdvOpen) return;
+
+      const tog=(label,title,key)=>{
+        const b=btn(label,title,()=>{
+          const p2=page.pcb; p2[key]=!p2[key]; b.classList.toggle('primary',!!p2[key]);
+          if(p2[key] && key.indexOf('flipA')===0) toast('عكس الوجه العلوي يعكس الصورة فقط؛ الرسم والطبقات تبقى في أماكنها','ok');
+          applyPcb(); pcbSave();
+        },!!pc[key]);
+        return b;
+      };
+      const adv=mk('div','ft-pcb-row');
+
+      const gC=grp('أبيض وأسود');
+      gC.append(tog('◐ العلوي','تحويل الوجه العلوي من ألوان إلى أبيض وأسود','grayA'), tog('◐ السفلي','تحويل الوجه السفلي من ألوان إلى أبيض وأسود','grayB'));
+      const gF=grp('عكس (مرآة)');
+      gF.append(tog('↔ العلوي','عكس العلوي أفقيًا','flipAH'), tog('↕ العلوي','عكس العلوي رأسيًا','flipAV'),
+                tog('↔ السفلي','عكس السفلي أفقيًا','flipBH'), tog('↕ السفلي','عكس السفلي رأسيًا','flipBV'));
+
+      const gA=grp('محاذاة السفلي');
+      gA.append(
+        btn('🎯 محاذاة بنقطتين','اختر نقطتين مشتركتين بين الوجهين وسيتم ضبط الإزاحة والتكبير والدوران تلقائيًا',pcbStartAlign,false),
+        btn('✋ تحريك','اسحب الوجه السفلي بإصبعك أو الفأرة لمحاذاته يدويًا',()=>{
+          pcbTool=(pcbTool==='move')?null:'move'; updateDrawCursor(); applyPcb(); buildPcbDock();
+        },pcbTool==='move'),
+        btn('⟲ 90°','تدوير السفلي 90° عكس عقارب الساعة',()=>{ const b=page.pcb.b; b.rot=pcbNormDeg(b.rot-90); applyPcb(); pcbSyncFields(); pcbSave(); },false),
+        btn('⟳ 90°','تدوير السفلي 90° مع عقارب الساعة',()=>{ const b=page.pcb.b; b.rot=pcbNormDeg(b.rot+90); applyPcb(); pcbSyncFields(); pcbSave(); },false),
+        btn('↺ ضبط','إعادة المحاذاة للوضع الافتراضي',()=>{ Object.assign(page.pcb.b,{dx:0,dy:0,s:1,rot:0}); applyPcb(); pcbSyncFields(); pcbSave(); },false)
+      );
+
+      const gN=grp('ضبط دقيق');
+      const fields=[];
+      const fmt=(v)=>String(Math.round(v*100)/100);
+      const nf=(label,title,get,set,step,w)=>{
+        const wr=mk('label','ft-draw-label',label);
+        const i=document.createElement('input'); i.type='number'; i.step=String(step); i.title=title; i.style.width=(w||62)+'px'; i.value=fmt(get());
+        i.oninput=()=>{ const v=parseFloat(i.value); if(Number.isFinite(v)){ set(v); applyPcb(); pcbSave(); } };
+        wr.appendChild(i); fields.push({i,get}); return wr;
+      };
+      const B=()=>page.pcb.b;
+      gN.append(
+        nf('X','إزاحة أفقية (بكسل)',()=>B().dx,v=>{B().dx=v;},1),
+        nf('Y','إزاحة رأسية (بكسل)',()=>B().dy,v=>{B().dy=v;},1),
+        nf('تكبير %','نسبة تكبير الوجه السفلي',()=>B().s*100,v=>{ if(v>1) B().s=v/100; },0.1,66),
+        nf('دوران °','زاوية دوران الوجه السفلي بالدرجات',()=>B().rot,v=>{B().rot=v;},0.1,60)
+      );
+      pcbUI.sync=()=>fields.forEach(f=>{ if(document.activeElement!==f.i) f.i.value=fmt(f.get()); });
+      const nudge=(dx,dy)=>()=>{ const st=1/Math.max(currentScale(),0.01); const b=B(); b.dx+=dx*st; b.dy+=dy*st; applyPcb(); pcbSyncFields(); pcbSave(); };
+      gN.append(holdBtn('▲','تحريك لأعلى بمقدار بكسل شاشة (اضغط مطولًا للتكرار)',nudge(0,-1)), holdBtn('▼','تحريك لأسفل',nudge(0,1)),
+                holdBtn('◀','تحريك لليسار',nudge(-1,0)), holdBtn('▶','تحريك لليمين',nudge(1,0)));
+
+      const gP=grp('الملف');
+      const rl=mk('label','btn small','🔁 استبدال');
+      const ri=document.createElement('input'); ri.type='file'; ri.accept='image/*'; ri.style.display='none';
+      ri.onchange=()=>{ const f=ri.files&&ri.files[0]; ri.value=''; pcbSetImage(f); };
+      rl.appendChild(ri);
+      const del=btn('🗑 إزالة الوجه السفلي','حذف الصورة السفلية من هذه الصفحة',(e)=>{ if(!nbArmConfirm(e.currentTarget,'اضغط تاني للتأكيد')) return; pcbRemove(); },false);
+      del.classList.add('danger');
+      gP.append(rl, del);
+
+      adv.append(gC, gF, gA, gN, gP);
+      pcbDock.appendChild(adv);
+    }
+    loadPcbImage();
+    buildPcbDock();
+
     worldImg.addEventListener('load', ()=>{
       natW=worldImg.naturalWidth; natH=worldImg.naturalHeight;
       worldImg.style.width=natW+'px'; worldImg.style.height=natH+'px';
       canvas.width=natW; canvas.height=natH; canvas.style.width=natW+'px'; canvas.style.height=natH+'px';
+      canvasB.width=natW; canvasB.height=natH; canvasB.style.width=natW+'px'; canvasB.style.height=natH+'px';
       live.width=natW; live.height=natH; live.style.width=natW+'px'; live.style.height=natH+'px';
       textLayer.style.width=natW+'px'; textLayer.style.height=natH+'px';
       markersLayer.style.width=natW+'px'; markersLayer.style.height=natH+'px';
       zoomFactor=1;
       computeBaseScaleAndCenter(); applyTransform();
+      applyPcb();
       redrawCanvas(); renderTextLabels(); renderMarkers();
     });
     window.addEventListener('resize', ()=>{ if(natW){ computeBaseScaleAndCenter(); applyTransform(); } });
@@ -11683,7 +12078,7 @@ async function dir(h,path,mk){let d=h;for(const p of path.split("/").filter(Bool
 async function put(h,path,data){const i=path.lastIndexOf("/"),d=i<0?h:await dir(h,path.slice(0,i),1),f=await d.getFileHandle(path.slice(i+1),{create:true}),w=await f.createWritable();try{await w.write(data);await w.close()}catch(e){try{await w.abort()}catch(_){}throw e}}
 async function get(h,path){const i=path.lastIndexOf("/"),d=i<0?h:await dir(h,path.slice(0,i));return(await d.getFileHandle(path.slice(i+1))).getFile()}
 const rj=async(h,p)=>{try{return JSON.parse(await(await get(h,p)).text())}catch(e){return null}};
-function refs(it){const R=[],a=(i,k)=>i&&R.push([i,k]);(it.imageIds||[]).forEach(i=>a(i,"images"));(it.docs||[]).forEach(d=>d&&a(d.fileId,"docs"));(it.notebookData?.images||[]).forEach(x=>a(x.id,"notebook"));(it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});return R}
+function refs(it){const R=[],a=(i,k)=>i&&R.push([i,k]);(it.imageIds||[]).forEach(i=>a(i,"images"));(it.docs||[]).forEach(d=>d&&a(d.fileId,"docs"));(it.notebookData?.images||[]).forEach(x=>a(x.id,"notebook"));(it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");a(p.pcb&&p.pcb.imageIdB,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});return R}
 let force=false,busy=false;
 async function libSave(h){
  const files=new Map((await idbGetAll_real("files")).map(f=>[f.id,f])),old=force?{}:(await rj(h,"index.json"))||{};
@@ -11749,7 +12144,7 @@ async function legacyRead(h){
  for(const it of snap.items){for(const[fid,k]of refs(it))if(!present.has(fid))rep.missing.push(it.name+": "+k+" "+fid);
   it.imageIds=(it.imageIds||[]).filter(i=>present.has(i));if(it.mainImageId&&!present.has(it.mainImageId))it.mainImageId=it.imageIds[0]||null;
   it.docs=(it.docs||[]).filter(d=>d?.fileId&&present.has(d.fileId));const nb=it.notebookData;if(nb?.images)nb.images=nb.images.filter(x=>present.has(x.id));
-  (nb?.faultTracking?.pages||[]).forEach(p=>{if(p.imageId&&!present.has(p.imageId))p.imageId=null;(p.hotspots||[]).forEach(hs=>{if(hs.content?.images)hs.content.images=hs.content.images.filter(x=>present.has(x.id))})})}
+  (nb?.faultTracking?.pages||[]).forEach(p=>{if(p.imageId&&!present.has(p.imageId))p.imageId=null;if(p.pcb&&p.pcb.imageIdB&&!present.has(p.pcb.imageIdB))p.pcb.imageIdB=null;(p.hotspots||[]).forEach(hs=>{if(hs.content?.images)hs.content.images=hs.content.images.filter(x=>present.has(x.id))})})}
  return{snap,files,rep}}
 async function migrate(h){
  const r=await legacyRead(h);if(!r)throw new Error("لا توجد بيانات قابلة للقراءة في هذا المجلد");
@@ -11879,6 +12274,7 @@ function ftTree(it,base,prev,settle){
     if(usedP.has(pd))pd+="~"+String(pid).slice(-4);usedP.add(pd);out.map[pid]=pd;
     const P={page:p,no,dir:pd,layers:[]};
     if(p.imageId&&!out.byFid.has(p.imageId))out.byFid.set(p.imageId,{dir:pd});
+    if(p.pcb&&p.pcb.imageIdB&&!out.byFid.has(p.pcb.imageIdB))out.byFid.set(p.pcb.imageIdB,{dir:pd});
     const usedL=new Set();
     (p.hotspots||[]).forEach((h,hi)=>{if(!h)return;
       const hn=Number.isFinite(h.no)?h.no:hi+1,hid=(p.id||pi)+":"+(h.id||("h"+hi));
@@ -11891,10 +12287,11 @@ function ftTree(it,base,prev,settle){
 function ftPageJson(P,base,files){const p=P.page,rel=f=>f&&files[f]?files[f].path.slice(base.length+1):null;
   return{schema:1,kind:"fault-page",id:p.id||null,no:P.no,name:p.name||"",caption:p.caption||"",
     background:p.imageId?{fileId:p.imageId,path:rel(p.imageId)}:null,
+    bottomImage:(p.pcb&&p.pcb.imageIdB)?{fileId:p.pcb.imageIdB,path:rel(p.pcb.imageIdB),settings:{fade:p.pcb.fade,grayA:!!p.pcb.grayA,grayB:!!p.pcb.grayB,flipAH:!!p.pcb.flipAH,flipAV:!!p.pcb.flipAV,flipBH:!!p.pcb.flipBH,flipBV:!!p.pcb.flipBV,align:p.pcb.b||null}}:null,
     layers:P.layers.map(L=>({id:L.h.id||null,no:L.no,name:L.h.name||"",folder:L.dir.slice(P.dir.length+1),color:L.h.color||null,visible:L.h.visible!==false,shapes:((L.h.content&&L.h.content.drawing&&L.h.content.drawing.shapes)||[]).length,images:((L.h.content&&L.h.content.images)||[]).length}))}}
 function ftLayerJson(P,L,base,files){const h=L.h,c=h.content||{},rel=f=>f&&files[f]?files[f].path.slice(base.length+1):null;
   return{schema:1,kind:"fault-layer",id:h.id||null,no:L.no,pageId:P.page.id||null,name:h.name||"",color:h.color||null,visible:h.visible!==false,shape:h.shape||"circle",x:h.x,y:h.y,w:h.w,h:h.h,
-    content:{title:c.title||"",note:c.note||"",images:(c.images||[]).map(x=>({id:x&&x.id,caption:(x&&x.caption)||"",path:rel(x&&x.id)})),drawing:{shapes:(c.drawing&&c.drawing.shapes)||[]}}}}
+    content:{title:c.title||"",note:c.note||"",images:(c.images||[]).map(x=>({id:x&&x.id,caption:(x&&x.caption)||"",path:rel(x&&x.id)})),drawing:{shapes:(c.drawing&&c.drawing.shapes)||[],shapesB:(c.drawing&&c.drawing.shapesB)||[]}}}}
 /* ---------- طابور الحذف: أي ملف/مجلد قديم (صورة اتحذفت، اسم اتغيّر، عنصر/مجموعة اتحذفت) بيتسجّل في index.json وبيتمسح من القرص بعد ما الجديد يتكتب ---------- */
 function addTrash(idx,path,type,why){if(!idx||!path)return;idx.trash=idx.trash||[];
   if(idx.trash.some(t=>t.path===path&&t.type===type))return;
@@ -11991,7 +12388,7 @@ async function pool(arr,n,fn){
 function refs(it){const R=[],a=(i,k)=>i&&R.push([i,k]);
   (it.imageIds||[]).forEach(i=>a(i,"images"));(it.docs||[]).forEach(d=>d&&a(d.fileId,"docs"));
   (it.notebookData?.images||[]).forEach(x=>a(x.id,"notebook"));
-  (it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});
+  (it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");a(p.pcb&&p.pcb.imageIdB,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});
   return R}
 
 function stats(idx){
@@ -12348,7 +12745,7 @@ function itemById(id){const it=ST().items||[];if(Date.now()-iTs>2000||iLen!==it.
 function refs(it){const R=[],a=(i,k)=>i&&R.push([i,k]);
   (it.imageIds||[]).forEach(i=>a(i,"images"));(it.docs||[]).forEach(d=>d&&a(d.fileId,"docs"));
   (it.notebookData?.images||[]).forEach(x=>a(x.id,"notebook"));
-  (it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});
+  (it.notebookData?.faultTracking?.pages||[]).forEach(p=>{a(p.imageId,"fault-backgrounds");a(p.pcb&&p.pcb.imageIdB,"fault-backgrounds");(p.hotspots||[]).forEach(hs=>(hs.content?.images||[]).forEach(x=>a(x.id,"fault-notes")))});
   return R}
 function fidMap(){if(Date.now()-fTs>2000){fTs=Date.now();fMap=new Map();for(const it of ST().items||[])for(const[fid,k]of refs(it))if(!fMap.has(fid))fMap.set(fid,{it,k})}return fMap}
 const fidOf=p=>{const m=/([^/]+?)(?:\.[A-Za-z0-9]{1,5})?$/.exec(p||"");return m?m[1]:""};
@@ -13188,6 +13585,7 @@ async function collectRefs(item,it){
   const ft=nb&&nb.faultTracking;
   if(ft&&Array.isArray(ft.pages))ft.pages.forEach((p,pi)=>{
     if(p&&p.imageId)push({role:"ft-bg",value:String(p.imageId),hint:hints[p.imageId],ptr:"ft.pages["+pi+"].imageId",pi,structured:true});
+    if(p&&p.pcb&&p.pcb.imageIdB)push({role:"ft-bg",value:String(p.pcb.imageIdB),hint:hints[p.pcb.imageIdB],ptr:"ft.pages["+pi+"].pcb.imageIdB",pi,structured:true});
     ((p&&p.hotspots)||[]).forEach((h,hi)=>((h&&h.content&&h.content.images)||[]).forEach((x,ii)=>{if(x&&x.id)push({role:"ft-note",value:String(x.id),hint:hints[x.id],ptr:"ft.pages["+pi+"].hotspots["+hi+"].images["+ii+"]",pi,hi,ii,structured:true})}))});
   if(Array.isArray(it._faultImages))it._faultImages.forEach(x=>{if(x&&x.fileId&&!seen.has(x.fileId)&&!out.some(r=>r.value===x.fileId)){seen.add(x.fileId);push({role:"ft-bg",value:x.fileId,hint:x.filename,ptr:"_faultImages",structured:false,fromMeta:true,orphanFt:true})}});
   /* صيغ قديمة */
@@ -13453,6 +13851,7 @@ async function apply(){
         const ft=it.notebookData.faultTracking;
         if(ft&&Array.isArray(ft.pages)){const pg=ft.pages,mp=new Map();rs.filter(r=>r.role==="ft-bg"||r.role==="ft-note").forEach(r=>mp.set(r.ptr,r));
           pg.forEach((p,pi)=>{if(p&&p.imageId){const r=mp.get("ft.pages["+pi+"].imageId");p.imageId=r&&r.newFid||null;if(r&&!r.newFid&&!r.final.ignored)R.removed.push({role:"ft-bg",value:r.value,why:r.res.why[0]||""})}
+            if(p&&p.pcb&&p.pcb.imageIdB){const r=mp.get("ft.pages["+pi+"].pcb.imageIdB");p.pcb.imageIdB=r&&r.newFid||null;if(r&&!r.newFid&&!r.final.ignored)R.removed.push({role:"ft-bg",value:r.value,why:r.res.why[0]||""})}
             ((p&&p.hotspots)||[]).forEach((h,hi)=>{if(h&&h.content&&Array.isArray(h.content.images))h.content.images=h.content.images.map((im,ii)=>{const r=mp.get("ft.pages["+pi+"].hotspots["+hi+"].images["+ii+"]");return r&&r.newFid?Object.assign({},im,{id:r.newFid}):null}).filter(Boolean)})})}
         it.notebookData.images=nb}
       else if(nb.length){/* مفيش دفتر ملاحظات: نضيف الصور كصور عادية */imgs.push(...nb.map(x=>x.id))}
@@ -13480,7 +13879,7 @@ async function apply(){
   const need=new Set();
   for(const R of rep.items){const it=R.newItem||R.merged;if(!it)continue;
     (it.imageIds||[]).forEach(x=>need.add(x));(it.docs||[]).forEach(d=>d&&need.add(d.fileId));((it.notebookData&&it.notebookData.images)||[]).forEach(x=>x&&need.add(x.id));
-    const ft=it.notebookData&&it.notebookData.faultTracking;if(ft&&ft.pages)ft.pages.forEach(p=>{if(p.imageId)need.add(p.imageId);((p.hotspots)||[]).forEach(h=>((h.content&&h.content.images)||[]).forEach(im=>im&&need.add(im.id)))})}
+    const ft=it.notebookData&&it.notebookData.faultTracking;if(ft&&ft.pages)ft.pages.forEach(p=>{if(p.imageId)need.add(p.imageId);if(p.pcb&&p.pcb.imageIdB)need.add(p.pcb.imageIdB);((p.hotspots)||[]).forEach(h=>((h.content&&h.content.images)||[]).forEach(im=>im&&need.add(im.id)))})}
   let wi=0;
   for(const w of written){if(!need.has(w.fid)||existFiles.has(w.fid)&&existFiles.get(w.fid).blob&&shaOfExist.get(w.fid)===w.f.hash)continue;
     try{setProg("كتابة الملفات",++wi,written.length);const rec=await makeRec(w.f,w.fid);await idbPut_real("files",rec);rep.files++;rep.bytes+=rec.size}catch(e){rep.errors.push("ملف "+w.f.path+": "+e.message)}}
@@ -13809,7 +14208,7 @@ function fidsOf(it){
   const nb=it.notebookData;
   if(nb){(nb.images||[]).forEach(x=>x&&x.id&&a.push(x.id));
     const ft=nb.faultTracking;
-    if(ft&&ft.pages)ft.pages.forEach(p=>{p&&p.imageId&&a.push(p.imageId);((p&&p.hotspots)||[]).forEach(h=>((h&&h.content&&h.content.images)||[]).forEach(x=>x&&x.id&&a.push(x.id)))})}
+    if(ft&&ft.pages)ft.pages.forEach(p=>{p&&p.imageId&&a.push(p.imageId);p&&p.pcb&&p.pcb.imageIdB&&a.push(p.pcb.imageIdB);((p&&p.hotspots)||[]).forEach(h=>((h&&h.content&&h.content.images)||[]).forEach(x=>x&&x.id&&a.push(x.id)))})}
   return a}
 async function names(it){
   const out=[];
@@ -13853,7 +14252,7 @@ function jobsOf(it){
   const nb=it.notebookData;
   if(nb){(nb.images||[]).forEach(x=>x&&x.id&&j.push([x.id,"nb"]));
     const ft=nb.faultTracking;
-    if(ft&&ft.pages)ft.pages.forEach(p=>{p&&p.imageId&&j.push([p.imageId,"ft"]);((p&&p.hotspots)||[]).forEach(h=>((h&&h.content&&h.content.images)||[]).forEach(x=>x&&x.id&&j.push([x.id,"ft"])))})}
+    if(ft&&ft.pages)ft.pages.forEach(p=>{p&&p.imageId&&j.push([p.imageId,"ft"]);p&&p.pcb&&p.pcb.imageIdB&&j.push([p.pcb.imageIdB,"ft"]);((p&&p.hotspots)||[]).forEach(h=>((h&&h.content&&h.content.images)||[]).forEach(x=>x&&x.id&&j.push([x.id,"ft"])))})}
   return j}
 async function normalizeItem(it,forceBase){
   if(!on()||!it)return 0;
@@ -14065,7 +14464,7 @@ function findFile(c,fid,itemId){
 function refsOf(it){const R=[],a=i=>i&&R.push(i);
   (it.imageIds||[]).forEach(a);(it.docs||[]).forEach(d=>d&&a(d.fileId));
   ((it.notebookData||{}).images||[]).forEach(x=>a(x&&x.id));
-  (((it.notebookData||{}).faultTracking||{}).pages||[]).forEach(p=>{a(p.imageId);(p.hotspots||[]).forEach(hs=>((hs.content||{}).images||[]).forEach(x=>a(x&&x.id)))});
+  (((it.notebookData||{}).faultTracking||{}).pages||[]).forEach(p=>{a(p.imageId);a(p.pcb&&p.pcb.imageIdB);(p.hotspots||[]).forEach(hs=>((hs.content||{}).images||[]).forEach(x=>a(x&&x.id)))});
   return R}
 const idbRec=async fid=>{try{return typeof idbGet_real==="function"?await idbGet_real("files",fid):null}catch(e){return null}};
 const NOLINK="داخل المتصفح فقط (قاعدة بيانات IndexedDB) — لا يوجد مجلد مرتبط حاليًا";
