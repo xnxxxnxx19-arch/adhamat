@@ -5692,8 +5692,8 @@ function logStoreActivity(storeName,oldValue,newValue){
       return;
     }
     // مقارنة سطحية-متعمقة محدودة (نستثني notebookData الثقيلة — لها التقاطها الخاص عبر هذا نفس المسار عند حفظها)
-    const oc=galleryClone(oldValue), nc=galleryClone(newValue);
-    delete oc.notebookData; delete nc.notebookData;
+    const __o=Object.assign({},oldValue), __n=Object.assign({},newValue); delete __o.notebookData; delete __n.notebookData;
+    const oc=galleryClone(__o), nc=galleryClone(__n);
     const diffs=[]; galleryDiff(oc,nc,'',diffs,25,0);
     diffs.forEach(d=>{
       const oldV=auditSafeStringG(d.oldValue), newV=auditSafeStringG(d.newValue);
@@ -5722,7 +5722,7 @@ function galleryClone(v){ try{ return JSON.parse(JSON.stringify(v)); }catch(e){ 
 function galleryProjection(){
   return {
     folders: state.folders||[],
-    items: (state.items||[]).map(it=>{ const c=galleryClone(it); if(c) delete c.notebookData; return c; })
+    items: (state.items||[]).map(it=>{ if(!it || typeof it!=='object') return it; const r=Object.assign({},it); delete r.notebookData; return galleryClone(r); })
   };
 }
 function galleryDiff(a,b,path,out,limit,depth){
@@ -11322,6 +11322,32 @@ function nbFtOpenEditor(hotspot, item, onChange){
   overlay.querySelector('.ft-modal-close').onclick=close;
 }
 
+/* مصغرات صفحات تتبع الأعطال: بدل ما كل مصغّرة تفك الصورة الأصلية كاملة (ده كان بيستهلك ذاكرة ضخمة مع كثرة الصفحات)،
+   بنعمل نسخة صغيرة (240px) مرة واحدة، واحدة ورا التانية، ونحتفظ بيها في الذاكرة. */
+const _ftThumbCache=new Map(); let _ftThumbChain=Promise.resolve();
+function nbFtThumbURL(fileId){
+  if(!fileId) return Promise.resolve(null);
+  if(_ftThumbCache.has(fileId)) return Promise.resolve(_ftThumbCache.get(fileId));
+  const job=_ftThumbChain.then(async()=>{
+    if(_ftThumbCache.has(fileId)) return _ftThumbCache.get(fileId);
+    try{
+      const rec=await idbGet('files',fileId);
+      if(!rec||!rec.blob) return null;
+      let bmp;
+      try{ bmp=await createImageBitmap(rec.blob,{resizeWidth:240,resizeQuality:'medium'}); }
+      catch(e){ bmp=await createImageBitmap(rec.blob); }
+      const sc=Math.min(1,240/bmp.width), w=Math.max(1,Math.round(bmp.width*sc)), h=Math.max(1,Math.round(bmp.height*sc));
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(bmp,0,0,w,h); if(bmp.close) bmp.close();
+      const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.78)); c.width=c.height=0;
+      if(!blob) return null;
+      const url=URL.createObjectURL(blob); _ftThumbCache.set(fileId,url); return url;
+    }catch(e){ return null; }
+  });
+  _ftThumbChain=job.catch(()=>{});
+  return job;
+}
+
 function nbFaultPanel(body, s, item){
   const ft = ensureFaultTrackingData(s);
   let mode='view';
@@ -11336,6 +11362,7 @@ function nbFaultPanel(body, s, item){
   let pcbDockOpen=null, pcbAdvOpen=false, pcbTool=null, pcbAlign=null;
   let wsOpenZones=new Set(), wsOpenMenuId=null;
   const wsDraw={alpha:1,dash:'',stamp:'⚠️'};
+  let ftDispose=()=>{};
 
   const help=document.createElement('div'); help.className='nb-help';
   help.textContent='أضف صورًا للجهاز، وأنشئ طبقة لكل نقطة عطل (دائرة قابلة للتحريك)، وارسم أسهمًا/خطوطًا/مسارات ونصوصًا مباشرة فوق الصورة داخل الطبقة المختارة. في وضع العرض تكون كل الطبقات مخفية، واضغط على نقطة محددة لإظهار محتواها فقط. كبّر وصغّر الصورة بإصبعين (Pinch) أو بعجلة الفأرة.';
@@ -11347,6 +11374,7 @@ function nbFaultPanel(body, s, item){
   function currentPage(){ return ft.pages.find(p=>p.id===activeId) || null; }
 
   function render(){
+    try{ ftDispose(); }catch(e){} ftDispose=()=>{};
     root.innerHTML='';
     if(isFullscreen){
       if(root.parentNode!==document.body){
@@ -11374,7 +11402,8 @@ function nbFaultPanel(body, s, item){
       const thumb=document.createElement('div');
       thumb.className='ft-page-thumb'+(p.id===activeId?' active':'');
       const img=document.createElement('img');
-      if(p.imageId) getFileBlobURL(p.imageId).then(u=>{ if(u) img.src=u; });
+      img.decoding='async';
+      if(p.imageId) nbFtThumbURL(p.imageId).then(u=>{ if(u) img.src=u; else return getFileBlobURL(p.imageId).then(u2=>{ if(u2) img.src=u2; }); });
       const lbl=document.createElement('span'); lbl.textContent=p.name || ('صفحة '+(idx+1));
       thumb.append(img,lbl);
       thumb.onclick=()=>{ activeId=p.id; ft.activePageId=p.id; activeLayerId=null; mode='view'; pcbDockOpen=null; nbScheduleSave(item); render(); };
@@ -11609,6 +11638,23 @@ function nbFaultPanel(body, s, item){
     const redoStacks=new Map();
     function clearRedo(layerId){ redoStacks.delete(layerId+SK()); }
 
+    /* حجم الكانفس الداخلي محدود (~9 ميجابكسل) بدل حجم الصورة الأصلي — الرسم بيفضل بإحداثيات الصورة الأصلية عن طريق setTransform.
+       كانفس الوجه السفلي بيتحجز بس لو فيه صورة/رسم للوجه السفلي، وإلا بيفضل 1×1. */
+    const FT_MAX_CANVAS_PX=9e6; let cvScale=1;
+    function sizeCanvases(){
+      if(!natW||!natH) return false;
+      cvScale=Math.min(1, Math.sqrt(FT_MAX_CANVAS_PX/(natW*natH)));
+      const w=Math.max(1,Math.round(natW*cvScale)), h=Math.max(1,Math.round(natH*cvScale));
+      const needB=pcbHasB() || page.hotspots.some(x=>x&&x.content&&x.content.drawing&&(x.content.drawing.shapesB||[]).length>0);
+      let changed=false;
+      [[canvas,ctx,true],[canvasB,ctxB,needB],[live,lctx,true]].forEach(a=>{
+        const c=a[0], cx=a[1], on=a[2], tw=on?w:1, th=on?h:1;
+        if(c.width!==tw||c.height!==th){ c.width=tw; c.height=th; changed=true; }
+        c.style.width=natW+'px'; c.style.height=natH+'px';
+        const k=on?cvScale:1; cx.setTransform(k,0,0,k,0,0);
+      });
+      return changed;
+    }
     function computeBaseScaleAndCenter(){
       const rect=viewport.getBoundingClientRect();
       if(!natW || !natH || !rect.width){ baseScale=1; }
@@ -11998,6 +12044,8 @@ function nbFaultPanel(body, s, item){
       }
     }
     function scheduleLive(){ if(!liveRaf) liveRaf=requestAnimationFrame(paintLive); }
+    let selRaf=0;
+    function scheduleSelRedraw(){ if(selRaf) return; selRaf=requestAnimationFrame(()=>{ selRaf=0; redrawCanvas(); renderTextLabels(); }); }
     function cancelLive(){ if(liveRaf){ cancelAnimationFrame(liveRaf); liveRaf=0; } clearLive(); }
     function commitShape(layer,ds){
       const sc=wScale; let shape=null;
@@ -12118,7 +12166,7 @@ function nbFaultPanel(body, s, item){
           const pos=screenToNatural(e.clientX, e.clientY);
           const dx=pos.x-drawState.last.x, dy=pos.y-drawState.last.y;
           moveShape(drawState.shape,dx,dy); drawState.last=pos;
-          redrawCanvas(); renderTextLabels(); return;
+          scheduleSelRedraw(); return;
         }
         if(drawState.erasing){ eraseNearActive(screenToNatural(e.clientX, e.clientY)); return; }
         if(drawState.tool && e.pointerId===drawState.id && wRect){
@@ -12237,6 +12285,7 @@ function nbFaultPanel(body, s, item){
 
     function applyPcb(){
       const pc=page.pcb;
+      if(natW && sizeCanvases()) redrawCanvas();
       const opA=pcbDrawOp('A'), opB=pcbDrawOp('B'), ef=pcbEditFace();
       canvas.style.opacity=String(opA); canvasB.style.opacity=String(opB);
       live.style.opacity=String(ef==='B'?opB:opA);
@@ -12476,9 +12525,8 @@ function nbFaultPanel(body, s, item){
     worldImg.addEventListener('load', ()=>{
       natW=worldImg.naturalWidth; natH=worldImg.naturalHeight;
       worldImg.style.width=natW+'px'; worldImg.style.height=natH+'px';
-      canvas.width=natW; canvas.height=natH; canvas.style.width=natW+'px'; canvas.style.height=natH+'px';
-      canvasB.width=natW; canvasB.height=natH; canvasB.style.width=natW+'px'; canvasB.style.height=natH+'px';
-      live.width=natW; live.height=natH; live.style.width=natW+'px'; live.style.height=natH+'px';
+      worldImg.decoding='async';
+      sizeCanvases();
       textLayer.style.width=natW+'px'; textLayer.style.height=natH+'px';
       markersLayer.style.width=natW+'px'; markersLayer.style.height=natH+'px';
       zoomFactor=1;
@@ -12486,8 +12534,18 @@ function nbFaultPanel(body, s, item){
       applyPcb();
       redrawCanvas(); renderTextLabels(); renderMarkers();
     });
-    window.addEventListener('resize', ()=>{ if(natW){ computeBaseScaleAndCenter(); applyTransform(); } });
-    document.addEventListener('keydown', function escFsHandler(e){ if(e.key==='Escape' && isFullscreen){ isFullscreen=false; render(); } });
+    const onWinResize=()=>{ if(!root.isConnected) return; if(natW){ computeBaseScaleAndCenter(); applyTransform(); } };
+    const escFsHandler=function(e){ if(!root.isConnected) return; if(e.key==='Escape' && isFullscreen){ isFullscreen=false; render(); } };
+    window.addEventListener('resize', onWinResize);
+    document.addEventListener('keydown', escFsHandler);
+    ftDispose=()=>{
+      window.removeEventListener('resize', onWinResize);
+      document.removeEventListener('keydown', escFsHandler);
+      if(liveRaf){ cancelAnimationFrame(liveRaf); liveRaf=0; }
+      if(selRaf){ cancelAnimationFrame(selRaf); selRaf=0; }
+      try{ [canvas,canvasB,live].forEach(c=>{ c.width=0; c.height=0; }); }catch(e){}
+      try{ worldImg.removeAttribute('src'); pcbImg.removeAttribute('src'); }catch(e){}
+    };
 
     updateDrawCursor();
     renderLayersBar();
