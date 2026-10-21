@@ -7676,7 +7676,7 @@ async function exportProject(){
         if(!frec){ missingFiles.push({item:it.name||it.id, type:"صورة", id:fid}); continue; }
         const ext = guessExt(frec.mime, frec.name);
         const fname = fid + ext;
-        folder.folder("images").file(fname, frec.blob);
+        folder.folder("images").file(fname, frec.blob, {compression:"STORE"});
         imageNames.push({fileId: fid, filename: "images/"+fname, isMain: fid===it.mainImageId});
       }
       const docNames = [];
@@ -7684,7 +7684,7 @@ async function exportProject(){
         const frec = fileMap.get(d.fileId);
         if(!frec){ missingFiles.push({item:it.name||it.id, type:"مستند", id:d.fileId, name:d.name}); continue; }
         const fname = d.fileId + "_" + (d.name||"file");
-        folder.folder("documents").file(fname, frec.blob);
+        folder.folder("documents").file(fname, frec.blob, {compression:"STORE"});
         docNames.push({fileId: d.fileId, filename: "documents/"+fname, name: d.name});
       }
       // صور دفتر الملاحظات التقني (منفصلة عن معرض صور العنصر الرئيسي) — لازم تُصدَّر كمان
@@ -7695,7 +7695,7 @@ async function exportProject(){
         if(!frec){ missingFiles.push({item:it.name||it.id, type:"صورة دفتر ملاحظات", id:nimg.id}); continue; }
         const ext = guessExt(frec.mime, frec.name);
         const fname = nimg.id + ext;
-        folder.folder("notebook_images").file(fname, frec.blob);
+        folder.folder("notebook_images").file(fname, frec.blob, {compression:"STORE"});
         nbImageNames.push({fileId: nimg.id, filename: "notebook_images/"+fname, caption: nimg.caption||''});
       }
       // صور "تتبع الأعطال": صور الصفحات نفسها + الصور المرفقة داخل محتوى كل نقطة تفاعلية
@@ -7714,7 +7714,7 @@ async function exportProject(){
         if(!frec){ missingFiles.push({item:it.name||it.id, type:"صورة تتبع أعطال", id:fid}); continue; }
         const ext = guessExt(frec.mime, frec.name);
         const fname = fid + ext;
-        folder.folder("fault_images").file(fname, frec.blob);
+        folder.folder("fault_images").file(fname, frec.blob, {compression:"STORE"});
         ftImageNames.push({fileId: fid, filename: "fault_images/"+fname});
       }
       clone._images = imageNames;
@@ -7729,7 +7729,7 @@ async function exportProject(){
       zip.file("project/export-warnings.json", JSON.stringify(missingFiles, null, 2));
     }
 
-    const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:4}});
+    const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:1}, streamFiles:true});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     const stamp = new Date().toISOString().slice(0,10);
@@ -10260,7 +10260,12 @@ li:has(>.md-task){list-style:none}
 .nb-blk .md-callout input[type=text]{background:transparent;border:0;padding:4px}
 .nb-blk .md-callout select{background:transparent;border:0;font-size:18px}
 .nb-seg-area .nb-b-ta{min-height:44px;height:auto;width:100%;box-sizing:border-box;resize:none;overflow:hidden}
-.nb-seg-area .nb-b-view{border:0;background:transparent;padding:4px}`;document.head.appendChild(st);})();
+.nb-seg-area .nb-b-view{border:0;background:transparent;padding:4px}
+.nb-grp{border:1px solid var(--border);border-radius:10px;margin:8px 0;background:var(--panel2)}
+.nb-grp-head{display:flex;gap:8px;align-items:center;padding:10px;cursor:pointer;font-weight:800;flex-wrap:wrap}
+.nb-grp-head b{flex:1;min-width:90px}
+.nb-grp-arrow{color:var(--amber);width:16px;text-align:center}
+.nb-grp-body{padding:4px 10px 12px}`;document.head.appendChild(st);})();
 
 const NB_TPL_KEY='nb_seg_tpl_v1', NB_DEF_KEY='nb_seg_def_v1';
 const nbLsGet=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v;}catch(e){return d;}};
@@ -10356,6 +10361,7 @@ function nbBlocksToMd(B){
 }
 
 /* ===== مقطع شرح إضافي (مطوّر) ===== */
+let nbTabRefresh=null;
 function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
   boxData.style=boxData.style||{}; boxData.sketches=boxData.sketches||{};
   const st=boxData.style, wrap=document.createElement('div');
@@ -10365,6 +10371,7 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
       <input class="nb-exbox-title" value="${esc(boxData.title||'')}" placeholder="عنوان المقطع (اختياري)">
       <span class="nb-seg-stat" title="الحفظ تلقائي">✓</span>
       <button type="button" class="btn small" data-act="src" title="عرض / تحرير كنص ماركداون">🧾</button>
+      <button type="button" class="btn small" data-act="mv" title="نقل إلى مجموعة">📁</button>
       <button type="button" class="btn small" data-act="tpl" title="القوالب">📋</button>
       <button type="button" class="btn small" data-act="set" title="تخصيص مربع الكتابة">⚙</button>
       <button type="button" class="btn small" data-act="fs" title="ملء الشاشة">🔳</button>
@@ -10380,6 +10387,7 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
   const q=a=>wrap.querySelector('[data-act="'+a+'"]');
   const titleEl=wrap.querySelector('.nb-exbox-title'), host=wrap.querySelector('.nb-blocks'), taEl=q('text'), tbH=q('toolbar'), area=wrap.querySelector('.nb-seg-area'), setP=wrap.querySelector('.nb-seg-set'), stat=wrap.querySelector('.nb-seg-stat'), grip=wrap.querySelector('.nb-seg-grip');
   let B=nbMdToBlocks(boxData.content), act=-1, curTa=null, src=false;
+  let lazy=!!boxData.col;
   const scratch=document.createElement('textarea');
   let tm; const save=()=>{stat.textContent='⏳';nbScheduleSave(item);clearTimeout(tm);tm=setTimeout(()=>stat.textContent='✓',900);};
   const commit=()=>{ boxData.content=nbBlocksToMd(B); taEl.value=boxData.content; save(); };
@@ -10478,7 +10486,7 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
   setP.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{delete st[b.dataset.clr];fillSet();applyStyle();save();});
   setP.querySelector('[data-a=def]').onclick=e=>{nbLsSet(NB_DEF_KEY,Object.assign({},st));e.target.textContent='✓ تم';};
   setP.querySelector('[data-a=reset]').onclick=()=>{Object.keys(st).forEach(k=>delete st[k]);fillSet();applyStyle();save();};
-  fillSet(); applyStyle(); redo();
+  fillSet(); applyStyle(); if(!lazy) redo();
 
   taEl.addEventListener('input',()=>{ boxData.content=taEl.value; save(); });
   q('src').onclick=()=>{ src=!src; if(src){ taEl.value=boxData.content||''; host.style.display='none'; tbH.style.display='none'; taEl.style.display='block'; }
@@ -10495,7 +10503,16 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
     const mv=ev=>{area.style.height=Math.max(70,h0+ev.clientY-y0)+'px';};
     const up=()=>{grip.removeEventListener('pointermove',mv);grip.removeEventListener('pointerup',up);st.h=parseInt(area.style.height)||undefined;fillSet();save();};
     grip.addEventListener('pointermove',mv);grip.addEventListener('pointerup',up);});
-  q('collapse').onclick=e=>{const c=wrap.classList.toggle('is-collapsed');e.currentTarget.textContent=c?'⌄':'⌃';};
+  if(boxData.col){ wrap.classList.add('is-collapsed'); q('collapse').textContent='⌄'; }
+  q('collapse').onclick=e=>{const c=wrap.classList.toggle('is-collapsed');e.currentTarget.textContent=c?'⌄':'⌃';boxData.col=c;if(!c&&lazy){lazy=false;redo();}nbScheduleSave(item);};
+  q('mv').onclick=()=>{
+    const nd=ensureNotebookData(item);
+    const tg=[{n:'🗂 بدون مجموعة',a:nd.explanations}].concat(nd.imageGroups.map(g=>({n:'📁 '+g.name,a:(g.explanations=g.explanations||[])}))).filter(x=>x.a!==s.explanations);
+    const ov=nbOv('<div class="nb-sk-box" style="max-width:340px"><b>نقل المقطع إلى…</b><div class="mvl" style="display:flex;flex-direction:column;gap:6px"></div><button type="button" class="btn small" data-a="x">إلغاء</button></div>');
+    tg.forEach(x=>{ const b=document.createElement('button'); b.type='button'; b.className='btn'; b.textContent=x.n;
+      b.onclick=()=>{ ov.remove(); const i=s.explanations.indexOf(boxData); if(i>-1) s.explanations.splice(i,1); x.a.push(boxData); nbScheduleSave(item); if(nbTabRefresh) nbTabRefresh(); };
+      ov.querySelector('.mvl').appendChild(b); });
+  };
   q('delete').onclick=e=>{if(!nbArmConfirm(e.currentTarget,'حذف المقطع؟'))return;if(wrap.classList.contains('nb-fs'))q('fs').click();s.explanations.splice(index,1);nbScheduleSave(item);rerenderList();};
   if(window.__SI) __SI.tag(wrap,{kind:'field',label:()=>'مربع شرح إضافي'+(boxData.title?' «'+boxData.title+'»':''),itemId:item.id,pos:'out',fieldPath:'notebookData.explanations['+index+']',get:()=>boxData});
   return wrap;
@@ -10531,9 +10548,10 @@ function nbTextPanel(body, s, item){
   const mainExWrap=document.createElement('div'); mainExWrap.className='nb-mainex-wrap';
   const mainExHead=document.createElement('div'); mainExHead.className='nb-mainex-head';
   mainExHead.innerHTML='<span class="nb-mainex-arrow">▸</span><b>📝 الشرح</b>';
-  const mainExBody=document.createElement('div'); mainExBody.className='nb-mainex-body'; mainExBody.style.display='none';
+  const mainExBody=document.createElement('div'); mainExBody.className='nb-mainex-body'; mainExBody.style.display=s.mainOpen?'block':'none'; mainExHead.querySelector('.nb-mainex-arrow').textContent=s.mainOpen?'▾':'▸';
   mainExHead.onclick=()=>{
     const willOpen = mainExBody.style.display==='none';
+    s.mainOpen = willOpen; nbScheduleSave(item);
     mainExBody.style.display = willOpen? 'block':'none';
     mainExHead.querySelector('.nb-mainex-arrow').textContent = willOpen? '▾':'▸';
   };
@@ -10564,12 +10582,12 @@ function nbTextPanel(body, s, item){
 
   const galHead=document.createElement('div');
   galHead.className='nb-subhead';
-  galHead.innerHTML='<b>📷 صور توضيحية</b>';
+  galHead.innerHTML='<b>📁 المجموعات والصور</b>';
   const addGroupBtn=document.createElement('button');
   addGroupBtn.type='button'; addGroupBtn.className='btn small'; addGroupBtn.textContent='📁+ مجموعة جديدة';
   addGroupBtn.onclick=()=>{
     const name=prompt('اسم المجموعة الجديدة:');
-    if(name && name.trim()){ s.imageGroups.push({id:uid('imgrp'), name:name.trim()}); nbScheduleSave(item); renderGallery(); }
+    if(name && name.trim()){ s.imageGroups.push({id:uid('imgrp'), name:name.trim(), open:true, explanations:[]}); nbScheduleSave(item); renderGallery(); }
   };
   galHead.appendChild(addGroupBtn);
   body.appendChild(galHead);
@@ -10607,59 +10625,69 @@ function nbTextPanel(body, s, item){
     if(window.__SI) __SI.tag(card,{kind:'file',fileId:entry.id,itemId:item.id,pos:'tl',extra:()=>[['حجم وصف الصورة (نص داخل item.json)',__SI.fmt(__SI.bytes(entry.caption||''))]]});
     return card;
   }
-  function renderGallery(){
-    gallery.innerHTML='';
-    const groups=s.imageGroups;
-    groups.forEach(g=>{
-      const groupImgs=s.images.filter(e=>e.groupId===g.id);
-      const gHead=document.createElement('div');
-      gHead.className='nb-photo-group-head';
-      gHead.innerHTML=`<b>📁 ${esc(g.name)}</b><span class="nb-photo-group-count">(${groupImgs.length})</span>`;
-      const renameBtn=document.createElement('button'); renameBtn.type='button'; renameBtn.className='btn small'; renameBtn.textContent='✏️';
-      renameBtn.onclick=()=>{ const nn=prompt('اسم المجموعة:', g.name); if(nn && nn.trim()){ g.name=nn.trim(); nbScheduleSave(item); renderGallery(); } };
-      const delGBtn=document.createElement('button'); delGBtn.type='button'; delGBtn.className='btn small danger'; delGBtn.textContent='🗑';
-      delGBtn.onclick=(e)=>{
-        if(!nbArmConfirm(e.currentTarget,'حذف المجموعة؟ (الصور نفسها تبقى بدون حذف)')) return;
-        s.images.forEach(im=>{ if(im.groupId===g.id) im.groupId=null; });
-        const gi=s.imageGroups.indexOf(g); if(gi!==-1) s.imageGroups.splice(gi,1);
-        nbScheduleSave(item); renderGallery();
-      };
-      gHead.append(renameBtn, delGBtn);
-      gallery.appendChild(gHead);
-      const gGrid=document.createElement('div'); gGrid.className='nb-gallery';
-      const navList=[];
-      groupImgs.forEach(entry=> gGrid.appendChild(buildPhotoCard(entry, navList)));
-      gallery.appendChild(gGrid);
-    });
-    const ungrouped=s.images.filter(e=>!e.groupId || !groups.find(g=>g.id===e.groupId));
-    if(groups.length){
-      const uHead=document.createElement('div');
-      uHead.className='nb-photo-group-head';
-      uHead.innerHTML=`<b>🗂 بدون مجموعة</b><span class="nb-photo-group-count">(${ungrouped.length})</span>`;
-      gallery.appendChild(uHead);
-    }
-    const uGrid=document.createElement('div'); uGrid.className='nb-gallery';
-    const uNavList=[];
-    ungrouped.forEach(entry=> uGrid.appendChild(buildPhotoCard(entry, uNavList)));
-    gallery.appendChild(uGrid);
-
-    const addCard=document.createElement('label');
-    addCard.className='nb-photo-add';
-    addCard.textContent='＋ أضف صورًا من الجهاز';
-    const pick=document.createElement('input');
-    pick.type='file'; pick.accept='image/*'; pick.multiple=true;
+  function makeAddCard(gid,done){
+    const addCard=document.createElement('label'); addCard.className='nb-photo-add'; addCard.textContent='＋ أضف صورًا من الجهاز';
+    const pick=document.createElement('input'); pick.type='file'; pick.accept='image/*'; pick.multiple=true;
     pick.onchange=async ()=>{
-      const files=[...(pick.files||[])];
-      if(!files.length) return;
+      const files=[...(pick.files||[])]; if(!files.length) return;
       addCard.textContent='جارٍ حفظ الصور...';
       const __nm=window.__NM?await window.__NM.namer(item):null;
-      for(const f of files){ const id=await storeFile(f, __nm?__nm.nb(f.name,f):f.name, f.type); s.images.push({id, caption:'', groupId:null}); }
-      nbScheduleSave(item);
-      renderGallery();
+      for(const f of files){ const id=await storeFile(f, __nm?__nm.nb(f.name,f):f.name, f.type); s.images.push({id, caption:'', groupId:gid}); }
+      nbScheduleSave(item); done();
     };
-    addCard.appendChild(pick);
-    uGrid.appendChild(addCard);
+    addCard.appendChild(pick); return addCard;
   }
+  const mkB=(l,fn,cls)=>{ const b=document.createElement('button'); b.type='button'; b.className='btn small'+(cls?' '+cls:''); b.textContent=l; b.onclick=e=>{ e.stopPropagation(); fn(e); }; return b; };
+  function buildGroupCard(g){
+    if(!Array.isArray(g.explanations)) g.explanations=[];
+    const card=document.createElement('div'); card.className='nb-grp';
+    const head=document.createElement('div'); head.className='nb-grp-head';
+    const arrow=document.createElement('span'); arrow.className='nb-grp-arrow';
+    const title=document.createElement('b'), cnt=document.createElement('span'); cnt.className='nb-photo-group-count';
+    const upd=()=>{ arrow.textContent=g.open?'▾':'▸'; title.textContent='📁 '+g.name; cnt.textContent='('+g.explanations.length+' شرح · '+s.images.filter(e=>e.groupId===g.id).length+' صورة)'; };
+    head.append(arrow,title,cnt,
+      mkB('✏️',()=>{ const nn=prompt('اسم المجموعة:',g.name); if(nn&&nn.trim()){ g.name=nn.trim(); nbScheduleSave(item); upd(); } }),
+      mkB('🗑',e=>{ if(!nbArmConfirm(e.currentTarget,'حذف المجموعة؟ (الشروح والصور تنتقل إلى «بدون مجموعة»)')) return;
+        s.images.forEach(im=>{ if(im.groupId===g.id) im.groupId=null; }); g.explanations.forEach(bx=>s.explanations.push(bx));
+        const gi=s.imageGroups.indexOf(g); if(gi!==-1) s.imageGroups.splice(gi,1); nbScheduleSave(item); renderExList(); renderGallery(); },'danger'));
+    const body=document.createElement('div'); body.className='nb-grp-body';
+    const fill=()=>{
+      body.innerHTML='';
+      const bar=document.createElement('div'); bar.className='nb-subhead';
+      bar.append(
+        mkB('+ مقطع شرح',()=>{ g.explanations.push({id:uid('nbex'),title:'',content:'',style:Object.assign({},nbLsGet(NB_DEF_KEY,{})),sketches:{}}); nbScheduleSave(item); fill(); upd(); }),
+        mkB('📋 من قالب',()=>nbTplMenu('new',tp=>{ const c=nbCloneTpl(tp); g.explanations.push({id:uid('nbex'),title:tp.name,content:c.content,style:c.style,sketches:c.sketches}); nbScheduleSave(item); fill(); upd(); })));
+      const list=document.createElement('div'); list.className='nb-explist';
+      g.explanations.forEach((bx,i)=>list.appendChild(nbBuildExtraExplainBox(g,bx,i,item,()=>{ fill(); upd(); })));
+      const grid=document.createElement('div'); grid.className='nb-gallery'; const nav=[];
+      s.images.filter(e=>e.groupId===g.id).forEach(e=>grid.appendChild(buildPhotoCard(e,nav)));
+      grid.appendChild(makeAddCard(g.id,()=>{ fill(); upd(); }));
+      body.append(bar,list,grid);
+    };
+    const setOpen=o=>{ g.open=o; nbScheduleSave(item); if(o){ fill(); body.style.display=''; } else { body.innerHTML=''; body.style.display='none'; } upd(); };
+    head.onclick=()=>setOpen(!g.open);
+    if(g.open) fill(); else body.style.display='none';
+    upd(); card.append(head,body); return card;
+  }
+  function renderGallery(){
+    gallery.innerHTML='';
+    s.imageGroups.forEach(g=>gallery.appendChild(buildGroupCard(g)));
+    const ungrouped=s.images.filter(e=>!e.groupId || !s.imageGroups.find(g=>g.id===e.groupId));
+    const uCard=document.createElement('div'); uCard.className='nb-grp';
+    const uBody=document.createElement('div'); uBody.className='nb-grp-body';
+    const fillU=()=>{ uBody.innerHTML=''; const grid=document.createElement('div'); grid.className='nb-gallery'; const nav=[]; ungrouped.forEach(e=>grid.appendChild(buildPhotoCard(e,nav))); grid.appendChild(makeAddCard(null,renderGallery)); uBody.appendChild(grid); };
+    if(s.imageGroups.length){
+      const head=document.createElement('div'); head.className='nb-grp-head';
+      const arrow=document.createElement('span'); arrow.className='nb-grp-arrow'; const label=document.createElement('b'); head.append(arrow,label);
+      const updU=()=>{ arrow.textContent=s.ungrpOpen!==false?'▾':'▸'; label.textContent='🗂 بدون مجموعة ('+ungrouped.length+')'; };
+      const setU=o=>{ s.ungrpOpen=o; nbScheduleSave(item); if(o){ fillU(); uBody.style.display=''; } else { uBody.innerHTML=''; uBody.style.display='none'; } updU(); };
+      head.onclick=()=>setU(s.ungrpOpen===false);
+      if(s.ungrpOpen===false) uBody.style.display='none'; else fillU();
+      updU(); uCard.append(head,uBody);
+    } else { fillU(); uCard.style.cssText='border:0;background:transparent'; uCard.appendChild(uBody); }
+    gallery.appendChild(uCard);
+  }
+  nbTabRefresh=()=>{ renderExList(); renderGallery(); };
   renderGallery();
 }
 
@@ -17009,6 +17037,149 @@ renderSettingsView = async function(c){
 window.__PKG = {exportItem, exportFolder, startImport, runImport, openPackage, build, remap, scan};
 })();
 
+</script>
+<script id="storage-compressor">
+/* =========================================================
+   ضغط وتحسين التخزين: إعادة ترميز الصور المخزّنة إلى WebP (بجودة وأبعاد تختارها)
+   - الأصل لا يُستبدل إلا لو الناتج أصغر بوضوح
+   - صور تتبع الأعطال تُضغط بدون تصغير أبعادها (حتى تبقى مواضع الرسم والنقاط سليمة)
+   ========================================================= */
+(function(){
+"use strict";
+const PRESETS={
+  light:{q:.9,m:4096,l:"خفيف — جودة عالية"},
+  bal:{q:.8,m:2560,l:"متوازن (موصى به)"},
+  max:{q:.68,m:1600,l:"أقصى ضغط (أرشفة)"}
+};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const isImg=r=>r&&r.blob&&/^image\/(jpeg|jpg|png|bmp|webp|avif)$/i.test(r.mime||r.blob.type||"");
+const putRec=rec=>(STORAGE_MODE==="memory"?memPut:idbPut_real)("files",rec);
+let run=null;
+
+function protectedIds(){
+  const s=new Set();
+  (state.items||[]).forEach(it=>{
+    const ps=it.notebookData&&it.notebookData.faultTracking&&it.notebookData.faultTracking.pages;
+    (ps||[]).forEach(p=>{ if(p.imageId) s.add(p.imageId); if(p.pcb&&p.pcb.imageIdB) s.add(p.pcb.imageIdB); });
+  });
+  return s;
+}
+async function encode(blob,q,m,noResize){
+  const bm=await createImageBitmap(blob);
+  const mx=Math.max(bm.width,bm.height), sc=(noResize||mx<=m)?1:m/mx;
+  const w=Math.max(1,Math.round(bm.width*sc)), h=Math.max(1,Math.round(bm.height*sc));
+  let out;
+  if(typeof OffscreenCanvas!=="undefined"){
+    const c=new OffscreenCanvas(w,h), x=c.getContext("2d"); x.imageSmoothingQuality="high"; x.drawImage(bm,0,0,w,h);
+    out=await c.convertToBlob({type:"image/webp",quality:q});
+  }else{
+    const c=document.createElement("canvas"); c.width=w; c.height=h; const x=c.getContext("2d"); x.imageSmoothingQuality="high"; x.drawImage(bm,0,0,w,h);
+    out=await new Promise(r=>c.toBlob(r,"image/webp",q)); c.width=c.height=0;
+  }
+  if(bm.close) bm.close();
+  return out;
+}
+/* يعالج ملفًا واحدًا. dry=true: قياس فقط بدون كتابة */
+async function one(rec,o,prot,dry){
+  const old=rec.blob.size, keep=o.keep&&prot.has(rec.id);
+  if(old<o.min) return {skip:1};
+  if(!dry&&rec.cz&&rec.cz.q<=o.q&&(keep||rec.cz.m<=o.m)) return {skip:1};
+  const out=await encode(rec.blob,o.q,o.m,keep);
+  if(!out||out.type!=="image/webp") throw new Error("nowebp");
+  if(out.size>old*0.92){ if(!dry){ rec.cz={q:o.q,m:o.m}; await putRec(rec); } return {old,now:old,gain:0}; }
+  if(!dry){
+    const n=Object.assign({},rec,{blob:out,mime:"image/webp",size:out.size,updatedAt:Date.now(),cz:{q:o.q,m:o.m}});
+    if(n.name) n.name=n.name.replace(/\.(jpe?g|png|bmp|tiff?|avif|heic|webp)$/i,".webp");
+    await putRec(n);
+  }
+  return {old,now:out.size,gain:old-out.size};
+}
+const allKeys=()=>new Promise((ok,no)=>{ const r=db.transaction("files","readonly").objectStore("files").getAllKeys(); r.onsuccess=()=>ok(r.result||[]); r.onerror=()=>no(r.error); });
+
+async function analyze(){
+  const recs=await idbGetAll("files"); const s={n:recs.length,all:0,img:0,imgN:0,pdf:0,vid:0,oth:0};
+  recs.forEach(r=>{ const b=(r.size||(r.blob&&r.blob.size)||0), t=r.mime||(r.blob&&r.blob.type)||""; s.all+=b;
+    if(/^image\//.test(t)){ s.img+=b; s.imgN++; } else if(/pdf/.test(t)) s.pdf+=b; else if(/^video\//.test(t)) s.vid+=b; else s.oth+=b; });
+  return s;
+}
+async function estimate(o,st){
+  const keys=await allKeys(), prot=protectedIds(), pick=[];
+  for(let i=0;i<keys.length&&pick.length<30;i++){ const k=keys[Math.floor(Math.random()*keys.length)]; if(!pick.includes(k)) pick.push(k); }
+  let a=0,b=0,n=0;
+  for(const k of pick){ try{ const r=await idbGet("files",k); if(isImg(r)){ const x=await one(r,o,prot,true); if(!x.skip){ a+=x.old; b+=Math.min(x.now,x.old); n++; } } }catch(e){} }
+  if(!n) return null;
+  return {ratio:b/a,saving:st.img*(1-b/a),n};
+}
+async function job(o,ui){
+  const keys=await allKeys(), prot=protectedIds(); let i=0,done=0,gain=0,fail=0,ch=0;
+  run={stop:false,pause:false,err:""};
+  const worker=async()=>{
+    while(!run.stop&&i<keys.length){
+      while(run.pause&&!run.stop) await sleep(250);
+      const k=keys[i++];
+      try{ const r=await idbGet("files",k); if(isImg(r)){ const x=await one(r,o,prot,false); if(x.gain>0){ gain+=x.gain; ch++;
+        try{ const u=state.objectUrls&&state.objectUrls.get(k); if(typeof u==="string"){ URL.revokeObjectURL(u); state.objectUrls.delete(k); } }catch(e){} } } }
+      catch(e){ fail++; if(e&&e.message==="nowebp"){ run.stop=true; run.err="المتصفح لا يدعم ترميز WebP"; } }
+      done++; if(done%5===0||done===keys.length) ui(done,keys.length,gain,fail,ch);
+    }
+  };
+  await Promise.all([worker(),worker()]);
+  ui(done,keys.length,gain,fail,ch);
+  try{ if(typeof requestFolderSync==="function"&&linkedDirHandle) requestFolderSync(); }catch(e){}
+  const res={gain,fail,ch,err:run.err,stopped:run.stop}; run=null; return res;
+}
+
+const _r=renderSettingsView;
+renderSettingsView=async function(c){
+  await _r(c);
+  if(c.querySelector("#czPanel")) return;
+  const p=document.createElement("div"); p.className="panel"; p.id="czPanel";
+  p.innerHTML=`<h3>🗜 ضغط وتحسين التخزين</h3>
+  <div id="czStats" style="font-size:12.5px;line-height:1.9;margin-bottom:8px">جارٍ حساب الحجم…</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <select id="czPreset">${Object.keys(PRESETS).map(k=>`<option value="${k}"${k==="bal"?" selected":""}>${PRESETS[k].l}</option>`).join("")}</select>
+    <label style="font-size:12px"><input type="checkbox" id="czKeep" checked> لا تصغّر أبعاد صور تتبع الأعطال (لحفظ مواضع الرسم)</label>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+    <button class="btn" id="czEst">🔍 قياس التوفير المتوقع</button>
+    <button class="btn primary" id="czGo">🗜 ابدأ الضغط</button>
+    <button class="btn" id="czPause" style="display:none">⏸ إيقاف مؤقت</button>
+    <button class="btn danger" id="czStop" style="display:none">⏹ إيقاف</button>
+  </div>
+  <div style="height:8px;background:var(--panel3);border-radius:6px;overflow:hidden"><div id="czBar" style="height:100%;width:0;background:var(--amber)"></div></div>
+  <div id="czMsg" style="font-size:12px;margin-top:6px;min-height:18px"></div>
+  <div style="font-size:11.5px;color:var(--dim2);line-height:1.8;margin-top:6px">يحوّل الصور إلى WebP ويستبدل الأصل فقط لو الناتج أصغر بوضوح. العملية لا يمكن التراجع عنها، فابدأ بـ«قياس التوفير» وخذ نسخة احتياطية قبل الضغط الكبير. ملفات PDF والفيديو لا تُضغط هنا. المساحة المعروضة في المتصفح قد تتأخر في النزول بعد الضغط. اترك الصفحة مفتوحة أثناء العمل؛ ولو أوقفتها تكمل لاحقًا من حيث انتهت.</div>`;
+  const anchor=c.querySelector("#exportBtn"), host=anchor&&anchor.closest(".panel");
+  if(host) host.insertAdjacentElement("afterend",p); else c.appendChild(p);
+  const $=s=>p.querySelector(s), msg=t=>{ $("#czMsg").textContent=t; };
+  const opts=()=>Object.assign({},PRESETS[$("#czPreset").value],{keep:$("#czKeep").checked,min:150*1024});
+  let st=null;
+  const showStats=async()=>{
+    if(STORAGE_MODE==="memory"){ $("#czStats").textContent="التخزين الدائم غير متاح في هذا السياق، فلا يمكن الضغط."; return; }
+    st=await analyze();
+    $("#czStats").innerHTML=`إجمالي الملفات: <b>${fmtBytes(st.all)}</b> (${st.n} ملف)<br>🖼 صور: <b>${fmtBytes(st.img)}</b> (${st.imgN}) — 📄 PDF: ${fmtBytes(st.pdf)} — 🎞 فيديو: ${fmtBytes(st.vid)} — غير ذلك: ${fmtBytes(st.oth)}`;
+  };
+  showStats();
+  $("#czEst").onclick=async()=>{
+    if(!st) return; msg("جارٍ قياس عيّنة من الصور…"); $("#czEst").disabled=true;
+    try{ const e=await estimate(opts(),st); msg(e?`التوفير المتوقع ≈ ${fmtBytes(e.saving)} (الصور ستصبح ~${Math.round(e.ratio*100)}% من حجمها، من عيّنة ${e.n} صورة)`:"لم أجد صورًا تحتاج ضغطًا في العيّنة."); }
+    catch(e){ msg("تعذّر القياس: "+(e.message||e)); } $("#czEst").disabled=false;
+  };
+  $("#czGo").onclick=async()=>{
+    if(run||!confirm("سيتم استبدال الصور بنسخ WebP مضغوطة ولا يمكن التراجع. متابعة؟")) return;
+    $("#czGo").style.display="none"; $("#czPause").style.display=$("#czStop").style.display="";
+    const t0=Date.now();
+    const res=await job(opts(),(d,t,g,f,ch)=>{ $("#czBar").style.width=(d/t*100)+"%"; msg(`${d}/${t} — تم تصغير ${ch} ملف — وفّرت ${fmtBytes(g)}`+(f?` — تعذّر ${f}`:"")); });
+    $("#czPause").style.display=$("#czStop").style.display="none"; $("#czGo").style.display="";
+    msg((res.err?res.err+" — ":res.stopped?"تم الإيقاف — ":"اكتمل — ")+`وفّرت ${fmtBytes(res.gain)} في ${Math.round((Date.now()-t0)/1000)} ثانية (${res.ch} ملف)`+(res.fail?` — تعذّر ${res.fail}`:""));
+    try{ toast("انتهى الضغط: وفّرت "+fmtBytes(res.gain),"ok"); }catch(e){}
+    showStats();
+  };
+  $("#czPause").onclick=e=>{ if(!run) return; run.pause=!run.pause; e.target.textContent=run.pause?"▶ متابعة":"⏸ إيقاف مؤقت"; };
+  $("#czStop").onclick=()=>{ if(run) run.stop=true; };
+};
+window.__CZ={analyze,estimate,job,PRESETS};
+})();
 </script>
 <script id="deep-search">
 /* =========================================================
