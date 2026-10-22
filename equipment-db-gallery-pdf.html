@@ -17451,6 +17451,147 @@ renderSettingsView=async function(c){
 window.__CZ={analyze,estimate,job,PRESETS};
 })();
 </script>
+<script id="plan-board">
+/* =========================================================
+   الصفحة الرئيسية: جدول الخطط والمهام
+   - عمود الخطط + عمود المهام (بمربع تحديد؛ المنجز ينزل لآخر الجدول)
+   - اكتب @ لذكر أي عنصر؛ الضغط على الاسم يفتح العنصر
+   - يُحفظ داخل إعدادات التطبيق (يدخل في النسخ والمزامنة)
+   ========================================================= */
+(function(){
+"use strict";
+const E=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const TOK=/@\[([^\]|]*)\|([^\]]+)\]/g;
+const rid=()=>"pb"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const getB=()=>{ const s=state.settings||(state.settings={}); if(!s.planBoard||!Array.isArray(s.planBoard.rows)) s.planBoard={rows:[]}; return s.planBoard; };
+let tm=null;
+const save=()=>{ clearTimeout(tm); tm=setTimeout(flush,500); };
+function flush(){ clearTimeout(tm); tm=null; try{ saveSettings(); }catch(e){} }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden"&&tm) flush(); });
+window.addEventListener("pagehide",()=>{ if(tm) flush(); });
+
+const itemById=id=>(state.items||[]).find(i=>i.id===id);
+function chip(n,id){ const it=itemById(id); return `<a class="pb-m${it?"":" gone"}" data-id="${E(id)}" contenteditable="false">@${E(it?it.name:n)}</a>`; }
+function toHtml(s){ s=String(s||""); let out="",last=0,m; TOK.lastIndex=0;
+  while((m=TOK.exec(s))){ out+=E(s.slice(last,m.index))+chip(m[1],m[2]); last=m.index+m[0].length; }
+  return out+E(s.slice(last)); }
+function ser(ed){ let o=""; const w=n=>n.childNodes.forEach(c=>{
+    if(c.nodeType===3) o+=c.nodeValue.replace(/\u00a0/g," ");
+    else if(c.nodeType===1){ if(c.classList.contains("pb-m")) o+="@["+c.textContent.replace(/^@/,"").replace(/[\]|]/g,"")+"|"+c.dataset.id+"]"; else if(c.tagName==="BR") o+=" "; else w(c); } });
+  w(ed); return o.replace(/\s+/g," ").replace(/^\s+/,""); }
+
+/* ===== قائمة الإشارة @ ===== */
+let pop=null, pst=null;
+function hidePop(){ if(pop){ pop.remove(); pop=null; } pst=null; }
+function findItems(q){
+  const ws=q.toLowerCase().split(/\s+/).filter(Boolean);
+  return (state.items||[]).filter(it=>{ const h=((it.name||"")+" "+(it.model||"")+" "+((it.tags||[]).join(" "))).toLowerCase(); return ws.every(w=>h.includes(w)); }).slice(0,8);
+}
+function mctx(ed){
+  const s=getSelection(); if(!s.rangeCount||!s.isCollapsed||!ed.contains(s.anchorNode)||s.anchorNode.nodeType!==3) return null;
+  const n=s.anchorNode, before=n.nodeValue.slice(0,s.anchorOffset), m=before.match(/@([^@\n]{0,25})$/); if(!m) return null;
+  const pc=before[m.index-1]; if(pc&&!/[\s\u00a0]/.test(pc)) return null;
+  return {n,off:s.anchorOffset,start:m.index,q:m[1]};
+}
+function insertChip(ed,c,it){
+  const after=c.n.splitText(c.off), mid=c.n.splitText(c.start); mid.remove();
+  const a=document.createElement("a"); a.className="pb-m"; a.dataset.id=it.id; a.contentEditable="false"; a.textContent="@"+it.name;
+  after.parentNode.insertBefore(a,after); const sp=document.createTextNode("\u00a0"); after.parentNode.insertBefore(sp,after);
+  const r=document.createRange(); r.setStart(sp,1); r.collapse(true); const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+function showPop(ed,c,onPick){
+  const list=findItems(c.q);
+  if(!list.length){ hidePop(); return; }
+  if(!pop){ pop=document.createElement("div"); pop.className="pb-pop"; document.body.appendChild(pop); }
+  pst={ed,c,list,idx:0,onPick};
+  pop.innerHTML=list.map((it,i)=>{ const path=(typeof getFolderPath==="function"&&it.folderId)?getFolderPath(it.folderId).map(f=>f.name).join(" › "):""; return `<div data-i="${i}" class="${i===0?"on":""}">${E(it.name||"(بدون اسم)")}<small>${E(path)}</small></div>`; }).join("");
+  pop.onpointerdown=e=>{ e.preventDefault(); const d=e.target.closest("[data-i]"); if(d) pick(+d.dataset.i); };
+  const s=getSelection(); let r=s.rangeCount?s.getRangeAt(0).getBoundingClientRect():null; if(!r||(!r.width&&!r.height&&!r.top)) r=ed.getBoundingClientRect();
+  const w=Math.min(320,innerWidth*.92); pop.style.left=Math.max(6,Math.min(innerWidth-w-6,r.left))+"px"; pop.style.top=Math.min(innerHeight-60,r.bottom+4)+"px";
+}
+function pick(i){ if(!pst) return; const {ed,c,list,onPick}=pst; insertChip(ed,c,list[i]); hidePop(); onPick(); }
+function popKey(e){
+  if(!pst) return false;
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){ e.preventDefault(); pst.idx=(pst.idx+(e.key==="ArrowDown"?1:pst.list.length-1))%pst.list.length; pop.querySelectorAll("[data-i]").forEach((d,i)=>d.classList.toggle("on",i===pst.idx)); return true; }
+  if(e.key==="Enter"||e.key==="Tab"){ e.preventDefault(); pick(pst.idx); return true; }
+  if(e.key==="Escape"){ e.preventDefault(); hidePop(); return true; }
+  return false;
+}
+
+/* ===== اللوحة ===== */
+function mount(host){
+  const draw=()=>{
+    const rows=getB().rows; host.innerHTML="";
+    const wrap=document.createElement("div"); wrap.className="pb-wrap";
+    wrap.innerHTML=`<div class="pb-head"><span>📋 الخطط</span><span>✅ المهام</span></div>`;
+    const focusCell=(id,k)=>{ const e=wrap.querySelector(`.pb-row[data-id="${id}"] .pb-${k} .pb-ed`); if(e){ e.focus(); const r=document.createRange(); r.selectNodeContents(e); r.collapse(false); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } };
+    const addRow=(at)=>{ const r={id:rid(),plan:"",task:"",done:false}; const fi=rows.findIndex(x=>x.done); rows.splice(at==null?(fi<0?rows.length:fi):at,0,r); save(); draw(); setTimeout(()=>focusCell(r.id,"plan"),30); };
+    rows.forEach((row,ri)=>{
+      const r=document.createElement("div"); r.className="pb-row"+(row.done?" done":""); r.dataset.id=row.id;
+      r.innerHTML=`<div class="pb-c pb-plan"><div class="pb-ed" contenteditable="true" data-ph="اكتب الخطة… أو @ لذكر عنصر"></div></div>
+        <div class="pb-c pb-task"><input type="checkbox" class="pb-ck" ${row.done?"checked":""}><div class="pb-ed" contenteditable="true" data-ph="مهمة…"></div><button type="button" class="pb-x" title="حذف الصف">✕</button></div>`;
+      [["plan",".pb-plan .pb-ed"],["task",".pb-task .pb-ed"]].forEach(([k,sel])=>{
+        const ed=r.querySelector(sel); ed.innerHTML=toHtml(row[k]);
+        const upd=()=>{ if(ed.innerHTML==="<br>") ed.innerHTML=""; row[k]=ser(ed); save(); };
+        ed.addEventListener("input",()=>{ upd(); const c=mctx(ed); if(c) showPop(ed,c,upd); else hidePop(); });
+        ed.addEventListener("keydown",e=>{ if(popKey(e)) return; if(e.key==="Enter"){ e.preventDefault(); if(k==="plan") focusCell(row.id,"task"); else addRow(row.done?null:ri+1); } });
+        ed.addEventListener("blur",()=>setTimeout(()=>{ if(!pst||pst.ed===ed) hidePop(); },200));
+        ed.addEventListener("click",e=>{ const a=e.target.closest(".pb-m"); if(a&&!a.classList.contains("gone")){ hidePop(); navigateTo({type:"item",id:a.dataset.id}); } });
+        ed.addEventListener("paste",e=>{ e.preventDefault(); document.execCommand("insertText",false,(e.clipboardData||window.clipboardData).getData("text/plain").replace(/\s+/g," ")); });
+      });
+      r.querySelector(".pb-ck").onchange=e=>{
+        const i=rows.indexOf(row); rows.splice(i,1); row.done=e.target.checked;
+        if(row.done) rows.push(row); else { const fi=rows.findIndex(x=>x.done); rows.splice(fi<0?rows.length:fi,0,row); }
+        save(); draw(); };
+      r.querySelector(".pb-x").onclick=()=>{ if((row.plan||row.task)&&!confirm("حذف هذا الصف؟")) return; rows.splice(rows.indexOf(row),1); save(); draw(); };
+      wrap.appendChild(r);
+    });
+    const left=rows.filter(r=>!r.done&&(r.plan||r.task)).length, dn=rows.filter(r=>r.done).length;
+    const foot=document.createElement("div"); foot.className="pb-foot";
+    foot.innerHTML=`<button type="button" class="btn small primary" data-a="add">＋ صف جديد</button>${dn?`<button type="button" class="btn small" data-a="clr">🧹 مسح المنجز</button>`:""}<span style="flex:1"></span><span>${left} متبقية · ${dn} منجزة</span>`;
+    foot.querySelector("[data-a=add]").onclick=()=>addRow();
+    const cb=foot.querySelector("[data-a=clr]"); if(cb) cb.onclick=()=>{ if(!confirm("مسح "+dn+" صف منجز؟")) return; getB().rows=rows.filter(r=>!r.done); save(); draw(); };
+    wrap.appendChild(foot); host.appendChild(wrap);
+  };
+  if(!getB().rows.length) getB().rows.push({id:rid(),plan:"",task:"",done:false});
+  draw();
+}
+const css=document.createElement("style"); css.textContent=`
+.pb-sec{margin:16px 0}
+.pb-wrap{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:0 4px 18px rgba(0,0,0,.18)}
+.pb-head,.pb-row{display:grid;grid-template-columns:1fr 1fr}
+.pb-head{background:linear-gradient(90deg,rgba(242,169,60,.28),rgba(242,169,60,.07));font-weight:800;color:var(--amber)}
+.pb-head span{padding:11px 14px}.pb-head span+span{border-inline-start:1px solid var(--border)}
+.pb-row{border-top:1px solid var(--border);transition:background .2s}
+.pb-row:nth-child(odd){background:rgba(255,255,255,.025)}
+.pb-c{padding:9px 12px;min-height:44px;display:flex;gap:9px;align-items:flex-start;min-width:0}
+.pb-c+.pb-c{border-inline-start:1px solid var(--border)}
+.pb-ed{flex:1;outline:none;min-height:24px;line-height:1.75;word-break:break-word;min-width:0}
+.pb-ed:empty:before{content:attr(data-ph);opacity:.38}
+.pb-ed:focus{background:rgba(242,169,60,.07);border-radius:6px}
+.pb-ck{width:21px;height:21px;accent-color:var(--amber);margin-top:3px;flex:none}
+.pb-row.done .pb-ed{text-decoration:line-through;opacity:.5}
+.pb-row.done{background:rgba(255,255,255,.01)!important}
+.pb-m{color:var(--amber);background:rgba(242,169,60,.15);padding:1px 8px;border-radius:12px;cursor:pointer;text-decoration:none;font-weight:700;white-space:nowrap}
+.pb-m.gone{opacity:.5;text-decoration:line-through;cursor:default}
+.pb-x{background:none;border:0;color:var(--text);opacity:.3;font-size:13px;cursor:pointer;padding:2px 4px;flex:none}
+.pb-x:hover{opacity:.9}
+.pb-foot{display:flex;gap:8px;align-items:center;padding:9px 12px;border-top:1px solid var(--border);flex-wrap:wrap;font-size:12px}
+.pb-pop{position:fixed;z-index:100001;width:min(320px,92vw);background:var(--panel);border:1px solid var(--amber);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden}
+.pb-pop div{padding:8px 12px;cursor:pointer;font-weight:700}
+.pb-pop div.on,.pb-pop div:hover{background:rgba(242,169,60,.2)}
+.pb-pop small{display:block;opacity:.6;font-weight:400;font-size:11px}`;
+document.head.appendChild(css);
+const _rh=renderHome;
+renderHome=function(c){
+  _rh(c);
+  const sec=document.createElement("div"); sec.className="pb-sec";
+  sec.innerHTML=`<div class="sec-head"><h2>🗓 الخطط والمهام</h2><div class="line"></div></div><div class="pb-mount"></div>`;
+  const sg=c.querySelector(".stat-grid"); if(sg) sg.insertAdjacentElement("afterend",sec); else c.appendChild(sec);
+  mount(sec.querySelector(".pb-mount"));
+};
+})();
+</script>
 <script id="deep-search">
 /* =========================================================
    البحث الشامل — زرار بجانب خانة البحث: لما يتفعّل بيبحث في كل النصوص
