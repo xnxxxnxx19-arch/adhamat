@@ -10282,6 +10282,35 @@ li:has(>.md-task){list-style:none}
 .nb-rt ul,.nb-rt ol{margin:6px 0;padding-inline-start:26px}
 .nb-rt blockquote{border-inline-start:3px solid var(--amber);margin:6px 0;padding:2px 10px;opacity:.92}
 .nb-rt a{color:var(--amber)}.nb-rt .md-sp{min-height:1em}
+.nb-rtbar .fmt-sw{width:30px;height:30px}
+.nb-split{display:inline-flex;gap:1px}
+.nb-tbin.nb-tb-fixed{position:fixed;left:6px;right:6px;top:0;margin-top:6px;z-index:99990;background:var(--panel);border:2px solid var(--amber);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.55);padding:6px;max-height:42vh;overflow-y:auto;overflow-x:hidden}
+.nb-tbin.nb-tb-fixed .fmt-toolbar{flex-wrap:wrap;gap:4px;width:auto;margin:0}
+.nb-tbin.nb-tb-fixed .fmt-btn{padding:3px 7px;font-size:12px;min-height:30px}
+.nb-tbin.nb-tb-fixed .fmt-sep{display:none}
+.nb-tbin.nb-tb-fixed .nb-split{flex:none}
+.nb-read{min-height:44px;padding:8px 10px;line-height:1.8}
+.nb-colpop{position:fixed;z-index:100002;background:var(--panel);border:1px solid var(--amber);border-radius:12px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.55);max-width:96vw;box-sizing:border-box}
+.nb-colpop h5{margin:0 0 6px;font-size:12px;color:var(--amber)}
+.nb-cg{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;width:min(320px,84vw);margin-bottom:8px}
+.nb-cg button{aspect-ratio:1;border-radius:6px;border:1px solid rgba(255,255,255,.2);padding:0;cursor:pointer}
+.nb-cr{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.nb-cr button{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.35);padding:0;cursor:pointer}
+.nb-cr:empty{display:none}
+.nb-cf{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px}
+.nb-szg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:min(260px,80vw)}
+.nb-fs .nb-tbin{flex:none;border:2px solid var(--amber);border-radius:12px;padding:6px;margin-bottom:8px;max-height:32vh;overflow-y:auto;background:var(--panel2)}
+.nb-fs .nb-tbin .fmt-toolbar{gap:4px;flex-wrap:wrap;margin:0}
+.nb-fs .nb-tbin .fmt-btn{padding:3px 7px;font-size:12px;min-height:30px}
+.nb-fs .nb-tbin .fmt-sep{display:none}
+.nb-fs .fmt-toolbar-holder{flex:none}
+.nb-minibar{display:flex;gap:8px;margin-bottom:8px;flex:none}
+.nb-fav{display:flex;flex-wrap:wrap;gap:5px;align-items:center;flex-basis:100%;padding:5px 0;margin:2px 0;border-top:1px dashed var(--border);border-bottom:1px dashed var(--border)}
+.nb-fl{font-size:12px;font-weight:800;color:var(--amber)}
+.nb-ft.on{outline:2px solid var(--amber)}
+.nb-fv{width:32px;height:32px;font-weight:900}
+.nb-fvw{position:relative;display:inline-block}
+.nb-fx{position:absolute;top:-7px;inset-inline-end:-7px;width:18px;height:18px;border-radius:50%;border:0;background:#e53935;color:#fff;font-size:12px;line-height:1;padding:0;cursor:pointer}
 .nb-rtsel{background:var(--panel3);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;padding:3px}
 .nb-blk-bar{display:none}.nb-blk.active .nb-blk-bar{display:flex}.nb-blk.active{border-color:var(--border)}
 .nb-ann{background:var(--panel);width:100%;height:100%;display:flex;flex-direction:column}
@@ -10383,8 +10412,10 @@ function nbHtmlToMd(ed){
       if(tg==='A'&&n.getAttribute('href')) f.a=n.getAttribute('href');
       if(tg==='FONT'&&n.getAttribute('color')) f.c=hex(n.getAttribute('color'))||f.c;
       if(s.color) f.c=hex(s.color)||f.c;
+      if(n.dataset&&n.dataset.dc) f.c='';
       const bg=hex(s.backgroundColor); if(bg) f.h=bg;
       if(s.fontSize&&/px$/.test(s.fontSize)) f.z=Math.max(10,Math.min(60,Math.round(parseFloat(s.fontSize))));
+      if(n.dataset&&n.dataset.ds) f.z=0;
       runs(n,f,out);
     });
   };
@@ -10436,36 +10467,126 @@ function nbRtShortcut(ed){
   else if(k==='-'||k==='*') document.execCommand('insertUnorderedList');
   else document.execCommand('insertOrderedList');
 }
+/* ===== تطبيق الألوان والأحجام بنظام خاص (موثوق) + لوحات اختيار ===== */
+function nbHsl(h,s,l){ s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l), f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1))); const x=v=>Math.round(255*v).toString(16).padStart(2,'0'); return '#'+x(f(0))+x(f(8))+x(f(4)); }
+const NB_PAL=(()=>{ const r=[['#000000','#434343','#666666','#999999','#b7b7b7','#cccccc','#d9d9d9','#efefef','#f3f3f3','#ffffff']]; [85,72,58,42,28].forEach(l=>r.push([0,28,48,60,120,170,210,240,270,310].map(h=>nbHsl(h,80,l)))); return r; })();
+/* يلفّ كل نص محدد في span بالنمط المطلوب (بدون execCommand) ويُبقي التحديد ليمكن التجربة المتكررة */
+function nbRtApplyStyle(ed,prop,val,reset){
+  if(!ed) return;
+  let s=getSelection(); if(!s.rangeCount||!ed.contains(s.anchorNode)) nbRtRestore();
+  s=getSelection(); if(!s.rangeCount) return;
+  if(s.isCollapsed&&s.modify){ s.modify('move','backward','word'); s.modify('extend','forward','word'); }
+  if(s.isCollapsed) return;
+  const r=s.getRangeAt(0), sc=r.startContainer, so=r.startOffset, ec=r.endContainer, eo=r.endOffset, nodes=[], w=document.createTreeWalker(ed,NodeFilter.SHOW_TEXT);
+  let n; while((n=w.nextNode())){ if(n.nodeValue.length&&r.intersectsNode(n)) nodes.push(n); }
+  if(!nodes.length) return;
+  (ed._cu=ed._cu||[]).push(ed.innerHTML); if(ed._cu.length>30) ed._cu.shift();
+  const out=[];
+  nodes.forEach(t=>{
+    let a=0,b=t.nodeValue.length; if(t===sc) a=so; if(t===ec) b=eo; if(b<=a) return;
+    if(b<t.nodeValue.length) t.splitText(b); if(a>0) t=t.splitText(a);
+    const p=t.parentNode; let el;
+    if(p!==ed&&p.tagName==='SPAN'&&p.childNodes.length===1) el=p; else { el=document.createElement('span'); p.replaceChild(el,t); el.appendChild(t); }
+    el.style[prop]=val;
+    if(prop==='color'){ if(reset) el.dataset.dc='1'; else delete el.dataset.dc; }
+    if(prop==='fontSize'){ if(reset) el.dataset.ds='1'; else delete el.dataset.ds; }
+    out.push(t);
+  });
+  if(!out.length) return;
+  const nr=document.createRange(); nr.setStart(out[0],0); const L=out[out.length-1]; nr.setEnd(L,L.nodeValue.length);
+  s.removeAllRanges(); s.addRange(nr); nbRtRange=nr.cloneRange();
+  ed._skip=1; ed._nat=0; ed.dispatchEvent(new Event('input',{bubbles:true}));
+}
+let nbPopEl=null;
+function nbClosePop(){ if(nbPopEl){ nbPopEl.remove(); nbPopEl=null; } document.removeEventListener('pointerdown',nbPopOut,true); }
+function nbPopOut(e){ if(nbPopEl&&!nbPopEl.contains(e.target)&&!e.target.closest('.nb-split,.nb-sizebtn')) nbClosePop(); }
+function nbOpenPop(anchor,html){
+  nbClosePop(); const p=document.createElement('div'); p.className='nb-colpop'; p.innerHTML=html; document.body.appendChild(p); nbPopEl=p;
+  const keep=e=>{ if(!e.target.closest('input')) e.preventDefault(); }; p.addEventListener('mousedown',keep);
+  const r=anchor.getBoundingClientRect(); let left=Math.min(innerWidth-p.offsetWidth-6,Math.max(6,r.left)), top=r.bottom+6;
+  if(top+p.offsetHeight>innerHeight-6) top=Math.max(6,r.top-p.offsetHeight-6);
+  p.style.left=left+'px'; p.style.top=top+'px'; document.addEventListener('pointerdown',nbPopOut,true); return p;
+}
+function nbColorPop(anchor,kind,pick,reset){
+  const rec=nbLsGet('nb_recent_colors',[]);
+  const p=nbOpenPop(anchor,'<h5>'+(kind==='c'?'لون النص':'لون التمييز (الخلفية)')+'</h5><div class="nb-cr"></div><div class="nb-cg"></div><div class="nb-cf"><button type="button" class="btn small" data-a="rs">'+(kind==='c'?'اللون الافتراضي':'بدون تمييز')+'</button><label class="nb-cf">مخصص <input type="color" value="#d32f2f"></label><button type="button" class="btn small primary" data-a="ok">تم</button></div>');
+  const rb=p.querySelector('.nb-cr'), g=p.querySelector('.nb-cg');
+  const sw=(c,box)=>{ const b=document.createElement('button'); b.type='button'; b.style.background=c; b.title=c; b.onclick=()=>use(c); box.appendChild(b); };
+  const drawRec=()=>{ rb.innerHTML=''; nbLsGet('nb_recent_colors',[]).slice(0,10).forEach(c=>sw(c,rb)); };
+  const use=c=>{ const a=[c].concat(nbLsGet('nb_recent_colors',[]).filter(x=>x!==c)).slice(0,10); nbLsSet('nb_recent_colors',a); drawRec(); pick(c); };
+  drawRec(); NB_PAL.forEach(row=>row.forEach(c=>sw(c,g)));
+  p.querySelector('input').oninput=e=>use(e.target.value);
+  p.addEventListener('click',e=>{ const a=e.target.dataset&&e.target.dataset.a; if(a==='rs') reset(); else if(a==='ok') nbClosePop(); });
+}
+function nbSizePop(anchor,pick,reset){
+  const p=nbOpenPop(anchor,'<h5>حجم الخط</h5><div class="nb-szg"></div><div class="nb-cf" style="margin-top:8px"><button type="button" class="btn small" data-a="rs">الحجم الافتراضي</button><button type="button" class="btn small primary" data-a="ok">تم</button></div>');
+  const g=p.querySelector('.nb-szg'); [10,12,14,16,18,20,24,28,32,40,48,60].forEach(n=>{ const b=document.createElement('button'); b.type='button'; b.className='btn small'; b.textContent=n; b.onclick=()=>pick(n); g.appendChild(b); });
+  p.addEventListener('click',e=>{ const a=e.target.dataset&&e.target.dataset.a; if(a==='rs') reset(); else if(a==='ok') nbClosePop(); });
+}
 function nbRichToolbar(ctx){
   const bar=document.createElement('div'); bar.className='fmt-toolbar nb-rtbar';
   bar.addEventListener('mousedown',e=>{ if(!e.target.closest('input,select')) e.preventDefault(); });
-  const ex=(c,v,css,rs)=>{ const ed=ctx.ed(); if(!ed) return; if(rs) nbRtRestore(); document.execCommand('styleWithCSS',false,!!css); document.execCommand(c,false,v); ed.dispatchEvent(new Event('input',{bubbles:true})); };
+  const E=()=>ctx.ed();
+  const ex=(c,v,css,rs)=>{ const ed=E(); if(!ed) return; const s=getSelection(); if(rs||!s.rangeCount||!ed.contains(s.anchorNode)) nbRtRestore(); document.execCommand('styleWithCSS',false,!!css); document.execCommand(c,false,v); ed.dispatchEvent(new Event('input',{bubbles:true})); };
   const btn=(l,t,fn,stl)=>{ const b=document.createElement('button'); b.type='button'; b.className='fmt-btn'; b.textContent=l; b.title=t||''; if(stl) b.style.cssText=stl; b.onclick=e=>{ e.preventDefault(); fn(); }; bar.appendChild(b); return b; };
   const sep=()=>{ const s=document.createElement('span'); s.className='fmt-sep'; bar.appendChild(s); };
-  const sel=(opts,ph,fn)=>{ const s=document.createElement('select'); s.className='nb-rtsel'; s.innerHTML='<option value="">'+ph+'</option>'+opts.map(o=>'<option value="'+o[0]+'">'+o[1]+'</option>').join(''); s.onchange=()=>{ const v=s.value; if(!v) return; nbRtRestore(); fn(v); s.value=''; }; bar.appendChild(s); };
-  btn('↶','تراجع',()=>ex('undo')); btn('↷','إعادة',()=>ex('redo')); sep();
+  if(ctx.shrink){ btn('❎ تصغير','العودة للحجم العادي',ctx.shrink); btn('👁 قراءة','التحويل لنظام القراءة',ctx.toRead); sep(); }
+  btn('↶','تراجع',()=>{ const ed=E(); if(ed&&ed._cu&&ed._cu.length&&!ed._nat){ ed._skip=1; ed.innerHTML=ed._cu.pop(); ed.dispatchEvent(new Event('input',{bubbles:true})); } else ex('undo'); });
+  btn('↷','إعادة',()=>ex('redo')); sep();
   [['p','فقرة'],['h1','عنوان 1'],['h2','عنوان 2'],['h3','عنوان 3'],['blockquote','اقتباس']].forEach(([v,l])=>btn(l,'نمط: '+l,()=>ex('formatBlock','<'+v+'>')));
   sep();
-  const setSize=v=>{ ex('fontSize','7',false); const ed=ctx.ed(); if(!ed) return; ed.querySelectorAll('font[size="7"]').forEach(f=>{ const s=document.createElement('span'); s.style.fontSize=v+'px'; while(f.firstChild) s.appendChild(f.firstChild); f.replaceWith(s); }); ed.dispatchEvent(new Event('input',{bubbles:true})); };
-  [12,14,16,20,24,32,40].forEach(n=>btn(String(n),'حجم الخط '+n,()=>setSize(n)));
-  sep();
   btn('B','عريض',()=>ex('bold'),'font-weight:900'); btn('I','مائل',()=>ex('italic'),'font-style:italic'); btn('U','تسطير',()=>ex('underline'),'text-decoration:underline'); btn('S','يتوسطه خط',()=>ex('strikeThrough'),'text-decoration:line-through');
-  const pal=document.createElement('div'); pal.className='fmt-colors';
-  btn('🎨','لون النص والتمييز',()=>{ pal.style.display=pal.style.display==='flex'?'none':'flex'; });
+  sep();
+  const paints=[];
+  const split=kind=>{
+    const prop=kind==='c'?'color':'backgroundColor', key=kind==='c'?'nb_last_color':'nb_last_hi', def=kind==='c'?'#d32f2f':'#fff59d';
+    const sp=document.createElement('span'); sp.className='nb-split';
+    const main=document.createElement('button'), dd=document.createElement('button'); main.type=dd.type='button'; main.className=dd.className='fmt-btn'; dd.textContent='▾'; dd.title='اختيار لون';
+    const paint=()=>{ const c=nbLsGet(key,def); main.innerHTML=kind==='c'?'<span style="border-bottom:4px solid '+c+';font-weight:900;padding:0 2px">A</span>':'<span style="background:'+c+';color:#111;padding:0 5px;border-radius:3px;font-weight:900">تمييز</span>'; main.title=kind==='c'?'تطبيق آخر لون نص مستخدم':'تطبيق آخر لون تمييز'; };
+    paint(); paints.push(paint);
+    main.onclick=e=>{ e.preventDefault(); nbRtApplyStyle(E(),prop,nbLsGet(key,def),false); };
+    dd.onclick=e=>{ e.preventDefault(); nbColorPop(dd,kind,v=>{ nbLsSet(key,v); paint(); nbRtApplyStyle(E(),prop,v,false); },()=>{ const ed=E(); nbRtApplyStyle(ed,prop,kind==='c'?getComputedStyle(ed).color:'transparent',kind==='c'); }); };
+    sp.append(main,dd); bar.appendChild(sp);
+  };
+  split('c'); split('h');
+  /* ===== ألواني: صف ألوان ظاهر دائمًا وقابل للتعديل ===== */
+  const favWrap=document.createElement('div'); favWrap.className='nb-fav'; let editing=false;
+  const favs=()=>nbLsGet('nb_fav_colors',['#d32f2f','#ef6c00','#f9a825','#2e7d32','#1976d2','#7b1fa2','#111111','#ffffff']);
+  const lum=c=>{ const n=parseInt(c.slice(1),16); return (n>>16)*.299+((n>>8)&255)*.587+(n&255)*.114; };
+  const favApply=c=>{ const tg=nbLsGet('nb_fav_target','c'); nbLsSet(tg==='c'?'nb_last_color':'nb_last_hi',c); paints.forEach(f=>f()); nbRtApplyStyle(E(),tg==='c'?'color':'backgroundColor',c,false); };
+  const pickColor=(init,cb)=>{ const i=document.createElement('input'); i.type='color'; i.value=/^#[0-9a-f]{6}$/i.test(init)?init:'#d32f2f'; i.style.cssText='position:fixed;opacity:0;left:0;top:0;width:1px;height:1px'; document.body.appendChild(i); i.onchange=()=>{ cb(i.value); i.remove(); }; i.addEventListener('blur',()=>setTimeout(()=>i.remove(),600)); i.click(); };
+  const drawFav=()=>{
+    favWrap.innerHTML=''; const tg=nbLsGet('nb_fav_target','c'), list=favs();
+    const mk=(html,cls,ti,fn,par)=>{ const b=document.createElement('button'); b.type='button'; b.className=cls; b.innerHTML=html; b.title=ti; b.onclick=e=>{ e.preventDefault(); fn(); }; (par||favWrap).appendChild(b); return b; };
+    const lb=document.createElement('span'); lb.className='nb-fl'; lb.textContent='ألواني:'; favWrap.appendChild(lb);
+    mk('نص','fmt-btn nb-ft'+(tg==='c'?' on':''),'تطبيق ألواني على لون النص',()=>{ nbLsSet('nb_fav_target','c'); drawFav(); });
+    mk('تمييز','fmt-btn nb-ft'+(tg==='h'?' on':''),'تطبيق ألواني كخلفية',()=>{ nbLsSet('nb_fav_target','h'); drawFav(); });
+    mk(tg==='c'?'A✕':'✕','fmt-btn',tg==='c'?'اللون الافتراضي':'بدون تمييز',()=>{ const ed=E(); nbRtApplyStyle(ed,tg==='c'?'color':'backgroundColor',tg==='c'?getComputedStyle(ed).color:'transparent',tg==='c'); });
+    list.forEach((c,i)=>{
+      const w=document.createElement('span'); w.className='nb-fvw'; favWrap.appendChild(w);
+      const b=mk(tg==='c'?'A':'','fmt-sw nb-fv',editing?'اضغط لتغيير هذا اللون':'تطبيق هذا اللون',()=>{ if(editing) pickColor(c,v=>{ const l=favs(); l[i]=v; nbLsSet('nb_fav_colors',l); drawFav(); }); else favApply(c); },w);
+      b.style.background=c; b.style.color=lum(c)>150?'#111':'#fff';
+      if(editing) mk('×','nb-fx','حذف اللون',()=>{ const l=favs(); l.splice(i,1); nbLsSet('nb_fav_colors',l); drawFav(); },w);
+    });
+    if(editing&&list.length<14) mk('＋','fmt-btn','إضافة لون',()=>pickColor('#d32f2f',v=>{ const l=favs(); l.push(v); nbLsSet('nb_fav_colors',l); drawFav(); }));
+    mk(editing?'✓ تم':'✎ تعديل','fmt-btn',editing?'إنهاء التعديل':'غيّر الألوان المعروضة',()=>{ editing=!editing; drawFav(); });
+  };
+  drawFav(); bar.appendChild(favWrap);
+  const curSize=()=>{ const s=getSelection(), n=s.anchorNode, el=n&&(n.nodeType===3?n.parentElement:n); return el?Math.round(parseFloat(getComputedStyle(el).fontSize)):16; };
+  const sz=v=>nbRtApplyStyle(E(),'fontSize',v+'px',false);
+  btn('A−','تصغير الخط',()=>{ if(E()) sz(Math.max(10,curSize()-2)); });
+  btn('A+','تكبير الخط',()=>{ if(E()) sz(Math.min(60,curSize()+2)); });
+  const sb=btn('حجم ▾','أحجام جاهزة',()=>nbSizePop(sb,sz,()=>{ const ed=E(); nbRtApplyStyle(ed,'fontSize',getComputedStyle(ed).fontSize,true); })); sb.classList.add('nb-sizebtn');
   sep();
   btn('يمين','محاذاة لليمين',()=>ex('justifyRight',null,true)); btn('وسط','توسيط',()=>ex('justifyCenter',null,true)); btn('يسار','محاذاة لليسار',()=>ex('justifyLeft',null,true)); btn('ضبط','ضبط الهوامش',()=>ex('justifyFull',null,true));
   sep();
   btn('• قائمة','قائمة نقطية',()=>ex('insertUnorderedList')); btn('1. قائمة','قائمة مرقمة',()=>ex('insertOrderedList'));
   btn('🔗','رابط',()=>{ const u=prompt('رابط URL:','https://'); if(u) ex('createLink',u,false,true); });
   btn('⌫','مسح التنسيق',()=>ex('removeFormat'));
-  ['#d32f2f','#ef6c00','#f9a825','#2e7d32','#1976d2','#7b1fa2','#757575','#111111','#ffffff'].forEach(c=>{ const b=document.createElement('button'); b.type='button'; b.className='fmt-sw'; b.textContent='A'; b.style.color=c; b.style.background=c==='#ffffff'?'#555':''; b.title='لون النص'; b.onclick=e=>{ e.preventDefault(); ex('foreColor',c,true); }; pal.appendChild(b); });
-  ['#fff59d','#a5d6a7','#90caf9','#f8bbd0','#ffcc80','transparent'].forEach(c=>{ const b=document.createElement('button'); b.type='button'; b.className='fmt-sw'; b.style.background=c==='transparent'?'':c; b.textContent=c==='transparent'?'✕':''; b.title='تمييز بخلفية'; b.onclick=e=>{ e.preventDefault(); ex('hiliteColor',c,true); }; pal.appendChild(b); });
-  const ci=document.createElement('input'); ci.type='color'; ci.title='لون مخصص'; ci.oninput=()=>ex('foreColor',ci.value,true,true); pal.appendChild(ci);
   sep();
   const pins=nbLsGet(NB_PIN_KEY,null);
   nbAllElements().forEach(el=>{ if(el.id==='quote'||el.id==='link') return; if(el.id==='sketch'&&!ctx.ext.sketch) return; if(pins?!pins.includes(el.id):!el.pin) return; btn(el.icon,el.name,()=>nbRunEl(el,ctx.scratch,ctx.ext)); });
   btn('🧩','كل العناصر: اختيار وتثبيت وإنشاء',()=>nbElementPicker(ctx.scratch,ctx.ext,()=>{ const nb=nbRichToolbar(ctx); bar.replaceWith(nb); }));
-  bar.appendChild(pal);
   return bar;
 }
 
@@ -10609,6 +10730,8 @@ async function nbImageAnnotator(entry,onSave){
 
 /* ===== مقطع شرح إضافي (مطوّر) ===== */
 let nbTabRefresh=null;
+let nbActiveSeg=null; const nbSegHooks=new Set();
+if(window.visualViewport){ ['scroll','resize'].forEach(e=>visualViewport.addEventListener(e,()=>nbSegHooks.forEach(h=>h()))); }
 function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
   boxData.style=boxData.style||{}; boxData.sketches=boxData.sketches||{};
   const st=boxData.style, wrap=document.createElement('div');
@@ -10628,14 +10751,15 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
     </div>
     <div class="nb-seg-set" style="display:none"></div>
     <div class="nb-exbox-body">
-      <div class="fmt-toolbar-holder" data-act="toolbar"></div>
-      <div class="nb-seg-area"><div class="nb-blocks"></div><textarea class="nb-editor" data-act="text" style="display:none;"></textarea></div>
+      <div class="fmt-toolbar-holder" data-act="toolbar"><div class="nb-tbin"></div></div>
+      <div class="nb-minibar" style="display:none"><button type="button" class="btn small" data-act="mbw">✏️ كتابة</button><button type="button" class="btn small" data-act="mbx">❎ تصغير</button></div>
+      <div class="nb-seg-area"><div class="nb-blocks"></div><div class="nb-read" style="display:none"></div><textarea class="nb-editor" data-act="text" style="display:none;"></textarea></div>
       <div class="nb-seg-grip" title="اسحب لتغيير الحجم">⋯</div>
     </div>`;
   const q=a=>wrap.querySelector('[data-act="'+a+'"]');
-  const titleEl=wrap.querySelector('.nb-exbox-title'), host=wrap.querySelector('.nb-blocks'), taEl=q('text'), tbH=q('toolbar'), area=wrap.querySelector('.nb-seg-area'), setP=wrap.querySelector('.nb-seg-set'), stat=wrap.querySelector('.nb-seg-stat'), grip=wrap.querySelector('.nb-seg-grip');
+  const titleEl=wrap.querySelector('.nb-exbox-title'), host=wrap.querySelector('.nb-blocks'), taEl=q('text'), tbH=q('toolbar'), area=wrap.querySelector('.nb-seg-area'), setP=wrap.querySelector('.nb-seg-set'), stat=wrap.querySelector('.nb-seg-stat'), grip=wrap.querySelector('.nb-seg-grip'), readEl=wrap.querySelector('.nb-read'), tbIn=wrap.querySelector('.nb-tbin'), mb=wrap.querySelector('.nb-minibar');
   let B=nbMdToBlocks(boxData.content), act=-1, curTa=null, src=false;
-  let lazy=!!boxData.col;
+  let lazy=!!boxData.col, built=false, fsRead=false;
   const scratch=document.createElement('textarea');
   let tm; const save=()=>{stat.textContent='⏳';nbScheduleSave(item);clearTimeout(tm);tm=setTimeout(()=>stat.textContent='✓',900);};
   const commit=()=>{ boxData.content=nbBlocksToMd(B); taEl.value=boxData.content; save(); };
@@ -10666,6 +10790,7 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
     ed.innerHTML=(o[k]||'').trim()?nbRenderMarkdown(o[k],boxData.sketches):'<p><br></p>';
     ed.addEventListener('focus',()=>{ nbRtCur=ed; if(!ed.firstChild) ed.innerHTML='<p><br></p>'; });
     ed.addEventListener('input',()=>{
+      if(ed._skip){ ed._skip=0; } else ed._nat=(ed._nat||0)+1;
       nbRtShortcut(ed);
       if([...ed.childNodes].some(n=>n.nodeType===3&&n.nodeValue.trim())) document.execCommand('formatBlock',false,'<p>');
       o[k]=nbHtmlToMd(ed); commit(); });
@@ -10717,7 +10842,7 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
     return el;
   }
   function redo(){
-    host.innerHTML=''; if(!B.length) B.push({t:'md',x:''});
+    built=true; host.innerHTML=''; if(!B.length) B.push({t:'md',x:''});
     B.forEach((b,i)=>host.appendChild(blkEl(b,i)));
     host.appendChild(mkBtn('＋ نص',()=>{ B.push({t:'md',x:'',_f:1}); act=B.length-1; redo(); }));
     if(act>=0&&host.children[act]&&host.children[act].classList.contains('nb-blk')) host.children[act].classList.add('active');
@@ -10727,13 +10852,32 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
     if(B.length===1&&B[0].t==='md'&&!B[0].x) B=[];
     const at=act>=0&&act<B.length?act+1:B.length; B.splice(at,0,...nb); act=at+nb.length-1; commit(); redo();
   }
-  const reload=()=>{ B=nbMdToBlocks(boxData.content); act=-1; taEl.value=boxData.content||''; redo(); save(); };
+  const reload=()=>{ B=nbMdToBlocks(boxData.content); act=-1; taEl.value=boxData.content||''; if(built) redo(); refreshMode(); save(); };
+  const fsOn=()=>wrap.classList.contains('nb-fs');
+  const curMode=()=>fsOn()?(fsRead?'read':'write'):'read';
+  function paintRead(){ readEl.innerHTML=nbRenderMarkdown(boxData.content,boxData.sketches); nbEnhanceMarkdownView(readEl); }
+  function updTb(){ const on=fsOn()&&curMode()==='write'&&!src&&!boxData.tbh&&!lazy; tbH.style.display=on?'':'none'; }
+  function refreshMode(){
+    const w=curMode()==='write';
+    q('src').style.display=q('tb').style.display=w?'':'none';
+    mb.style.display=(fsOn()&&!w)?'':'none';
+    if(!lazy){ if(w){ if(!built) redo(); } else { src=false; taEl.style.display='none'; paintRead(); } }
+    host.style.display=(w&&!src)?'':'none'; readEl.style.display=w?'none':'';
+    updTb();
+  }
+  nbSegHooks.add(updTb);
+  mb.querySelector('[data-act=mbw]').onclick=()=>{ fsRead=false; refreshMode(); };
+  mb.querySelector('[data-act=mbx]').onclick=()=>q('fs').click();
+  readEl.addEventListener('click',e=>{ if(!fsOn()&&!(boxData.content||'').trim()&&!e.target.closest('summary,a')) q('fs').click(); });
+  const setActive=()=>{ if(nbActiveSeg!==wrap){ nbActiveSeg=wrap; nbSegHooks.forEach(h=>h()); } };
+  wrap.addEventListener('pointerdown',setActive,true); wrap.addEventListener('focusin',setActive);
+  readEl.addEventListener('change',e=>{ if(e.target.classList.contains('md-task')){ nbToggleTask(()=>boxData.content||'',v=>{ boxData.content=v; taEl.value=v; if(built){ B=nbMdToBlocks(v); redo(); } },+e.target.dataset.t,e.target.checked); save(); } });
   tbH.addEventListener('mousedown',e=>{ if(e.target.closest('input')) return; });
-  tbH.appendChild(nbRichToolbar({ed:()=>(nbRtCur&&wrap.contains(nbRtCur))?nbRtCur:null,scratch,ext:{blockMode:true,sketch:()=>editSketch(null),insertMd}}));
+  tbIn.appendChild(nbRichToolbar({ed:()=>(nbRtCur&&wrap.contains(nbRtCur))?nbRtCur:null,scratch,shrink:()=>q('fs').click(),toRead:()=>{ fsRead=true; refreshMode(); },ext:{blockMode:true,sketch:()=>editSketch(null),insertMd}}));
   taEl.value=boxData.content||'';
 
   const applyStyle=()=>{
-    [host,taEl].forEach(e=>{e.style.fontSize=(st.fs||14)+'px';e.style.lineHeight=st.lh||'1.8';e.style.fontFamily=st.ff||'';e.style.direction=st.dir||'';e.style.textAlign=st.dir==='ltr'?'left':'';e.style.background=st.bg||'';e.style.color=st.col||'';});
+    [host,taEl,readEl].forEach(e=>{e.style.fontSize=(st.fs||14)+'px';e.style.lineHeight=st.lh||'1.8';e.style.fontFamily=st.ff||'';e.style.direction=st.dir||'';e.style.textAlign=st.dir==='ltr'?'left':'';e.style.background=st.bg||'';e.style.color=st.col||'';});
     wrap.style.width=(st.w&&st.w<100)?st.w+'%':'';area.style.height=st.h?st.h+'px':'';taEl.style.minHeight=st.h?'0':'';};
   setP.innerHTML=`<label>حجم الخط<input type="range" data-k="fs" min="11" max="30"></label>
 <label>تباعد الأسطر<input type="range" data-k="lh" min="1.3" max="2.6" step=".1"></label>
@@ -10749,14 +10893,13 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
   setP.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{delete st[b.dataset.clr];fillSet();applyStyle();save();});
   setP.querySelector('[data-a=def]').onclick=e=>{nbLsSet(NB_DEF_KEY,Object.assign({},st));e.target.textContent='✓ تم';};
   setP.querySelector('[data-a=reset]').onclick=()=>{Object.keys(st).forEach(k=>delete st[k]);fillSet();applyStyle();save();};
-  fillSet(); applyStyle(); if(!lazy) redo();
+  fillSet(); applyStyle(); refreshMode();
   host.addEventListener('pointerdown',e=>{ if(e.target===host){ act=-1; setAct(null); } });
 
   taEl.addEventListener('input',()=>{ boxData.content=taEl.value; save(); });
-  q('src').onclick=()=>{ src=!src; if(src){ taEl.value=boxData.content||''; host.style.display='none'; tbH.style.display='none'; taEl.style.display='block'; }
-    else { boxData.content=taEl.value; B=nbMdToBlocks(taEl.value); act=-1; taEl.style.display='none'; host.style.display=''; tbH.style.display=boxData.tbh?'none':''; redo(); save(); } };
+  q('src').onclick=()=>{ src=!src; if(src){ taEl.value=boxData.content||''; host.style.display='none'; taEl.style.display='block'; } else { boxData.content=taEl.value; B=nbMdToBlocks(taEl.value); act=-1; taEl.style.display='none'; host.style.display=''; redo(); save(); } updTb(); };
   titleEl.oninput=e=>{boxData.title=e.target.value;save();};
-  const applyTb=()=>{ tbH.style.display=(boxData.tbh||src)?'none':''; q('tb').style.opacity=boxData.tbh?'.5':'1'; };
+  const applyTb=()=>{ q('tb').style.opacity=boxData.tbh?'.5':'1'; updTb(); };
   q('tb').onclick=()=>{ boxData.tbh=!boxData.tbh; applyTb(); nbScheduleSave(item); };
   applyTb();
   q('tpl').onclick=()=>nbTplMenu('apply',(t,how)=>{const c=nbCloneTpl(t);
@@ -10765,13 +10908,13 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
     reload();},()=>({content:boxData.content,style:st,sketches:boxData.sketches}));
   q('set').onclick=()=>{setP.style.display=setP.style.display==='none'?'grid':'none';};
   const onEsc=e=>{if(e.key==='Escape'&&wrap.classList.contains('nb-fs'))q('fs').click();};
-  q('fs').onclick=e=>{const on=wrap.classList.toggle('nb-fs');document.body.classList.toggle('nb-lock',on);e.currentTarget.textContent=on?'❎':'🔳';document[on?'addEventListener':'removeEventListener']('keydown',onEsc);};
+  q('fs').onclick=e=>{const on=wrap.classList.toggle('nb-fs');document.body.classList.toggle('nb-lock',on);e.currentTarget.textContent=on?'❎':'🔳';document[on?'addEventListener':'removeEventListener']('keydown',onEsc);if(on) fsRead=false; refreshMode();};
   grip.addEventListener('pointerdown',e=>{e.preventDefault();grip.setPointerCapture(e.pointerId);const y0=e.clientY,h0=area.offsetHeight;
     const mv=ev=>{area.style.height=Math.max(70,h0+ev.clientY-y0)+'px';};
     const up=()=>{grip.removeEventListener('pointermove',mv);grip.removeEventListener('pointerup',up);st.h=parseInt(area.style.height)||undefined;fillSet();save();};
     grip.addEventListener('pointermove',mv);grip.addEventListener('pointerup',up);});
   if(boxData.col){ wrap.classList.add('is-collapsed'); q('collapse').textContent='⌄'; }
-  q('collapse').onclick=e=>{const c=wrap.classList.toggle('is-collapsed');e.currentTarget.textContent=c?'⌄':'⌃';boxData.col=c;if(!c&&lazy){lazy=false;redo();}nbScheduleSave(item);};
+  q('collapse').onclick=e=>{const c=wrap.classList.toggle('is-collapsed');e.currentTarget.textContent=c?'⌄':'⌃';boxData.col=c;if(!c&&lazy){lazy=false;refreshMode();}nbScheduleSave(item);};
   q('mv').onclick=()=>{
     const nd=ensureNotebookData(item);
     const tg=[{n:'🗂 بدون مجموعة',a:nd.explanations}].concat(nd.imageGroups.map(g=>({n:'📁 '+g.name,a:(g.explanations=g.explanations||[])}))).filter(x=>x.a!==s.explanations);
@@ -17522,7 +17665,7 @@ function popKey(e){
 function mount(host){
   const draw=()=>{
     const rows=getB().rows; host.innerHTML="";
-    const wrap=document.createElement("div"); wrap.className="pb-wrap";
+    const wrap=document.createElement("div"); wrap.className="pb-wrap"; wrap.style.setProperty("--pbz",getB().zoom||100);
     wrap.innerHTML=`<div class="pb-head"><span>📋 الخطط</span><span>✅ المهام</span></div>`;
     const focusCell=(id,k)=>{ const e=wrap.querySelector(`.pb-row[data-id="${id}"] .pb-${k} .pb-ed`); if(e){ e.focus(); const r=document.createRange(); r.selectNodeContents(e); r.collapse(false); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } };
     const addRow=(at)=>{ const r={id:rid(),plan:"",task:"",done:false}; const fi=rows.findIndex(x=>x.done); rows.splice(at==null?(fi<0?rows.length:fi):at,0,r); save(); draw(); setTimeout(()=>focusCell(r.id,"plan"),30); };
@@ -17558,21 +17701,21 @@ function mount(host){
 }
 const css=document.createElement("style"); css.textContent=`
 .pb-sec{margin:16px 0}
-.pb-wrap{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:0 4px 18px rgba(0,0,0,.18)}
-.pb-head,.pb-row{display:grid;grid-template-columns:1fr 1fr}
+.pb-wrap{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:0 4px 18px rgba(0,0,0,.18);font-size:calc(var(--pbz,100) * 1%)}
+.pb-head,.pb-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .pb-head{background:linear-gradient(90deg,rgba(242,169,60,.28),rgba(242,169,60,.07));font-weight:800;color:var(--amber)}
 .pb-head span{padding:11px 14px}.pb-head span+span{border-inline-start:1px solid var(--border)}
 .pb-row{border-top:1px solid var(--border);transition:background .2s}
 .pb-row:nth-child(odd){background:rgba(255,255,255,.025)}
 .pb-c{padding:9px 12px;min-height:44px;display:flex;gap:9px;align-items:flex-start;min-width:0}
 .pb-c+.pb-c{border-inline-start:1px solid var(--border)}
-.pb-ed{flex:1;outline:none;min-height:24px;line-height:1.75;word-break:break-word;min-width:0}
+.pb-ed{flex:1;outline:none;min-height:24px;line-height:1.75;word-break:break-word;overflow-wrap:anywhere;min-width:0;max-width:100%}
 .pb-ed:empty:before{content:attr(data-ph);opacity:.38}
 .pb-ed:focus{background:rgba(242,169,60,.07);border-radius:6px}
 .pb-ck{width:21px;height:21px;accent-color:var(--amber);margin-top:3px;flex:none}
 .pb-row.done .pb-ed{text-decoration:line-through;opacity:.5}
 .pb-row.done{background:rgba(255,255,255,.01)!important}
-.pb-m{color:var(--amber);background:rgba(242,169,60,.15);padding:1px 8px;border-radius:12px;cursor:pointer;text-decoration:none;font-weight:700;white-space:nowrap}
+.pb-m{color:var(--amber);background:rgba(242,169,60,.15);padding:1px 8px;border-radius:12px;cursor:pointer;text-decoration:none;font-weight:700;white-space:normal;overflow-wrap:anywhere}
 .pb-m.gone{opacity:.5;text-decoration:line-through;cursor:default}
 .pb-x{background:none;border:0;color:var(--text);opacity:.3;font-size:13px;cursor:pointer;padding:2px 4px;flex:none}
 .pb-x:hover{opacity:.9}
@@ -17580,15 +17723,23 @@ const css=document.createElement("style"); css.textContent=`
 .pb-pop{position:fixed;z-index:100001;width:min(320px,92vw);background:var(--panel);border:1px solid var(--amber);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden}
 .pb-pop div{padding:8px 12px;cursor:pointer;font-weight:700}
 .pb-pop div.on,.pb-pop div:hover{background:rgba(242,169,60,.2)}
-.pb-pop small{display:block;opacity:.6;font-weight:400;font-size:11px}`;
+.pb-pop small{display:block;opacity:.6;font-weight:400;font-size:11px}
+.pb-sec.pb-fs{position:fixed;inset:0;z-index:99998;margin:0;padding:12px;overflow:auto;background:var(--panel)}
+.pb-fs .pb-wrap{min-height:calc(100vh - 80px)}
+.pb-sec .sec-head{gap:6px;flex-wrap:wrap}`;
 document.head.appendChild(css);
 const _rh=renderHome;
 renderHome=function(c){
   _rh(c);
   const sec=document.createElement("div"); sec.className="pb-sec";
-  sec.innerHTML=`<div class="sec-head"><h2>🗓 الخطط والمهام</h2><div class="line"></div></div><div class="pb-mount"></div>`;
+  sec.innerHTML=`<div class="sec-head"><h2>🗓 الخطط والمهام</h2><div class="line"></div><button type="button" class="btn small" data-a="zm-" title="تصغير الخط">A−</button><button type="button" class="btn small" data-a="zm+" title="تكبير الخط">A+</button><button type="button" class="btn small" data-a="fs" title="ملء الصفحة">🔳</button></div><div class="pb-mount"></div>`;
   const sg=c.querySelector(".stat-grid"); if(sg) sg.insertAdjacentElement("afterend",sec); else c.appendChild(sec);
   mount(sec.querySelector(".pb-mount"));
+  const zoom=d=>{ const b=getB(); b.zoom=Math.max(70,Math.min(240,(b.zoom||100)+d)); const w=sec.querySelector(".pb-wrap"); if(w) w.style.setProperty("--pbz",b.zoom); save(); };
+  const onEsc=e=>{ if(e.key==="Escape") fsBtn.click(); };
+  const fsBtn=sec.querySelector('[data-a="fs"]');
+  fsBtn.onclick=()=>{ const on=sec.classList.toggle("pb-fs"); document.body.style.overflow=on?"hidden":""; fsBtn.textContent=on?"❎":"🔳"; document[on?"addEventListener":"removeEventListener"]("keydown",onEsc); };
+  sec.querySelector('[data-a="zm-"]').onclick=()=>zoom(-10); sec.querySelector('[data-a="zm+"]').onclick=()=>zoom(10);
 };
 })();
 </script>
