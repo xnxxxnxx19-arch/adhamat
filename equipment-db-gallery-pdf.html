@@ -10305,6 +10305,99 @@ li:has(>.md-task){list-style:none}
 .nb-fs .nb-tbin .fmt-sep{display:none}
 .nb-fs .fmt-toolbar-holder{flex:none}
 .nb-minibar{display:flex;gap:8px;margin-bottom:8px;flex:none}
+/* ===== ترتيب بصري لتبويب الشرح والصور (نظام مسافات: 8 / 12 / 16 / 24) ===== */
+.nb-subhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:24px 0 12px;padding:0;border:0;min-height:0}
+.nb-subhead b{flex:1;min-width:120px;font-size:16px;font-weight:800;border-inline-start:4px solid var(--amber);padding-inline-start:10px;line-height:1.5}
+.nb-mainex-head{display:flex;align-items:center;gap:8px;margin:20px 0 12px;padding:0;background:none;border:0;border-radius:0}
+.nb-mainex-head b{flex:1;font-size:16px;font-weight:800;border-inline-start:4px solid var(--amber);padding-inline-start:10px;line-height:1.5}
+.nb-mainex-head:hover{background:none}
+.nb-mainex-arrow{order:2;font-size:14px}
+.nb-mainex-body{margin-top:0;padding:12px;background:rgba(127,127,127,.08);border-radius:12px}
+.nb-grp-head{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:8px;padding:12px}
+.nb-gtxt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.nb-gtxt b{font-size:16px;font-weight:800;line-height:1.4;overflow-wrap:anywhere}
+.nb-gtxt .nb-photo-group-count{align-self:flex-start;background:none;padding:0;font-size:12px;opacity:.7;font-weight:500}
+.nb-grp-head .btn{padding:4px 9px;min-height:34px}
+.nb-grp-body{padding:4px 12px 16px}
+.nb-lblrow{margin:16px 0 8px}
+.nb-explist{gap:12px;margin-bottom:0}
+.nb-exbox{padding:8px 12px 10px}
+.nb-exbox-head{margin-bottom:6px}
+.nb-exbox-head .nb-exbox-title{padding:6px 2px;font-size:15px}
+.nb-seg-grip{height:16px;font-size:0;line-height:0;position:relative;cursor:ns-resize}
+.nb-seg-grip::after{content:"";position:absolute;left:50%;top:6px;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:rgba(127,127,127,.4)}
+.nb-read{padding:4px 6px;line-height:1.75}
+.nb-read .md-h1{font-size:1.45em;margin:6px 0 8px;padding-bottom:4px}
+.nb-read .md-h2{font-size:1.25em;margin:10px 0 4px}
+.nb-read .md-h3{font-size:1.1em;margin:8px 0 4px}
+.nb-read p{margin:4px 0}
+.nb-read ul,.nb-read ol{margin:4px 0}
+.nb-read .md-callout{margin:8px 0}
+.nb-read>*:first-child{margin-top:0}
+.nb-gallery{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nb-photo{padding:8px}
+.nb-photo img{height:110px}
+.nb-photo textarea{min-height:40px;resize:none;margin-top:6px}
+.nb-photo-actions{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center;margin-top:6px}
+.nb-photo-actions .btn{width:auto;padding:4px 10px;min-height:34px}
+.nb-photo-actions select{min-width:0;width:100%;font-size:12px}
+.nb-photo-add{grid-column:1/-1;min-height:48px;padding:12px;font-size:13px}
+.nb-subhead b{white-space:nowrap;flex:1 0 auto}
+.nb-subhead .btn{padding:4px 10px;font-size:12.5px}
+.nb-mainex-head{border-inline-start:4px solid var(--amber);padding-inline-start:10px}
+.nb-mainex-head b{border:0;padding:0}
+.nb-mainex-arrow{order:2}
+.nb-grp{position:relative;border:0}
+.nb-grp::before{content:"";position:absolute;top:0;bottom:0;inset-inline-start:0;width:5px;background:var(--gc,#5b8def)}
+.nb-grp-head{padding-inline-start:16px}
+.nb-grp-body{padding-inline-start:17px}
+.nb-photo-actions{grid-template-columns:1fr 1fr}
+.nb-photo-actions select{grid-column:1/-1;order:3}
+.nb-subhead{border:0!important;padding:0!important;margin:24px 0 12px}
+.nb-mainex-head{margin:20px 0 12px;padding-block:2px;padding-inline-end:0}
+.nb-grp-body{padding:6px 14px 16px;padding-inline-start:17px}
+.nb-explist{gap:12px}
+.nb-help{font-size:12px;opacity:.7;margin-bottom:14px;line-height:1.8}
+.nb-subhead{margin:28px 0 12px;padding:2px 12px;border-inline-start:4px solid var(--amber);gap:8px;flex-wrap:wrap;min-height:34px}
+.nb-subhead b{font-size:17px;font-weight:800}
+.nb-mainex-head{background:transparent;border:0;border-inline-start:4px solid var(--amber);border-radius:0;padding:4px 12px;margin:4px 0}
+.nb-mainex-head b{font-size:17px;font-weight:800}
+.nb-mainex-body{margin-top:10px;padding:12px;background:rgba(127,127,127,.08);border-radius:12px}
+.nb-grp{border:0;border-inline-start:5px solid var(--gc,#5b8def);border-radius:14px;margin:14px 0;background:rgba(127,127,127,.07);overflow:hidden}
+.nb-grp-head{padding:12px 14px;background:rgba(127,127,127,.1);gap:10px}
+.nb-grp-head b{font-size:16px;font-weight:800}
+.nb-photo-group-count{font-size:12px;opacity:.8;background:rgba(127,127,127,.2);padding:2px 10px;border-radius:10px;font-weight:600}
+.nb-grp-head .btn{padding:3px 10px;font-size:13px;opacity:.85}
+.nb-grp-body{padding:12px 14px 16px}
+.nb-lblrow{display:flex;align-items:center;gap:8px;margin:16px 0 8px;flex-wrap:wrap}
+.nb-lblrow:first-child{margin-top:2px}
+.nb-lbl{flex:1;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:800;opacity:.85;min-width:90px}
+.nb-lbl::after{content:"";flex:1;height:1px;background:rgba(127,127,127,.35)}
+.nb-empty{font-size:12.5px;opacity:.55;padding:10px 4px}
+.nb-explist{gap:14px}
+.nb-exbox{background:rgba(127,127,127,.1);border:1px solid rgba(127,127,127,.22);border-radius:12px;padding:10px 12px 12px;box-shadow:none}
+.nb-exbox-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+.nb-exbox-head .nb-exbox-title{flex:1 1 100%;order:0;background:transparent;border:0;border-bottom:1px solid rgba(127,127,127,.3);border-radius:0;padding:6px 2px;font-size:16px;font-weight:800;color:var(--text)}
+.nb-hrow{display:flex;align-items:center;gap:6px;flex:1 1 100%}
+.nb-hrow .btn{padding:3px 10px;min-height:32px}
+.nb-hfill{flex:1}
+.nb-menu{flex:1 1 100%;flex-wrap:wrap;gap:6px;padding:8px;background:rgba(127,127,127,.14);border-radius:10px}
+.nb-menu .btn::after{content:" " attr(title);font-size:12.5px}
+.nb-photos-wrap,.nb-gallery{gap:12px}
+.nb-photo{border-radius:12px;background:rgba(127,127,127,.09)}
+.nb-photo-actions{flex-wrap:wrap;gap:6px}
+.nb-exbox.is-collapsed{padding-bottom:6px}
+.nb-exbox.is-collapsed .nb-exbox-head{margin-bottom:0}
+.nb-exbox.is-collapsed .nb-menu{display:none!important}
+/* ===== القيم النهائية (آخر كتلة = الأعلى أولوية) ===== */
+.nb-subhead{margin:24px 0 12px}
+.nb-subhead b{font-size:16px}
+.nb-mainex-head{margin:20px 0 12px;padding:2px 0;padding-inline-start:10px}
+.nb-grp{border:0;border-radius:14px;margin:14px 0}
+.nb-grp-head{padding:12px;padding-inline-start:18px}
+.nb-grp-body{padding:6px 14px 16px;padding-inline-start:19px}
+.nb-explist{gap:12px}
+.nb-exbox{padding:8px 12px 10px}
 .nb-fav{display:flex;flex-wrap:wrap;gap:5px;align-items:center;flex-basis:100%;padding:5px 0;margin:2px 0;border-top:1px dashed var(--border);border-bottom:1px dashed var(--border)}
 .nb-fl{font-size:12px;font-weight:800;color:var(--amber)}
 .nb-ft.on{outline:2px solid var(--amber)}
@@ -10323,7 +10416,7 @@ li:has(>.md-task){list-style:none}
 .nb-ann-svg,.nb-ann-txt{position:absolute;inset:0;width:100%;height:100%}
 .nb-ann-txt{pointer-events:none}
 .nb-ann-t{position:absolute;white-space:pre;line-height:1.3;font-family:Tahoma,sans-serif;pointer-events:auto;outline:none;min-width:1em;touch-action:none}
-.nb-ann-t.sel{outline:2px dashed var(--amber)}`;document.head.appendChild(st);})();
+.nb-ann-t.sel{outline:2px dashed var(--amber)}`;document.head.appendChild(st); document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(st));})();
 
 const NB_TPL_KEY='nb_seg_tpl_v1', NB_DEF_KEY='nb_seg_def_v1';
 const nbLsGet=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v;}catch(e){return d;}};
@@ -10739,15 +10832,21 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
   wrap.innerHTML=`
     <div class="nb-exbox-head">
       <input class="nb-exbox-title" value="${esc(boxData.title||'')}" placeholder="عنوان المقطع (اختياري)">
-      <span class="nb-seg-stat" title="الحفظ تلقائي">✓</span>
-      <button type="button" class="btn small" data-act="tb" title="إظهار / إخفاء شريط الأدوات">🧰</button>
-      <button type="button" class="btn small" data-act="src" title="عرض / تحرير كنص ماركداون">🧾</button>
-      <button type="button" class="btn small" data-act="mv" title="نقل إلى مجموعة">📁</button>
-      <button type="button" class="btn small" data-act="tpl" title="القوالب">📋</button>
-      <button type="button" class="btn small" data-act="set" title="تخصيص مربع الكتابة">⚙</button>
-      <button type="button" class="btn small" data-act="fs" title="ملء الشاشة">🔳</button>
-      <button type="button" class="btn small" data-act="collapse">⌃</button>
-      <button type="button" class="btn small danger" data-act="delete">🗑</button>
+      <div class="nb-hrow">
+        <span class="nb-seg-stat" title="الحفظ تلقائي">✓</span>
+        <span class="nb-hfill"></span>
+        <button type="button" class="btn small" data-act="tb" title="إظهار / إخفاء شريط الأدوات">🧰</button>
+        <button type="button" class="btn small" data-act="src" title="عرض / تحرير كنص ماركداون">🧾</button>
+        <button type="button" class="btn small" data-act="fs" title="تكبير للكتابة">🔳</button>
+        <button type="button" class="btn small" data-act="collapse" title="طي / فتح">⌃</button>
+        <button type="button" class="btn small" data-act="more" title="المزيد">المزيد ▾</button>
+      </div>
+      <div class="nb-menu" style="display:none">
+        <button type="button" class="btn small" data-act="mv" title="نقل إلى مجموعة">📁</button>
+        <button type="button" class="btn small" data-act="tpl" title="القوالب">📋</button>
+        <button type="button" class="btn small" data-act="set" title="تخصيص مربع الكتابة">⚙</button>
+        <button type="button" class="btn small danger" data-act="delete" title="حذف المقطع">🗑</button>
+      </div>
     </div>
     <div class="nb-seg-set" style="display:none"></div>
     <div class="nb-exbox-body">
@@ -10907,6 +11006,9 @@ function nbBuildExtraExplainBox(s, boxData, index, item, rerenderList){
     else{boxData.content=(boxData.content?boxData.content+'\n\n':'')+c.content;Object.assign(boxData.sketches,c.sketches);}
     reload();},()=>({content:boxData.content,style:st,sketches:boxData.sketches}));
   q('set').onclick=()=>{setP.style.display=setP.style.display==='none'?'grid':'none';};
+  const menuEl=wrap.querySelector('.nb-menu');
+  q('more').onclick=()=>{ menuEl.style.display=menuEl.style.display==='none'?'flex':'none'; };
+  menuEl.addEventListener('click',e=>{ const bt=e.target.closest('button'); if(bt&&bt.dataset.act!=='delete') menuEl.style.display='none'; });
   const onEsc=e=>{if(e.key==='Escape'&&wrap.classList.contains('nb-fs'))q('fs').click();};
   q('fs').onclick=e=>{const on=wrap.classList.toggle('nb-fs');document.body.classList.toggle('nb-lock',on);e.currentTarget.textContent=on?'❎':'🔳';document[on?'addEventListener':'removeEventListener']('keydown',onEsc);if(on) fsRead=false; refreshMode();};
   grip.addEventListener('pointerdown',e=>{e.preventDefault();grip.setPointerCapture(e.pointerId);const y0=e.clientY,h0=area.offsetHeight;
@@ -10972,11 +11074,11 @@ function nbTextPanel(body, s, item){
 
   const exHead=document.createElement('div');
   exHead.className='nb-subhead';
-  exHead.innerHTML='<b>مقاطع شرح إضافية</b>';
+  exHead.innerHTML='<b>شروح إضافية</b>';
   const addExBtn=document.createElement('button');
-  addExBtn.type='button'; addExBtn.className='btn small'; addExBtn.textContent='+ إضافة مقطع شرح';
+  addExBtn.type='button'; addExBtn.className='btn small'; addExBtn.textContent='+ مقطع شرح';
   exHead.appendChild(addExBtn);
-  const tplBtn=document.createElement('button'); tplBtn.type='button'; tplBtn.className='btn small'; tplBtn.textContent='📋 من قالب';
+  const tplBtn=document.createElement('button'); tplBtn.type='button'; tplBtn.className='btn small'; tplBtn.textContent='📋 قالب';
   tplBtn.onclick=()=>nbTplMenu('new',(tp)=>{ const c=nbCloneTpl(tp); s.explanations.push({id:uid('nbex'), title:tp.name, content:c.content, style:c.style, sketches:c.sketches}); nbScheduleSave(item); renderExList(); });
   exHead.appendChild(tplBtn);
   body.appendChild(exHead);
@@ -11028,9 +11130,9 @@ function nbTextPanel(body, s, item){
     groupSel.value = entry.groupId || '';
     groupSel.onchange=()=>{ entry.groupId = groupSel.value || null; nbScheduleSave(item); renderGallery(); };
     const delBtn=document.createElement('button');
-    delBtn.type='button'; delBtn.className='btn small danger'; delBtn.textContent='🗑 حذف';
+    delBtn.type='button'; delBtn.className='btn small danger'; delBtn.textContent='🗑'; delBtn.title='حذف الصورة';
     delBtn.onclick=async ()=>{ const idx=s.images.indexOf(entry); if(idx!==-1) s.images.splice(idx,1); nbScheduleSave(item); await garbageCollectUnreferencedFiles(); await requestFolderSync(); renderGallery(); };
-    const annBtn=document.createElement('button'); annBtn.type='button'; annBtn.className='btn small'; annBtn.textContent='🖊 رسم وكتابة';
+    const annBtn=document.createElement('button'); annBtn.type='button'; annBtn.className='btn small'; annBtn.textContent='🖊'; annBtn.title='رسم وكتابة على الصورة';
     annBtn.onclick=()=>nbImageAnnotator(entry,()=>{ nbScheduleSave(item); loadThumb(); });
     acts.append(annBtn, groupSel, delBtn);
     card.append(img, cap, acts);
@@ -11054,11 +11156,13 @@ function nbTextPanel(body, s, item){
   function buildGroupCard(g){
     if(!Array.isArray(g.explanations)) g.explanations=[];
     const card=document.createElement('div'); card.className='nb-grp';
+    const GC=['#5b8def','#43a789','#c9873d','#a56bd6','#d25d7a','#5aa7c9']; card.style.setProperty('--gc',GC[Math.max(0,s.imageGroups.indexOf(g))%GC.length]);
     const head=document.createElement('div'); head.className='nb-grp-head';
     const arrow=document.createElement('span'); arrow.className='nb-grp-arrow';
     const title=document.createElement('b'), cnt=document.createElement('span'); cnt.className='nb-photo-group-count';
-    const upd=()=>{ arrow.textContent=g.open?'▾':'▸'; title.textContent='📁 '+g.name; cnt.textContent='('+g.explanations.length+' شرح · '+s.images.filter(e=>e.groupId===g.id).length+' صورة)'; };
-    head.append(arrow,title,cnt,
+    const upd=()=>{ arrow.textContent=g.open?'▾':'▸'; title.textContent='📁 '+g.name; cnt.textContent=g.explanations.length+' شرح · '+s.images.filter(e=>e.groupId===g.id).length+' صورة'; };
+    const tx=document.createElement('div'); tx.className='nb-gtxt'; tx.append(title,cnt);
+    head.append(arrow,tx,
       mkB('✏️',()=>{ const nn=prompt('اسم المجموعة:',g.name); if(nn&&nn.trim()){ g.name=nn.trim(); nbScheduleSave(item); upd(); } }),
       mkB('🗑',e=>{ if(!nbArmConfirm(e.currentTarget,'حذف المجموعة؟ (الشروح والصور تنتقل إلى «بدون مجموعة»)')) return;
         s.images.forEach(im=>{ if(im.groupId===g.id) im.groupId=null; }); g.explanations.forEach(bx=>s.explanations.push(bx));
@@ -11066,16 +11170,18 @@ function nbTextPanel(body, s, item){
     const body=document.createElement('div'); body.className='nb-grp-body';
     const fill=()=>{
       body.innerHTML='';
-      const bar=document.createElement('div'); bar.className='nb-subhead';
+      const bar=document.createElement('div'); bar.className='nb-lblrow'; bar.innerHTML='<span class="nb-lbl">📝 الشروح</span>';
       bar.append(
         mkB('+ مقطع شرح',()=>{ g.explanations.push({id:uid('nbex'),title:'',content:'',style:Object.assign({},nbLsGet(NB_DEF_KEY,{})),sketches:{}}); nbScheduleSave(item); fill(); upd(); }),
         mkB('📋 من قالب',()=>nbTplMenu('new',tp=>{ const c=nbCloneTpl(tp); g.explanations.push({id:uid('nbex'),title:tp.name,content:c.content,style:c.style,sketches:c.sketches}); nbScheduleSave(item); fill(); upd(); })));
       const list=document.createElement('div'); list.className='nb-explist';
       g.explanations.forEach((bx,i)=>list.appendChild(nbBuildExtraExplainBox(g,bx,i,item,()=>{ fill(); upd(); })));
+      if(!g.explanations.length){ const em=document.createElement('div'); em.className='nb-empty'; em.textContent='لا توجد شروح في هذه المجموعة بعد'; list.appendChild(em); }
       const grid=document.createElement('div'); grid.className='nb-gallery'; const nav=[];
       s.images.filter(e=>e.groupId===g.id).forEach(e=>grid.appendChild(buildPhotoCard(e,nav)));
       grid.appendChild(makeAddCard(g.id,()=>{ fill(); upd(); }));
-      body.append(bar,list,grid);
+      const il=document.createElement('div'); il.className='nb-lblrow'; il.innerHTML='<span class="nb-lbl">🖼 الصور</span>';
+      body.append(bar,list,il,grid);
     };
     const setOpen=o=>{ g.open=o; nbScheduleSave(item); if(o){ fill(); body.style.display=''; } else { body.innerHTML=''; body.style.display='none'; } upd(); };
     head.onclick=()=>setOpen(!g.open);
@@ -11086,7 +11192,7 @@ function nbTextPanel(body, s, item){
     gallery.innerHTML='';
     s.imageGroups.forEach(g=>gallery.appendChild(buildGroupCard(g)));
     const ungrouped=s.images.filter(e=>!e.groupId || !s.imageGroups.find(g=>g.id===e.groupId));
-    const uCard=document.createElement('div'); uCard.className='nb-grp';
+    const uCard=document.createElement('div'); uCard.className='nb-grp'; uCard.style.setProperty('--gc','#8a94a6');
     const uBody=document.createElement('div'); uBody.className='nb-grp-body';
     const fillU=()=>{ uBody.innerHTML=''; const grid=document.createElement('div'); grid.className='nb-gallery'; const nav=[]; ungrouped.forEach(e=>grid.appendChild(buildPhotoCard(e,nav))); grid.appendChild(makeAddCard(null,renderGallery)); uBody.appendChild(grid); };
     if(s.imageGroups.length){
