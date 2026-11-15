@@ -5692,7 +5692,7 @@ function logStoreActivity(storeName,oldValue,newValue){
       return;
     }
     // مقارنة سطحية-متعمقة محدودة (نستثني notebookData الثقيلة — لها التقاطها الخاص عبر هذا نفس المسار عند حفظها)
-    const __o=Object.assign({},oldValue), __n=Object.assign({},newValue); delete __o.notebookData; delete __n.notebookData;
+    const __o=Object.assign({},oldValue), __n=Object.assign({},newValue); delete __o.notebookData; delete __n.notebookData; delete __o.checklist; delete __n.checklist;
     const oc=galleryClone(__o), nc=galleryClone(__n);
     const diffs=[]; galleryDiff(oc,nc,'',diffs,25,0);
     diffs.forEach(d=>{
@@ -5701,7 +5701,7 @@ function logStoreActivity(storeName,oldValue,newValue){
       logActivity(classifyChangeTypeG(oldV,newV,d.path),{entity:storeName,entityId:newValue.id,entityLabel:label,field,oldValue:oldV,newValue:newV,summary:'تعديل في '+kindLabel+': '+label});
     });
     if(oldValue.notebookData!==newValue.notebookData){
-      logActivity('edit',{entity:storeName,entityId:newValue.id,entityLabel:label,field:'محتوى التوثيق/الدفتر',summary:'تحديث محتوى التوثيق لعنصر: '+label});
+      if(window.__CHG&&storeName==='items')window.__CHG.nbLog(oldValue.notebookData,newValue.notebookData,label,newValue.id);else logActivity('edit',{entity:storeName,entityId:newValue.id,entityLabel:label,field:'محتوى التوثيق/الدفتر',summary:'تحديث محتوى التوثيق لعنصر: '+label});
     }
   }
 }
@@ -5938,7 +5938,7 @@ async function getFileBlobURL(fileId){
 }
 async function loadFileIntoElement(el,fileId){
   try{
-    const url=await getFileBlobURL(fileId);
+    const url=await (window.getFileThumbURL||getFileBlobURL)(fileId);
     if(!url || !el.isConnected) return;
     if(el.tagName==="IMG"){ el.src=url; el.classList.add("loaded"); }
     else{ el.innerHTML=`<img src="${url}" alt="" loading="lazy">`; if(el.__siBtn) el.appendChild(el.__siBtn); }
@@ -7657,6 +7657,7 @@ async function exportProject(){
     zip.file("project/manifest.json", JSON.stringify(manifest, null, 2));
     zip.file("project/folders.json", JSON.stringify(state.folders, null, 2));
     zip.file("project/settings.json", JSON.stringify(state.settings, null, 2));
+    if(window.__PB) zip.file("project/plan-board.json", JSON.stringify(window.__PB.fileJson(), null, 2));
     // نظام الفئات والمواصفات (مستقل عن المجلدات) — كان ناقصًا تمامًا من التصدير القديم
     zip.file("project/categories.json", JSON.stringify({categories: state.categories, categorySchemas: state.categorySchemas}, null, 2));
 
@@ -11032,7 +11033,7 @@ function nbImgTransfer(entry,item,onDone){
     xpl.style.display=old?'':'none'; xpl.innerHTML='';
     if(old&&!pages.some(p=>p.id===pageId)) pageId=pages.length?pages[0].id:'';
     if(old) pages.forEach(p=>{ const b=document.createElement('button'); b.type='button'; b.className='xpc'+(p.id===pageId?' on':'');
-      const th=document.createElement('img'); if(p.imageId) getFileBlobURL(p.imageId).then(u=>{ if(u) th.src=u; });
+      const th=document.createElement('img'); if(p.imageId) (window.getFileThumbURL||getFileBlobURL)(p.imageId).then(u=>{ if(u) th.src=u; });
       const tx=document.createElement('span'); tx.textContent=(p.name||('صفحة '+p.no))+(p.pcb&&p.pcb.imageIdB?'  ✔ له ظهر':'');
       b.append(th,tx); b.onclick=()=>{ pageId=p.id; renderFt(); }; xpl.appendChild(b); });
     const side=val('xs'), pg=old?pages.find(p=>p.id===pageId):null;
@@ -11367,7 +11368,7 @@ function nbTextPanel(body, s, item){
     card.className='nb-photo';
     const img=document.createElement('img');
     img.alt='صورة توضيحية';
-    const loadThumb=()=>getFileBlobURL(entry.id).then(async u=>{ if(!u) return; img.src = entry.ann ? await nbAnnUrl(entry,u) : u; });
+    const loadThumb=()=>(entry.ann?getFileBlobURL:(window.getFileThumbURL||getFileBlobURL))(entry.id).then(async u=>{ if(!u) return; img.src = entry.ann ? await nbAnnUrl(entry,u) : u; });
     loadThumb();
     const cap=document.createElement('textarea');
     cap.placeholder='وصف الصورة...';
@@ -12360,7 +12361,7 @@ function nbFtRenderContentReadonly(container, content){
     content.images.forEach(entry=>{
       const card=document.createElement('div'); card.className='nb-photo';
       const img=document.createElement('img'); img.alt=entry.caption||'صورة';
-      getFileBlobURL(entry.id).then(u=>{ if(u) img.src=u; });
+      (window.getFileThumbURL||getFileBlobURL)(entry.id).then(u=>{ if(u) img.src=u; });
       img.onclick=()=>nbOpenImageViewer(img.src, entry.caption||'');
       card.appendChild(img);
       if(entry.caption){ const cap=document.createElement('div'); cap.className='ft-view-caption'; cap.textContent=entry.caption; card.appendChild(cap); }
@@ -12445,7 +12446,7 @@ function nbFtOpenEditor(hotspot, item, onChange){
     (hotspot.content.images||[]).forEach((entry,i)=>{
       const card=document.createElement('div'); card.className='nb-photo';
       const img=document.createElement('img'); img.alt='صورة مرفقة';
-      getFileBlobURL(entry.id).then(u=>{ if(u) img.src=u; });
+      (window.getFileThumbURL||getFileBlobURL)(entry.id).then(u=>{ if(u) img.src=u; });
       const cap=document.createElement('textarea'); cap.placeholder='وصف...'; cap.value=entry.caption||'';
       img.onclick=()=>nbOpenImageViewer(img.src, cap.value);
       cap.oninput=()=>{ entry.caption=cap.value; nbScheduleSave(item); };
@@ -12581,9 +12582,24 @@ function nbFaultPanel(body, s, item){
 
     const page=currentPage();
     if(!page){
-      const empty=document.createElement('div'); empty.style.cssText='padding:26px;text-align:center;color:var(--dim2);font-size:12.5px;';
-      empty.textContent='لا توجد صفحات بعد — أضف صورة لبدء تتبع الأعطال.';
-      root.appendChild(empty);
+      /* واجهة تتبع الأعطال الطبيعية حتى لو مفيش صفحات: نفس الشريط، وأدواته معطّلة لحد ما تضيف صورة */
+      const etb=document.createElement('div'); etb.className='ft-toolbar';
+      const enm=document.createElement('input'); enm.className='ft-page-name'; enm.placeholder='اسم الصفحة'; enm.disabled=true;
+      const emb=document.createElement('div'); emb.className='ft-mode-switch';
+      emb.innerHTML='<button type="button" class="btn small icon-only primary" disabled title="وضع العرض">👁</button><button type="button" class="btn small icon-only" disabled title="وضع التحرير">✏️</button>';
+      const epb=document.createElement('button'); epb.type='button'; epb.className='btn small icon-only'; epb.textContent='🔀'; epb.disabled=true; epb.title='دمج وجهي اللوحة';
+      const elb=document.createElement('div'); elb.className='ft-layers-bar'; elb.innerHTML='<span style="font-size:11px;color:var(--dim2)">لا توجد طبقات</span>';
+      const ezc=document.createElement('div'); ezc.className='ft-zoom-controls';
+      ezc.innerHTML=`<button type="button" class="ft-zbtn" disabled>−</button><span class="ft-zlevel">100%</span><button type="button" class="ft-zbtn" disabled>+</button><button type="button" class="ft-zbtn" disabled>⤢</button><button type="button" class="ft-zbtn ft-zbtn-fs" data-act="zfull" title="ملء الشاشة / خروج">${isFullscreen?'🗗':'⛶'}</button>`;
+      ezc.querySelector('[data-act="zfull"]').onclick=()=>{ isFullscreen=!isFullscreen; render(); };
+      etb.append(enm, emb, epb, elb, ezc);
+      const est=document.createElement('div'); est.className='ft-stage-area';
+      const evp=document.createElement('div'); evp.className='ft-stage-viewport'; evp.style.cssText+='display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
+      const emsg=document.createElement('div'); emsg.style.cssText='text-align:center;color:var(--dim2);font-size:12.5px;padding:0 20px;'; emsg.textContent='لا توجد صفحات بعد — أضف صورة لبدء تتبع الأعطال.';
+      const ebtn=document.createElement('button'); ebtn.type='button'; ebtn.className='btn primary'; ebtn.textContent='＋ إضافة صورة / صفحة';
+      ebtn.onclick=()=>pagePick.click();
+      evp.append(emsg, ebtn); est.appendChild(evp);
+      root.append(etb, est);
       return;
     }
     if(!page.hotspots.some(h=>h.id===activeLayerId)) activeLayerId = page.hotspots[0] ? page.hotspots[0].id : null;
@@ -15024,21 +15040,21 @@ async function runTrash(idx){
 /* فحص القرص: كل ملف/مجلد مش في الفهرس */
 async function audit(onP){
   if(!bind())return null;const idx=E.idx||await loadIdx();if(!idx)return null;
-  const known=new Set(["index.json","meta.json"]),dirs=new Set();
+  const known=new Set(["index.json","meta.json","planboard.json","inventory.json"]),dirs=new Set();
   const anc=p=>{let i;while((i=p.lastIndexOf("/"))>0){p=p.slice(0,i);dirs.add(p)}};
   for(const g of Object.values(idx.groups)){known.add(g.path+"/group.json");anc(g.path+"/group.json")}
-  for(const e of Object.values(idx.items)){for(const n of["item.json","hashes.json"]){known.add(e.path+"/"+n);anc(e.path+"/"+n)}for(const f of Object.values(e.files||{})){known.add(f.path);anc(f.path)}for(const pth of Object.keys(e.ft||{})){known.add(pth);anc(pth)}}
+  for(const e of Object.values(idx.items)){for(const n of["item.json","hashes.json","checklist.json"]){known.add(e.path+"/"+n);anc(e.path+"/"+n)}for(const f of Object.values(e.files||{})){known.add(f.path);anc(f.path)}for(const pth of Object.keys(e.ft||{})){known.add(pth);anc(pth)}}
   for(const f of Object.values(idx.unassigned||{})){known.add(f.path);anc(f.path)}
   const res=[];let n=0;
   const hasFiles=async d=>{for await(const[,x]of d.entries()){if(x.kind==="file"||await hasFiles(x))return true}return false};
-  const walk=async(d,pre)=>{for await(const[name,hd]of d.entries()){const p=pre?pre+"/"+name:name;
-    if(!pre&&name===".system")continue;
+  const walk=async(d,pre)=>{const ents=[];for await(const e of d.entries())ents.push(e);await pool(ents,8,async([name,hd])=>{const p=pre?pre+"/"+name:name;
+    if(!pre&&name===".system")return;
     if(hd.kind==="directory"){if(!dirs.has(p)){if(await hasFiles(hd))res.push({path:p,type:"dir"})}else await walk(hd,p)}
     else if(!known.has(p)){let size=0;try{size=(await hd.getFile()).size}catch(e){}res.push({path:p,type:"file",size})}
-    if(onP&&++n%40===0)onP(n)}};
+    if(onP&&++n%40===0)onP(n)})};
   await walk(E.h,"");return res}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const DEBOUNCE=150, POOL=4, SCAN_EVERY=5*60*1000;
+const DEBOUNCE=150, POOL=Math.max(6,Math.min(16,(navigator.hardwareConcurrency||4)*2)), SCAN_EVERY=5*60*1000;
 
 const E={h:null,idx:null,dirty:new Set(),dirtyFiles:new Set(),deleted:new Set(),force:new Set(),
   scan:true,allowEmpty:false,running:null,again:false,timer:null,retryT:null,retry:0,paused:0,
@@ -15131,6 +15147,7 @@ async function syncItem(it,base,idx,W,force,ctx){
   const op=idx.items[it.id],po=op&&op.path===base?op:null,
     Eo={path:base,files:{},name:it.name,folderId:it.folderId||null},used={},stale=[];
   Eo.sha=await wt(base+"/item.json",JSON.stringify(it,null,2),po&&!force?po.sha:null,W,it.id);
+  if(window.__CK&&window.__CK.has(it))Eo.ck=await wt(base+"/checklist.json",JSON.stringify(window.__CK.fileJson(it),null,2),po&&!force?po.ck:null,W,it.id);
   used.__ft=ftTree(it,base,po&&po.ftmap,!!(force||ctx.scan));
   let fch=!po;
   for(const[fid,k]of refs(it)){
@@ -15196,6 +15213,8 @@ async function pass(){
     const mp=idx.meta&&idx.meta.sha,
       ms=await wt("meta.json",JSON.stringify({settings:state.settings,categories:state.categories,categorySchemas:state.categorySchemas},null,2),mp,W);
     if(ms!==mp)changed=true;idx.meta={path:"meta.json",sha:ms};
+    if(window.__PB){const pp=idx.planboard&&idx.planboard.sha,ps=await wt("planboard.json",JSON.stringify(window.__PB.fileJson(),null,2),pp,W);if(ps!==pp)changed=true;idx.planboard={path:"planboard.json",sha:ps}}
+    if(window.__HIST){const ip=idx.inventory&&idx.inventory.sha,is=await wt("inventory.json",JSON.stringify(window.__HIST.inventoryJson(),null,2),ip,W);if(is!==ip)changed=true;idx.inventory={path:"inventory.json",sha:is}}
     const{gp,itemPath}=makePaths(idx);
     for(const f of state.folders){
       const p=gp[f.id],og=idx.groups[f.id],
@@ -17242,6 +17261,7 @@ async function rowsFolder(c,d){
   return["معلومات تخزين المجموعة",R]}
 
 async function rowsField(c,d){
+  if(d.rowsFn)return await d.rowsFn(c,d,{full,diskSize,fmt,bytes,folderPath,NOLINK});
   const R=[],it=itemById(d.itemId),obj=d.get?d.get():d.obj,sz=bytes(obj==null?"":obj),e=c.idx&&c.idx.items[d.itemId];
   const lab=typeof d.label==="function"?d.label():d.label;
   R.push(["النوع",lab||"بيانات"]);
@@ -17970,10 +17990,26 @@ window.__CZ={analyze,estimate,job,PRESETS};
 const E=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const TOK=/@\[([^\]|]*)\|([^\]]+)\]/g;
 const rid=()=>"pb"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const getB=()=>{ const s=state.settings||(state.settings={}); if(!s.planBoard||!Array.isArray(s.planBoard.rows)) s.planBoard={rows:[]}; return s.planBoard; };
+const SH=new WeakMap();
+const snap=b=>{const m={};(b.rows||[]).forEach(r=>{ if(r.plan||r.task) m[r.id]={p:r.plan||"",t:r.task||"",d:!!r.done}; });return m;};
+const track=b=>{ if(b&&!SH.has(b)) SH.set(b,snap(b)); };
+function stamp(b){
+  const old=SH.get(b)||{},now=Date.now(),L=b.log=b.log||[],ids=new Set();
+  const push=(a,r)=>{ const last=L[L.length-1];
+    if(a==="edit"&&last&&last.a==="edit"&&last.id===r.id&&now-last.t<60000){ last.t=now; last.plan=(r.plan||"").slice(0,200); last.task=(r.task||"").slice(0,200); return; }
+    L.push({t:now,a,id:r.id,plan:(r.plan||"").slice(0,200),task:(r.task||"").slice(0,200)}); };
+  (b.rows||[]).forEach(r=>{ if(!r.created) r.created=now; if(!(r.plan||r.task)) return; ids.add(r.id); const o=old[r.id];
+    if(!o){ push("add",r); r.updated=now; }
+    else{ if(o.p!==(r.plan||"")||o.t!==(r.task||"")){ push("edit",r); r.updated=now; }
+      if(o.d!==!!r.done){ push(r.done?"done":"undone",r); r.updated=now; r.doneAt=r.done?now:null; } } });
+  for(const id in old) if(!ids.has(id)) L.push({t:now,a:"del",id,plan:old[id].p.slice(0,200),task:old[id].t.slice(0,200)});
+  if(L.length>2000) L.splice(0,L.length-2000);
+  b.updatedAt=now; SH.set(b,snap(b));
+}
+const getB=()=>{ const s=state.settings||(state.settings={}); if(!s.planBoard||!Array.isArray(s.planBoard.rows)) s.planBoard={rows:[]}; track(s.planBoard); return s.planBoard; };
 let tm=null;
 const save=()=>{ clearTimeout(tm); tm=setTimeout(flush,500); };
-function flush(){ clearTimeout(tm); tm=null; try{ saveSettings(); }catch(e){} }
+function flush(){ clearTimeout(tm); tm=null; try{ stamp(getB()); saveSettings(); }catch(e){} }
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden"&&tm) flush(); });
 window.addEventListener("pagehide",()=>{ if(tm) flush(); });
 
@@ -18026,20 +18062,21 @@ function popKey(e){
 }
 
 /* ===== اللوحة ===== */
-function mount(host){
+function mount(host,store){
+  const G=()=>store?store.get():getB(), sv=()=>store?store.save():save();
   const draw=()=>{
-    const rows=getB().rows; host.innerHTML="";
-    const wrap=document.createElement("div"); wrap.className="pb-wrap"; wrap.style.setProperty("--pbz",getB().zoom||100);
+    const rows=G().rows; host.innerHTML="";
+    const wrap=document.createElement("div"); wrap.className="pb-wrap"; wrap.style.setProperty("--pbz",G().zoom||100);
     wrap.innerHTML=`<div class="pb-head"><span>📋 الخطط</span><span>✅ المهام</span></div>`;
     const focusCell=(id,k)=>{ const e=wrap.querySelector(`.pb-row[data-id="${id}"] .pb-${k} .pb-ed`); if(e){ e.focus(); const r=document.createRange(); r.selectNodeContents(e); r.collapse(false); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } };
-    const addRow=(at)=>{ const r={id:rid(),plan:"",task:"",done:false}; const fi=rows.findIndex(x=>x.done); rows.splice(at==null?(fi<0?rows.length:fi):at,0,r); save(); draw(); setTimeout(()=>focusCell(r.id,"plan"),30); };
+    const addRow=(at)=>{ const r={id:rid(),plan:"",task:"",done:false}; const fi=rows.findIndex(x=>x.done); rows.splice(at==null?(fi<0?rows.length:fi):at,0,r); sv(); draw(); setTimeout(()=>focusCell(r.id,"plan"),30); };
     rows.forEach((row,ri)=>{
       const r=document.createElement("div"); r.className="pb-row"+(row.done?" done":""); r.dataset.id=row.id;
       r.innerHTML=`<div class="pb-c pb-plan"><div class="pb-ed" contenteditable="true" data-ph="اكتب الخطة… أو @ لذكر عنصر"></div></div>
         <div class="pb-c pb-task"><input type="checkbox" class="pb-ck" ${row.done?"checked":""}><div class="pb-ed" contenteditable="true" data-ph="مهمة…"></div><button type="button" class="pb-x" title="حذف الصف">✕</button></div>`;
       [["plan",".pb-plan .pb-ed"],["task",".pb-task .pb-ed"]].forEach(([k,sel])=>{
         const ed=r.querySelector(sel); ed.innerHTML=toHtml(row[k]);
-        const upd=()=>{ if(ed.innerHTML==="<br>") ed.innerHTML=""; row[k]=ser(ed); save(); };
+        const upd=()=>{ if(ed.innerHTML==="<br>") ed.innerHTML=""; row[k]=ser(ed); sv(); };
         ed.addEventListener("input",()=>{ upd(); const c=mctx(ed); if(c) showPop(ed,c,upd); else hidePop(); });
         ed.addEventListener("keydown",e=>{ if(popKey(e)) return; if(e.key==="Enter"){ e.preventDefault(); if(k==="plan") focusCell(row.id,"task"); else addRow(row.done?null:ri+1); } });
         ed.addEventListener("blur",()=>setTimeout(()=>{ if(!pst||pst.ed===ed) hidePop(); },200));
@@ -18049,18 +18086,18 @@ function mount(host){
       r.querySelector(".pb-ck").onchange=e=>{
         const i=rows.indexOf(row); rows.splice(i,1); row.done=e.target.checked;
         if(row.done) rows.push(row); else { const fi=rows.findIndex(x=>x.done); rows.splice(fi<0?rows.length:fi,0,row); }
-        save(); draw(); };
-      r.querySelector(".pb-x").onclick=()=>{ if((row.plan||row.task)&&!confirm("حذف هذا الصف؟")) return; rows.splice(rows.indexOf(row),1); save(); draw(); };
+        sv(); draw(); };
+      r.querySelector(".pb-x").onclick=()=>{ if((row.plan||row.task)&&!confirm("حذف هذا الصف؟")) return; rows.splice(rows.indexOf(row),1); sv(); draw(); };
       wrap.appendChild(r);
     });
     const left=rows.filter(r=>!r.done&&(r.plan||r.task)).length, dn=rows.filter(r=>r.done).length;
     const foot=document.createElement("div"); foot.className="pb-foot";
     foot.innerHTML=`<button type="button" class="btn small primary" data-a="add">＋ صف جديد</button>${dn?`<button type="button" class="btn small" data-a="clr">🧹 مسح المنجز</button>`:""}<span style="flex:1"></span><span>${left} متبقية · ${dn} منجزة</span>`;
     foot.querySelector("[data-a=add]").onclick=()=>addRow();
-    const cb=foot.querySelector("[data-a=clr]"); if(cb) cb.onclick=()=>{ if(!confirm("مسح "+dn+" صف منجز؟")) return; getB().rows=rows.filter(r=>!r.done); save(); draw(); };
+    const cb=foot.querySelector("[data-a=clr]"); if(cb) cb.onclick=()=>{ if(!confirm("مسح "+dn+" صف منجز؟")) return; G().rows=rows.filter(r=>!r.done); sv(); draw(); };
     wrap.appendChild(foot); host.appendChild(wrap);
   };
-  if(!getB().rows.length) getB().rows.push({id:rid(),plan:"",task:"",done:false});
+  if(!G().rows.length) G().rows.push({id:rid(),plan:"",task:"",done:false});
   draw();
 }
 const css=document.createElement("style"); css.textContent=`
@@ -18099,11 +18136,467 @@ renderHome=function(c){
   sec.innerHTML=`<div class="sec-head"><h2>🗓 الخطط والمهام</h2><div class="line"></div><button type="button" class="btn small" data-a="zm-" title="تصغير الخط">A−</button><button type="button" class="btn small" data-a="zm+" title="تكبير الخط">A+</button><button type="button" class="btn small" data-a="fs" title="ملء الصفحة">🔳</button></div><div class="pb-mount"></div>`;
   const sg=c.querySelector(".stat-grid"); if(sg) sg.insertAdjacentElement("afterend",sec); else c.appendChild(sec);
   mount(sec.querySelector(".pb-mount"));
+  sec.querySelector(".sec-head").insertAdjacentHTML("beforeend",'<button type="button" class="btn small chg-ico" data-a="log" title="سجل التغييرات">🕘</button>');
+  sec.querySelector('[data-a="log"]').onclick=()=>openChg(null);
+  if(window.__SI) __SI.tag(sec,{kind:"field",label:"جدول الخطط والمهام",pos:"out",rowsFn:(cx,d,h)=>infoRows(cx,h,getB(),null,"جدول الخطط والمهام — الصفحة الرئيسية")});
   const zoom=d=>{ const b=getB(); b.zoom=Math.max(70,Math.min(240,(b.zoom||100)+d)); const w=sec.querySelector(".pb-wrap"); if(w) w.style.setProperty("--pbz",b.zoom); save(); };
   const onEsc=e=>{ if(e.key==="Escape") fsBtn.click(); };
   const fsBtn=sec.querySelector('[data-a="fs"]');
   fsBtn.onclick=()=>{ const on=sec.classList.toggle("pb-fs"); document.body.style.overflow=on?"hidden":""; fsBtn.textContent=on?"❎":"🔳"; document[on?"addEventListener":"removeEventListener"]("keydown",onEsc); };
   sec.querySelector('[data-a="zm-"]').onclick=()=>zoom(-10); sec.querySelector('[data-a="zm+"]').onclick=()=>zoom(10);
+};
+
+/* ===== الخطط والمهام على مستوى كل عنصر + ملفات مستقلة + سجل التغييرات ===== */
+const fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"}):"—"}catch(e){return String(t||"—")}};
+const cnt=b=>{const r=(b&&b.rows||[]).filter(x=>x.plan||x.task);return{n:r.length,d:r.filter(x=>x.done).length}};
+const LBL={add:"إضافة",edit:"تعديل",done:"إنجاز",undone:"إلغاء إنجاز",del:"حذف"};
+function fileJson(b,extra){ const c=cnt(b); return Object.assign({schema:1,kind:"plan-board",updatedAt:b.updatedAt||null,counts:{rows:c.n,done:c.d,left:c.n-c.d,log:(b.log||[]).length},rows:(b.rows||[]).filter(r=>r.plan||r.task),log:b.log||[]},extra||{}); }
+const hasCk=it=>!!(it&&it.checklist&&((it.checklist.log&&it.checklist.log.length)||(it.checklist.rows||[]).some(r=>r.plan||r.task)));
+function itemStore(it){ return { get(){ if(!it.checklist||!Array.isArray(it.checklist.rows)) it.checklist={v:1,rows:[],log:[]}; track(it.checklist); return it.checklist; },
+  save(){ stamp(this.get()); try{ nbScheduleSave(it); }catch(e){ try{ saveAndFlag("items",it); }catch(x){} } } }; }
+async function infoRows(cx,h,b,it,title){
+  const c2=cnt(b),R=[],L=b.log||[];
+  R.push(["النوع",title]);
+  if(it) R.push(["تابع للعنصر",(it.name||"")+(it.folderId?"  —  "+h.folderPath(it.folderId):"")]);
+  R.push(["عدد الصفوف",String(c2.n)]); R.push(["المنجز / المتبقي",c2.d+" / "+(c2.n-c2.d)]);
+  R.push(["عدد التغييرات في السجل",String(L.length)]);
+  R.push(["أول تسجيل",fmtT(L[0]&&L[0].t)]); R.push(["آخر تعديل",fmtT(b.updatedAt)]);
+  R.push(["حجم البيانات",h.fmt(h.bytes(JSON.stringify(fileJson(b))))]);
+  const e=it?(cx.idx&&cx.idx.items[it.id]):(cx.idx&&cx.idx.planboard), p=it?(e&&e.path?e.path+"/checklist.json":null):"planboard.json";
+  if(!cx.linked) R.push(["مكان التخزين","داخل بيانات البرنامج فقط — "+h.NOLINK,{cls:"warn"}]);
+  else if(e&&(it?e.ck:e.sha)&&p){ const ds=await h.diskSize(cx,p); R.push(["ملف مستقل على القرص",h.full(cx,p),{path:1,copy:1}]); R.push(["حجم الملف على القرص",ds==null?"⚠ غير موجود في المجلد!":h.fmt(ds),ds==null?{cls:"bad"}:{cls:"ok"}]); }
+  else R.push(["مكان التخزين","لم يُكتب ملفه في المجلد بعد",{cls:"warn"}]);
+  R.push(["الحفظ والنسخ",it?"نسخة داخل item.json (تدخل في التصدير والجلسات مع العنصر) + ملف checklist.json مستقل":"داخل إعدادات التطبيق (تدخل في التصدير والاستيراد) + ملف planboard.json مستقل"]);
+  return [title,R]; }
+function showLog(b,title){
+  const ov=document.createElement("div"); ov.className="si-ov"; ov.dir="rtl";
+  ov.innerHTML='<div class="si-box" role="dialog"><div class="si-head"><b class="si-title"></b><button type="button" class="si-x" title="إغلاق">✕</button></div><div class="si-body"></div></div>';
+  ov.querySelector(".si-title").textContent="🕘 "+title; const body=ov.querySelector(".si-body"), L=(b.log||[]).slice().reverse();
+  if(!L.length) body.textContent="لا توجد تغييرات مسجلة بعد.";
+  L.slice(0,300).forEach(x=>{ const r=document.createElement("div"); r.className="si-row"; const k=document.createElement("div"); k.className="si-k"; k.textContent=(LBL[x.a]||x.a)+" · "+fmtT(x.t);
+    const v=document.createElement("div"); v.className="si-v"; const sp=document.createElement("span"); sp.textContent=[x.plan,x.task].filter(Boolean).join(" ← ")||"(فارغ)"; v.appendChild(sp); r.append(k,v); body.appendChild(r); });
+  const close=()=>ov.remove(); ov.querySelector(".si-x").onclick=close; ov.addEventListener("click",e=>{ if(e.target===ov) close(); }); document.body.appendChild(ov); }
+function openChg(id){ if(window.__CHG) window.__CHG.open(id); }
+const _rd=renderItemDetail;
+renderItemDetail=async function(c,id){
+  await _rd.apply(this,arguments);
+  const it=(state.items||[]).find(i=>i.id===id), va=c.querySelector(".view-actions"); if(!it||!va) return;
+  const sec=document.createElement("div"); sec.className="pb-sec";
+  sec.innerHTML='<div class="sec-head"><h2>☑ الخطط والمهام</h2><div class="line"></div><button type="button" class="btn small chg-ico" data-a="log" title="سجل التغييرات">🕘</button></div><div class="pb-mount"></div>';
+  va.insertAdjacentElement("afterend",sec); const st=itemStore(it); mount(sec.querySelector(".pb-mount"),st);
+  sec.querySelector('[data-a="log"]').onclick=()=>openChg(it.id);
+  const nbh=[...c.querySelectorAll(".sec-head")].find(h=>/دفتر ملاحظات/.test(h.textContent));
+  if(nbh&&!nbh.querySelector(".chg-ico")){ const bt=document.createElement("button"); bt.type="button"; bt.className="btn small chg-ico"; bt.textContent="🕘"; bt.title="سجل التغييرات"; bt.onclick=()=>openChg(it.id); nbh.appendChild(bt); }
+  if(window.__SI) __SI.tag(sec,{kind:"field",label:"قائمة الخطط والمهام",itemId:it.id,pos:"out",rowsFn:(cx,d,h)=>infoRows(cx,h,st.get(),it,"قائمة الخطط والمهام الخاصة بالعنصر")});
+};
+window.__CK={fileJson:it=>fileJson(it.checklist,{itemId:it.id,itemName:it.name||""}),has:hasCk};
+window.__PB={mount,fileJson:()=>fileJson(getB()),getB};
+})();
+</script>
+<script id="turbo-zip-and-fastcheck">
+/* =========================================================
+   1) تصدير ZIP64 بالبث المباشر: بيكتب على القرص قطعة قطعة (من غير ما يحمّل الحجم كله في الذاكرة)
+      - الصور والفيديو والملفات المضغوطة أصلًا: بتتخزن كما هي بايت ببايت (جودة 100%)
+      - النصوص وJSON وباقي الملفات: ضغط Deflate
+      - كل ملف عليه CRC32 + ملف checksums.json، وكل ملفات قاعدة البيانات حتى غير المرتبطة بعنصر
+   2) مراجعة مزامنة سريعة: وجود + حجم كل ملف بالتوازي بدون حساب بصمات
+   ========================================================= */
+(function(){
+"use strict";
+const enc=new TextEncoder();
+const T=(()=>{const t=new Int32Array(2048);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?(c>>>1)^0xEDB88320:c>>>1;t[n]=c;}for(let n=0;n<256;n++){let c=t[n];for(let k=1;k<8;k++){c=t[c&255]^(c>>>8);t[k*256+n]=c;}}return t;})();
+function crc(c,b){c=~c;let i=0;const n=b.length;for(;i+8<=n;i+=8){const a=c^(b[i]|b[i+1]<<8|b[i+2]<<16|b[i+3]<<24);c=T[1792+(a&255)]^T[1536+((a>>>8)&255)]^T[1280+((a>>>16)&255)]^T[1024+(a>>>24)]^T[768+b[i+4]]^T[512+b[i+5]]^T[256+b[i+6]]^T[b[i+7]];}for(;i<n;i++)c=T[(c^b[i])&255]^(c>>>8);return ~c;}
+const dosT=d=>({t:(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1),d:((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate()});
+class ZipW{
+  constructor(sink,onBytes){this.s=sink;this.off=0;this.ents=[];this.ob=onBytes;}
+  async w(b){await this.s.write(b);this.off+=b.length;if(this.ob)this.ob(b.length);}
+  async add(name,src,deflate){
+    const nm=enc.encode(name),dt=dosT(new Date()),start=this.off,lh=new DataView(new ArrayBuffer(50+nm.length));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,45,true);lh.setUint16(6,0x0808,true);lh.setUint16(8,deflate?8:0,true);lh.setUint16(10,dt.t,true);lh.setUint16(12,dt.d,true);
+    lh.setUint16(26,nm.length,true);lh.setUint16(28,20,true);new Uint8Array(lh.buffer).set(nm,30);lh.setUint16(30+nm.length,1,true);lh.setUint16(32+nm.length,16,true);
+    await this.w(new Uint8Array(lh.buffer));
+    let cv=0,usz=0,csz=0;
+    const blob=src instanceof Blob?src:new Blob([typeof src==="string"?enc.encode(src):src]),rd=blob.stream().getReader();
+    if(!deflate){for(;;){const {done,value}=await rd.read();if(done)break;cv=crc(cv,value);usz+=value.length;csz+=value.length;await this.w(value);}}
+    else{const cs=new CompressionStream("deflate-raw"),wr=cs.writable.getWriter(),rr=cs.readable.getReader();
+      const pump=(async()=>{for(;;){const {done,value}=await rd.read();if(done)break;cv=crc(cv,value);usz+=value.length;await wr.write(value);}await wr.close();})();
+      const drain=(async()=>{for(;;){const {done,value}=await rr.read();if(done)break;csz+=value.length;await this.w(value);}})();
+      await Promise.all([pump,drain]);}
+    cv>>>=0;
+    const dd=new DataView(new ArrayBuffer(24));dd.setUint32(0,0x08074b50,true);dd.setUint32(4,cv,true);dd.setBigUint64(8,BigInt(csz),true);dd.setBigUint64(16,BigInt(usz),true);
+    await this.w(new Uint8Array(dd.buffer));
+    this.ents.push({nm,dt,start,crc:cv,csz,usz,m:deflate?8:0});
+    return {crc:cv,size:usz,csz};
+  }
+  async finish(){
+    const cd=this.off;let cs=0;
+    for(const e of this.ents){const h=new DataView(new ArrayBuffer(74+e.nm.length));
+      h.setUint32(0,0x02014b50,true);h.setUint16(4,45,true);h.setUint16(6,45,true);h.setUint16(8,0x0808,true);h.setUint16(10,e.m,true);h.setUint16(12,e.dt.t,true);h.setUint16(14,e.dt.d,true);h.setUint32(16,e.crc,true);
+      h.setUint32(20,0xFFFFFFFF,true);h.setUint32(24,0xFFFFFFFF,true);h.setUint16(28,e.nm.length,true);h.setUint16(30,28,true);h.setUint32(42,0xFFFFFFFF,true);
+      new Uint8Array(h.buffer).set(e.nm,46);const o=46+e.nm.length;h.setUint16(o,1,true);h.setUint16(o+2,24,true);h.setBigUint64(o+4,BigInt(e.usz),true);h.setBigUint64(o+12,BigInt(e.csz),true);h.setBigUint64(o+20,BigInt(e.start),true);
+      const u=new Uint8Array(h.buffer);await this.w(u);cs+=u.length;}
+    const z=new DataView(new ArrayBuffer(98));
+    z.setUint32(0,0x06064b50,true);z.setBigUint64(4,44n,true);z.setUint16(12,45,true);z.setUint16(14,45,true);z.setBigUint64(24,BigInt(this.ents.length),true);z.setBigUint64(32,BigInt(this.ents.length),true);z.setBigUint64(40,BigInt(cs),true);z.setBigUint64(48,BigInt(cd),true);
+    z.setUint32(56,0x07064b50,true);z.setBigUint64(64,BigInt(cd+cs),true);z.setUint32(72,1,true);
+    z.setUint32(76,0x06054b50,true);z.setUint16(84,0xFFFF,true);z.setUint16(86,0xFFFF,true);z.setUint32(88,0xFFFFFFFF,true);z.setUint32(92,0xFFFFFFFF,true);
+    await this.w(new Uint8Array(z.buffer));await this.s.close();
+  }
+}
+async function makeSink(fname){
+  if(window.showSaveFilePicker){
+    try{const fh=await showSaveFilePicker({suggestedName:fname,types:[{description:"ZIP",accept:{"application/zip":[".zip"]}}]}),w=await fh.createWritable();
+      return {disk:true,write:b=>w.write(b),close:()=>w.close(),abort:()=>{try{return w.abort();}catch(e){}}};
+    }catch(e){if(e&&e.name==="AbortError")throw e;}
+  }
+  let parts=[],sz=0;
+  return {disk:false,write:async b=>{parts.push(b);sz+=b.length;if(sz>64*1048576){parts=[new Blob(parts)];sz=0;}},abort:()=>{parts=[];},
+    close:async()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(parts,{type:"application/zip"}));a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),120000);}};
+}
+const STORE_RX=/^(image\/(jpeg|png|webp|gif|avif|heic|heif)|video\/|audio\/|application\/(zip|gzip|x-7z|x-rar|vnd\.rar|x-zip))/i,STORE_EXT=/\.(jpe?g|png|webp|gif|avif|heic|heif|mp4|mov|mkv|webm|mp3|m4a|aac|ogg|zip|7z|rar|gz|docx|xlsx|pptx)$/i;
+const isStored=r=>STORE_RX.test(r.mime||(r.blob&&r.blob.type)||"")||STORE_EXT.test(r.name||"");
+const fmtB=n=>n>=1073741824?(n/1073741824).toFixed(2)+" GB":n>=1048576?(n/1048576).toFixed(1)+" MB":n>=1024?(n/1024).toFixed(1)+" KB":n+" B";
+const J=o=>JSON.stringify(o,null,2);
+function progressUI(){
+  const d=document.createElement("div");d.dir="rtl";d.style.cssText="position:fixed;inset:auto 10px 10px 10px;z-index:100002;background:var(--panel);border:1px solid var(--amber);border-radius:12px;padding:10px 12px;box-shadow:0 8px 26px rgba(0,0,0,.5);font-size:12px";
+  d.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px"><b class="tx">📦 جارٍ التصدير…</b><button type="button" class="btn small danger">إيقاف</button></div><div style="height:7px;background:var(--panel2);border-radius:4px;margin-top:7px;overflow:hidden"><div class="bar" style="height:100%;width:0;background:var(--amber)"></div></div>';
+  document.body.appendChild(d);const ui={stop:false,set(t,p){d.querySelector(".tx").textContent=t;if(p!=null)d.querySelector(".bar").style.width=Math.min(100,p)+"%";},close(){d.remove();}};
+  d.querySelector("button").onclick=()=>{ui.stop=true;ui.set("جارٍ الإيقاف…");};return ui;
+}
+const legacy=exportProject;
+exportProject=async function(){
+  if(typeof CompressionStream==="undefined"||typeof BigInt==="undefined")return legacy();
+  const t0=Date.now(),date=new Date().toISOString().slice(0,10),fname=`equipment-db-${date}.zip`;
+  let sink;try{sink=await makeSink(fname);}catch(e){toast("تم إلغاء التصدير.");return;}
+  const ui=progressUI();let done=0,total=1;
+  try{
+    ui.set("📦 تجهيز القائمة…",0);
+    const files=await idbGetAll("files"),fm=new Map(files.map(f=>[f.id,f]));
+    total=files.reduce((a,f)=>a+((f.blob&&f.blob.size)||f.size||0),0)||1;
+    if(!sink.disk&&total>1.5*1073741824&&!confirm("حجم البيانات "+fmtB(total)+" والمتصفح لا يدعم الكتابة المباشرة على القرص، فقد يفشل التصدير. المتابعة؟")){sink.abort();ui.close();return;}
+    const z=new ZipW(sink,n=>{done+=n;}),sums={},missing=[],used=new Set(),tick=setInterval(()=>ui.set("📦 "+fmtB(done)+" مكتوب — "+z.ents.length+" ملف",done/(total+1)*100),300);
+    const add=async(path,src,deflate)=>{if(ui.stop)throw new Error("stopped");const r=await z.add(path,src,deflate);sums[path]={crc:r.crc.toString(16).padStart(8,"0"),size:r.size,csz:r.csz};return r;};
+    const meta=await idbGetAll("meta").catch(()=>[]);
+    await add("project/manifest.json",J({app:"workshop-equipment-db",version:2,format:"turbo-zip64",exportedAt:new Date().toISOString(),counts:{folders:state.folders.length,items:state.items.length,categories:state.categories.length,files:files.length}}),true);
+    await add("project/folders.json",J(state.folders),true);
+    await add("project/settings.json",J(state.settings),true);
+    if(window.__PB)await add("project/plan-board.json",J(window.__PB.fileJson()),true);
+    await add("project/categories.json",J({categories:state.categories,categorySchemas:state.categorySchemas}),true);
+    await add("project/items_index.json",J(state.items.map(i=>({id:i.id,name:i.name,folderId:i.folderId}))),true);
+    await add("project/all-meta.json",J(meta.map(m=>({key:m.key,value:m.value}))),true);
+    await add("project/activity-log.json",J(state.activityLog||[]),true);
+    if(window.__CHG)await add("project/changes-log.json",J(window.__CHG.gather()),true);
+    for(const it of state.items){
+      const base="equipment/"+it.id+"/",clone=JSON.parse(JSON.stringify(it)),seen=new Set(),out={_images:[],_docs:[],_notebookImages:[],_faultImages:[]};
+      const put=async(dir,fid,keyName,extra)=>{
+        if(!fid)return;const rec=fm.get(fid);
+        if(!rec||!rec.blob){missing.push({item:it.name||it.id,type:dir,id:fid});return;}
+        used.add(fid);const fn=(extra&&extra.fname)||(fid+guessExt(rec.mime,rec.name)),path=base+dir+"/"+fn;
+        if(!seen.has(path)){seen.add(path);await add(path,rec.blob,!isStored(rec));}
+        return {fileId:fid,filename:dir+"/"+fn};
+      };
+      for(const fid of (it.imageIds||[])){const r=await put("images",fid);if(r){r.isMain=fid===it.mainImageId;out._images.push(r);}}
+      for(const d of (it.docs||[])){const r=await put("documents",d.fileId,null,{fname:d.fileId+"_"+(d.name||"file")});if(r){r.name=d.name;out._docs.push(r);}}
+      for(const im of ((it.notebookData&&it.notebookData.images)||[])){const r=await put("notebook_images",im.id);if(r){r.caption=im.caption||"";out._notebookImages.push(r);}}
+      const ids=[];((it.notebookData&&it.notebookData.faultTracking&&it.notebookData.faultTracking.pages)||[]).forEach(p=>{if(p.imageId)ids.push(p.imageId);if(p.pcb&&p.pcb.imageIdB)ids.push(p.pcb.imageIdB);(p.hotspots||[]).forEach(h=>((h.content&&h.content.images)||[]).forEach(im=>ids.push(im.id)));});
+      for(const fid of ids){const r=await put("fault_images",fid);if(r)out._faultImages.push({fileId:r.fileId,filename:r.filename});}
+      Object.assign(clone,out);
+      await add(base+"data.json",J(clone),true);
+      if(window.__CK&&window.__CK.has(it))await add(base+"checklist.json",J(window.__CK.fileJson(it)),true);
+    }
+    /* أي ملف في قاعدة البيانات مش مرتبط بعنصر: بيتصدّر برضه عشان ما يضيعش حاجة */
+    let orphan=0;
+    for(const f of files){if(used.has(f.id)||!f.blob)continue;orphan++;await add("files_unreferenced/"+f.id+guessExt(f.mime,f.name),f.blob,!isStored(f));}
+    await add("project/files-index.json",J(files.map(f=>({id:f.id,name:f.name,mime:f.mime,size:(f.blob&&f.blob.size)||f.size||0,referenced:used.has(f.id)}))),true);
+    if(missing.length)await add("project/export-warnings.json",J(missing),true);
+    const ms=Date.now()-t0,csz=z.ents.reduce((a,e)=>a+e.csz,0),usz=z.ents.reduce((a,e)=>a+e.usz,0);
+    await add("project/export-report.json",J({entries:z.ents.length,originalBytes:usz,packedBytes:csz,ratio:usz?+(csz/usz).toFixed(3):1,orphans:orphan,missing:missing.length,seconds:+(ms/1000).toFixed(1)}),true);
+    if(window.__HIST)await add("project/inventory.json",J(window.__HIST.inventoryJson()),true);
+    await add("project/checksums.json",J(sums),true);
+    clearInterval(tick);ui.set("جارٍ إنهاء الملف…",99);await z.finish();ui.close();
+    toast(`تم التصدير: ${z.ents.length} ملف — ${fmtB(usz)} ← ${fmtB(csz)} في ${(ms/1000).toFixed(1)} ث. الصور محفوظة بجودتها الأصلية${missing.length?` — ⚠ ${missing.length} مرجع بلا ملف`:""}`,missing.length?"err":"ok",9000);
+  }catch(e){
+    try{await sink.abort();}catch(x){}ui.close();
+    toast(e&&e.message==="stopped"?"تم إيقاف التصدير.":"فشل التصدير: "+(e&&e.message||e),"err",8000);
+  }
+};
+
+/* ---- مراجعة المزامنة السريعة ---- */
+async function fastCheck(out){
+  const fs=window.__FS,P=fs&&fs.plan&&fs.plan(),h=fs&&fs.state&&fs.state.h;
+  if(!P||!h){out.textContent="اربط مجلد التخزين الأول.";return null;}
+  const idx=P.idx,t0=performance.now(),dirs=new Map();
+  const dirOf=path=>{if(dirs.has(path))return dirs.get(path);const pr=(async()=>{if(!path)return h;const i=path.lastIndexOf("/");return (await dirOf(i<0?"":path.slice(0,i))).getDirectoryHandle(path.slice(i+1));})();dirs.set(path,pr);return pr;};
+  const jobs=[];
+  for(const [id,e] of Object.entries(idx.items||{})){jobs.push([id,e.path+"/item.json",null]);for(const f of Object.values(e.files||{}))jobs.push([id,f.path,f.size]);}
+  for(const [id,g] of Object.entries(idx.groups||{}))jobs.push(["g:"+id,g.path+"/group.json",null]);
+  const bad={missing:[],size:[]};let i=0,n=0;
+  const wk=async()=>{while(i<jobs.length){const [id,path,size]=jobs[i++];
+    try{const k=path.lastIndexOf("/"),d=await dirOf(path.slice(0,k)),f=await (await d.getFileHandle(path.slice(k+1))).getFile();if(size!=null&&f.size!==size)bad.size.push([id,path]);}catch(e){bad.missing.push([id,path]);}
+    if(++n%300===0)out.textContent="جارٍ الفحص… "+n+" / "+jobs.length;}};
+  await Promise.all(Array.from({length:24},wk));
+  return {total:jobs.length,bad,sec:(performance.now()-t0)/1000,items:Object.keys(idx.items||{}).length};
+}
+const _rs=renderSettingsView;
+renderSettingsView=async function(c){
+  await _rs.apply(this,arguments);
+  if(!c||c.querySelector("#fastChkPanel"))return;
+  const p=document.createElement("div");p.className="panel";p.id="fastChkPanel";p.style.marginTop="14px";
+  p.innerHTML='<h3>⚡ مراجعة المزامنة السريعة</h3><div style="font-size:12px;opacity:.8;margin:4px 0 8px">بتقارن كل ملفات المجلد المربوط بالفهرس (وجود + حجم) بالتوازي من غير ما تحسب بصمات، فبتخلص في ثواني حتى مع الأحجام الكبيرة.</div><button type="button" class="btn small primary" data-a="run">ابدأ المراجعة</button> <button type="button" class="btn small" data-a="fix" style="display:none">🛠 إصلاح الناقص</button><div class="fc-out" style="margin-top:8px;font-size:12px;overflow-wrap:anywhere"></div>';
+  c.appendChild(p);const out=p.querySelector(".fc-out"),fix=p.querySelector('[data-a="fix"]');let last=null;
+  p.querySelector('[data-a="run"]').onclick=async()=>{out.textContent="جارٍ الفحص…";fix.style.display="none";
+    try{last=await fastCheck(out);if(!last)return;const nb=last.bad.missing.length+last.bad.size.length;
+      out.textContent=`فُحص ${last.total} ملف (${last.items} عنصر) في ${last.sec.toFixed(1)} ثانية — ${nb?`⚠ ناقص: ${last.bad.missing.length}، حجم مختلف: ${last.bad.size.length}`:"✅ كل شيء سليم ومطابق للفهرس"}`;
+      if(nb)fix.style.display="";}catch(e){out.textContent="تعذّر الفحص: "+(e&&e.message||e);}};
+  fix.onclick=()=>{const fs=window.__FS;if(!fs||!last)return;const st=fs.state;let g=false;
+    for(const [id] of last.bad.missing.concat(last.bad.size)){if(String(id).startsWith("g:"))g=true;else{st.force.add(id);st.dirty.add(id);}}
+    if(g)st.scan=true;fs.kick(0);out.textContent="بدأت إعادة كتابة الناقص — أعد المراجعة بعد ثواني.";fix.style.display="none";};
+};
+})();
+</script>
+<script id="history-inventory">
+/* =========================================================
+   الهيستوري + الحصر: مشتقّان من بيانات البرنامج وسجل النشاط نفسه،
+   فبيتحفظوا ويتزامنوا ويتصدّروا ويدخلوا الجلسات مع البيانات تلقائيًا،
+   ونسخة منهم بتتكتب في inventory.json (مزامنة) و project/inventory.json (ZIP).
+   ========================================================= */
+(function(){
+"use strict";
+const css=document.createElement("style");
+css.textContent=".hx-w{overflow-x:auto;margin-bottom:10px}.hx-t{width:100%;border-collapse:collapse;font-size:12px}.hx-t th{position:sticky;top:0;background:var(--panel2);text-align:right;padding:6px 7px;white-space:nowrap;cursor:pointer;border-bottom:1px solid var(--border)}.hx-t td{padding:6px 7px;border-bottom:1px solid var(--border);vertical-align:top}.hx-t tr.hx-r{cursor:pointer}.hx-t tr.hx-r:hover td{background:rgba(255,170,60,.09)}.hx-t .n{text-align:center;font-variant-numeric:tabular-nums}.hx-sub{margin:4px 0 8px;padding:6px 8px;border:1px dashed var(--border);border-radius:8px}.hx-sub h4{margin:6px 0 4px;font-size:12px}.hx-sm{opacity:.7;font-size:11px}";
+document.head.appendChild(css);
+const el=(t,o,...k)=>{const n=document.createElement(t);if(o){if(o.style)n.style.cssText=o.style;if(o.cls)n.className=o.cls;if(o.on)for(const x in o.on)n.addEventListener(x,o.on[x]);if(o.title)n.title=o.title;if(o.colSpan)n.colSpan=o.colSpan;}k.flat().forEach(c=>{if(c!=null)n.append(c instanceof Node?c:String(c));});return n;};
+const fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"}):"—"}catch(e){return "—"}};
+const lines=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean);
+const ICON={add:"➕",edit:"✏️",delete:"🗑️",image:"🖼️",done:"✅",undone:"↩️"};
+const folderName=id=>{try{return getFolderPath(id).map(f=>f.name).join(" › ")}catch(e){return ""}};
+const annOk=a=>!!(a&&((a.strokes&&a.strokes.length)||(a.texts&&a.texts.length)));
+const itemOf=id=>(state.items||[]).find(i=>i.id===id);
+
+/* ---- الانتقال للمكان بالظبط ---- */
+const AREAS=[[/مربع|الشرح|صورة في الدفتر|مجموعة صور/,"الشرح"],[/كود/,"الأكواد"],[/الرسم/,"الرسم"],[/الخريطة/,"الخريطة"],[/تتبع/,"تتبع الأعطال"]];
+function go(itemId,hint,folderId){
+  if(folderId&&!itemId){ try{navigateTo({type:"folder",id:folderId});}catch(e){} return; }
+  if(!itemOf(itemId)){ if(typeof toast==="function")toast("العنصر ده اتحذف أو مش موجود.","err"); return; }
+  navigateTo({type:"item",id:itemId});
+  const h=String(hint||""); let tab=null,plans=/الخطط والمهام/.test(h);
+  for(const [rx,t] of AREAS) if(!plans&&rx.test(h)){tab=t;break;}
+  if(!tab&&!plans) return;
+  let n=0; const iv=setInterval(()=>{ n++;
+    if(plans){ const x=document.querySelector(".pb-sec"); if(x){clearInterval(iv);x.scrollIntoView({block:"start"});} }
+    else{ const nav=document.querySelector(".nb-tabs"),b=nav&&[...nav.querySelectorAll("button")].find(x=>x.textContent.includes(tab));
+      if(b){ clearInterval(iv); if(!b.classList.contains("primary")) b.click(); setTimeout(()=>{ const t2=document.querySelector(".nb-tabs"); if(t2) t2.scrollIntoView({block:"start"}); },60); } }
+    if(n>40) clearInterval(iv); },100);
+}
+
+/* ---- إحصاء عنصر ---- */
+function stats(it,logs){
+  const nb=it.notebookData||{},nimgs=nb.images||[],ann=nimgs.filter(x=>annOk(x.ann)),boxes=[];
+  if(lines(nb.explanation).length) boxes.push({title:"المربع الرئيسي",lines:lines(nb.explanation).length});
+  (nb.explanations||[]).forEach(b=>boxes.push({title:b.title||"بدون عنوان",lines:lines(b.content).length}));
+  (nb.imageGroups||[]).forEach(g=>(g.explanations||[]).forEach(b=>boxes.push({title:(g.name?g.name+" › ":"")+(b.title||"بدون عنوان"),lines:lines(b.content).length})));
+  const pages=((nb.faultTracking&&nb.faultTracking.pages)||[]).map(p=>({name:p.name||"بدون اسم",hot:(p.hotspots||[]).length,two:!!(p.pcb&&p.pcb.imageIdB)}));
+  const ck=((it.checklist&&it.checklist.rows)||[]).filter(r=>r.plan||r.task),L=logs.filter(e=>e.item===it.id);
+  return {id:it.id,name:it.name||"(بدون اسم)",folder:folderName(it.folderId),imgs:(it.imageIds||[]).length,main:it.mainImageId||null,nimgs:nimgs.length,nann:ann.length,nimgList:nimgs.map(x=>({cap:x.caption||"",ann:annOk(x.ann)})),
+    boxes,codes:(nb.codes||[]).length,docs:(it.docs||[]).length,pages,hot:pages.reduce((a,p)=>a+p.hot,0),ck:ck.length,ckDone:ck.filter(r=>r.done).length,changes:L.length,last:L.length?L[0].t:0,log:L};
+}
+function allStats(){ const logs=window.__CHG?window.__CHG.gather():[]; return {logs,rows:(state.items||[]).map(it=>stats(it,logs))}; }
+const DEFS=[
+ ["📦","العناصر",r=>1],["🖼️","صور العناصر (أصلية بدون تعديل)",r=>r.imgs],["🖼️","صور الدفتر (بدون تعديل)",r=>r.nimgs-r.nann],["✏️","صور معدّلة (رسم/تعليقات)",r=>r.nann],
+ ["📝","مربعات الشرح",r=>r.boxes.length],["💻","كتل الأكواد",r=>r.codes],["📎","المستندات",r=>r.docs],["🩺","صفحات تتبع الأعطال",r=>r.pages.length],["📍","نقاط تتبع الأعطال",r=>r.hot],["☑","الخطط والمهام",r=>r.ck],["🕘","تغييرات مسجلة",r=>r.changes]];
+
+/* ---- جدول عام قابل للترتيب ---- */
+function table(cols,rows,opt){
+  opt=opt||{}; let sk=opt.sort||null,dir=-1; const w=el("div",{cls:"hx-w"}),t=el("table",{cls:"hx-t"}),th=el("thead"),tb=el("tbody");
+  const draw=()=>{ tb.textContent=""; let rs=rows.slice(); if(sk!=null){ const c=cols[sk]; rs.sort((a,b)=>{const x=c.v?c.v(a):a[sk],y=c.v?c.v(b):b[sk];return (x>y?1:x<y?-1:0)*dir;}); }
+    rs.forEach(r=>{ const tr=el("tr",{cls:opt.click?"hx-r":""}); cols.forEach((c,i)=>{ const v=c.r?c.r(r):r[i]; tr.appendChild(el("td",{cls:c.n?"n":""},v)); });
+      tb.appendChild(tr); if(opt.click) tr.onclick=()=>opt.click(r,tr,tb); }); if(!rs.length) tb.appendChild(el("tr",null,el("td",{colSpan:cols.length},"لا توجد بيانات.")));};
+  const hr=el("tr"); cols.forEach((c,i)=>{ const h=el("th",{title:"ترتيب"},c.h); h.onclick=()=>{ if(sk===i)dir*=-1; else{sk=i;dir=-1;} draw(); }; hr.appendChild(h); });
+  th.appendChild(hr); t.append(th,tb); w.appendChild(t); draw(); return w;
+}
+
+/* ---- الحصر ---- */
+function inventory(host,close){
+  const A=allStats(),rows=A.rows; host.textContent="";
+  const sumRows=DEFS.map(d=>({ic:d[0],lb:d[1],fn:d[2],n:rows.reduce((a,r)=>a+d[2](r),0)}));
+  sumRows.unshift({ic:"📁",lb:"المجلدات",n:(state.folders||[]).length,folders:true});
+  host.appendChild(el("h4",{style:"margin:4px 0"},"📊 حصر محتويات البرنامج (اضغط أي بند لتفاصيله)"));
+  host.appendChild(table([{h:"البند",r:r=>r.ic+" "+r.lb},{h:"العدد",n:1,v:r=>r.n,r:r=>String(r.n)}],sumRows,{click:(r,tr)=>{
+    const nx=tr.nextSibling; if(nx&&nx.dataset&&nx.dataset.drill){nx.remove();return;}
+    const dr=el("tr");dr.dataset.drill=1;const td=el("td",{colSpan:2});
+    if(r.folders){ td.appendChild(table([{h:"المجلد",r:f=>f.path},{h:"العناصر",n:1,v:f=>f.n,r:f=>String(f.n)}],(state.folders||[]).map(f=>({id:f.id,path:folderName(f.id),n:(state.items||[]).filter(i=>i.folderId===f.id).length})),{click:f=>{close();go(null,"",f.id);}})); }
+    else td.appendChild(table([{h:"العنصر",r:x=>x.name},{h:"العدد",n:1,v:x=>x.n,r:x=>String(x.n)}],rows.filter(x=>r.fn(x)>0).map(x=>({id:x.id,name:x.name,n:r.fn(x)})),{sort:1,click:x=>{close();go(x.id,"");}}));
+    dr.appendChild(td);tr.after(dr);}}));
+  host.appendChild(el("h4",{style:"margin:10px 0 4px"},"📦 تفاصيل كل عنصر (اضغط الصف للتفصيل)"));
+  const q=el("input",{style:"width:100%;margin-bottom:6px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"}); q.type="search"; q.placeholder="بحث باسم العنصر أو المجلد…";
+  const box=el("div"); host.append(q,box);
+  const cols=[{h:"العنصر",v:r=>r.name,r:r=>el("div",null,el("b",null,r.name),el("div",{cls:"hx-sm"},r.folder))},{h:"صور",n:1,v:r=>r.imgs,r:r=>String(r.imgs)},{h:"صور دفتر",n:1,v:r=>r.nimgs,r:r=>String(r.nimgs)},{h:"معدّلة",n:1,v:r=>r.nann,r:r=>String(r.nann)},{h:"شرح",n:1,v:r=>r.boxes.length,r:r=>String(r.boxes.length)},{h:"أكواد",n:1,v:r=>r.codes,r:r=>String(r.codes)},{h:"أعطال",n:1,v:r=>r.pages.length,r:r=>String(r.pages.length)},{h:"مهام",n:1,v:r=>r.ck,r:r=>r.ck?r.ckDone+"/"+r.ck:"0"},{h:"تعديلات",n:1,v:r=>r.changes,r:r=>String(r.changes)},{h:"آخر تعديل",v:r=>r.last,r:r=>fmtT(r.last)}];
+  const paint=()=>{ const s=q.value.trim().toLowerCase(); box.textContent=""; box.appendChild(table(cols,rows.filter(r=>!s||(r.name+" "+r.folder).toLowerCase().includes(s)),{sort:9,click:(r,tr)=>{
+    const nx=tr.nextSibling; if(nx&&nx.dataset&&nx.dataset.det){nx.remove();return;}
+    const dr=el("tr");dr.dataset.det=1;const td=el("td",{colSpan:cols.length});td.appendChild(detail(r,close));dr.appendChild(td);tr.after(dr);}})); };
+  q.oninput=paint; paint();
+}
+function detail(r,close){
+  const d=el("div",{cls:"hx-sub"}),g=(h)=>()=>{close();go(r.id,h);};
+  d.appendChild(el("button",{cls:"btn small primary",on:{click:g("")}},"فتح العنصر ↗"));
+  const imgs=[]; for(let i=0;i<r.imgs;i++) imgs.push({k:"صورة العنصر "+(i+1),s:"أصلية",h:""}); r.nimgList.forEach((x,i)=>imgs.push({k:"صورة دفتر "+(i+1)+(x.cap?" — "+x.cap:""),s:x.ann?"معدّلة ✏️":"أصلية",h:"صورة في الدفتر"}));
+  d.appendChild(el("h4",null,"🖼️ الصور ("+imgs.length+")")); d.appendChild(table([{h:"الصورة",r:x=>x.k},{h:"الحالة",r:x=>x.s}],imgs,{click:x=>{close();go(r.id,x.h);}}));
+  d.appendChild(el("h4",null,"📝 مربعات الشرح ("+r.boxes.length+")")); d.appendChild(table([{h:"المربع",r:x=>x.title},{h:"الأسطر",n:1,v:x=>x.lines,r:x=>String(x.lines)}],r.boxes,{click:()=>{close();go(r.id,"مربع شرح");}}));
+  d.appendChild(el("h4",null,"🩺 تتبع الأعطال ("+r.pages.length+" صفحة)")); d.appendChild(table([{h:"الصفحة",r:x=>x.name},{h:"النقاط",n:1,v:x=>x.hot,r:x=>String(x.hot)},{h:"وجه ثاني",r:x=>x.two?"نعم":"—"}],r.pages,{click:()=>{close();go(r.id,"تتبع");}}));
+  d.appendChild(el("h4",null,"🕘 آخر التعديلات ("+r.log.length+")")); d.appendChild(table([{h:"الوقت",v:x=>x.t,r:x=>fmtT(x.t)},{h:"النوع",r:x=>(ICON[x.type]||"•")+" "+x.type},{h:"المكان / التفصيل",r:x=>[x.field,x.sum].filter(Boolean).join(" — ")}],r.log.slice(0,20),{click:x=>{close();go(r.id,x.field+" "+x.sum);}}));
+  return d;
+}
+
+/* ---- الهيستوري: الأماكن اللي اشتغلت عليها ---- */
+function placeOf(e){
+  const f=(e.field||"")+" "+(e.sum||"");
+  if(e.ent==="folders") return "مجلد";
+  if(/مربع/.test(f)) return e.field||"مربع شرح"; if(/تتبع/.test(f)) return e.field||"تتبع الأعطال";
+  if(/كود/.test(f)) return "كتلة كود"; if(/الرسم/.test(f)) return "الرسم التوضيحي"; if(/الخريطة/.test(f)) return "الخريطة الذهنية"; if(/الخطط/.test(f)) return "الخطط والمهام";
+  if(/صورة|صور/.test(f)||e.type==="image") return e.field||"صورة"; return e.field||"بيانات العنصر";
+}
+function histRows(logs){
+  const m=new Map();
+  for(const e of logs){ if(!e.item&&e.ent!=="folders") continue; const id=e.item||e.eid,pl=placeOf(e),k=id+"|"+pl;
+    let r=m.get(k); if(!r){ const it=e.item?itemOf(e.item):null; r={item:e.item||null,folderId:e.item?null:e.eid,label:e.label||(it&&it.name)||"",place:pl,n:0,t:e.t,type:e.type,sum:e.sum,hint:(e.field||"")+" "+(e.sum||""),ent:e.ent}; m.set(k,r); }
+    r.n++; }
+  return [...m.values()].sort((a,b)=>b.t-a.t);
+}
+function history(host,close,itemId){
+  host.textContent=""; const logs=window.__CHG?window.__CHG.gather():[]; let scopeItem=!!itemId;
+  const bar=el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"}),box=el("div");
+  const paint=()=>{ bar.textContent=""; if(itemId) bar.appendChild(el("button",{cls:"btn small primary",on:{click:()=>{scopeItem=!scopeItem;paint();}}},scopeItem?"هذا العنصر فقط":"كل البرنامج"));
+    box.textContent=""; const rs=histRows(scopeItem?logs.filter(e=>e.item===itemId):logs);
+    box.appendChild(table([{h:"آخر نشاط",v:r=>r.t,r:r=>fmtT(r.t)},{h:"العنصر / المجلد",v:r=>r.label,r:r=>(r.folderId?"📁 ":"📦 ")+r.label},{h:"المكان",v:r=>r.place,r:r=>r.place},{h:"مرات",n:1,v:r=>r.n,r:r=>String(r.n)},{h:"آخر نوع",r:r=>(ICON[r.type]||"•")+" "+r.type}],rs.slice(0,500),{click:r=>{close();go(r.item,r.hint,r.folderId);}})); };
+  host.append(el("div",{cls:"hx-sm",style:"margin-bottom:6px"},"الأماكن اللي اشتغلت عليها، الأحدث أولًا — اضغط أي صف للوصول للعنصر والمكان."),bar,box); paint();
+}
+function inventoryJson(){
+  const A=allStats();
+  return {schema:1,kind:"inventory",totals:[{key:"folders",count:(state.folders||[]).length}].concat(DEFS.map(d=>({key:d[1],count:A.rows.reduce((a,r)=>a+d[2](r),0)}))),
+    items:A.rows.map(r=>({id:r.id,name:r.name,folder:r.folder,images:r.imgs,notebookImages:r.nimgs,annotatedImages:r.nann,explanationBoxes:r.boxes.length,codes:r.codes,docs:r.docs,faultPages:r.pages.length,faultHotspots:r.hot,tasks:r.ck,tasksDone:r.ckDone,changes:r.changes,lastChange:r.last||null})),
+    history:histRows(A.logs).slice(0,500).map(r=>({item:r.item,folder:r.folderId,label:r.label,place:r.place,count:r.n,lastType:r.type,lastAt:r.t}))};
+}
+window.__HIST={go,history,inventory,inventoryJson};
+})();
+</script>
+<script id="change-log-and-thumbs">
+/* =========================================================
+   1) سجل التغييرات الشامل (أيقونة 🕘): عناصر، مجلدات، صور، مربعات شرح، أكواد، رسم، خريطة، تتبع أعطال، خطط ومهام
+   2) مصغّرات خفيفة جدًا للصور غير المفتوحة (تتخزن في قاعدة منفصلة، الأصل لا يتغير)
+   ========================================================= */
+(function(){
+"use strict";
+const css=document.createElement("style"); css.textContent=".chg-ico{padding:2px 7px!important;min-width:0!important;font-size:13px!important;line-height:1.3!important;flex:none}"; document.head.appendChild(css);
+const META={add:["➕","إضافة"],edit:["✏️","تعديل"],delete:["🗑️","حذف"],image:["🖼️","صورة/ملف"],done:["✅","إنجاز"],undone:["↩️","إلغاء إنجاز"],import:["📥","استيراد"],export:["📦","تصدير"]};
+const fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"}):"—"}catch(e){return "—"}};
+const mapA=a=>a==="del"?"delete":a;
+function gather(){
+  const out=[];
+  for(const e of (state.activityLog||[])){ if(e.type==="save"||e.type==="sync") continue;
+    out.push({t:Date.parse(e.ts)||0,type:e.type,ent:e.entity,eid:e.entityId,item:e.entity==="items"?e.entityId:(e.itemId||null),label:e.entityLabel||"",field:e.field||"",sum:e.summary||""}); }
+  for(const it of state.items||[]){ const L=it.checklist&&it.checklist.log; if(L) for(const x of L) out.push({t:x.t,type:mapA(x.a),item:it.id,label:it.name||"",field:"الخطط والمهام",sum:[x.plan,x.task].filter(Boolean).join(" ← ")}); }
+  const pb=state.settings&&state.settings.planBoard; if(pb&&pb.log) for(const x of pb.log) out.push({t:x.t,type:mapA(x.a),item:null,label:"الصفحة الرئيسية",field:"الخطط والمهام",sum:[x.plan,x.task].filter(Boolean).join(" ← ")});
+  return out.sort((a,b)=>b.t-a.t);
+}
+function open(itemId){
+  let scope=itemId?"item":"all",ty="all",q="",lim=150;
+  const ov=document.createElement("div"); ov.className="si-ov"; ov.dir="rtl";
+  ov.innerHTML='<div class="si-box" role="dialog"><div class="si-head"><b class="si-title">🕘 سجل التغييرات</b><button type="button" class="si-x" title="إغلاق">✕</button></div><div class="si-body"></div></div>';
+  const body=document.createElement("div"),all=gather(),chips=document.createElement("div"),inp=document.createElement("input"),list=document.createElement("div");
+  chips.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"; inp.type="search"; inp.placeholder="بحث في السجل…"; inp.style.cssText="width:100%;margin-bottom:8px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)";
+  const close=()=>ov.remove();
+  const chip=(txt,fn,on)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(on?" primary":""); b.textContent=txt; b.onclick=fn; chips.appendChild(b); };
+  const drawChips=()=>{ chips.textContent=""; if(itemId) chip(scope==="item"?"هذا العنصر فقط":"كل البرنامج",()=>{scope=scope==="item"?"all":"item";lim=150;drawChips();paint();},true);
+    [["all","الكل"],["add","➕"],["edit","✏️"],["delete","🗑️"],["image","🖼️"]].forEach(([k,l])=>chip(l,()=>{ty=k;lim=150;drawChips();paint();},ty===k)); };
+  const paint=()=>{
+    const rows=all.filter(e=>(scope!=="item"||e.item===itemId)&&(ty==="all"||(ty==="edit"?["edit","done","undone"].includes(e.type):e.type===ty))&&(!q||(e.label+" "+e.field+" "+e.sum).toLowerCase().includes(q)));
+    list.textContent=""; if(!rows.length){ list.textContent="لا توجد تغييرات مطابقة."; return; }
+    rows.slice(0,lim).forEach(e=>{ const m=META[e.type]||["•",e.type],r=document.createElement("div"); r.style.cssText="padding:7px 4px;border-bottom:1px solid var(--border)"+((e.item||e.ent==="folders")?";cursor:pointer":"");
+      const a=document.createElement("div"); a.style.cssText="display:flex;gap:8px;justify-content:space-between;font-weight:700"; const l=document.createElement("span"); l.textContent=m[0]+" "+m[1]+(e.label?" · "+e.label:""); const t=document.createElement("small"); t.style.cssText="opacity:.65;white-space:nowrap"; t.textContent=fmtT(e.t); a.append(l,t);
+      const b=document.createElement("div"); b.style.cssText="font-size:12px;opacity:.85;overflow-wrap:anywhere"; b.textContent=[e.field,e.sum].filter(Boolean).join(" — "); r.append(a,b);
+      if(e.item||e.ent==="folders") r.onclick=()=>{ close(); window.__HIST.go(e.item,e.field+" "+e.sum,e.ent==="folders"?e.eid:null); };
+      list.appendChild(r); });
+    if(rows.length>lim){ const mb=document.createElement("button"); mb.type="button"; mb.className="btn small"; mb.textContent="عرض المزيد ("+(rows.length-lim)+")"; mb.onclick=()=>{lim+=150;paint();}; list.appendChild(mb); } };
+  inp.oninput=()=>{ q=inp.value.trim().toLowerCase(); lim=150; paint(); };
+  body.append(chips,inp,list); drawChips(); paint();
+  const body0=ov.querySelector(".si-body"),tabs=document.createElement("div"),hb=document.createElement("div"),ib=document.createElement("div");
+  tabs.style.cssText="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap";
+  [["🕘 السجل",body],["📜 الهيستوري",hb,"history"],["📊 الحصر",ib,"inventory"]].forEach(([l,el,fn],ix)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(ix?"":" primary"); b.textContent=l;
+    b.onclick=()=>{ [body,hb,ib].forEach(x=>x.style.display="none"); el.style.display=""; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); if(fn&&!el.dataset.d&&window.__HIST){ el.dataset.d=1; window.__HIST[fn](el,close,itemId); } }; tabs.appendChild(b); });
+  hb.style.display=ib.style.display="none"; body0.append(tabs,body,hb,ib);
+  ov.querySelector(".si-x").onclick=close; ov.addEventListener("click",e=>{ if(e.target===ov) close(); }); document.body.appendChild(ov);
+}
+
+/* ---- تفاصيل تعديلات الدفتر (مربعات الشرح، الصور، الأكواد، الرسم، الخريطة، تتبع الأعطال) ---- */
+const lines=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean);
+function logC(type,pl){
+  try{ const L=state.activityLog,f=L&&L[0];
+    if(f&&f._nb&&f.entityId===pl.entityId&&f.field===pl.field&&type!=="delete"&&f.type!=="delete"&&Date.now()-Date.parse(f.ts)<45000){
+      f.ts=new Date().toISOString(); f.day=f.ts.slice(0,10); f.summary=pl.summary; if(typeof persistActivityLogDebounced==="function") persistActivityLogDebounced(); return; }
+  }catch(e){}
+  logActivity(type,Object.assign({entity:"items",_nb:1},pl));
+}
+function textLog(o,n,where,label,id){
+  if(o===n) return;
+  const m=new Map(); lines(o).forEach(l=>m.set(l,(m.get(l)||0)+1));
+  const add=[]; lines(n).forEach(l=>{ const c=m.get(l); if(c) m.set(l,c-1); else add.push(l); });
+  let rem=0; m.forEach(v=>rem+=v);
+  const ex=(add[0]||"").slice(0,70),w=k=>k>1?k+" أسطر":"سطر";
+  let type,sum;
+  if(add.length&&!rem){ type="add"; sum="إضافة "+w(add.length)+" في "+where+(ex?": "+ex:""); }
+  else if(!add.length&&rem){ type="delete"; sum="حذف "+w(rem)+" من "+where; }
+  else { type="edit"; sum="تعديل "+w(Math.max(add.length,rem))+" في "+where+(ex?": "+ex:""); }
+  logC(type,{entityId:id,entityLabel:label,field:where,summary:sum});
+}
+const dc=(v,d)=>{ if(!v||typeof v!=="object"||d<=0) return 0; let c=0; if(Array.isArray(v)){ c=v.length; for(const x of v) c+=dc(x,d-1); } else for(const k in v){ const x=v[k]; if(x&&typeof x==="object") c+=dc(x,d-1); } return c; };
+function byId(arr,key){ const m=new Map(); (arr||[]).forEach((x,i)=>m.set(x&&x.id!=null?x.id:key+i,x)); return m; }
+function diffMap(om,nm,id,label,{noun,addType,get,field}){
+  nm.forEach((v,k)=>{ const p=om.get(k); if(!p) logC(addType||"add",{entityId:id,entityLabel:label,field:noun,summary:"إضافة "+noun}); else get&&get(p,v); });
+  om.forEach((v,k)=>{ if(!nm.has(k)) logC("delete",{entityId:id,entityLabel:label,field:noun,summary:"حذف "+noun}); });
+}
+function nbLog(o,n,label,id){
+  try{
+    o=o||{}; n=n||{};
+    textLog(o.explanation,n.explanation,"مربع الشرح الرئيسي",label,id);
+    const boxes=nb=>{ const m=new Map(); (nb.explanations||[]).forEach(b=>m.set(b.id,b)); (nb.imageGroups||[]).forEach(g=>(g.explanations||[]).forEach(b=>m.set(b.id,b))); return m; };
+    const ob=boxes(o),nbx=boxes(n);
+    nbx.forEach((b,k)=>{ const nm="مربع شرح"+(b.title?" «"+b.title+"»":""),p=ob.get(k);
+      if(!p) logC("add",{entityId:id,entityLabel:label,field:nm,summary:"إضافة "+nm});
+      else{ if((p.title||"")!==(b.title||"")) logC("edit",{entityId:id,entityLabel:label,field:nm,summary:"تغيير عنوان مربع الشرح"}); textLog(p.content,b.content,nm,label,id); } });
+    ob.forEach((b,k)=>{ if(!nbx.has(k)){ const nm="مربع شرح"+(b.title?" «"+b.title+"»":""); logC("delete",{entityId:id,entityLabel:label,field:nm,summary:"حذف "+nm}); } });
+    diffMap(byId(o.images,"i"),byId(n.images,"i"),id,label,{noun:"صورة في الدفتر",addType:"image",get:(p,v)=>{ if((p.caption||"")!==(v.caption||"")) logC("edit",{entityId:id,entityLabel:label,field:"صورة في الدفتر",summary:"تعديل وصف صورة"}); if(JSON.stringify(p.ann||null)!==JSON.stringify(v.ann||null)) logC("edit",{entityId:id,entityLabel:label,field:"صورة في الدفتر",summary:"تعديل رسم/تعليقات على صورة"}); }});
+    diffMap(byId(o.imageGroups,"g"),byId(n.imageGroups,"g"),id,label,{noun:"مجموعة صور",get:(p,v)=>{ if((p.name||"")!==(v.name||"")) logC("edit",{entityId:id,entityLabel:label,field:"مجموعة صور",summary:"تغيير اسم مجموعة صور إلى: "+(v.name||"")}); }});
+    diffMap(byId(o.codes,"c"),byId(n.codes,"c"),id,label,{noun:"كتلة كود",get:(p,v)=>{ if(JSON.stringify(p)!==JSON.stringify(v)) logC("edit",{entityId:id,entityLabel:label,field:"كتلة كود",summary:"تعديل كتلة كود"}); }});
+    const a=dc(o.drawing,4),b=dc(n.drawing,4); if(a!==b) logC(b>a?"add":"delete",{entityId:id,entityLabel:label,field:"الرسم التوضيحي",summary:(b>a?"إضافة":"حذف")+" عناصر في الرسم التوضيحي"});
+    if(JSON.stringify(o.mindmap||null).length!==JSON.stringify(n.mindmap||null).length) logC("edit",{entityId:id,entityLabel:label,field:"الخريطة الذهنية",summary:"تعديل الخريطة الذهنية"});
+    const op=(o.faultTracking&&o.faultTracking.pages)||[],np=(n.faultTracking&&n.faultTracking.pages)||[];
+    diffMap(byId(op,"p"),byId(np,"p"),id,label,{noun:"صفحة تتبع أعطال",addType:"image",get:(p,v)=>{ const nm="صفحة تتبع أعطال «"+(v.name||"")+"»";
+      if((p.name||"")!==(v.name||"")) logC("edit",{entityId:id,entityLabel:label,field:nm,summary:"تغيير اسم الصفحة"});
+      if((p.imageId||"")!==(v.imageId||"")) logC("image",{entityId:id,entityLabel:label,field:nm,summary:"تغيير صورة الصفحة"});
+      const x=dc(p,4),y=dc(v,4); if(x!==y) logC(y>x?"add":"delete",{entityId:id,entityLabel:label,field:nm,summary:(y>x?"إضافة":"حذف")+" رسم/طبقات/نقاط في "+nm}); }});
+  }catch(e){}
+}
+window.__CHG={open,nbLog,gather};
+
+/* ---- مصغّرات خفيفة جدًا ---- */
+const TDB="WorkshopEquipmentDB_Thumbs"; let tdb=null;
+const topen=()=>tdb||(tdb=new Promise(r=>{ try{ const q=indexedDB.open(TDB,1); q.onupgradeneeded=()=>q.result.createObjectStore("t"); q.onsuccess=()=>r(q.result); q.onerror=q.onblocked=()=>r(null); }catch(e){ r(null); } }));
+const tget=async k=>{ const d=await topen(); if(!d) return null; return new Promise(r=>{ try{ const q=d.transaction("t").objectStore("t").get(k); q.onsuccess=()=>r(q.result||null); q.onerror=()=>r(null); }catch(e){ r(null); } }); };
+const tput=async(k,v)=>{ const d=await topen(); if(!d) return; try{ d.transaction("t","readwrite").objectStore("t").put(v,k); }catch(e){} };
+const mem=new Map(); let busy=0; const wait=[];
+const slot=fn=>new Promise(res=>{ const go=async()=>{ busy++; try{ res(await fn()); }catch(e){ res(null); } busy--; if(wait.length) wait.shift()(); }; busy<2?go():wait.push(go); });
+window.getFileThumbURL=async function(fileId){
+  if(!fileId) return null;
+  if(mem.has(fileId)) return mem.get(fileId);
+  try{
+    const rec=await idbGet("files",fileId); if(!rec||!rec.blob) return null;
+    const mt=rec.blob.type||rec.mime||"";
+    if(!/^image\//.test(mt)||/svg/.test(mt)||rec.blob.size<25000) return await getFileBlobURL(fileId);
+    const key=fileId+":"+(rec.updatedAt||rec.size||0);
+    let tb=await tget(key);
+    if(!tb){ tb=await slot(async()=>{ const bmp=await createImageBitmap(rec.blob),sc=Math.min(1,220/Math.max(bmp.width,bmp.height)),w=Math.max(1,Math.round(bmp.width*sc)),h=Math.max(1,Math.round(bmp.height*sc)),cv=document.createElement("canvas"); cv.width=w; cv.height=h; cv.getContext("2d").drawImage(bmp,0,0,w,h); if(bmp.close) bmp.close(); return await new Promise(r=>cv.toBlob(r,"image/webp",.3)); });
+      if(!tb) return await getFileBlobURL(fileId); tput(key,tb); }
+    const u=URL.createObjectURL(tb); mem.set(fileId,u); return u;
+  }catch(e){ return await getFileBlobURL(fileId); }
 };
 })();
 </script>
