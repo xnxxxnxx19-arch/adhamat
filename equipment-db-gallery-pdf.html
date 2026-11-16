@@ -5722,7 +5722,7 @@ function galleryClone(v){ try{ return JSON.parse(JSON.stringify(v)); }catch(e){ 
 function galleryProjection(){
   return {
     folders: state.folders||[],
-    items: (state.items||[]).map(it=>{ if(!it || typeof it!=='object') return it; const r=Object.assign({},it); delete r.notebookData; return galleryClone(r); })
+    items: (state.items||[]).map(it=>{ if(!it || typeof it!=='object') return it; const r=Object.assign({},it); delete r.notebookData; delete r.checklist; return galleryClone(r); })
   };
 }
 function galleryDiff(a,b,path,out,limit,depth){
@@ -8092,6 +8092,7 @@ async function loadCategoryMeta(){
 async function saveCategoryMeta(){
   try{ await idbPut('meta', {key: CAT_META_KEY, value: {categories: state.categories, categorySchemas: state.categorySchemas}}); }catch(e){}
 }
+window.saveCategoryMeta=saveCategoryMeta;
 async function ensureCategoryMetaLoaded(){
   if(_catMetaLoaded) return;
   _catMetaLoaded = true;
@@ -15054,7 +15055,7 @@ async function audit(onP){
     if(onP&&++n%40===0)onP(n)})};
   await walk(E.h,"");return res}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const DEBOUNCE=150, POOL=Math.max(6,Math.min(16,(navigator.hardwareConcurrency||4)*2)), SCAN_EVERY=5*60*1000;
+const DEBOUNCE=150, POOL=/Android|Mobi|iPhone|iPad/i.test(navigator.userAgent)?6:Math.max(6,Math.min(16,(navigator.hardwareConcurrency||4)*2)), SCAN_EVERY=5*60*1000;
 
 const E={h:null,idx:null,dirty:new Set(),dirtyFiles:new Set(),deleted:new Set(),force:new Set(),
   scan:true,allowEmpty:false,running:null,again:false,timer:null,retryT:null,retry:0,paused:0,
@@ -15329,7 +15330,7 @@ function run(){
         E.again=false;
         while(E.paused)await sleep(100);
         folderSyncBusy=true;
-        try{await pass();E.retry=0;folderSyncError=null;E.lastErr=null}
+        try{await pass();E.retry=0;folderSyncError=null;E.lastErr=null;E.doneAt=Date.now()}
         catch(e){
           folderSyncError=e;E.lastErr=e;console.warn("FastSync:",e);
           if(e&&e.message==="folder-permission-required"){try{folderPermissionNeedsActivation=true}catch(_){}}
@@ -18327,11 +18328,12 @@ async function fastCheck(out){
   const idx=P.idx,t0=performance.now(),dirs=new Map();
   const dirOf=path=>{if(dirs.has(path))return dirs.get(path);const pr=(async()=>{if(!path)return h;const i=path.lastIndexOf("/");return (await dirOf(i<0?"":path.slice(0,i))).getDirectoryHandle(path.slice(i+1));})();dirs.set(path,pr);return pr;};
   const jobs=[];
-  for(const [id,e] of Object.entries(idx.items||{})){jobs.push([id,e.path+"/item.json",null]);for(const f of Object.values(e.files||{}))jobs.push([id,f.path,f.size]);}
+  for(const [id,e] of Object.entries(idx.items||{})){jobs.push([id,e.path+"/item.json",null]);if(e.ck)jobs.push([id,e.path+"/checklist.json",null]);for(const f of Object.values(e.files||{}))jobs.push([id,f.path,f.size]);for(const pth of Object.keys(e.ft||{}))jobs.push([id,pth,null]);}
+  for(const rf of ["index.json","meta.json","planboard.json","inventory.json"])jobs.push(["root:"+rf,rf,null]);
   for(const [id,g] of Object.entries(idx.groups||{}))jobs.push(["g:"+id,g.path+"/group.json",null]);
   const bad={missing:[],size:[]};let i=0,n=0;
   const wk=async()=>{while(i<jobs.length){const [id,path,size]=jobs[i++];
-    try{const k=path.lastIndexOf("/"),d=await dirOf(path.slice(0,k)),f=await (await d.getFileHandle(path.slice(k+1))).getFile();if(size!=null&&f.size!==size)bad.size.push([id,path]);}catch(e){bad.missing.push([id,path]);}
+    try{const k=path.lastIndexOf("/"),d=await dirOf(k<0?"":path.slice(0,k)),f=await (await d.getFileHandle(path.slice(k+1))).getFile();if(size!=null&&f.size!==size)bad.size.push([id,path]);}catch(e){bad.missing.push([id,path]);}
     if(++n%300===0)out.textContent="جارٍ الفحص… "+n+" / "+jobs.length;}};
   await Promise.all(Array.from({length:24},wk));
   return {total:jobs.length,bad,sec:(performance.now()-t0)/1000,items:Object.keys(idx.items||{}).length};
@@ -18344,11 +18346,11 @@ renderSettingsView=async function(c){
   p.innerHTML='<h3>⚡ مراجعة المزامنة السريعة</h3><div style="font-size:12px;opacity:.8;margin:4px 0 8px">بتقارن كل ملفات المجلد المربوط بالفهرس (وجود + حجم) بالتوازي من غير ما تحسب بصمات، فبتخلص في ثواني حتى مع الأحجام الكبيرة.</div><button type="button" class="btn small primary" data-a="run">ابدأ المراجعة</button> <button type="button" class="btn small" data-a="fix" style="display:none">🛠 إصلاح الناقص</button><div class="fc-out" style="margin-top:8px;font-size:12px;overflow-wrap:anywhere"></div>';
   c.appendChild(p);const out=p.querySelector(".fc-out"),fix=p.querySelector('[data-a="fix"]');let last=null;
   p.querySelector('[data-a="run"]').onclick=async()=>{out.textContent="جارٍ الفحص…";fix.style.display="none";
-    try{last=await fastCheck(out);if(!last)return;const nb=last.bad.missing.length+last.bad.size.length;
+    try{last=await fastCheck(out);window.__LASTFC=last;if(!last)return;const nb=last.bad.missing.length+last.bad.size.length;
       out.textContent=`فُحص ${last.total} ملف (${last.items} عنصر) في ${last.sec.toFixed(1)} ثانية — ${nb?`⚠ ناقص: ${last.bad.missing.length}، حجم مختلف: ${last.bad.size.length}`:"✅ كل شيء سليم ومطابق للفهرس"}`;
       if(nb)fix.style.display="";}catch(e){out.textContent="تعذّر الفحص: "+(e&&e.message||e);}};
   fix.onclick=()=>{const fs=window.__FS;if(!fs||!last)return;const st=fs.state;let g=false;
-    for(const [id] of last.bad.missing.concat(last.bad.size)){if(String(id).startsWith("g:"))g=true;else{st.force.add(id);st.dirty.add(id);}}
+    for(const [id] of last.bad.missing.concat(last.bad.size)){if(String(id).startsWith("g:")||String(id).startsWith("root:"))g=true;else{st.force.add(id);st.dirty.add(id);}}
     if(g)st.scan=true;fs.kick(0);out.textContent="بدأت إعادة كتابة الناقص — أعد المراجعة بعد ثواني.";fix.style.display="none";};
 };
 })();
@@ -18362,7 +18364,7 @@ renderSettingsView=async function(c){
 (function(){
 "use strict";
 const css=document.createElement("style");
-css.textContent=".hx-w{overflow-x:auto;margin-bottom:10px}.hx-t{width:100%;border-collapse:collapse;font-size:12px}.hx-t th{position:sticky;top:0;background:var(--panel2);text-align:right;padding:6px 7px;white-space:nowrap;cursor:pointer;border-bottom:1px solid var(--border)}.hx-t td{padding:6px 7px;border-bottom:1px solid var(--border);vertical-align:top}.hx-t tr.hx-r{cursor:pointer}.hx-t tr.hx-r:hover td{background:rgba(255,170,60,.09)}.hx-t .n{text-align:center;font-variant-numeric:tabular-nums}.hx-sub{margin:4px 0 8px;padding:6px 8px;border:1px dashed var(--border);border-radius:8px}.hx-sub h4{margin:6px 0 4px;font-size:12px}.hx-sm{opacity:.7;font-size:11px}";
+css.textContent=".hx-w{overflow-x:auto;margin-bottom:10px}.hx-t{width:100%;border-collapse:collapse;font-size:12px}.hx-t th{position:sticky;top:0;background:var(--panel2);text-align:right;padding:6px 7px;white-space:nowrap;cursor:pointer;border-bottom:1px solid var(--border)}.hx-t td{padding:6px 7px;border-bottom:1px solid var(--border);vertical-align:top}.hx-t tr.hx-r{cursor:pointer}.hx-t tr.hx-r:hover td{background:rgba(255,170,60,.09)}.hx-t .n{text-align:center;font-variant-numeric:tabular-nums}.hx-sub{margin:4px 0 8px;padding:6px 8px;border:1px dashed var(--border);border-radius:8px}.hx-sub h4{margin:6px 0 4px;font-size:12px}.hx-sm{opacity:.7;font-size:11px}.hx-sync{display:inline-flex;gap:5px;align-items:center;font-size:11px;margin-top:3px;white-space:nowrap}.hx-sync.ok{color:#4ade80}.hx-sync.wait{color:#fbbf24}.hx-sync.err{color:#f87171}.hx-sync.off,.hx-sync.pause{opacity:.7}.hx-sync button{padding:0 7px!important;min-width:0!important;font-size:11px!important;line-height:1.5!important}";
 document.head.appendChild(css);
 const el=(t,o,...k)=>{const n=document.createElement(t);if(o){if(o.style)n.style.cssText=o.style;if(o.cls)n.className=o.cls;if(o.on)for(const x in o.on)n.addEventListener(x,o.on[x]);if(o.title)n.title=o.title;if(o.colSpan)n.colSpan=o.colSpan;}k.flat().forEach(c=>{if(c!=null)n.append(c instanceof Node?c:String(c));});return n;};
 const fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"}):"—"}catch(e){return "—"}};
@@ -18466,7 +18468,7 @@ function history(host,close,itemId){
   const bar=el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"}),box=el("div");
   const paint=()=>{ bar.textContent=""; if(itemId) bar.appendChild(el("button",{cls:"btn small primary",on:{click:()=>{scopeItem=!scopeItem;paint();}}},scopeItem?"هذا العنصر فقط":"كل البرنامج"));
     box.textContent=""; const rs=histRows(scopeItem?logs.filter(e=>e.item===itemId):logs);
-    box.appendChild(table([{h:"آخر نشاط",v:r=>r.t,r:r=>fmtT(r.t)},{h:"العنصر / المجلد",v:r=>r.label,r:r=>(r.folderId?"📁 ":"📦 ")+r.label},{h:"المكان",v:r=>r.place,r:r=>r.place},{h:"مرات",n:1,v:r=>r.n,r:r=>String(r.n)},{h:"آخر نوع",r:r=>(ICON[r.type]||"•")+" "+r.type}],rs.slice(0,500),{click:r=>{close();go(r.item,r.hint,r.folderId);}})); };
+    box.appendChild(table([{h:"آخر نشاط",v:r=>r.t,r:r=>fmtT(r.t)},{h:"العنصر / المجلد",v:r=>r.label,r:r=>(r.folderId?"📁 ":"📦 ")+r.label},{h:"المكان",v:r=>r.place,r:r=>r.place},{h:"مرات",n:1,v:r=>r.n,r:r=>String(r.n)},{h:"آخر نوع",r:r=>(ICON[r.type]||"•")+" "+r.type},{h:"الحفظ الخارجي",v:r=>r.t,r:r=>badge(r.item,r.t)}],rs.slice(0,500),{click:r=>{close();go(r.item,r.hint,r.folderId);}})); };
   host.append(el("div",{cls:"hx-sm",style:"margin-bottom:6px"},"الأماكن اللي اشتغلت عليها، الأحدث أولًا — اضغط أي صف للوصول للعنصر والمكان."),bar,box); paint();
 }
 function inventoryJson(){
@@ -18475,7 +18477,47 @@ function inventoryJson(){
     items:A.rows.map(r=>({id:r.id,name:r.name,folder:r.folder,images:r.imgs,notebookImages:r.nimgs,annotatedImages:r.nann,explanationBoxes:r.boxes.length,codes:r.codes,docs:r.docs,faultPages:r.pages.length,faultHotspots:r.hot,tasks:r.ck,tasksDone:r.ckDone,changes:r.changes,lastChange:r.last||null})),
     history:histRows(A.logs).slice(0,500).map(r=>({item:r.item,folder:r.folderId,label:r.label,place:r.place,count:r.n,lastType:r.type,lastAt:r.t}))};
 }
-window.__HIST={go,history,inventory,inventoryJson};
+
+/* ---- حالة الحفظ في الملف الخارجي + تسجيل فوري ---- */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function statusOf(item,t){
+  const fs=window.__FS; if(!fs||!fs.state||!fs.state.h) return {k:"off",l:"⚪ غير مربوط بمجلد خارجي"};
+  const st=fs.state,saved=Math.max(st.doneAt||0,(st.idx&&st.idx.savedAt)||0);
+  const pend=item?(st.dirty.has(item)||st.force.has(item)||st.scan):(st.dirty.size>0||st.dirtyFiles.size>0||st.scan||st.force.size>0);
+  if(st.paused) return {k:"pause",l:"⏸ المزامنة متوقفة"};
+  if(!pend&&saved>=t) return {k:"ok",l:"🟢 اتحفظ في الملف الخارجي"};
+  if(st.lastErr) return {k:"err",l:"🔴 فشل الحفظ"+(st.lastErr.message?": "+String(st.lastErr.message).slice(0,40):"")};
+  return {k:"wait",l:st.running?"🟡 جارٍ الحفظ…":"🟡 لسه ما اتحفظش"};
+}
+async function syncNow(ids,scan){
+  const fs=window.__FS; if(!fs||!fs.state||!fs.state.h){ if(typeof toast==="function")toast("اربط مجلد التخزين الأول.","err"); return false; }
+  const st=fs.state; if(scan||!(ids&&ids.length)) st.scan=true; (ids||[]).forEach(i=>st.dirty.add(i));
+  fs.kick(0); await sleep(250); const t0=Date.now();
+  while(Date.now()-t0<120000){ if(!st.running&&!st.dirty.size&&!st.scan&&!st.force.size&&!st.dirtyFiles.size) break; await sleep(250); }
+  return true;
+}
+function updBadge(w){ const s=statusOf(w.dataset.item||null,+w.dataset.t); w.className="hx-sync "+s.k; w.firstChild.textContent=s.l; w.lastChild.style.display=(s.k==="wait"||s.k==="err")?"":"none"; w.dataset.k=s.k; }
+function refreshBadges(root){ (root||document).querySelectorAll(".hx-sync").forEach(updBadge); }
+function badge(item,t){
+  const w=el("span",{cls:"hx-sync"}),l=el("span"),b=el("button",{cls:"btn small",title:"سجّل في الملف الخارجي الآن"},"⚡");
+  w.dataset.item=item||""; w.dataset.t=t||0; b.onclick=async ev=>{ ev.stopPropagation(); b.disabled=true; await syncNow(item?[item]:null,!item); b.disabled=false; refreshBadges(document); };
+  w.append(l,b); updBadge(w); return w;
+}
+function bar(){
+  const d=el("div",{style:"display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px"}),tx=el("span",{style:"font-size:12px"}),bt=el("button",{cls:"btn small primary"},"⚡ تسجيل فوري"),all=(window.__CHG?window.__CHG.gather():[]).slice(0,3000);
+  d.append(tx,bt); let busy=false,ids=new Set(),glob=false;
+  const calc=()=>{
+    const fs=window.__FS; if(!fs||!fs.state||!fs.state.h){ tx.textContent="⚪ غير مربوط بمجلد خارجي — الحفظ داخل المتصفح فقط"; bt.style.display="none"; return; }
+    bt.style.display=""; ids=new Set(); glob=false; let n=0,err=null;
+    for(const e of all){ const s=statusOf(e.item,e.t); if(s.k==="wait"||s.k==="err"){ n++; if(e.item) ids.add(e.item); else glob=true; if(s.k==="err") err=s.l; } }
+    const st=fs.state; if(st.paused) tx.textContent="⏸ المزامنة متوقفة مؤقتًا"; else tx.textContent=busy?"⏳ جارٍ الحفظ في المجلد الخارجي…":(n?"🟡 "+n+" حدث لسه ما اتحفظش في المجلد الخارجي"+(err?" — "+err:""):"🟢 كل الأحداث اتحفظت في المجلد الخارجي");
+    bt.disabled=busy; bt.textContent=busy?"…":"⚡ تسجيل فوري";
+  };
+  bt.onclick=async()=>{ busy=true; calc(); await syncNow([...ids],glob); busy=false; calc(); refreshBadges(document); };
+  const iv=setInterval(()=>{ if(!d.isConnected){ clearInterval(iv); return; } calc(); refreshBadges(d.closest(".si-ov")||document); },1500);
+  calc(); return d;
+}
+window.__HIST={go,history,inventory,inventoryJson,badge,bar,statusOf,syncNow};
 })();
 </script>
 <script id="change-log-and-thumbs">
@@ -18491,7 +18533,7 @@ const fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateSt
 const mapA=a=>a==="del"?"delete":a;
 function gather(){
   const out=[];
-  for(const e of (state.activityLog||[])){ if(e.type==="save"||e.type==="sync") continue;
+  for(const e of (state.activityLog||[])){ if(e.type==="save"||e.type==="sync") continue; if((e.entity==="items"||e.entity==="folders")&&(e.field==="updatedAt"||e.field==="createdAt")) continue;
     out.push({t:Date.parse(e.ts)||0,type:e.type,ent:e.entity,eid:e.entityId,item:e.entity==="items"?e.entityId:(e.itemId||null),label:e.entityLabel||"",field:e.field||"",sum:e.summary||""}); }
   for(const it of state.items||[]){ const L=it.checklist&&it.checklist.log; if(L) for(const x of L) out.push({t:x.t,type:mapA(x.a),item:it.id,label:it.name||"",field:"الخطط والمهام",sum:[x.plan,x.task].filter(Boolean).join(" ← ")}); }
   const pb=state.settings&&state.settings.planBoard; if(pb&&pb.log) for(const x of pb.log) out.push({t:x.t,type:mapA(x.a),item:null,label:"الصفحة الرئيسية",field:"الخطط والمهام",sum:[x.plan,x.task].filter(Boolean).join(" ← ")});
@@ -18512,7 +18554,7 @@ function open(itemId){
     list.textContent=""; if(!rows.length){ list.textContent="لا توجد تغييرات مطابقة."; return; }
     rows.slice(0,lim).forEach(e=>{ const m=META[e.type]||["•",e.type],r=document.createElement("div"); r.style.cssText="padding:7px 4px;border-bottom:1px solid var(--border)"+((e.item||e.ent==="folders")?";cursor:pointer":"");
       const a=document.createElement("div"); a.style.cssText="display:flex;gap:8px;justify-content:space-between;font-weight:700"; const l=document.createElement("span"); l.textContent=m[0]+" "+m[1]+(e.label?" · "+e.label:""); const t=document.createElement("small"); t.style.cssText="opacity:.65;white-space:nowrap"; t.textContent=fmtT(e.t); a.append(l,t);
-      const b=document.createElement("div"); b.style.cssText="font-size:12px;opacity:.85;overflow-wrap:anywhere"; b.textContent=[e.field,e.sum].filter(Boolean).join(" — "); r.append(a,b);
+      const b=document.createElement("div"); b.style.cssText="font-size:12px;opacity:.85;overflow-wrap:anywhere"; b.textContent=[e.field,e.sum].filter(Boolean).join(" — "); r.append(a,b); if(window.__HIST&&window.__HIST.badge) r.appendChild(window.__HIST.badge(e.item,e.t));
       if(e.item||e.ent==="folders") r.onclick=()=>{ close(); window.__HIST.go(e.item,e.field+" "+e.sum,e.ent==="folders"?e.eid:null); };
       list.appendChild(r); });
     if(rows.length>lim){ const mb=document.createElement("button"); mb.type="button"; mb.className="btn small"; mb.textContent="عرض المزيد ("+(rows.length-lim)+")"; mb.onclick=()=>{lim+=150;paint();}; list.appendChild(mb); } };
@@ -18522,7 +18564,7 @@ function open(itemId){
   tabs.style.cssText="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap";
   [["🕘 السجل",body],["📜 الهيستوري",hb,"history"],["📊 الحصر",ib,"inventory"]].forEach(([l,el,fn],ix)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(ix?"":" primary"); b.textContent=l;
     b.onclick=()=>{ [body,hb,ib].forEach(x=>x.style.display="none"); el.style.display=""; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); if(fn&&!el.dataset.d&&window.__HIST){ el.dataset.d=1; window.__HIST[fn](el,close,itemId); } }; tabs.appendChild(b); });
-  hb.style.display=ib.style.display="none"; body0.append(tabs,body,hb,ib);
+  hb.style.display=ib.style.display="none"; body0.append(...(window.__HIST&&window.__HIST.bar?[window.__HIST.bar()]:[]),tabs,body,hb,ib);
   ov.querySelector(".si-x").onclick=close; ov.addEventListener("click",e=>{ if(e.target===ov) close(); }); document.body.appendChild(ov);
 }
 
