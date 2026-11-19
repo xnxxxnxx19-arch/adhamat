@@ -15041,7 +15041,7 @@ async function runTrash(idx){
 /* فحص القرص: كل ملف/مجلد مش في الفهرس */
 async function audit(onP){
   if(!bind())return null;const idx=E.idx||await loadIdx();if(!idx)return null;
-  const known=new Set(["index.json","meta.json","planboard.json","inventory.json"]),dirs=new Set();
+  const known=new Set(["index.json","meta.json","planboard.json","inventory.json","ai-model.json"]),dirs=new Set();
   const anc=p=>{let i;while((i=p.lastIndexOf("/"))>0){p=p.slice(0,i);dirs.add(p)}};
   for(const g of Object.values(idx.groups)){known.add(g.path+"/group.json");anc(g.path+"/group.json")}
   for(const e of Object.values(idx.items)){for(const n of["item.json","hashes.json","checklist.json"]){known.add(e.path+"/"+n);anc(e.path+"/"+n)}for(const f of Object.values(e.files||{})){known.add(f.path);anc(f.path)}for(const pth of Object.keys(e.ft||{})){known.add(pth);anc(pth)}}
@@ -15216,6 +15216,7 @@ async function pass(){
     if(ms!==mp)changed=true;idx.meta={path:"meta.json",sha:ms};
     if(window.__PB){const pp=idx.planboard&&idx.planboard.sha,ps=await wt("planboard.json",JSON.stringify(window.__PB.fileJson(),null,2),pp,W);if(ps!==pp)changed=true;idx.planboard={path:"planboard.json",sha:ps}}
     if(window.__HIST){const ip=idx.inventory&&idx.inventory.sha,is=await wt("inventory.json",JSON.stringify(window.__HIST.inventoryJson(),null,2),ip,W);if(is!==ip)changed=true;idx.inventory={path:"inventory.json",sha:is}}
+    if(window.__AI){try{const ap=idx.aimodel&&idx.aimodel.sha,asha=await wt("ai-model.json",JSON.stringify(window.__AI.fileJson()),ap,W);if(asha!==ap)changed=true;idx.aimodel={path:"ai-model.json",sha:asha}}catch(e){}}
     const{gp,itemPath}=makePaths(idx);
     for(const f of state.folders){
       const p=gp[f.id],og=idx.groups[f.id],
@@ -18313,6 +18314,7 @@ exportProject=async function(){
     await add("project/export-report.json",J({entries:z.ents.length,originalBytes:usz,packedBytes:csz,ratio:usz?+(csz/usz).toFixed(3):1,orphans:orphan,missing:missing.length,seconds:+(ms/1000).toFixed(1)}),true);
     if(window.__HIST)await add("project/inventory.json",J(window.__HIST.inventoryJson()),true);
     if(window.__HIST&&window.__HIST.analysisJson){try{await add("project/analysis.json",J(window.__HIST.analysisJson()),true);}catch(e){}}
+    if(window.__AI){try{await add("project/ai-model.json",J(window.__AI.fileJson()),true);}catch(e){}}
     await add("project/checksums.json",J(sums),true);
     clearInterval(tick);ui.set("جارٍ إنهاء الملف…",99);await z.finish();ui.close();
     toast(`تم التصدير: ${z.ents.length} ملف — ${fmtB(usz)} ← ${fmtB(csz)} في ${(ms/1000).toFixed(1)} ث. الصور محفوظة بجودتها الأصلية${missing.length?` — ⚠ ${missing.length} مرجع بلا ملف`:""}`,missing.length?"err":"ok",9000);
@@ -18330,7 +18332,7 @@ async function fastCheck(out){
   const dirOf=path=>{if(dirs.has(path))return dirs.get(path);const pr=(async()=>{if(!path)return h;const i=path.lastIndexOf("/");return (await dirOf(i<0?"":path.slice(0,i))).getDirectoryHandle(path.slice(i+1));})();dirs.set(path,pr);return pr;};
   const jobs=[];
   for(const [id,e] of Object.entries(idx.items||{})){jobs.push([id,e.path+"/item.json",null]);if(e.ck)jobs.push([id,e.path+"/checklist.json",null]);for(const f of Object.values(e.files||{}))jobs.push([id,f.path,f.size]);for(const pth of Object.keys(e.ft||{}))jobs.push([id,pth,null]);}
-  for(const rf of ["index.json","meta.json","planboard.json","inventory.json"])jobs.push(["root:"+rf,rf,null]);
+  for(const rf of ["index.json","meta.json","planboard.json","inventory.json","ai-model.json"])jobs.push(["root:"+rf,rf,null]);
   for(const [id,g] of Object.entries(idx.groups||{}))jobs.push(["g:"+id,g.path+"/group.json",null]);
   const bad={missing:[],size:[]};let i=0,n=0;
   const wk=async()=>{while(i<jobs.length){const [id,path,size]=jobs[i++];
@@ -18697,7 +18699,425 @@ function analysis(host,close,itemId){
     if(rows.length>lim) list.appendChild(el("button",{cls:"btn small",on:{click:()=>{lim+=40;paint();}}},"عرض المزيد ("+(rows.length-lim)+")")); if(!rows.length) list.textContent="لا توجد عناصر مطابقة."; };
   q.oninput=()=>{lim=40;paint();}; draw(); host.append(q,bar,list); paint();
 }
-Object.assign(window.__HIST,{analysis,analysisJson,_nlp:{keywords,extract,tokens}});
+Object.assign(window.__HIST,{analysis,analysisJson,_nlp:{keywords,extract,tokens,stem,itemTexts,itemStat,score,areaOf,analyze,itemSummary,lines,norm}});
+})();
+</script>
+<script id="ai-engine">
+/* =========================================================
+   🧠 محرك التعلّم المحلي (On-device ML): نمذجة دلالية، تجميع مواضيع، تعلّم سلوك، توقع، توليد نصوص بنموذج n-gram،
+   ورسوم SVG. النموذج المتعلَّم بيتخزّن في إعدادات التطبيق + ملف ai-model.json داخل المزامنة.
+   ========================================================= */
+(function(){
+"use strict";
+if(!window.__HIST||!window.__HIST._nlp) return;
+document.head.appendChild(Object.assign(document.createElement("style"),{textContent:".si-ov h4{font-size:13.5px!important;margin:8px 0 3px!important}"}));
+/* ---------- أدوات أساسية ---------- */
+const NL=window.__HIST._nlp,tokens=NL.tokens,itemTexts=NL.itemTexts,score=NL.score,areaOf=NL.areaOf,analyze=NL.analyze,lines=NL.lines,norm=NL.norm;
+const DAY=864e5;
+const AREAS=["الشرح","الصور","تتبع الأعطال","الأكواد","الرسم","الخريطة","الخطط والمهام","بيانات العنصر","المجلدات"];
+const AIDX=e=>{const i=AREAS.indexOf(areaOf(e));return i<0?7:i;};
+const NS="http://www.w3.org/2000/svg";
+const el=(t,o,...k)=>{const n=document.createElement(t);if(o){if(o.style)n.style.cssText=o.style;if(o.cls)n.className=o.cls;if(o.on)for(const x in o.on)n.addEventListener(x,o.on[x]);if(o.title)n.title=o.title;if(o.open)n.open=true;}k.flat().forEach(c=>{if(c!=null)n.append(c instanceof Node?c:String(c));});return n;};
+const sv=(t,a,...k)=>{const n=document.createElementNS(NS,t);if(a)for(const x in a)n.setAttribute(x,a[x]);k.flat().forEach(c=>{if(c!=null)n.append(c instanceof Node?c:String(c));});return n;};
+const dkey=t=>new Date(t).toLocaleDateString("en-CA");
+const fmtD=t=>{try{return new Date(t).toLocaleDateString("ar-EG-u-nu-latn",{dateStyle:"medium"})}catch(e){return "—"}};
+const fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"}):"—"}catch(e){return "—"}};
+const hash=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;};
+const pick=(arr,seed)=>arr[hash(String(seed))%arr.length];
+const rng=seed=>{let s=(seed>>>0)||1;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296;};};
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+const nn=(n,w)=>n===2?w[1]:n+" "+(n>=3&&n<=10?w[2]:w[0]);
+const EV=["حدث","حدثين","أحداث"],DW=["يوم","يومين","أيام"],IT=["عنصر","عنصرين","عناصر"];
+const R3=x=>Math.round(x*1000)/1000;
+
+/* ---------- تمثيل دلالي: TF-IDF + LSA (تكرار الفضاء الجزئي) ---------- */
+function lsa(rows,V,k,iters){
+  const N=rows.length,r=rng(20260101);
+  let X=Array.from({length:k},()=>{const a=new Float32Array(N);for(let i=0;i<N;i++)a[i]=r()-.5;return a;});
+  const AtX=x=>{const o=new Float32Array(V);for(let i=0;i<N;i++){const xi=x[i];if(!xi)continue;const R=rows[i];for(let j=0;j<R.idx.length;j++)o[R.idx[j]]+=R.val[j]*xi;}return o;};
+  const AZ=z=>{const o=new Float32Array(N);for(let i=0;i<N;i++){const R=rows[i];let s=0;for(let j=0;j<R.idx.length;j++)s+=R.val[j]*z[R.idx[j]];o[i]=s;}return o;};
+  const orth=()=>{for(let j=0;j<k;j++){const v=X[j];for(let i=0;i<j;i++){const u=X[i];let d=0;for(let n=0;n<N;n++)d+=v[n]*u[n];for(let n=0;n<N;n++)v[n]-=d*u[n];}let nr=0;for(let n=0;n<N;n++)nr+=v[n]*v[n];nr=Math.sqrt(nr)||1;for(let n=0;n<N;n++)v[n]/=nr;}};
+  orth(); for(let t=0;t<iters;t++){X=X.map(x=>AZ(AtX(x)));orth();}
+  const S=X.map(x=>{const z=AtX(x);let s=0;for(let i=0;i<V;i++)s+=z[i]*z[i];return Math.sqrt(s);});
+  const E=new Float32Array(N*k);for(let j=0;j<k;j++)for(let i=0;i<N;i++)E[i*k+j]=X[j][i]*S[j];
+  return E;
+}
+function normRows(E,N,k,d0){const D=k-d0,P=new Float32Array(N*D);for(let i=0;i<N;i++){let s=0;for(let j=0;j<D;j++){const v=E[i*k+d0+j];P[i*D+j]=v;s+=v*v;}s=Math.sqrt(s)||1;for(let j=0;j<D;j++)P[i*D+j]/=s;}return {P,D};}
+function kmeans(P,N,D,K,seed){
+  const r=rng(seed),C=[],dot=(a,bo)=>{let s=0;for(let j=0;j<D;j++)s+=P[a*D+j]*bo[j];return s;};
+  const row=i=>Array.from(P.subarray(i*D,i*D+D));
+  C.push(row(Math.floor(r()*N)));
+  while(C.length<K){const d2=new Float64Array(N);let tot=0;for(let i=0;i<N;i++){let b=-1;for(const c of C){const s=dot(i,c);if(s>b)b=s;}d2[i]=Math.max(0,1-b)**2;tot+=d2[i];}let x=r()*tot,pk=N-1;for(let i=0;i<N;i++){x-=d2[i];if(x<=0){pk=i;break;}}C.push(row(pk));}
+  let asg=new Int32Array(N);
+  for(let it=0;it<18;it++){let ch=0;for(let i=0;i<N;i++){let b=-2,bi=0;for(let c=0;c<K;c++){const s=dot(i,C[c]);if(s>b){b=s;bi=c;}}if(asg[i]!==bi){asg[i]=bi;ch++;}}
+    const S=Array.from({length:K},()=>new Float64Array(D)),cn=new Int32Array(K);for(let i=0;i<N;i++){cn[asg[i]]++;for(let j=0;j<D;j++)S[asg[i]][j]+=P[i*D+j];}
+    for(let c=0;c<K;c++){if(!cn[c]){C[c]=row(Math.floor(r()*N));continue;}let nr=0;for(let j=0;j<D;j++)nr+=S[c][j]**2;nr=Math.sqrt(nr)||1;C[c]=Array.from(S[c],v=>v/nr);}
+    if(!ch&&it>0)break;}
+  return asg;
+}
+
+/* ---------- استخراج المعرفة: قياسات، أكواد، خطوات، أسباب، تحذيرات ---------- */
+const UNIT_RX=/(\d+(?:[.,]\d+)?)\s*(°c|°|%|درجه|فولت|امبير|اوم|واط|هرتز|بار|ثانيه|دقيقه|ساعه|ملم|مم|سم|متر|لتر|كجم|جم|rpm|ohm|volts?|amps?|watts?|hz|psi|bar|mm|cm|kg|v|a|w|c)(?![\u0600-\u06FFa-z0-9])/g;
+const IMPER=new Set("افصل فك ركب قس افحص استبدل شغل اضغط تاكد نظف اغلق افتح ضبط اضبط عاير ثبت وصل شد اربط فحص تحقق ابدا اطفي ارفع نزل غير بدل جرب راجع سجل قارن".split(" "));
+const CAUSE_RX=/(بسبب|نتيجه|لان|لانه|عشان|يؤدي|بيؤدي|ادي الي|يسبب|بيسبب|اذا|لو|عندما|لما|سبب)/;
+const SYMP_RX=/(تالف|عطل|سخن|سخونه|صوت|تسريب|توقف|ضعيف|مش بيشتغل|لا يعمل|تآكل|تاكل|احتراق|حرق|ارتفاع|انخفاض|اهتزاز|رعشه|فصل)/;
+const WARN_RX=/(تحذير|خطر|انتبه|ممنوع|لا تقم|متنساش|احذر|ضروري جدا|صعق)/;
+function extractFacts(it){
+  const T=itemTexts(it),ls=lines(T.body),meas=[],codes=new Set(),steps=[],causal=[],warn=[],seenM=new Set();
+  for(const ln of ls){
+    const n=norm(ln);
+    let m;UNIT_RX.lastIndex=0;
+    while((m=UNIT_RX.exec(n))&&meas.length<8){const key=m[1]+m[2];if(seenM.has(key))continue;seenM.add(key);const ctx=n.slice(Math.max(0,m.index-22),m.index).replace(/\s+/g," ").trim();meas.push({v:parseFloat(m[1].replace(",",".")),u:m[2],c:ctx});}
+    (ln.match(/\b[A-Za-z]{1,5}[-_ ]?\d{2,}[A-Za-z0-9\-]*\b/g)||[]).forEach(c=>{if(c.length>=4&&codes.size<6)codes.add(c.trim());});
+    const first=n.split(/\s+/)[0]||"";
+    if((/^\s*(\d+[\.\)\-]|[•\-\*])\s*/.test(ln)||IMPER.has(first))&&steps.length<8)steps.push(ln.replace(/^\s*(\d+[\.\)\-]|[•\-\*])\s*/,"").slice(0,120));
+    if(WARN_RX.test(n)&&warn.length<3)warn.push(ln.slice(0,140));
+    ln.split(/[\.!؟\?؛]+\s*/).forEach(x=>{const s=norm(x);if(s.length>=12&&s.length<=200&&CAUSE_RX.test(s)&&causal.length<12)causal.push({x:x.trim(),sc:(SYMP_RX.test(s)?2:0)+(/(لو|اذا|عندما|لما)/.test(s)?1:0)});});
+  }
+  causal.sort((a,b)=>b.sc-a.sc);
+  return {meas:meas.slice(0,6),codes:[...codes],steps:steps.slice(0,6),causal:causal.slice(0,4).map(c=>c.x.slice(0,150)),warn};
+}
+
+/* ---------- بناء قاعدة المعرفة (مع كاش بالتوقيع) ---------- */
+let KC=null;
+function buildK(){
+  const items=state.items||[],N=items.length;
+  const sig=N+":"+hash(items.map(it=>{const nb=it.notebookData||{};let L=(nb.explanation||"").length;(nb.explanations||[]).forEach(b=>L+=(b.content||"").length+(b.title||"").length);return it.id+"|"+(it.updatedAt||0)+"|"+L+"|"+(it.name||"").length;}).join(";"));
+  if(KC&&KC.sig===sig) return KC;
+  const surf=new Map(),docs=[],df=new Map(),lang=[];
+  items.forEach(it=>{const T=itemTexts(it),tf=new Map(),add=(txt,w)=>{for(const t of tokens(txt)){tf.set(t.s,(tf.get(t.s)||0)+w);let m=surf.get(t.s);if(!m){m=new Map();surf.set(t.s,m);}m.set(t.raw,(m.get(t.raw)||0)+1);}};add(T.head,3);add(T.body.slice(0,40000),1);docs.push(tf);tf.forEach((_,s)=>df.set(s,(df.get(s)||0)+1));});
+  const sf=s=>{const m=surf.get(s);let b="",c=0;if(m)m.forEach((v,k)=>{if(v>c){c=v;b=k;}});return b||s;};
+  const minDf=N>=30?2:1,vl=[...df].filter(x=>x[1]>=minDf).sort((a,b)=>b[1]-a[1]||(a[0]<b[0]?-1:1)).slice(0,3000).map(x=>x[0]),vid=new Map(vl.map((s,i)=>[s,i])),V=vl.length;
+  const idf=vl.map(s=>Math.log((N+1)/(df.get(s)+1))+1);
+  const rows=docs.map(tf=>{const ids=[],vals=[];let nr=0;tf.forEach((c,s)=>{const j=vid.get(s);if(j==null)return;const w=(1+Math.log(c))*idf[j];ids.push(j);vals.push(w);nr+=w*w;});nr=Math.sqrt(nr)||1;return {idx:Int32Array.from(ids),val:Float32Array.from(vals,v=>v/nr)};});
+  const kw=rows.map(r=>[...r.idx].map((j,q)=>[j,r.val[q]]).sort((a,b)=>b[1]-a[1]||a[0]-b[0]).slice(0,8).map(x=>sf(vl[x[0]])));
+  const K={sig,N,ids:items.map(i=>i.id),names:items.map(i=>i.name||""),V,k:0,assign:new Int32Array(N),clusters:[],map:null,neighbors:items.map(()=>[]),dups:[],kw,facts:items.map(extractFacts),phrases:[],units:{},sf,tok:docs.map(d=>d.size)};
+  if(N>=4&&V>=3){
+    const k=Math.min(10,N-1,V),E=lsa(rows,V,k,7),d0=k>=4?1:0,{P,D}=normRows(E,N,k,d0);K.k=k;
+    const KK=N<6?1:Math.max(2,Math.min(8,Math.round(Math.sqrt(N/2))));
+    let asg=KK>1?kmeans(P,N,D,KK,777):new Int32Array(N);
+    const cnt=new Int32Array(KK);asg.forEach(c=>cnt[c]++);const ord=[...cnt.keys()].filter(c=>cnt[c]>0).sort((a,b)=>cnt[b]-cnt[a]||a-b),remap=new Map(ord.map((c,i)=>[c,i]));
+    K.assign=Int32Array.from(asg,c=>remap.get(c));
+    K.clusters=ord.map((c,ci)=>{const ids=[],sum=new Map();K.assign.forEach((a,i)=>{if(a===ci){ids.push(i);const R=rows[i];for(let q=0;q<R.idx.length;q++)sum.set(R.idx[q],(sum.get(R.idx[q])||0)+R.val[q]);}});
+      const lab=[...sum].sort((a,b)=>b[1]-a[1]||a[0]-b[0]).slice(0,3).map(x=>sf(vl[x[0]]));return {id:ci,label:lab,size:ids.length,ids};});
+    if(D>=2){let mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;const raw=[];for(let i=0;i<N;i++){const x=P[i*D],y=P[i*D+1];raw.push([x,y]);mnx=Math.min(mnx,x);mxx=Math.max(mxx,x);mny=Math.min(mny,y);mxy=Math.max(mxy,y);}
+      K.map=raw.map(p=>[R3(.06+.88*(p[0]-mnx)/((mxx-mnx)||1)),R3(.06+.88*(p[1]-mny)/((mxy-mny)||1))]);}
+    if(N<=3500){for(let i=0;i<N;i++){const top=[];for(let j=0;j<N;j++){if(j===i)continue;let s=0;for(let q=0;q<D;q++)s+=P[i*D+q]*P[j*D+q];if(s>=.3){top.push({j,sim:s});}}top.sort((a,b)=>b.sim-a.sim||a.j-b.j);K.neighbors[i]=top.slice(0,3).map(t=>({j:t.j,sim:R3(t.sim)}));}
+      const seen=new Set();for(let i=0;i<N;i++)for(const t of K.neighbors[i]){const a=Math.min(i,t.j),b=Math.max(i,t.j),key=a+"|"+b;if(t.sim>=.93&&K.tok[a]>=6&&K.tok[b]>=6&&!seen.has(key)){seen.add(key);K.dups.push([a,b,t.sim]);}}
+      K.dups.sort((x,y)=>y[2]-x[2]);K.dups=K.dups.slice(0,12);}
+  } else K.clusters=N?[{id:0,label:N?kw.flat().slice(0,3):[],size:N,ids:items.map((_,i)=>i)}]:[];
+  /* عبارات مفتاحية (ثنائيات كلمات متلازمة) */
+  if(N<=3000){const uni=new Map(),bi=new Map();items.forEach(it=>{lines(itemTexts(it).body).slice(0,60).forEach(ln=>{const t=tokens(ln).map(x=>x.s);t.forEach(s=>uni.set(s,(uni.get(s)||0)+1));for(let i=0;i+1<t.length;i++){if(t[i]===t[i+1])continue;const k2=t[i]+" "+t[i+1];bi.set(k2,(bi.get(k2)||0)+1);}});});
+    K.phrases=[...bi].filter(([k2,c])=>{const [a,b]=k2.split(" ");return c>=3&&c/Math.min(uni.get(a),uni.get(b))>=.35;}).sort((a,b)=>b[1]-a[1]||(a[0]<b[0]?-1:1)).slice(0,12).map(([k2,c])=>({p:k2.split(" ").map(sf).join(" "),n:c}));}
+  K.facts.forEach(f=>f.meas.forEach(m=>{const u=K.units[m.u]||(K.units[m.u]={n:0,min:Infinity,max:-Infinity});u.n++;u.min=Math.min(u.min,m.v);u.max=Math.max(u.max,m.v);}));
+  KC=K;return K;
+}
+
+/* ---------- نموذج لغوي (trigram) مدرّب على كتابتك ---------- */
+let LMC=null;
+const wordsOf=s=>String(s||"").replace(/[^\u0600-\u06FFA-Za-z0-9\-_\s]/g," ").toLowerCase().split(/\s+/).filter(Boolean);
+function getLM(){
+  const K=buildK();if(LMC&&LMC.sig===K.sig)return LMC;
+  const tri=new Map(),bi=new Map();let tk=0;
+  const add=(m,k2,w)=>{let x=m.get(k2);if(!x){x=new Map();m.set(k2,x);}x.set(w,(x.get(w)||0)+1);};
+  (state.items||[]).forEach(it=>{lines(itemTexts(it).body).forEach(ln=>{const w=["<s>","<s>",...wordsOf(ln),"</s>"];tk+=w.length-3;for(let i=2;i<w.length;i++){add(tri,w[i-2]+" "+w[i-1],w[i]);add(bi,w[i-1],w[i]);}});});
+  return LMC={sig:K.sig,tri,bi,tokens:tk};
+}
+function complete(prefix){
+  const L=getLM();if(L.tokens<120)return null;
+  const w=wordsOf(prefix);let beams=[{ws:[],c:["<s>","<s>",...w].slice(-2),lp:0,done:false}];
+  for(let step=0;step<9;step++){const nb=[];
+    for(const b of beams){if(b.done){nb.push(b);continue;}
+      let cand=L.tri.get(b.c[0]+" "+b.c[1]),src=3;if(!cand||!cand.size){cand=L.bi.get(b.c[1]);src=2;}
+      if(!cand){nb.push({...b,done:true});continue;}
+      let tot=0;cand.forEach(v=>tot+=v);const arr=[...cand].sort((a,c)=>c[1]-a[1]||(a[0]<c[0]?-1:1)).slice(0,4);
+      for(const [wd,cn] of arr){const lp=b.lp+Math.log(cn/tot)+(src===2?Math.log(.35):0);if(wd==="</s>")nb.push({...b,lp,done:true});else{const ws=b.ws,rep=ws.length&&ws[ws.length-1]===wd;if(rep)continue;nb.push({ws:ws.concat(wd),c:[b.c[1],wd],lp,done:false});}}}
+    beams=nb.sort((a,b)=>b.lp/Math.sqrt(b.ws.length+1)-a.lp/Math.sqrt(a.ws.length+1)).slice(0,6);if(beams.every(b=>b.done))break;}
+  const out=[],seen=new Set();for(const b of beams){const t=b.ws.join(" ").trim();if(t&&!seen.has(t)){seen.add(t);out.push(t);}}
+  return out.slice(0,3);
+}
+
+/* ---------- نموذج السلوك المتعلَّم (بيتخزّن ويتراكم) ---------- */
+function ensureModel(){
+  const s=state.settings; let M=s.aiModel;
+  if(!M||M.v!==1){M=s.aiModel={v:1,cursor:0,n:0,hw:new Array(168).fill(0),trans:AREAS.map(()=>new Array(AREAS.length).fill(0)),areaN:new Array(AREAS.length).fill(0),daily:{},sess:{n:0,ev:0,min:0,long:0,start:new Array(24).fill(0)},recent:[],lastT:0,lastA:-1,openStart:0,openEv:0};}
+  return M;
+}
+function closeSession(M){if(M.openEv>0){const mins=Math.max(1,Math.round((M.lastT-M.openStart)/60000));M.sess.n++;M.sess.ev+=M.openEv;M.sess.min+=mins;if(M.openEv>=10||mins>=30)M.sess.long++;M.recent.push([M.openStart,mins,M.openEv]);if(M.recent.length>40)M.recent.shift();}}
+function ingest(M,logs){
+  const ev=logs.filter(e=>e.t>M.cursor).sort((a,b)=>a.t-b.t);if(!ev.length)return 0;
+  for(const e of ev){const d=new Date(e.t),a=AIDX(e);M.hw[d.getDay()*24+d.getHours()]++;const k=dkey(e.t);M.daily[k]=(M.daily[k]||0)+1;M.areaN[a]++;
+    if(M.lastT&&e.t-M.lastT<=30*60000){if(M.lastA>=0)M.trans[M.lastA][a]++;M.openEv++;}
+    else{closeSession(M);M.openStart=e.t;M.openEv=1;M.sess.start[d.getHours()]++;}
+    M.lastT=e.t;M.lastA=a;}
+  M.cursor=ev[ev.length-1].t;M.n+=ev.length;
+  const ks=Object.keys(M.daily).sort();if(ks.length>800)ks.slice(0,ks.length-800).forEach(k=>delete M.daily[k]);
+  return ev.length;
+}
+let _saveT=null;
+function saveModel(){
+  try{saveSettings();}catch(e){}
+  clearTimeout(_saveT);_saveT=setTimeout(()=>{const fs=window.__FS;if(fs&&fs.state&&fs.state.h)try{fs.kick(0);}catch(e){}},1500);
+}
+function learn(){
+  try{const M=ensureModel(),logs=window.__CHG?window.__CHG.gather():[],n=ingest(M,logs);if(n)saveModel();return n;}catch(e){return 0;}
+}
+function weeklySeries(M,now,W){
+  const today=new Date(now);today.setHours(0,0,0,0);const wk0=today.getTime()-today.getDay()*DAY,out=[];
+  for(let w=W-1;w>=0;w--){const st=wk0-w*7*DAY;let s=0;for(let d=0;d<7;d++){const dt=new Date(st+d*DAY+12*36e5);s+=M.daily[dkey(dt.getTime())]||0;}out.push(s);}
+  return out;
+}
+function holt(y,h){
+  if(y.length<3)return {fc:[],band:0};
+  let l=y[0],b=y[1]-y[0];const res=[];
+  for(let t=1;t<y.length;t++){const pred=l+b;res.push(y[t]-pred);const ln=.5*y[t]+.5*(l+b);b=.3*(ln-l)+.7*b;l=ln;}
+  const sd=Math.sqrt(res.reduce((a,x)=>a+x*x,0)/res.length),fc=[];for(let i=1;i<=h;i++)fc.push(Math.max(0,Math.round(l+i*b)));
+  return {fc,band:Math.round(sd*1.3)};
+}
+function derive(M,A){
+  const now=A.G.now,D={now,M},S=M.sess;
+  const open=M.openEv>0&&now-M.lastT<=30*60000;
+  D.sessions=S.n+(M.openEv>0?1:0);D.avgMin=S.n?Math.round(S.min/S.n):0;D.avgEv=S.n?+(S.ev/S.n).toFixed(1):0;D.longS=S.long;
+  const sh=S.start,mx=Math.max(...sh);D.startHour=mx>0?sh.indexOf(mx):null;D.startShare=pct(mx,S.n+(M.openEv>0?1:0));
+  const hrs=new Array(24).fill(0);for(let d=0;d<7;d++)for(let h=0;h<24;h++)hrs[h]+=M.hw[d*24+h];
+  let bw=-1,bs=-1;for(let h=0;h<24;h++){const v=hrs[h]+hrs[(h+1)%24]+hrs[(h+2)%24];if(v>bs){bs=v;bw=h;}}D.focusStart=bs>0?bw:null;D.focusShare=pct(bs,hrs.reduce((a,b)=>a+b,0));
+  D.trans=[];M.trans.forEach((row,i)=>{const tot=row.reduce((a,b)=>a+b,0);row.forEach((c,j)=>{if(i!==j&&c>=4&&tot>0)D.trans.push({a:i,b:j,c,p:Math.round(c/tot*100)});});});D.trans.sort((x,y)=>y.c-x.c);
+  D.next=[];if(M.lastA>=0){const row=M.trans[M.lastA],tot=row.reduce((a,b)=>a+b,0);if(tot>=5)D.next=row.map((c,j)=>({j,p:Math.round(c/tot*100)})).filter(x=>x.j!==M.lastA&&x.p>=15).sort((a,b)=>b.p-a.p).slice(0,3);}
+  D.weekly=weeklySeries(M,now,12);const H=holt(D.weekly,2);D.fc=H.fc;D.band=H.band;
+  D.anom=[];const keys=[];for(let i=45;i>=0;i--)keys.push(dkey(now-i*DAY));
+  const all=[];for(let i=75;i>=0;i--)all.push(M.daily[dkey(now-i*DAY)]||0);
+  for(let i=Math.max(28,all.length-46);i<all.length;i++){const win=all.slice(i-28,i),mu=win.reduce((a,b)=>a+b,0)/28,sd=Math.sqrt(win.reduce((a,b)=>a+(b-mu)**2,0)/28)||1;const z=(all[i]-mu)/sd;if(Math.abs(z)>=2.5&&(all[i]>=6||mu>=5))D.anom.push({k:dkey(now-(all.length-1-i)*DAY),v:all[i],mu:Math.round(mu),z:+z.toFixed(1)});}
+  D.anom=D.anom.slice(-3);
+  /* حرارة الاهتمام لكل عنصر (تناقص أسّي، نصف عمر ~10 أيام) */
+  D.heat=A.its.map(st=>{let h=0;st.L.forEach(e=>{h+=Math.exp(-(now-e.t)/(14*DAY));});return h;});
+  D.open=open;return D;
+}
+
+/* ---------- محرك التوصيات (مكسب متوقع × اهتمام × تنبؤ بالخطوة التالية) ---------- */
+function recommend(A,D,K){
+  const out=[],now=A.G.now,pa=new Set((D.next||[]).map(x=>AREAS[x.j]));
+  A.its.forEach((st,i)=>{
+    const heat=D.heat[i],w=.35+Math.min(heat,3)/3*.65,add=(txt,gain,area)=>out.push({i,txt,gain,area,pr:gain*w*(pa.has(area)?1.25:1)});
+    if(st.imgs+st.nimgs===0)add("ضيف صورة",20,"الصور");
+    if(st.expLines===0)add("اكتب شرح للعنصر",25,"الشرح");else if(st.expLines<3)add("وسّع الشرح",13,"الشرح");
+    if(st.filled<3)add("كمّل بيانات العنصر (موديل/مصنّع/نوع)",+(15-Math.min(st.filled,3)/3*15).toFixed(0),"بيانات العنصر");
+    if(st.pages===0&&(st.imgs+st.nimgs>0))add("ضيف صفحة تتبع أعطال على صورة العنصر",15,"تتبع الأعطال");
+    if(st.codes+st.docs===0&&st.expLines>=3)add("ضيف كود أو مستند مرجعي",10,"الأكواد");
+    if(st.open.length)add("خلّص مهمة مفتوحة: "+String(st.open[0].task||st.open[0].plan).slice(0,40),8,"الخطط والمهام");
+    if(now-st.last>45*DAY&&score(st,now).sc>=60)add("راجع المعلومات (ممكن تتقادم)",6,"بيانات العنصر");
+  });
+  out.sort((a,b)=>b.pr-a.pr||a.i-b.i);const per=new Map(),res=[];
+  for(const r of out){const c=per.get(r.i)||0;if(c>=2)continue;per.set(r.i,c+1);res.push(r);if(res.length>=6)break;}
+  return {top:res,byItem:i=>out.filter(r=>r.i===i).slice(0,4)};
+}
+
+/* ---------- رسوم SVG ---------- */
+const pal=i=>"hsl("+((i*53+18)%360)+" 68% 58%)";
+const wrapSvg=(w,h,extra)=>sv("svg",Object.assign({viewBox:"0 0 "+w+" "+h,width:"100%",style:"max-width:"+Math.max(w,300)+"px;display:block;margin:4px auto;direction:ltr"},extra||{}));
+const WDS=["ح","ن","ث","ر","خ","ج","س"];
+function calHeat(daily){
+  const weeks=26,cs=11,gap=2,W=weeks*(cs+gap)+24,H=7*(cs+gap)+16,svg=wrapSvg(W,H),today=new Date();today.setHours(0,0,0,0);
+  const start=today.getTime()-(today.getDay()+(weeks-1)*7)*DAY,vals=Object.values(daily).filter(v=>v>0).sort((a,b)=>a-b),q=vals.length?vals[Math.min(vals.length-1,Math.floor(vals.length*.9))]:1;
+  WDS.forEach((l,d)=>svg.appendChild(sv("text",{x:8,y:12+d*(cs+gap)+cs-2,"font-size":8,fill:"currentColor","text-anchor":"middle",opacity:.6},l)));
+  for(let w=0;w<weeks;w++)for(let d=0;d<7;d++){const t=start+(w*7+d)*DAY;if(t>today.getTime())continue;const k=dkey(t+12*36e5),v=daily[k]||0,a=v?.25+.75*Math.min(1,v/q):0;
+    svg.appendChild(sv("rect",{x:20+w*(cs+gap),y:12+d*(cs+gap),width:cs,height:cs,rx:2,fill:v?"rgba(251,191,36,"+a.toFixed(2)+")":"rgba(128,128,128,.14)"},sv("title",null,k+" — "+v)));}
+  return svg;
+}
+function hwHeat(hw){
+  const cs=12,gap=1,W=24*(cs+gap)+26,H=7*(cs+gap)+20,svg=wrapSvg(W,H),mx=Math.max(1,...hw);
+  WDS.forEach((l,d)=>svg.appendChild(sv("text",{x:8,y:10+d*(cs+gap)+cs-2,"font-size":8,fill:"currentColor","text-anchor":"middle",opacity:.6},l)));
+  for(let d=0;d<7;d++)for(let h=0;h<24;h++){const v=hw[d*24+h],a=v?.15+.85*(v/mx):0;svg.appendChild(sv("rect",{x:20+h*(cs+gap),y:8+d*(cs+gap),width:cs,height:cs,rx:2,fill:v?"rgba(96,165,250,"+a.toFixed(2)+")":"rgba(128,128,128,.14)"},sv("title",null,h+":00 — "+v)));}
+  [0,6,12,18,23].forEach(h=>svg.appendChild(sv("text",{x:20+h*(cs+gap)+cs/2,y:H-3,"font-size":8,fill:"currentColor","text-anchor":"middle",opacity:.6},h)));
+  return svg;
+}
+function radar(vals,labels,size){
+  size=size||200;const c=size/2,R=size/2-34,n=vals.length,svg=wrapSvg(size,size);
+  const pt=(i,r)=>{const a=-Math.PI/2+i*2*Math.PI/n;return [c+Math.cos(a)*r,c+Math.sin(a)*r];};
+  [.33,.66,1].forEach(f=>svg.appendChild(sv("polygon",{points:vals.map((_,i)=>pt(i,R*f).join(",")).join(" "),fill:"none",stroke:"rgba(128,128,128,.35)","stroke-width":1})));
+  vals.forEach((_,i)=>{const p=pt(i,R);svg.appendChild(sv("line",{x1:c,y1:c,x2:p[0],y2:p[1],stroke:"rgba(128,128,128,.3)"}));const q=pt(i,R+14);svg.appendChild(sv("text",{x:q[0],y:q[1]+3,"font-size":9,fill:"currentColor","text-anchor":"middle"},labels[i]));});
+  svg.appendChild(sv("polygon",{points:vals.map((v,i)=>pt(i,R*Math.max(.04,Math.min(1,v))).join(",")).join(" "),fill:"rgba(251,191,36,.35)",stroke:"#fbbf24","stroke-width":2}));
+  vals.forEach((v,i)=>{const p=pt(i,R*Math.max(.04,Math.min(1,v)));svg.appendChild(sv("circle",{cx:p[0],cy:p[1],r:2.6,fill:"#fbbf24"},sv("title",null,labels[i]+": "+Math.round(v*100)+"%")));});
+  return svg;
+}
+function donut(entries){
+  const tot=entries.reduce((a,e)=>a+e.v,0)||1,r=34,C=2*Math.PI*r,svg=wrapSvg(100,100,{style:"width:130px;display:block;margin:4px auto;direction:ltr"});let off=0;
+  entries.forEach((e,i)=>{const len=e.v/tot*C;svg.appendChild(sv("circle",{cx:50,cy:50,r,fill:"none",stroke:pal(i),"stroke-width":16,"stroke-dasharray":len+" "+(C-len),"stroke-dashoffset":-off,transform:"rotate(-90 50 50)"},sv("title",null,e.label+": "+e.v)));off+=len;});
+  svg.appendChild(sv("text",{x:50,y:54,"font-size":13,"font-weight":700,fill:"currentColor","text-anchor":"middle"},tot));
+  const leg=el("div",{style:"display:flex;flex-wrap:wrap;gap:4px 10px;justify-content:center;font-size:11px"},entries.map((e,i)=>el("span",null,el("span",{style:"display:inline-block;width:9px;height:9px;border-radius:2px;background:"+pal(i)+";margin-inline-end:4px"}),e.label+" "+pct(e.v,tot)+"%")));
+  return el("div",null,svg,leg);
+}
+function trendChart(series,fc,band){
+  const W=320,H=130,P=18,all=series.concat(fc),mx=Math.max(1,...all,...fc.map(v=>v+band)),svg=wrapSvg(W,H),n=all.length;
+  const X=i=>P+i*(W-2*P)/Math.max(1,n-1),Y=v=>H-P-v/mx*(H-2*P);
+  [0,.5,1].forEach(f=>svg.appendChild(sv("line",{x1:P,x2:W-P,y1:Y(mx*f),y2:Y(mx*f),stroke:"rgba(128,128,128,.25)"})));
+  if(fc.length){const i0=series.length-1,pts=[[X(i0),Y(series[i0])]].concat(fc.map((v,q)=>[X(i0+1+q),Y(v)]));
+    svg.appendChild(sv("polygon",{points:pts.map(p=>p.join(",")).join(" ")+" "+fc.map((v,q)=>[X(i0+1+q),Y(v+band)].join(",")).reverse().join(" "),fill:"rgba(96,165,250,.14)"}));
+    svg.appendChild(sv("polyline",{points:pts.map(p=>p.join(",")).join(" "),fill:"none",stroke:"#60a5fa","stroke-width":2,"stroke-dasharray":"5 4"}));}
+  svg.appendChild(sv("polyline",{points:series.map((v,i)=>X(i)+","+Y(v)).join(" "),fill:"none",stroke:"#fbbf24","stroke-width":2.4}));
+  series.forEach((v,i)=>svg.appendChild(sv("circle",{cx:X(i),cy:Y(v),r:2.8,fill:"#fbbf24"},sv("title",null,"أسبوع "+(i+1)+": "+v))));
+  fc.forEach((v,q)=>svg.appendChild(sv("circle",{cx:X(series.length+q),cy:Y(v),r:3,fill:"#60a5fa"},sv("title",null,"توقع: "+v))));
+  return svg;
+}
+function scatter(K,onPick,focus){
+  const W=320,H=250,svg=wrapSvg(W,H,{style:"max-width:420px;display:block;margin:4px auto;direction:ltr;background:rgba(128,128,128,.07);border-radius:10px"});
+  K.map.forEach((p,i)=>{const c=svg.appendChild(sv("circle",{cx:p[0]*W,cy:p[1]*H,r:i===focus?7:4.2,fill:pal(K.assign[i]),stroke:i===focus?"#fff":"rgba(0,0,0,.35)","stroke-width":i===focus?2:.8,opacity:.9,style:"cursor:pointer"},sv("title",null,K.names[i])));c.addEventListener("click",()=>onPick(i));});
+  return svg;
+}
+function gauge(sc){
+  const r=26,C=2*Math.PI*r,svg=wrapSvg(68,68,{style:"width:64px;height:64px;direction:ltr;flex:none"}),col=sc>=70?"#4ade80":sc>=40?"#fbbf24":"#f87171";
+  svg.appendChild(sv("circle",{cx:34,cy:34,r,fill:"none",stroke:"rgba(128,128,128,.25)","stroke-width":7}));
+  svg.appendChild(sv("circle",{cx:34,cy:34,r,fill:"none",stroke:col,"stroke-width":7,"stroke-linecap":"round","stroke-dasharray":(C*sc/100)+" "+C,transform:"rotate(-90 34 34)"}));
+  svg.appendChild(sv("text",{x:34,y:38,"font-size":14,"font-weight":700,fill:"currentColor","text-anchor":"middle"},sc+"%"));return svg;
+}
+function transHeat(M){
+  const n=AREAS.length,cs=22,W=n*cs+30,H=n*cs+30,svg=wrapSvg(W,H,{style:"max-width:260px;display:block;margin:4px auto;direction:ltr"});
+  let mx=1;M.trans.forEach((r,i)=>r.forEach((c,j)=>{if(i!==j)mx=Math.max(mx,c);}));
+  for(let i=0;i<n;i++){svg.appendChild(sv("text",{x:14,y:30+i*cs+cs/2+3,"font-size":9,fill:"currentColor","text-anchor":"middle",opacity:.7},i+1));svg.appendChild(sv("text",{x:30+i*cs+cs/2,y:18,"font-size":9,fill:"currentColor","text-anchor":"middle",opacity:.7},i+1));
+    for(let j=0;j<n;j++){const c=M.trans[i][j],a=i===j?0:c/mx;svg.appendChild(sv("rect",{x:30+j*cs,y:30+i*cs,width:cs-2,height:cs-2,rx:3,fill:c&&i!==j?"rgba(52,211,153,"+(.18+.82*a).toFixed(2)+")":"rgba(128,128,128,.12)"},sv("title",null,AREAS[i]+" → "+AREAS[j]+": "+c)));}}
+  return svg;
+}
+
+/* ---------- التقرير التحليلي التوليدي (صياغة لغوية ديناميكية من نتائج الخوارزميات) ---------- */
+const hh=h=>(h%24)+":00";
+function buildReport(A,D,K,R){
+  const G=A.G,M=D.M,N=A.its.length,F=(state.folders||[]).length,S=[];
+  const conf=(G.events<30||N<5)?"منخفضة (بيانات قليلة)":(G.events<200||N<20)?"متوسطة":"عالية";
+  const top=K.clusters.filter(c=>c.size>0).slice(0,3).map(c=>"«"+c.label.join(" / ")+"»");
+  const last=D.weekly[D.weekly.length-1]||0,prev=D.weekly[D.weekly.length-2]||0;
+  const ex=[];
+  ex.push(pick([`عندك ${nn(N,IT)} في ${F} مجلد`,`البرنامج فيه ${nn(N,IT)} موزّعين على ${F} مجلد`],"ex1"+N)+(K.clusters.length>1?`، والمعرفة اللي استخلصتها من شرحك بتتجمّع في ${K.clusters.length} مواضيع أبرزها ${top.join("، ")}.`:"."));
+  if(M.n>=8){const ch=prev?Math.round((last-prev)/prev*100):0;ex.push(D.fc.length?pick([`نشاطك الأسبوعي ${ch>20?"في صعود":ch<-20?"في هبوط":"مستقر"} (${last} حدث الأسبوع ده)، والنموذج بيتوقع حوالي ${D.fc[0]} حدث الأسبوع الجاي (±${D.band}).`,`آخر أسبوع سجّلت ${last} حدث، والتوقع للأسبوع الجاي حوالي ${D.fc[0]} (±${D.band}) بناءً على اتجاهك.`],"ex2"+last):`آخر أسبوع سجّلت ${last} حدث.`);}
+  const gaps=[["من غير صور",G.noImg.length],["من غير شرح",G.noExp.length],["ما اتحدّثتش من أكتر من 30 يوم",G.stale.length]].sort((a,b)=>b[1]-a[1])[0];
+  if(gaps&&gaps[1]>0)ex.push(`أكبر فجوة دلوقتي: ${nn(gaps[1],IT)} ${gaps[0]} (${pct(gaps[1],N)}%).`);
+  if(R.top[0])ex.push(`أفضل خطوة الآن: «${A.its[R.top[0].i].name}» — ${R.top[0].txt}.`);
+  ex.push("درجة الثقة في التحليل: "+conf+".");
+  S.push({h:"🧾 الخلاصة التنفيذية",ps:ex});
+  const b=[];
+  if(D.focusStart!=null&&M.n>=20)b.push(`بتشتغل أكتر في الفترة ${hh(D.focusStart)}–${hh(D.focusStart+3)} (${D.focusShare}% من نشاطك المتعلَّم).`);
+  if(D.sessions>=3)b.push(`الجلسة المعتادة بتاخد حوالي ${D.avgMin} دقيقة وبتشمل ${D.avgEv} حدث تقريبًا${D.longS?`، ومنها ${D.longS} جلسة طويلة (10 أحداث أو 30 دقيقة فأكتر)`:""}${D.startHour!=null&&D.startShare>=25?`، وغالبًا بتبدأ الساعة ${hh(D.startHour)}`:""}.`);
+  if(G.streak>=2||G.longest>=4)b.push(`استمرارك: ${nn(G.streak,DW)} متتالية حاليًا وأطول تتابع ${nn(G.longest,DW)}.`);
+  D.trans.slice(0,2).forEach(t=>b.push(`نمط متكرر: بعد «${AREAS[t.a]}» غالبًا بتنتقل لـ«${AREAS[t.b]}» (${t.p}% من المرات).`));
+  if(D.next.length)b.push(`بناءً على آخر نشاط ليك في «${AREAS[M.lastA]}»، الخطوة التالية المرجّحة: ${D.next.map(x=>"«"+AREAS[x.j]+"» ("+x.p+"%)").join("، ")}.`);
+  D.anom.forEach(a=>b.push(`${a.z>0?"ارتفاع":"انخفاض"} غير معتاد يوم ${a.k}: ${nn(a.v,EV)} مقابل المعتاد ~${a.mu}.`));
+  if(!b.length)b.push("لسه مفيش بيانات سلوك كافية لاستخراج أنماط — النموذج بيتعلّم تدريجيًا مع شغلك.");
+  S.push({h:"🧭 سلوكك في الشغل",ps:b});
+  const k=[];
+  K.clusters.slice(0,5).forEach(c=>{if(c.size>0)k.push(`موضوع «${c.label.join(" / ")}»: ${nn(c.size,IT)}${c.size>1?" (مثلًا "+c.ids.slice(0,3).map(i=>"«"+K.names[i]+"»").join("، ")+")":""}.`);});
+  if(K.phrases.length)k.push("عبارات متكررة في شرحك: "+K.phrases.slice(0,6).map(p=>"«"+p.p+"»").join("، ")+".");
+  Object.entries(K.units).sort((a,b)=>b[1].n-a[1].n).slice(0,3).forEach(([u,x])=>k.push(`قياسات بوحدة «${u}»: ${x.n} قيمة بين ${x.min} و${x.max}.`));
+  K.dups.slice(0,3).forEach(d=>k.push(`«${K.names[d[0]]}» و«${K.names[d[1]]}» متشابهين جدًا (${Math.round(d[2]*100)}%) — ممكن يكونوا مكرّرين.`));
+  const st=K.facts.reduce((a,f)=>a+f.steps.length,0),ca=K.facts.reduce((a,f)=>a+f.causal.length,0),wr=K.facts.reduce((a,f)=>a+f.warn.length,0);
+  if(st+ca+wr)k.push(`استخرجت من شرحك ${st} خطوة إجرائية و${ca} علاقة سبب/عرض و${wr} تحذير.`);
+  if(!k.length)k.push("محتاج شرح نصي أكتر عشان أستخرج مواضيع ومعرفة.");
+  S.push({h:"📚 المعرفة اللي اتعلّمتها من شرحك",ps:k});
+  S.push({h:"🎯 توصيات مرتّبة",ps:R.top.map((r,q)=>`${q+1}. «${A.its[r.i].name}» — ${r.txt} (مكسب متوقع +${r.gain} نقطة اكتمال)`)});
+  return S;
+}
+function itemReport(i,A,D,K,R){
+  const st=A.its[i],now=A.G.now,heat=D.heat[i],ht=heat>=2?"🔥 ساخن":heat>=.6?"🌤️ دافئ":"❄️ بارد",c=K.clusters[K.assign[i]],P=[];
+  if(c&&K.clusters.length>1)P.push(`بيقع ضمن موضوع «${c.label.join(" / ")}» مع ${nn(Math.max(0,c.size-1),IT)} تانيين.`);
+  if(K.neighbors[i].length)P.push("أقرب عناصر ليه في المحتوى: "+K.neighbors[i].map(n=>"«"+K.names[n.j]+"» ("+Math.round(n.sim*100)+"%)").join("، ")+".");
+  P.push(`حرارة الاهتمام: ${ht} (${heat.toFixed(1)}).`+(heat<.6&&score(st,now).sc>=60?" المحتوى متوثّق كويس لكن مهمل — راجعه قبل ما يتقادم.":""));
+  const nx=D.next.length?D.next[0]:null;if(nx&&R.byItem(i).some(r=>r.area===AREAS[nx.j]))P.push(`متسق مع نمطك: الخطوة التالية المرجّحة «${AREAS[nx.j]}» وده مطلوب هنا.`);
+  return {P,ht,c,heat};
+}
+
+/* ---------- الواجهة ---------- */
+const sec=(title,open,...k)=>{const d=el("details",{open,style:"margin:8px 0;border:1px solid var(--border);border-radius:10px;padding:2px 8px"},el("summary",{style:"cursor:pointer;font-weight:700;padding:6px 0;font-size:13px"},title));k.flat().forEach(x=>d.appendChild(x));return d;};
+const chip=(t,col)=>el("span",{style:"padding:2px 8px;border-radius:12px;font-size:11px;border:1px solid var(--border);background:"+(col||"var(--panel2)")},t);
+const lst=(a,f)=>el("div",null,a.map(x=>el("div",{style:"font-size:12px;margin:2px 0;overflow-wrap:anywhere"},"• "+(f?f(x):x))));
+const copyT=t=>{try{navigator.clipboard.writeText(t);if(typeof toast==="function")toast("اتنسخ.","ok");}catch(e){}};
+function dims(st){return [Math.min(1,(st.imgs+st.nimgs)/3),Math.min(1,st.expLines/8),Math.min(1,st.filled/4),st.hot>0?1:st.pages?.6:0,Math.min(1,(st.codes+st.docs)/2),Math.min(1,st.rows.length/3)];}
+const DL=["صور","شرح","بيانات","أعطال","مراجع","مهام"];
+function complBox(prefixFn){
+  const out=el("div",{style:"margin-top:4px"});
+  const run=()=>{out.textContent="";const p=prefixFn(),r=complete(p);if(!r||!r.length){out.appendChild(el("div",{cls:"hx-sm"},"النموذج محتاج شرح أكتر (حوالي 120 كلمة على الأقل) عشان يقترح تكملات من أسلوبك."));return;}
+    r.forEach(t=>out.appendChild(el("div",{style:"font-size:12.5px;margin:3px 0;cursor:pointer",title:"اضغط للنسخ",on:{click:()=>copyT((p?p+" ":"")+t)}},"✍️ "+(p?p+" ":"")+"… "+t)));};
+  return {run,out};
+}
+function itemCard(i,A,D,K,R,close){
+  const st=A.its[i],now=A.G.now,sm=NL.itemSummary(st,now),ir=itemReport(i,A,D,K,R),f=K.facts[i],card=el("div",{cls:"hx-sub"});
+  card.appendChild(el("div",{style:"display:flex;gap:10px;align-items:center"},gauge(sm.score),el("div",{style:"flex:1"},el("b",null,"🧠 «"+st.name+"»"),el("div",{style:"display:flex;gap:5px;flex-wrap:wrap;margin-top:4px"},chip(ir.ht),ir.c&&K.clusters.length>1?chip("موضوع: "+ir.c.label.join(" / "),"hsl("+((ir.c.id*53+18)%360)+" 60% 25% / .5)"):null))));
+  sm.lines.forEach(l=>card.appendChild(el("div",{style:"margin:3px 0;font-size:12.5px"},l)));
+  ir.P.forEach(l=>card.appendChild(el("div",{style:"margin:3px 0;font-size:12.5px"},"• "+l)));
+  card.appendChild(radar(dims(st),DL,190));
+  if(sm.ex.length){card.appendChild(el("h4",null,"📝 خلاصة شرحك"));card.appendChild(lst(sm.ex));}
+  if(K.kw[i].length){card.appendChild(el("h4",null,"🔑 مفاهيم أساسية (TF-IDF)"));card.appendChild(el("div",{style:"display:flex;gap:5px;flex-wrap:wrap"},K.kw[i].map(k=>chip(k))));}
+  if(f.meas.length){card.appendChild(el("h4",null,"📏 قياسات مستخرجة"));card.appendChild(lst(f.meas,m=>m.v+" "+m.u+(m.c?" ← "+m.c:"")));}
+  if(f.codes.length){card.appendChild(el("h4",null,"🏷️ أكواد/موديلات"));card.appendChild(el("div",{style:"display:flex;gap:5px;flex-wrap:wrap"},f.codes.map(c=>chip(c))));}
+  if(f.steps.length){card.appendChild(el("h4",null,"🛠️ خطوات إجرائية"));card.appendChild(lst(f.steps,x=>x));}
+  if(f.causal.length){card.appendChild(el("h4",null,"🔍 أسباب / أعراض"));card.appendChild(lst(f.causal));}
+  if(f.warn.length){card.appendChild(el("h4",null,"⚠️ تحذيرات"));card.appendChild(lst(f.warn));}
+  const rc=R.byItem(i);if(rc.length){card.appendChild(el("h4",null,"💡 اقتراحات مرتّبة بالمكسب"));card.appendChild(lst(rc,r=>r.txt+" (+"+r.gain+")"));}
+  if(K.neighbors[i].length){card.appendChild(el("h4",null,"🔗 عناصر مرتبطة"));K.neighbors[i].forEach(n=>card.appendChild(el("div",{style:"font-size:12px;cursor:pointer;margin:2px 0",on:{click:()=>{close();window.__HIST.go(K.ids[n.j],"");}}},"• "+K.names[n.j]+" — "+Math.round(n.sim*100)+"%")));}
+  const nbx=(st.it.notebookData&&st.it.notebookData.explanation)||"",ls=lines(nbx),cb=complBox(()=>ls.length?ls[ls.length-1].split(/\s+/).slice(-3).join(" "):"");
+  card.appendChild(el("h4",null,"✍️ توليد (تجريبي): كمّل شرحك بأسلوبك"));card.appendChild(el("button",{cls:"btn small",on:{click:cb.run}},"اقترح تكملة لآخر سطر"));card.appendChild(cb.out);
+  card.appendChild(el("div",{style:"display:flex;gap:6px;margin-top:8px"},el("button",{cls:"btn small primary",on:{click:()=>{close();window.__HIST.go(st.id,"");}}},"فتح العنصر ↗"),el("button",{cls:"btn small",on:{click:()=>copyT(sm.lines.concat(ir.P).join("\n")+(sm.ex.length?"\n\nخلاصة:\n"+sm.ex.join("\n"):""))}},"📋 نسخ التقرير")));
+  return card;
+}
+function analysis2(host,close,itemId){
+  host.textContent="";const t0=performance.now(),A=analyze(),M=ensureModel();if(ingest(M,A.logs))saveModel();
+  const K=buildK(),D=derive(M,A),R=recommend(A,D,K),REP=buildReport(A,D,K,R),N=A.its.length;
+  host.appendChild(el("div",{cls:"hx-sm",style:"margin-bottom:6px"},"🧠 تعلّم آلي على بياناتك أنت، بدون إنترنت: تمثيل دلالي (TF-IDF + LSA)، تجميع مواضيع (k-means)، نموذج سلوك (سلاسل ماركوف + إيقاع زمني + توقع)، ونموذج لغوي n-gram مدرّب على كتابتك. مفيش معرفة عامة جاهزة — كل اللي بيعرفه اتعلّمه من شغلك."));
+  /* حالة التعلّم */
+  const stat=el("div",{style:"display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px"});
+  const info=el("div",{style:"font-size:12px"},"🧬 النموذج اتعلّم من "+nn(M.n,EV)+" على "+nn(Object.keys(M.daily).length,DW)+"، وحلّل "+nn(N,IT)+" ("+K.V+" مفهوم، "+K.clusters.length+" مواضيع). محفوظ في ",el("code",null,"ai-model.json")," داخل المزامنة. ");
+  if(window.__HIST&&window.__HIST.badge)info.appendChild(window.__HIST.badge(null,Date.now()-2000));
+  stat.append(info,el("button",{cls:"btn small",on:{click:()=>{learn();analysis2(host,close,itemId);}}},"🔄 تعلّم الآن"));host.appendChild(stat);
+  /* التقرير */
+  const rb=[];REP.forEach(s=>{rb.push(el("h4",{style:"margin:8px 0 3px"},s.h));s.ps.forEach(p=>rb.push(el("div",{style:"font-size:12.5px;margin:3px 0;line-height:1.7"},p)));});
+  rb.push(el("button",{cls:"btn small",on:{click:()=>copyT(REP.map(s=>s.h+"\n"+s.ps.join("\n")).join("\n\n"))}},"📋 نسخ التقرير"));
+  host.appendChild(sec("📝 التقرير التحليلي",true,rb));
+  host.appendChild(sec("🎯 أفضل الإجراءات الآن",true,el("div",null,R.top.map((r,q)=>el("div",{style:"padding:5px 2px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12.5px",on:{click:()=>{close();window.__HIST.go(A.its[r.i].id,"");}}},el("b",null,(q+1)+". "+A.its[r.i].name),el("div",{cls:"hx-sm"},r.txt+" — مكسب +"+r.gain))))));
+  host.appendChild(sec("🗓️ تقويم النشاط (آخر 26 أسبوع)",true,calHeat(M.daily)));
+  host.appendChild(sec("⏰ إيقاعك المتعلَّم (ساعات × أيام)",false,hwHeat(M.hw),el("div",{cls:"hx-sm"},"الأزرق الأغمق = نشاط أعلى. الأيام: ح،ن،ث،ر،خ،ج،س.")));
+  host.appendChild(sec("📈 الاتجاه والتوقع",true,trendChart(D.weekly,D.fc,D.band),el("div",{cls:"hx-sm"},"الأصفر: أسابيعك الفعلية (آخر 12). الأزرق المتقطّع: توقع الأسبوعين الجايين بنموذج Holt مع نطاق خطأ.")));
+  const am=AREAS.map((l,i)=>({label:l,v:M.areaN[i]})).filter(x=>x.v>0);if(am.length)host.appendChild(sec("🧩 توزيع الشغل",false,donut(am)));
+  host.appendChild(sec("🔀 انتقالاتك بين الأماكن (ماركوف)",false,transHeat(M),el("div",{cls:"hx-sm"},AREAS.map((a,i)=>(i+1)+"="+a).join(" · ")+" — الصف = من، العمود = إلى."),D.trans.length?lst(D.trans.slice(0,5),t=>AREAS[t.a]+" → "+AREAS[t.b]+" ("+t.p+"%، "+t.c+" مرة)"):el("div",{cls:"hx-sm"},"لسه مفيش انتقالات كفاية.")));
+  const av=A.its.length?dims(A.its[0]).map((_,d)=>A.its.reduce((a,s)=>a+dims(s)[d],0)/A.its.length):[0,0,0,0,0,0];
+  host.appendChild(sec("🕸️ توازن التوثيق (متوسط كل العناصر)",false,radar(av,DL,220)));
+  /* خريطة المواضيع */
+  const mapHost=el("div"),clsList=el("div");
+  if(K.map){const pickItem=i=>{mapHost.textContent="";mapHost.append(scatter(K,pickItem,i),itemCard(i,A,D,K,R,close));};mapHost.appendChild(scatter(K,pickItem,-1));}
+  K.clusters.forEach(c=>{const row=el("div",{style:"margin:3px 0"}),hd=el("div",{style:"cursor:pointer;font-size:12.5px;display:flex;gap:6px;align-items:center"},el("span",{style:"width:10px;height:10px;border-radius:3px;background:"+pal(c.id)}),el("b",null,c.label.join(" / ")),el("span",{cls:"hx-sm"},nn(c.size,IT))),body=el("div");hd.onclick=()=>{if(body.firstChild)body.textContent="";else c.ids.slice(0,30).forEach(i=>body.appendChild(el("div",{style:"font-size:12px;margin:2px 14px;cursor:pointer",on:{click:()=>{close();window.__HIST.go(K.ids[i],"");}}},"• "+K.names[i])));};row.append(hd,body);clsList.appendChild(row);});
+  host.appendChild(sec("🗺️ خريطة المواضيع (اضغط نقطة)",false,mapHost,clsList));
+  /* معرفة */
+  const kk=[];Object.entries(K.units).sort((a,b)=>b[1].n-a[1].n).slice(0,6).forEach(([u,x])=>kk.push("«"+u+"»: "+x.n+" قيمة (من "+x.min+" إلى "+x.max+")"));
+  host.appendChild(sec("🧪 المعرفة المستخرجة",false,kk.length?el("div",null,el("h4",null,"📏 وحدات القياس"),lst(kk)):el("div",{cls:"hx-sm"},"مفيش قياسات في الشرح لسه."),K.phrases.length?el("div",null,el("h4",null,"🔤 عبارات متلازمة"),el("div",{style:"display:flex;gap:5px;flex-wrap:wrap"},K.phrases.map(p=>chip(p.p+" ×"+p.n)))):null,K.dups.length?el("div",null,el("h4",null,"♊ تشابه عالي"),lst(K.dups,d=>K.names[d[0]]+" ≈ "+K.names[d[1]]+" ("+Math.round(d[2]*100)+"%)")):null));
+  /* مختبر التوليد */
+  const inp=el("input",{style:"width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"});inp.placeholder="اكتب بداية جملة…";const lb=complBox(()=>inp.value.trim());
+  host.appendChild(sec("✍️ مختبر التوليد (تجريبي)",false,el("div",{cls:"hx-sm"},"نموذج trigram مدرّب على شرحك أنت. بيعيد صياغة أنماط كتابتك — مش معرفة جديدة، وجودته بتزيد بزيادة شرحك."),inp,el("button",{cls:"btn small",style:"margin:6px 0",on:{click:lb.run}},"اقترح تكملة"),lb.out));
+  /* العناصر */
+  host.appendChild(el("h4",{style:"margin:10px 0 4px"},"📦 تقرير كل عنصر"));
+  const q=el("input",{style:"width:100%;margin-bottom:6px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"});q.type="search";q.placeholder="بحث باسم العنصر أو مفهوم من شرحه…";
+  const bar=el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"}),list=el("div");let sort="recent",lim=40;
+  const drawBar=()=>{bar.textContent="";[["recent","الأحدث نشاطًا"],["low","الأقل اكتمالًا"],["hot","الأسخن اهتمامًا"]].forEach(([k,l])=>bar.appendChild(el("button",{cls:"btn small"+(sort===k?" primary":""),on:{click:()=>{sort=k;lim=40;drawBar();paint();}}},l)));};
+  const sc=A.its.map(s=>score(s,A.G.now).sc);
+  const paint=()=>{list.textContent="";const s=q.value.trim().toLowerCase();let ix=A.its.map((_,i)=>i).filter(i=>!s||(A.its[i].name+" "+A.its[i].folder+" "+K.kw[i].join(" ")).toLowerCase().includes(s));
+    ix.sort((a,b)=>sort==="low"?sc[a]-sc[b]:sort==="hot"?D.heat[b]-D.heat[a]:A.its[b].last-A.its[a].last);
+    if(itemId){const f=A.its.findIndex(x=>x.id===itemId);if(f>=0)ix=[f,...ix.filter(i=>i!==f)];}
+    ix.slice(0,lim).forEach((i,n)=>{const x=A.its[i],row=el("div",{style:"padding:7px 4px;border-bottom:1px solid var(--border);cursor:pointer"}),holder=el("div");
+      row.append(el("div",{style:"display:flex;justify-content:space-between;gap:8px;font-weight:700"},el("span",null,x.name),el("span",{style:"font-size:11px;color:"+(sc[i]>=70?"#4ade80":sc[i]>=40?"#fbbf24":"#f87171")},sc[i]+"%")),el("div",{cls:"hx-sm"},[x.folder,nn(x.imgs+x.nimgs,["صورة","صورتين","صور"]),nn(x.L.length,EV),D.heat[i]>=2?"🔥":D.heat[i]>=.6?"🌤️":"❄️"].filter(Boolean).join(" · ")),holder);
+      const tg=()=>{if(holder.firstChild)holder.textContent="";else holder.appendChild(itemCard(i,A,D,K,R,close));};row.onclick=ev=>{if(ev.target.closest("button,input,svg,.hx-sub"))return;tg();};list.appendChild(row);if(itemId&&n===0&&x.id===itemId)tg();});
+    if(ix.length>lim)list.appendChild(el("button",{cls:"btn small",on:{click:()=>{lim+=40;paint();}}},"عرض المزيد ("+(ix.length-lim)+")"));if(!ix.length)list.textContent="لا توجد عناصر مطابقة.";};
+  q.oninput=()=>{lim=40;paint();};drawBar();host.append(q,bar,list);paint();
+  host.appendChild(el("div",{cls:"hx-sm",style:"margin-top:8px"},"⏱️ التحليل خلّص في "+Math.round(performance.now()-t0)+" مللي ثانية."));
+}
+
+/* ---------- التخزين داخل المزامنة + التعلّم المستمر ---------- */
+let FJ=null;
+function fileJson(){
+  const M=ensureModel(),K=buildK(),key=K.sig+"|"+M.n+"|"+M.cursor;
+  if(FJ&&FJ.key===key)return FJ.v;
+  const v={schema:1,kind:"ai-model",method:"on-device learning (no external AI): TF-IDF + LSA (subspace iteration) + k-means + Markov/rhythm/Holt behavior model + n-gram LM",asOf:M.cursor,model:JSON.parse(JSON.stringify(M)),
+    knowledge:{count:K.N,vocab:K.V,clusters:K.clusters.map(c=>({label:c.label,size:c.size,items:c.ids.map(i=>K.ids[i])})),phrases:K.phrases,duplicates:K.dups.map(d=>({a:K.ids[d[0]],b:K.ids[d[1]],sim:d[2]})),units:K.units,
+      items:K.ids.map((id,i)=>({id,name:K.names[i],cluster:K.assign[i],keywords:K.kw[i],neighbors:K.neighbors[i].map(n=>({id:K.ids[n.j],sim:n.sim})),facts:K.facts[i]}))}};
+  FJ={key,v};return v;
+}
+window.__AI={fileJson,learn,buildK,complete,extractFacts,ensureModel,derive,ingest};
+window.__HIST.analysis=analysis2;
+setTimeout(learn,6000);setInterval(()=>{if(document.visibilityState==="visible")learn();},120000);
+
 })();
 </script>
 <script id="change-log-and-thumbs">
