@@ -18312,6 +18312,7 @@ exportProject=async function(){
     const ms=Date.now()-t0,csz=z.ents.reduce((a,e)=>a+e.csz,0),usz=z.ents.reduce((a,e)=>a+e.usz,0);
     await add("project/export-report.json",J({entries:z.ents.length,originalBytes:usz,packedBytes:csz,ratio:usz?+(csz/usz).toFixed(3):1,orphans:orphan,missing:missing.length,seconds:+(ms/1000).toFixed(1)}),true);
     if(window.__HIST)await add("project/inventory.json",J(window.__HIST.inventoryJson()),true);
+    if(window.__HIST&&window.__HIST.analysisJson){try{await add("project/analysis.json",J(window.__HIST.analysisJson()),true);}catch(e){}}
     await add("project/checksums.json",J(sums),true);
     clearInterval(tick);ui.set("جارٍ إنهاء الملف…",99);await z.finish();ui.close();
     toast(`تم التصدير: ${z.ents.length} ملف — ${fmtB(usz)} ← ${fmtB(csz)} في ${(ms/1000).toFixed(1)} ث. الصور محفوظة بجودتها الأصلية${missing.length?` — ⚠ ${missing.length} مرجع بلا ملف`:""}`,missing.length?"err":"ok",9000);
@@ -18520,6 +18521,185 @@ function bar(){
 window.__HIST={go,history,inventory,inventoryJson,badge,bar,statusOf,syncNow};
 })();
 </script>
+<script id="insights-engine">
+/* =========================================================
+   🧠 التحليل المحلي: خوارزمية (إحصاء سلوكي + تلخيص استخلاصي للنص العربي/الإنجليزي)
+   بتشتغل على جهازك بالكامل بدون إنترنت. مش نموذج توليدي: بتستنتج من سجلك وبياناتك وشرحك.
+   ========================================================= */
+(function(){
+"use strict";
+if(!window.__HIST) return;
+const el=(t,o,...k)=>{const n=document.createElement(t);if(o){if(o.style)n.style.cssText=o.style;if(o.cls)n.className=o.cls;if(o.on)for(const x in o.on)n.addEventListener(x,o.on[x]);if(o.title)n.title=o.title;}k.flat().forEach(c=>{if(c!=null)n.append(c instanceof Node?c:String(c));});return n;};
+const DAY=864e5,fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"}):"—"}catch(e){return "—"}};
+const fmtD=t=>{try{return new Date(t).toLocaleDateString("ar-EG-u-nu-latn",{dateStyle:"medium"})}catch(e){return "—"}};
+const dkey=t=>new Date(t).toLocaleDateString("en-CA");
+const lines=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean);
+const itemOf=id=>(state.items||[]).find(i=>i.id===id);
+const folderName=id=>{try{return getFolderPath(id).map(f=>f.name).join(" › ")}catch(e){return ""}};
+const annOk=a=>!!(a&&((a.strokes&&a.strokes.length)||(a.texts&&a.texts.length)));
+
+/* ---------- معالجة اللغة ---------- */
+const norm=s=>String(s||"").replace(/[\u064B-\u0652\u0670\u0640]/g,"").replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").toLowerCase();
+const STOP=new Set(("في من على الى إلى عن مع هذا هذه ذلك تلك هو هي هم هن انا أنا نحن انت أنت ان إن أن كان كانت يكون تكون كل بعض اي أي او أو ثم لكن لا ما لم لن قد وقد حتى اذا إذا عند عندما بعد قبل بين خلال كما مثل غير فقط ايضا أيضا هناك هنا الذي التي الذين اللي ده دي دول فيه فيها منه منها له لها لهم به بها بهم عليه عليها كده كدا بس لو يا ايه إيه ازاي إزاي علشان عشان تم يتم يمكن ممكن لازم يجب هيكون وده ودي كمان برضه برضو the a an of to in on for and or is are was be with this that it as by at from not").split(/\s+/).map(norm));
+const PRE=["وال","بال","كال","فال","لل","ال","و","ب","ل","ف"],SUF=["ات","ون","ين","ان","ها","هم","ه","ي"];
+function stem(w){ if(!/[\u0600-\u06FF]/.test(w)) return w; for(const p of PRE) if(w.startsWith(p)&&w.length-p.length>=3){w=w.slice(p.length);break;} for(const x of SUF) if(w.endsWith(x)&&w.length-x.length>=3){w=w.slice(0,-x.length);break;} return w; }
+function tokens(text){ const out=[],m=String(text||"").match(/[\u0600-\u06FFA-Za-z0-9_\-\.]+/g)||[]; for(const raw of m){ let w=norm(raw).replace(/^[\-\._]+|[\-\._]+$/g,""); if(w.length<2||STOP.has(w)) continue; if(/^\d+$/.test(w)&&w.length<3) continue; out.push({raw:raw.replace(/^[\-\._]+|[\-\._]+$/g,""),s:stem(w)}); } return out; }
+function itemTexts(it){
+  const nb=it.notebookData||{},parts=[],w3=[it.name,it.model,it.manufacturer,it.type];
+  (nb.explanations||[]).forEach(b=>w3.push(b.title)); (nb.imageGroups||[]).forEach(g=>{w3.push(g.name);(g.explanations||[]).forEach(b=>w3.push(b.title));});
+  ((nb.faultTracking&&nb.faultTracking.pages)||[]).forEach(p=>w3.push(p.name));
+  const body=[it.notes,nb.explanation];(nb.explanations||[]).forEach(b=>body.push(b.content));(nb.imageGroups||[]).forEach(g=>(g.explanations||[]).forEach(b=>body.push(b.content)));(nb.images||[]).forEach(i=>body.push(i.caption));
+  return {head:w3.filter(Boolean).join(" "),body:body.filter(Boolean).join("\n").slice(0,30000)};
+}
+let DF=null,DFN=0;
+function buildDF(){ DF=new Map(); const its=state.items||[]; DFN=its.length; for(const it of its){ const T=itemTexts(it),seen=new Set(); tokens(T.head+" "+T.body).forEach(t=>seen.add(t.s)); seen.forEach(s=>DF.set(s,(DF.get(s)||0)+1)); } }
+const idf=s=>Math.log((DFN+1)/((DF.get(s)||0)+1))+1;
+function keywords(it,n){
+  if(!DF) buildDF(); const T=itemTexts(it),tf=new Map(),surf=new Map();
+  const add=(txt,wt)=>tokens(txt).forEach(t=>{tf.set(t.s,(tf.get(t.s)||0)+wt);const m=surf.get(t.s)||new Map();m.set(t.raw,(m.get(t.raw)||0)+1);surf.set(t.s,m);});
+  add(T.head,3);add(T.body,1);
+  return [...tf].map(([s,v])=>({s,sc:v*idf(s)})).sort((a,b)=>b.sc-a.sc).slice(0,n||8).map(x=>{let best="",c=0;surf.get(x.s).forEach((v,k)=>{if(v>c){c=v;best=k;}});return best;});
+}
+function extract(it,k){
+  if(!DF) buildDF(); const T=itemTexts(it),sents=[];
+  lines(T.body).forEach((ln,li)=>{ ln.split(/[\.!؟\?؛]+\s*/).forEach(x=>{x=x.trim();if(x.length>=12)sents.push({x,li});}); });
+  if(!sents.length) return [];
+  const sc=sents.map((o,i)=>{ const tk=tokens(o.x); let sum=0; tk.forEach(t=>sum+=idf(t.s)); return {i,o,v:sum/Math.sqrt(tk.length+1)*(o.li===0?1.25:1)}; });
+  return sc.sort((a,b)=>b.v-a.v).slice(0,k||3).sort((a,b)=>a.i-b.i).map(x=>x.o.x.length>230?x.o.x.slice(0,227)+"…":x.o.x);
+}
+
+/* ---------- سلوك الشغل ---------- */
+const AREAS=[[/مربع|الشرح/,"الشرح"],[/صورة|صور/,"الصور"],[/تتبع/,"تتبع الأعطال"],[/كود/,"الأكواد"],[/الرسم/,"الرسم"],[/الخريطة/,"الخريطة"],[/الخطط|مهام/,"الخطط والمهام"]];
+const areaOf=e=>{ if(e.ent==="folders") return "المجلدات"; const f=(e.field||"")+" "+(e.sum||""); for(const [rx,l] of AREAS) if(rx.test(f)) return l; return e.type==="image"?"الصور":"بيانات العنصر"; };
+const daypart=h=>h>=5&&h<12?"صباحًا":h>=12&&h<17?"ظهرًا وعصرًا":h>=17&&h<22?"مساءً":"ليلًا";
+const WD=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+function itemStat(it,logs){
+  const nb=it.notebookData||{},nimgs=nb.images||[],pages=((nb.faultTracking&&nb.faultTracking.pages)||[]),boxes=[];
+  if(lines(nb.explanation).length) boxes.push(lines(nb.explanation).length); (nb.explanations||[]).forEach(b=>boxes.push(lines(b.content).length)); (nb.imageGroups||[]).forEach(g=>(g.explanations||[]).forEach(b=>boxes.push(lines(b.content).length)));
+  const rows=((it.checklist&&it.checklist.rows)||[]).filter(r=>r.plan||r.task),L=logs.filter(e=>e.item===it.id);
+  const filled=["model","manufacturer","type","serial","partNumber"].filter(k=>String(it[k]||"").trim()).length+Object.values(it.fields||{}).filter(v=>String(v==null?"":v).trim()).length;
+  const last=Math.max(L.length?L[0].t:0,it.updatedAt||0,it.createdAt||0);
+  return {it,id:it.id,name:it.name||"(بدون اسم)",folder:folderName(it.folderId),imgs:(it.imageIds||[]).length,nimgs:nimgs.length,nann:nimgs.filter(x=>annOk(x.ann)).length,boxes:boxes.length,expLines:boxes.reduce((a,b)=>a+b,0),codes:(nb.codes||[]).length,docs:(it.docs||[]).length,pages:pages.length,hot:pages.reduce((a,p)=>a+(p.hotspots||[]).length,0),rows,open:rows.filter(r=>!r.done),filled,L,last};
+}
+function score(st,now){
+  let sc=0; const miss=[];
+  if(st.imgs+st.nimgs>0) sc+=20; else miss.push("ضيف صورة واحدة على الأقل");
+  if(st.expLines>=3) sc+=25; else if(st.expLines>0){sc+=12;miss.push("وسّع الشرح (أقل من 3 أسطر)");} else miss.push("اكتب شرح للعنصر");
+  sc+=Math.min(st.filled,3)/3*15; if(st.filled<3) miss.push("كمّل بيانات العنصر (موديل/مصنّع/نوع/سيريال)");
+  if(st.pages>0) sc+=15; else miss.push("ضيف صفحة تتبع أعطال");
+  if(st.codes+st.docs>0) sc+=10; else miss.push("ضيف كود أو مستند مرجعي");
+  if(st.rows.length>0) sc+=5; else miss.push("حدد خطط أو مهام");
+  if(now-st.last<=30*DAY) sc+=10; else miss.push("بقاله أكتر من 30 يوم من غير تحديث");
+  return {sc:Math.round(sc),miss};
+}
+function analyze(){
+  const now=Date.now(),logs=(window.__CHG?window.__CHG.gather():[]).filter(e=>e.t),its=(state.items||[]).map(it=>itemStat(it,logs));
+  const G={now,events:logs.length,first:logs.length?logs[logs.length-1].t:0,hours:new Array(24).fill(0),wd:new Array(7).fill(0),types:{},areas:{},days:new Set()};
+  for(const e of logs){ const d=new Date(e.t); G.hours[d.getHours()]++; G.wd[d.getDay()]++; G.types[e.type]=(G.types[e.type]||0)+1; const a=areaOf(e); G.areas[a]=(G.areas[a]||0)+1; G.days.add(dkey(e.t)); }
+  const ds=[...G.days].sort(); let best=0,run=0,prev=null; for(const k of ds){ const t=new Date(k+"T00:00:00").getTime(); run=(prev!=null&&Math.round((t-prev)/DAY)===1)?run+1:1; best=Math.max(best,run); prev=t; }
+  let cur=0; for(let t=new Date(dkey(now)+"T00:00:00").getTime();;t-=DAY){ if(G.days.has(dkey(t+3600e3))) cur++; else if(cur===0&&t===new Date(dkey(now)+"T00:00:00").getTime()) continue; else break; if(cur>4000) break; }
+  G.activeDays=G.days.size; G.longest=best; G.streak=cur;
+  G.w7=logs.filter(e=>now-e.t<=7*DAY).length; G.p7=logs.filter(e=>now-e.t>7*DAY&&now-e.t<=14*DAY).length;
+  G.topItems=its.map(s=>({s,n:s.L.filter(e=>now-e.t<=30*DAY).length})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n).slice(0,5);
+  G.recent30=logs.filter(e=>now-e.t<=30*DAY&&e.item).length;
+  G.stale=its.filter(s=>now-s.last>30*DAY); G.noImg=its.filter(s=>s.imgs+s.nimgs===0); G.noExp=its.filter(s=>s.expLines===0); G.noFault=its.filter(s=>s.pages===0);
+  G.tasksTotal=its.reduce((a,s)=>a+s.rows.length,0); G.tasksOpen=its.reduce((a,s)=>a+s.open.length,0);
+  G.newByWeek=[0,1,2,3].map(w=>(state.items||[]).filter(i=>i.createdAt&&now-i.createdAt>w*7*DAY&&now-i.createdAt<=(w+1)*7*DAY).length);
+  G.scores=its.map(s=>({s,...score(s,now)}));
+  G.insights=insights(G,its,logs); G.summary=summaryText(G,its); return {G,its,logs};
+}
+const nn=(n,w)=>n===2?w[1]:n+" "+(n>=3&&n<=10?w[2]:w[0]);
+const EV=["حدث","حدثين","أحداث"],DW=["يوم","يومين","أيام"],LN=["سطر","سطرين","أسطر"],PT=["نقطة","نقطتين","نقاط"],IM=["صورة","صورتين","صور"],IT=["عنصر","عنصرين","عناصر"],TM=["مرة","مرتين","مرات"],BX=["مربع","مربعين","مربعات"],CD=["كتلة","كتلتين","كتل"],DC=["مستند","مستندين","مستندات"],PG=["صفحة","صفحتين","صفحات"];
+const pct=(a,b)=>b?Math.round(a/b*100):0,top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1])[0];
+function insights(G,its,logs){
+  const I=[],E=G.events; if(!E){ I.push(["ℹ️","لسه مفيش أحداث كفاية في السجل للتحليل السلوكي — كمّل شغل وهيظهر هنا."]); }
+  else{
+    I.push(["📈",`السجل فيه ${nn(E,EV)} على ${nn(G.activeDays,DW)} نشاط (بمعدل ${(E/Math.max(1,G.activeDays)).toFixed(1)} حدث/يوم)، من ${fmtD(G.first)}.`]);
+    if(G.p7||G.w7){ const ch=G.p7?Math.round((G.w7-G.p7)/G.p7*100):100; I.push([ch>25?"🔼":ch<-25?"🔽":"➖",ch>25?`نشاطك آخر 7 أيام زاد ${ch}% عن الأسبوع اللي قبله (${G.w7} مقابل ${G.p7}).`:ch<-25?`نشاطك آخر 7 أيام قلّ ${-ch}% عن الأسبوع اللي قبله (${G.w7} مقابل ${G.p7}).`:`نشاطك آخر 7 أيام ثابت تقريبًا (${G.w7} مقابل ${G.p7}).`]); }
+    const parts={}; G.hours.forEach((v,h)=>{const k=daypart(h);parts[k]=(parts[k]||0)+v;}); const [dp,dn]=top(parts); if(pct(dn,E)>=40) I.push(["🕒",`أغلب شغلك بيحصل ${dp} (${pct(dn,E)}% من الأحداث).`]);
+    const bw=G.wd.indexOf(Math.max(...G.wd)); I.push(["📅",`أنشط يوم عندك ${WD[bw]} (${nn(G.wd[bw],EV)}).`]);
+    if(G.streak>=2||G.longest>=3) I.push(["🔥",`تتابع أيام الشغل: الحالي ${nn(G.streak,DW)}، وأطول تتابع ${nn(G.longest,DW)}.`]);
+    const [ar,an]=top(G.areas); const style={"الشرح":"توثيق نصّي (شرح)","الصور":"توثيق مرئي (صور)","تتبع الأعطال":"تتبع أعطال","الأكواد":"أكواد ومراجع","الرسم":"رسم توضيحي","الخريطة":"خرائط ذهنية","الخطط والمهام":"تخطيط ومتابعة مهام","بيانات العنصر":"إدخال وتعديل بيانات العناصر","المجلدات":"تنظيم المجلدات"}[ar]||ar;
+    I.push(["🧭",`نمط شغلك الغالب: ${style} (${pct(an,E)}% من الأحداث).`]);
+    const t=G.types,dl=t.delete||0; if(pct(dl,E)>=25) I.push(["🗑️",`نسبة الحذف عالية (${pct(dl,E)}%) — راجع إن ده مقصود.`]); else if((t.add||0)>(t.edit||0)*1.5) I.push(["➕",`بتضيف أكتر ما بتعدّل (${t.add||0} إضافة مقابل ${t.edit||0} تعديل) — مرحلة بناء محتوى.`]); else if((t.edit||0)>(t.add||0)*1.5) I.push(["✏️",`بتعدّل أكتر ما بتضيف (${t.edit||0} تعديل مقابل ${t.add||0} إضافة) — مرحلة تحسين ومراجعة.`]);
+    if(G.topItems.length&&G.recent30){ const x=G.topItems[0]; if(pct(x.n,G.recent30)>=30) I.push(["🎯",`تركيزك آخر 30 يوم على «${x.s.name}» (${pct(x.n,G.recent30)}% من شغلك على العناصر).`]); }
+  }
+  const N=its.length; if(N){
+    if(G.noImg.length) I.push(["🖼️",`${nn(G.noImg.length,IT)} من ${N} من غير أي صورة${G.noImg.length<=3?": "+G.noImg.map(s=>"«"+s.name+"»").join("، "):""}.`]);
+    if(G.noExp.length) I.push(["📝",`${nn(G.noExp.length,IT)} من غير شرح${G.noExp.length<=3?": "+G.noExp.map(s=>"«"+s.name+"»").join("، "):""}.`]);
+    if(G.stale.length) I.push(["💤",`${nn(G.stale.length,IT)} ما اتحدّثش من أكتر من 30 يوم.`]);
+    if(G.tasksTotal) I.push(["☑",`المهام: ${G.tasksTotal-G.tasksOpen} منجزة من ${G.tasksTotal} (${pct(G.tasksTotal-G.tasksOpen,G.tasksTotal)}%)، والمفتوحة ${G.tasksOpen}.`]);
+    const avg=Math.round(G.scores.reduce((a,x)=>a+x.sc,0)/N); I.push(["📊",`متوسط اكتمال التوثيق ${avg}% عبر ${N} عنصر.`]);
+    const w=G.newByWeek; if(w.some(Boolean)) I.push(["🌱",`العناصر الجديدة آخر 4 أسابيع: ${w.join(" ، ")} (من الأحدث للأقدم).`]);
+  }
+  return I;
+}
+function summaryText(G,its){
+  const a=G.insights.slice(0,5).map(x=>x[1]); return "ملخص شغلك على البرنامج:\n"+a.map(x=>"• "+x).join("\n");
+}
+function itemSummary(st,now){
+  const it=st.it,sc=score(st,now),L=st.L,out=[];
+  const meta=[["model","موديل"],["manufacturer","مصنّع"],["type","نوع"],["serial","سيريال"],["partNumber","رقم قطعة"]].filter(([k])=>String(it[k]||"").trim()).map(([k,l])=>l+": "+it[k]);
+  out.push(`«${st.name}»${st.folder?" في «"+st.folder+"»":""}${meta.length?" ("+meta.join("، ")+")":""}.`);
+  out.push(`فيه ${nn(st.imgs+st.nimgs,IM)}${st.nann?` (منها ${st.nann} معدّلة)`:""}، ${nn(st.boxes,BX)} شرح (${nn(st.expLines,LN)})، ${nn(st.codes,CD)} كود${st.pages?`، ${nn(st.pages,PG)} تتبع أعطال (${nn(st.hot,PT)})`:""}${st.docs?`، ${nn(st.docs,DC)}`:""}.`);
+  if(L.length){ const ar={}; L.forEach(e=>{const a=areaOf(e);ar[a]=(ar[a]||0)+1;}); const [a,n]=top(ar); out.push(`اشتغلت عليه ${nn(L.length,TM)} بين ${fmtD(L[L.length-1].t)} و${fmtD(L[0].t)}، وأغلب شغلك كان في «${a}» (${pct(n,L.length)}%).`); }
+  else out.push(`مفيش نشاط مسجّل عليه في السجل${it.updatedAt?"، وآخر حفظ "+fmtT(it.updatedAt):""}.`);
+  if(st.rows.length) out.push(`المهام: ${st.open.length} مفتوحة من ${st.rows.length}${st.open.length?" — أولها: "+String(st.open[0].task||st.open[0].plan).slice(0,70):""}.`);
+  const dd=Math.floor((now-st.last)/DAY); if(dd>30) out.push(`بقاله ${nn(dd,DW)} من غير تعديل.`);
+  return {lines:out,score:sc.sc,miss:sc.miss,kw:keywords(it,8),ex:extract(it,3)};
+}
+function analysisJson(){
+  const A=analyze(),G=A.G; return {schema:1,kind:"analysis",method:"local-heuristic (statistics + extractive summarization)",generatedAt:new Date().toISOString(),
+    behavior:{events:G.events,activeDays:G.activeDays,longestStreak:G.longest,currentStreak:G.streak,last7:G.w7,prev7:G.p7,hours:G.hours,weekdays:G.wd,types:G.types,areas:G.areas},insights:G.insights.map(x=>x[1]),
+    items:A.its.map(st=>{const sm=itemSummary(st,G.now);return {id:st.id,name:st.name,score:sm.score,keywords:sm.kw,summary:sm.lines.join(" "),extract:sm.ex,missing:sm.miss};})};
+}
+
+/* ---------- الواجهة ---------- */
+const bars=(vals,labels,hi)=>{ const mx=Math.max(1,...vals),w=el("div",{style:"display:flex;gap:2px;align-items:flex-end;height:54px;margin:4px 0"});
+  vals.forEach((v,i)=>w.appendChild(el("div",{title:(labels[i]||i)+": "+v,style:"flex:1;min-width:3px;background:"+(i===hi?"var(--amber)":"rgba(255,170,60,.45)")+";height:"+Math.max(3,Math.round(v/mx*100))+"%;border-radius:2px 2px 0 0"}))); return w; };
+const chips=a=>el("div",{style:"display:flex;gap:5px;flex-wrap:wrap;margin:4px 0"},a.map(k=>el("span",{style:"padding:2px 8px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);font-size:11px"},k)));
+const copy=txt=>{ try{navigator.clipboard.writeText(txt);if(typeof toast==="function")toast("اتنسخ.","ok");}catch(e){} };
+function itemCard(st,now,close,open){
+  const sm=itemSummary(st,now),card=el("div",{cls:"hx-sub"});
+  card.appendChild(el("div",{style:"display:flex;justify-content:space-between;gap:8px;align-items:center"},el("b",null,"🧠 ملخص «"+st.name+"»"),el("span",{style:"font-size:11px"},"اكتمال "+sm.score+"%")));
+  card.appendChild(el("div",{style:"height:6px;background:var(--panel2);border-radius:4px;overflow:hidden;margin:4px 0"},el("div",{style:"height:100%;width:"+sm.score+"%;background:"+(sm.score>=70?"#4ade80":sm.score>=40?"#fbbf24":"#f87171")})));
+  sm.lines.forEach(l=>card.appendChild(el("div",{style:"margin:3px 0;font-size:12.5px"},l)));
+  if(sm.ex.length){ card.appendChild(el("h4",null,"📝 خلاصة شرحك")); sm.ex.forEach(x=>card.appendChild(el("div",{style:"margin:2px 0;font-size:12px;opacity:.9"},"• "+x))); }
+  if(sm.kw.length){ card.appendChild(el("h4",null,"🔑 أهم الكلمات")); card.appendChild(chips(sm.kw)); }
+  if(sm.miss.length){ card.appendChild(el("h4",null,"💡 اقتراحات")); sm.miss.forEach(x=>card.appendChild(el("div",{style:"font-size:12px"},"• "+x))); }
+  const ev=st.L.slice(0,5); if(ev.length){ card.appendChild(el("h4",null,"🕘 آخر نشاط")); ev.forEach(e=>card.appendChild(el("div",{cls:"hx-sm",style:"cursor:pointer",on:{click:()=>{close();window.__HIST.go(st.id,(e.field||"")+" "+(e.sum||""));}}},fmtT(e.t)+" — "+areaOf(e)+": "+(e.sum||e.field||"")))); }
+  const act=el("div",{style:"display:flex;gap:6px;margin-top:6px"},el("button",{cls:"btn small primary",on:{click:()=>{close();window.__HIST.go(st.id,"");}}},"فتح العنصر ↗"),el("button",{cls:"btn small",on:{click:()=>copy(sm.lines.join("\n")+(sm.ex.length?"\n\nخلاصة الشرح:\n"+sm.ex.join("\n"):"")+(sm.kw.length?"\n\nكلمات: "+sm.kw.join("، "):""))}},"📋 نسخ الملخص"));
+  card.appendChild(act); return card;
+}
+function analysis(host,close,itemId){
+  host.textContent=""; const A=analyze(),G=A.G,now=G.now;
+  host.appendChild(el("div",{cls:"hx-sm",style:"margin-bottom:6px"},"🧠 تحليل محلي بخوارزمية (إحصاء + تلخيص استخلاصي للنص) — شغّال على جهازك بدون إنترنت، ومش نموذج توليدي. الاستنتاجات مبنية على سجلك وبياناتك وشرحك."));
+  const sum=el("div",{cls:"hx-sub"},el("b",null,"📋 الملخص العام"),el("div",{style:"white-space:pre-wrap;font-size:12.5px;margin:4px 0"},G.summary),el("button",{cls:"btn small",on:{click:()=>copy(G.summary)}},"📋 نسخ"));
+  host.appendChild(sum);
+  host.appendChild(el("h4",{style:"margin:8px 0 2px"},"🔎 استنتاجات")); G.insights.forEach(x=>host.appendChild(el("div",{style:"font-size:12.5px;margin:3px 0"},x[0]+" "+x[1])));
+  if(G.events){
+    host.appendChild(el("h4",{style:"margin:8px 0 0"},"🕒 توزيع الشغل على ساعات اليوم")); host.appendChild(bars(G.hours,G.hours.map((_,i)=>i+":00"),G.hours.indexOf(Math.max(...G.hours)))); host.appendChild(el("div",{cls:"hx-sm",style:"display:flex;justify-content:space-between"},el("span",null,"0"),el("span",null,"6"),el("span",null,"12"),el("span",null,"18"),el("span",null,"23")));
+    host.appendChild(el("h4",{style:"margin:8px 0 0"},"📅 توزيع الشغل على أيام الأسبوع")); host.appendChild(bars(G.wd,WD,G.wd.indexOf(Math.max(...G.wd)))); host.appendChild(el("div",{cls:"hx-sm",style:"display:flex;justify-content:space-between"},["أحد","اثنين","ثلاثاء","أربعاء","خميس","جمعة","سبت"].map(d=>el("span",null,d))));
+    host.appendChild(el("h4",{style:"margin:8px 0 2px"},"🧩 توزيع الشغل حسب المكان")); Object.entries(G.areas).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>host.appendChild(el("div",{style:"font-size:12px;display:flex;gap:6px;align-items:center;margin:2px 0"},el("span",{style:"min-width:96px"},k),el("div",{style:"flex:1;height:7px;background:var(--panel2);border-radius:4px;overflow:hidden"},el("div",{style:"height:100%;width:"+pct(v,G.events)+"%;background:var(--amber)"})),el("span",{cls:"hx-sm"},nn(v,EV)+" ("+pct(v,G.events)+"%)"))));
+  }
+  if(G.topItems.length){ host.appendChild(el("h4",{style:"margin:8px 0 2px"},"🏆 أكتر العناصر شغلًا آخر 30 يوم")); G.topItems.forEach(x=>host.appendChild(el("div",{style:"font-size:12.5px;cursor:pointer;margin:2px 0",on:{click:()=>{close();window.__HIST.go(x.s.id,"");}}},"• "+x.s.name+" — "+nn(x.n,EV)))); }
+  host.appendChild(el("h4",{style:"margin:10px 0 4px"},"📦 ملخص كل عنصر"));
+  const q=el("input",{style:"width:100%;margin-bottom:6px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"}); q.type="search"; q.placeholder="بحث باسم العنصر أو كلمة من شرحه…";
+  const bar=el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"}),list=el("div"); let sort="recent",lim=40;
+  const draw=()=>{ bar.textContent=""; [["recent","الأحدث نشاطًا"],["low","الأقل اكتمالًا"],["busy","الأكتر شغلًا"]].forEach(([k,l])=>bar.appendChild(el("button",{cls:"btn small"+(sort===k?" primary":""),on:{click:()=>{sort=k;lim=40;draw();paint();}}},l)));};
+  const paint=()=>{ list.textContent=""; const s=q.value.trim().toLowerCase(); let rows=G.scores.filter(x=>!s||(x.s.name+" "+x.s.folder+" "+keywords(x.s.it,6).join(" ")).toLowerCase().includes(s));
+    rows.sort((a,b)=>sort==="low"?a.sc-b.sc:sort==="busy"?b.s.L.length-a.s.L.length:b.s.last-a.s.last);
+    if(itemId){ const f=rows.find(x=>x.s.id===itemId); if(f){ rows=[f,...rows.filter(x=>x!==f)]; } }
+    rows.slice(0,lim).forEach((x,ix)=>{ const row=el("div",{style:"padding:7px 4px;border-bottom:1px solid var(--border);cursor:pointer"}),hd=el("div",{style:"display:flex;justify-content:space-between;gap:8px;font-weight:700"},el("span",null,x.s.name),el("span",{style:"font-size:11px;color:"+(x.sc>=70?"#4ade80":x.sc>=40?"#fbbf24":"#f87171")},x.sc+"%"));
+      row.append(hd,el("div",{cls:"hx-sm"},[x.s.folder,nn(x.s.imgs+x.s.nimgs,IM),nn(x.s.boxes,BX)+" شرح",nn(x.s.L.length,EV),"آخر نشاط "+fmtD(x.s.last)].filter(Boolean).join(" · "))); const holder=el("div"); row.appendChild(holder);
+      const toggle=()=>{ if(holder.firstChild) holder.textContent=""; else holder.appendChild(itemCard(x.s,now,close)); }; row.onclick=ev=>{ if(ev.target.closest("button")||ev.target.closest(".hx-sub")) return; toggle(); };
+      list.appendChild(row); if(itemId&&ix===0&&x.s.id===itemId) toggle(); });
+    if(rows.length>lim) list.appendChild(el("button",{cls:"btn small",on:{click:()=>{lim+=40;paint();}}},"عرض المزيد ("+(rows.length-lim)+")")); if(!rows.length) list.textContent="لا توجد عناصر مطابقة."; };
+  q.oninput=()=>{lim=40;paint();}; draw(); host.append(q,bar,list); paint();
+}
+Object.assign(window.__HIST,{analysis,analysisJson,_nlp:{keywords,extract,tokens}});
+})();
+</script>
 <script id="change-log-and-thumbs">
 /* =========================================================
    1) سجل التغييرات الشامل (أيقونة 🕘): عناصر، مجلدات، صور، مربعات شرح، أكواد، رسم، خريطة، تتبع أعطال، خطط ومهام
@@ -18560,11 +18740,11 @@ function open(itemId){
     if(rows.length>lim){ const mb=document.createElement("button"); mb.type="button"; mb.className="btn small"; mb.textContent="عرض المزيد ("+(rows.length-lim)+")"; mb.onclick=()=>{lim+=150;paint();}; list.appendChild(mb); } };
   inp.oninput=()=>{ q=inp.value.trim().toLowerCase(); lim=150; paint(); };
   body.append(chips,inp,list); drawChips(); paint();
-  const body0=ov.querySelector(".si-body"),tabs=document.createElement("div"),hb=document.createElement("div"),ib=document.createElement("div");
+  const body0=ov.querySelector(".si-body"),tabs=document.createElement("div"),hb=document.createElement("div"),ib=document.createElement("div"),ab=document.createElement("div");
   tabs.style.cssText="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap";
-  [["🕘 السجل",body],["📜 الهيستوري",hb,"history"],["📊 الحصر",ib,"inventory"]].forEach(([l,el,fn],ix)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(ix?"":" primary"); b.textContent=l;
-    b.onclick=()=>{ [body,hb,ib].forEach(x=>x.style.display="none"); el.style.display=""; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); if(fn&&!el.dataset.d&&window.__HIST){ el.dataset.d=1; window.__HIST[fn](el,close,itemId); } }; tabs.appendChild(b); });
-  hb.style.display=ib.style.display="none"; body0.append(...(window.__HIST&&window.__HIST.bar?[window.__HIST.bar()]:[]),tabs,body,hb,ib);
+  [["🕘 السجل",body],["📜 الهيستوري",hb,"history"],["📊 الحصر",ib,"inventory"],["🧠 التحليل",ab,"analysis"]].forEach(([l,el,fn],ix)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(ix?"":" primary"); b.textContent=l;
+    b.onclick=()=>{ [body,hb,ib,ab].forEach(x=>x.style.display="none"); el.style.display=""; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); if(fn&&!el.dataset.d&&window.__HIST){ el.dataset.d=1; window.__HIST[fn](el,close,itemId); } }; tabs.appendChild(b); });
+  hb.style.display=ib.style.display=ab.style.display="none"; body0.append(...(window.__HIST&&window.__HIST.bar?[window.__HIST.bar()]:[]),tabs,body,hb,ib,ab);
   ov.querySelector(".si-x").onclick=close; ov.addEventListener("click",e=>{ if(e.target===ov) close(); }); document.body.appendChild(ov);
 }
 
