@@ -6286,40 +6286,7 @@ window.addEventListener('pagehide',()=>{ if(linkedDirHandle) requestFolderSync()
 /* =========================================================
    الإقلاع
    ========================================================= */
-window.__EQUIPMENT_BOOT_DIAG = { phase: "لم يبدأ", completed: false, error: null };
-function __equipmentBootPhase(name){
-  window.__EQUIPMENT_BOOT_DIAG.phase = name;
-  console.info("[Equipment boot]", name);
-}
-function __equipmentShowDiag(message){
-  let box = document.getElementById("equipmentBootDiagnostic");
-  if(!box){
-    box = document.createElement("div");
-    box.id = "equipmentBootDiagnostic";
-    box.dir = "rtl";
-    box.style.cssText = "position:fixed;top:8px;left:8px;right:8px;z-index:2147483647;background:#7b1d1d;color:#fff;border:2px solid #ffb4b4;border-radius:10px;padding:12px 14px;font: bold 13px/1.7 Tahoma,Arial,sans-serif;white-space:pre-wrap;box-shadow:0 4px 22px #0008";
-    document.body.appendChild(box);
-  }
-  box.textContent = message;
-}
-window.addEventListener("error", function(e){
-  const d = window.__EQUIPMENT_BOOT_DIAG;
-  if(d && !d.completed){
-    d.error = e.message || "JavaScript error";
-    __equipmentShowDiag("تشخيص Equipment: حدث خطأ أثناء الإقلاع\nالمرحلة: " + d.phase + "\nالخطأ: " + d.error + (e.filename ? "\nالملف: " + e.filename.split("/").pop() + ":" + e.lineno : ""));
-  }
-});
-window.addEventListener("unhandledrejection", function(e){
-  const d = window.__EQUIPMENT_BOOT_DIAG;
-  if(d && !d.completed){
-    const reason = e.reason && (e.reason.message || String(e.reason)) || "Unhandled promise rejection";
-    d.error = reason;
-    __equipmentShowDiag("تشخيص Equipment: فشل وعد غير معالج أثناء الإقلاع\nالمرحلة: " + d.phase + "\nالتفاصيل: " + reason);
-  }
-});
-
 async function boot(){
-  __equipmentBootPhase("فتح قاعدة البيانات المحلية IndexedDB");
   try{
     // لا نجبر التطبيق على وضع الذاكرة عند فتح الملف من file:// أو content://.
     // نحاول IndexedDB أولاً لأنها الوحيدة التي تحفظ البيانات بعد إعادة التحميل/الإغلاق.
@@ -6329,7 +6296,6 @@ async function boot(){
     console.error("IndexedDB غير متاح:", err);
     STORAGE_MODE = "memory";
   }
-  __equipmentBootPhase("قراءة المجلدات والعناصر والإعدادات من قاعدة البيانات");
   const [folders, items, metaRows] = await Promise.all([idbGetAll("folders"), idbGetAll("items"), idbGetAll("meta")]);
   state.folders = folders;
   state.items = items;
@@ -6343,34 +6309,28 @@ async function boot(){
   const syncStateRow = metaRows.find(m=>m.key==="syncLogState");
   if(syncStateRow && syncStateRow.value) state.syncLogState = Object.assign(state.syncLogState, syncStateRow.value);
 
-  // إذا كان هناك مجلد مرتبط سابقًا، فملف project.json داخله هو المصدر الخارجي
-  // الفعلي. لا نستخدم IndexedDB بدلًا منه؛ نحمّل منه عند فتح البرنامج كلما كانت
-  // الصلاحية متاحة. إذا كانت الصلاحية تحتاج تفاعلًا من المستخدم، تظهر حالة
-  // "تفعيل" في الإعدادات بدل محاولة requestPermission خارج gesture.
-  __equipmentBootPhase("التحقق من مجلد تخزين خارجي محفوظ سابقًا إن وُجد");
+  // استرجاع مرجع المجلد المرتبط من IndexedDB دون فحص الصلاحية أو قراءة المجلد
+  // أثناء الإقلاع. بعض متصفحات الهاتف قد تعلق داخل queryPermission/getFile
+  // عند استعادة FileSystemDirectoryHandle بعد إعادة فتح الصفحة.
+  // نعرض الواجهة أولاً، ثم تتم مطالبة المستخدم بتفعيل المجلد من داخل الإعدادات
+  // بضغطة فعلية (activateLinkedFolder)؛ لا نمسح ولا نستبدل أي بيانات هنا.
   if(STORAGE_MODE!=="memory"){
     const linkedDirRow = metaRows.find(m=>m.key==="linkedDir");
     if(linkedDirRow && linkedDirRow.value){
       linkedDirHandle = linkedDirRow.value;
-      try{
-        const granted = await ensureFolderPermission(linkedDirHandle,false);
-        if(granted){
-          const snap = await readFolderSnapshot(linkedDirHandle);
-          if(snap){
-            await restoreAllFromFolder(linkedDirHandle,snap);
-            applyTheme(state.settings.theme || "amber");
-          }
-        }
-      }catch(e){ console.warn("تعذر تحميل التخزين من المجلد المرتبط:",e); }
+      folderPermissionNeedsActivation = true;
     }
   }
 
-  __equipmentBootPhase("ربط أحداث الأزرار والتنقل");
   bindGlobalEvents();
-  __equipmentBootPhase("رسم قائمة المجلدات");
   renderSidebarTree();
-  __equipmentBootPhase("عرض الصفحة الرئيسية");
   navigateTo({type:"home"});
+  if(linkedDirHandle){
+    try{ renderFolderLinkStatus(); }catch(e){}
+    setTimeout(()=>{
+      toast("تم العثور على مجلد التخزين المرتبط. افتح الإعدادات واضغط تفعيل/استعادة المجلد لمزامنة بياناته.","warn",8000);
+    },700);
+  }
   initGalleryAuditTracker();
   try{ restartActivityLogScheduler(); }catch(e){}
   try{
@@ -7985,23 +7945,7 @@ async function importProject(file, mode){
   }
 }
 
-window.addEventListener("DOMContentLoaded", function(){
-  const d = window.__EQUIPMENT_BOOT_DIAG;
-  const watchdog = setTimeout(function(){
-    if(d && !d.completed){
-      __equipmentShowDiag("تشخيص Equipment: الإقلاع لم يكتمل بعد 8 ثوانٍ\nالمرحلة الحالية: " + d.phase + "\nهذا لا يحذف أو يغيّر بياناتك. أرسل صورة هذه الرسالة.");
-    }
-  }, 8000);
-  boot().then(function(){
-    if(d) d.completed = true;
-    clearTimeout(watchdog);
-  }).catch(function(err){
-    if(d) d.error = err && (err.stack || err.message) || String(err);
-    clearTimeout(watchdog);
-    __equipmentShowDiag("تشخيص Equipment: فشل تشغيل البرنامج\nالمرحلة: " + (d ? d.phase : "غير معروفة") + "\nالخطأ: " + (d ? d.error : String(err)));
-    console.error("[Equipment boot failed]", err);
-  });
-});
+window.addEventListener("DOMContentLoaded", boot);
 </script>
 
 <style id="cat-move-system-css">
