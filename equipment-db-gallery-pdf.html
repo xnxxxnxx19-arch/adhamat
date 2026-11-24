@@ -6309,28 +6309,30 @@ async function boot(){
   const syncStateRow = metaRows.find(m=>m.key==="syncLogState");
   if(syncStateRow && syncStateRow.value) state.syncLogState = Object.assign(state.syncLogState, syncStateRow.value);
 
-  // استرجاع مرجع المجلد المرتبط من IndexedDB دون فحص الصلاحية أو قراءة المجلد
-  // أثناء الإقلاع. بعض متصفحات الهاتف قد تعلق داخل queryPermission/getFile
-  // عند استعادة FileSystemDirectoryHandle بعد إعادة فتح الصفحة.
-  // نعرض الواجهة أولاً، ثم تتم مطالبة المستخدم بتفعيل المجلد من داخل الإعدادات
-  // بضغطة فعلية (activateLinkedFolder)؛ لا نمسح ولا نستبدل أي بيانات هنا.
+  // إذا كان هناك مجلد مرتبط سابقًا، فملف project.json داخله هو المصدر الخارجي
+  // الفعلي. لا نستخدم IndexedDB بدلًا منه؛ نحمّل منه عند فتح البرنامج كلما كانت
+  // الصلاحية متاحة. إذا كانت الصلاحية تحتاج تفاعلًا من المستخدم، تظهر حالة
+  // "تفعيل" في الإعدادات بدل محاولة requestPermission خارج gesture.
   if(STORAGE_MODE!=="memory"){
     const linkedDirRow = metaRows.find(m=>m.key==="linkedDir");
     if(linkedDirRow && linkedDirRow.value){
       linkedDirHandle = linkedDirRow.value;
-      folderPermissionNeedsActivation = true;
+      try{
+        const granted = await ensureFolderPermission(linkedDirHandle,false);
+        if(granted){
+          const snap = await readFolderSnapshot(linkedDirHandle);
+          if(snap){
+            await restoreAllFromFolder(linkedDirHandle,snap);
+            applyTheme(state.settings.theme || "amber");
+          }
+        }
+      }catch(e){ console.warn("تعذر تحميل التخزين من المجلد المرتبط:",e); }
     }
   }
 
   bindGlobalEvents();
   renderSidebarTree();
   navigateTo({type:"home"});
-  if(linkedDirHandle){
-    try{ renderFolderLinkStatus(); }catch(e){}
-    setTimeout(()=>{
-      toast("تم العثور على مجلد التخزين المرتبط. افتح الإعدادات واضغط تفعيل/استعادة المجلد لمزامنة بياناته.","warn",8000);
-    },700);
-  }
   initGalleryAuditTracker();
   try{ restartActivityLogScheduler(); }catch(e){}
   try{
@@ -19123,6 +19125,7 @@ setTimeout(learn,6000);setInterval(()=>{if(document.visibilityState==="visible")
 })();
 </script>
 <script id="ai-neural">
+
 /* =========================================================
    🧬 الشبكة العصبية: تدريب على بيانات خارجية (بالبث داخل Worker) + حزم مرجعية + تعرّف فوري + تعلّم من التصحيحات
    ========================================================= */
@@ -19135,22 +19138,22 @@ function sharedCode(){
   const TOK=/[\p{L}\p{N}]+/gu;
   const fnv=(h,c)=>Math.imul(h^c,16777619)>>>0;
   /* كل كلمة → خصائص: الكلمة + ثنائي الكلمتين + مقاطع حروف (3-gram) = شبكة بتتحمّل اللهجات والأخطاء الإملائية */
-  function feats(text,B,maxTok){
-    const t=NORM(text),out=[];let prev=0,n=0,m;TOK.lastIndex=0;
+  function feats(text,B,maxTok,info){
+    const t=NORM(text),out=[];let prev=0,n=0,m,ck=2166136261;TOK.lastIndex=0;
     while(n<maxTok&&(m=TOK.exec(t))){
       const w=m[0];if(w.length<2&&!(w>="0"&&w<="9"))continue;n++;
       let h=2166136261;for(let i=0;i<w.length;i++)h=fnv(h,w.charCodeAt(i));
-      out.push(h%B);
+      ck=Math.imul(ck^h,16777619)>>>0;out.push(h%B);
       if(prev)out.push((Math.imul(prev,31)+h>>>0)%B);
       prev=h;
       if(w.length>=4){const s="<"+w+">";for(let i=0;i+3<=s.length;i++){let g=2166136261;g=fnv(g,s.charCodeAt(i));g=fnv(g,s.charCodeAt(i+1));g=fnv(g,s.charCodeAt(i+2));out.push(((g^0x5bd1e995)>>>0)%B);}}
     }
-    return Int32Array.from(out);
+    if(info)info.ck=ck;return Int32Array.from(out);
   }
   /* استدلال على نموذج مضغوط (E=int8 لكل صف + scale) */
   function embed(P,f,x){
-    const D=P.D,E=P.E,Es=P.Es;x.fill(0);const nf=f.length;if(!nf)return 0;
-    for(let q=0;q<nf;q++){const r=f[q],s=Es[r]/127,o=r*D;for(let d=0;d<D;d++)x[d]+=E[o+d]*s;}
+    const D=P.D,E=P.E,Es=P.Es,ov=P.ov&&P.ov.size?P.ov:null;x.fill(0);const nf=f.length;if(!nf)return 0;
+    for(let q=0;q<nf;q++){const r=f[q],o=r*D;if(ov){const v=ov.get(r);if(v){for(let d=0;d<D;d++)x[d]+=v[d];continue;}}const s=Es[r]/127;for(let d=0;d<D;d++)x[d]+=E[o+d]*s;}
     for(let d=0;d<D;d++)x[d]/=nf;return nf;
   }
   function mlp(P,x,h,z){
@@ -19161,7 +19164,13 @@ function sharedCode(){
     for(let j=0;j<H;j++){let v=h[j];if(v<0){h[j]=0;continue;}const o=j*C;for(let c=0;c<C;c++)z[c]+=v*W2[o+c];}
   }
   function softmax(z,C,T,p){let mx=-1e30;for(let c=0;c<C;c++)if(z[c]>mx)mx=z[c];let s=0;for(let c=0;c<C;c++){p[c]=Math.exp((z[c]-mx)/T);s+=p[c];}for(let c=0;c<C;c++)p[c]/=s;}
-  return {NORM,feats,embed,mlp,softmax};
+  function whash(w){let h=2166136261;for(let i=0;i<w.length;i++)h=fnv(h,w.charCodeAt(i));return h;}
+  function words(text,maxTok){const t=NORM(text),out=[];let m;TOK.lastIndex=0;while(out.length<maxTok&&(m=TOK.exec(t))){const w=m[0];if(w.length<2&&!(w>="0"&&w<="9"))continue;out.push(w);}return out;}
+  function ckey(ws){let h=2166136261;for(const w of ws)h=Math.imul(h^whash(w),16777619)>>>0;return h>>>0;}
+  function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++)h=fnv(h,s.charCodeAt(i));return h>>>0;}
+  const MHC=[0x9e3779b1,0x85ebca6b,0xc2b2ae35,0x27d4eb2f];
+  function minhash(ws){const out=new Uint32Array(4).fill(0xffffffff),n=ws.length,hs=ws.map(whash),k=n>=3?3:1;for(let i=0;i+k<=n;i++){let s=hs[i];if(k===3)s=(Math.imul(hs[i],31)+Math.imul(hs[i+1],131)+hs[i+2])>>>0;for(let j=0;j<4;j++){let x=Math.imul(s^MHC[j],MHC[(j+1)&3])>>>0;x^=x>>>15;x=Math.imul(x,0x2c1b3c6d)>>>0;x^=x>>>12;if(x<out[j])out[j]=x;}}return out;}
+  return {NORM,feats,embed,mlp,softmax,words,ckey,hashStr,minhash,whash};
 }
 
 /* ===== Worker: قراءة بالبث + تدريب شبكة عصبية (embedding → ReLU → softmax) ===== */
@@ -19171,15 +19180,16 @@ function workerMain(){
   const post=(type,o)=>self.postMessage(Object.assign({type},o||{}));
   self.onmessage=async ev=>{
     const m=ev.data;if(m.cmd==="cancel"){cancel=true;return;}
-    try{cancel=false;if(m.cmd==="preview")await preview(m);else if(m.cmd==="train")await trainRun(m);}
+    try{cancel=false;if(m.cmd==="preview")await preview(m);else if(m.cmd==="knowledge")await learnKnowledge(m);else if(m.cmd==="train"){if(m.cfg&&m.cfg.algo==="v1")await trainRunV1(m);else await trainRunV2(m);}}
     catch(e){post("error",{msg:String(e&&e.message||e)});}
   };
   const LK=["label","topic","category","class","تصنيف","الفئة","الموضوع","التصنيف","فئة","موضوع","labels"],TK=["text","body","content","description","desc","نص","شرح","الشرح","محتوى","وصف","المحتوى"],NK=["title","name","عنوان","الاسم","اسم"];
   const pickKey=(o,ks)=>{for(const k of Object.keys(o))if(ks.includes(k.toLowerCase().trim()))return k;return null;};
+  const GK=["group","source","src","doc_id","item_id","item","مصدر","مجموعة"];
   function fromObj(o){
     if(!o||typeof o!=="object")return null;const lk=pickKey(o,LK),tk=pickKey(o,TK),nk=pickKey(o,NK);if(!lk||!tk)return null;
     let l=o[lk];if(Array.isArray(l))l=l[0];if(l==null||o[tk]==null)return null;
-    return {label:String(l).trim(),text:(nk&&o[nk]?o[nk]+". ":"")+o[tk]};
+    const gk=pickKey(o,GK);return {label:String(l).trim(),text:(nk&&o[nk]?o[nk]+". ":"")+o[tk],group:gk&&o[gk]!=null?String(o[gk]):null};
   }
   async function* lineGen(file){
     const rd=file.stream().getReader(),dec=new TextDecoder("utf-8");let buf="";
@@ -19189,8 +19199,75 @@ function workerMain(){
   }
   function splitCSV(line,d){const out=[];let cur="",q=false;for(let i=0;i<line.length;i++){const c=line[i];if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=c;}else if(c==='"')q=true;else if(c===d){out.push(cur);cur="";}else cur+=c;}out.push(cur);return out;}
   const qcount=s=>{let n=0;for(let i=0;i<s.length;i++)if(s.charCodeAt(i)===34)n++;return n;};
+  async function inflatePdfBytes(u8){
+    // Consume the readable side concurrently; waiting for close() before reading can deadlock on back-pressure.
+    try{
+      if(typeof DecompressionStream==="undefined")return null;
+      const ds=new DecompressionStream("deflate"),w=ds.writable.getWriter();
+      const readPromise=new Response(ds.readable).arrayBuffer();
+      await w.write(u8);await w.close();
+      const out=await readPromise;
+      if(out.byteLength>64*1024*1024)return null;
+      return new Uint8Array(out);
+    }catch(e){return null;}
+  }
+  function decodeAscii85(u8){const s=Array.from(u8,b=>String.fromCharCode(b)).join("").replace(/\s/g,"").replace(/<~/,""),out=[];let g=[];for(let i=0;i<s.length;i++){const c=s[i];if(c==="~")break;if(c==="z"&&!g.length){out.push(0,0,0,0);continue;}const n=c.charCodeAt(0)-33;if(n<0||n>84)continue;g.push(n);if(g.length===5){let v=0;for(const x of g)v=v*85+x;out.push((v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255);g=[];}}if(g.length>1){const len=g.length;while(g.length<5)g.push(84);let v=0;for(const x of g)v=v*85+x;const a=[(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255];out.push(...a.slice(0,len-1));}return new Uint8Array(out);}
+  const pdfHexBytes=h=>{h=String(h||"").replace(/\s/g,"");const a=new Uint8Array(Math.floor(h.length/2));for(let i=0;i<a.length;i++)a[i]=parseInt(h.slice(i*2,i*2+2),16)||0;return a;};
+  const pdfHexUtf16=h=>{h=String(h||"").replace(/\s/g,"");let out="";for(let i=0;i+3<h.length;i+=4)out+=String.fromCharCode(parseInt(h.slice(i,i+4),16)||0);return out;};
+  async function parsePdfPages(file,onProgress){
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    // تحويل ثنائي أسرع وأقل استهلاكًا للذاكرة من Array.from(...).join() على كل بايت.
+    const rawParts=[];for(let i=0;i<bytes.length;i+=32768){rawParts.push(String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+32768,bytes.length))));if((i&262143)===0){if(cancel)return [];if(onProgress)onProgress({phase:"bytes",loaded:Math.min(i+32768,bytes.length),total:bytes.length});await new Promise(r=>setTimeout(r,0));}}
+    const raw=rawParts.join("");
+    // لا تترك شريط التقدم عالقًا عند 17% للملفات الأصغر من 256KB.
+    if(onProgress)onProgress({phase:"objects",loaded:bytes.length,total:bytes.length,stage:"فهرسة كائنات PDF"});
+    await new Promise(r=>setTimeout(r,0));
+    const objs=new Map(),re=/(\d+)\s+\d+\s+obj\b([\s\S]*?)endobj/g;let m,objCount=0,lastObjYield=Date.now();
+    while((m=re.exec(raw))){objs.set(+m[1],m[2]);objCount++;if(objCount%250===0&&Date.now()-lastObjYield>20){if(cancel)return [];if(onProgress)onProgress({phase:"objects",objects:objCount,loaded:bytes.length,total:bytes.length,stage:"فهرسة كائنات PDF"});lastObjYield=Date.now();await new Promise(r=>setTimeout(r,0));}}
+    if(onProgress)onProgress({phase:"objects",objects:objCount,loaded:bytes.length,total:bytes.length,stage:"اكتمل فهرسة كائنات PDF"});
+    const streamOf=async body=>{const a=body.indexOf("stream");if(a<0)return null;let st=a+6;if(body[st]==="\r"&&body[st+1]==="\n")st+=2;else if(body[st]==="\n"||body[st]==="\r")st++;let en=body.indexOf("endstream",st);if(en<0)return null;let e=en;if(body[e-1]==="\n")e--;if(body[e-1]==="\r")e--;let u=new Uint8Array(e-st);for(let i=0;i<u.length;i++)u[i]=body.charCodeAt(st+i)&255;const dict=body.slice(0,a);if(/\/ASCII85Decode|\/A85/.test(dict))u=decodeAscii85(u);if(/\/FlateDecode/.test(dict)){const z=await inflatePdfBytes(u);if(z)u=z;else return null;}return u;};
+    const cmapByObj=new Map(),fontToCmap=new Map();
+    for(const [id,body] of objs){const ref=body.match(/\/ToUnicode\s+(\d+)\s+\d+\s+R/);if(ref)fontToCmap.set(id,+ref[1]);}
+    const cmapIds=new Set(fontToCmap.values());
+    for(const [id,body] of objs){if(!cmapIds.has(id))continue;const u=await streamOf(body);if(!u)continue;const t=new TextDecoder("latin1").decode(u),map=new Map();let q;
+      const bf=/beginbfchar([\s\S]*?)endbfchar/g;while((q=bf.exec(t))){const rr=/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;let z;while((z=rr.exec(q[1])))map.set(z[1].toUpperCase(),pdfHexUtf16(z[2]));}
+      const br=/beginbfrange([\s\S]*?)endbfrange/g;while((q=br.exec(t))){const rr=/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(?:<([0-9A-Fa-f]+)>|\[([\s\S]*?)\])/g;let z;while((z=rr.exec(q[1]))){let a=parseInt(z[1],16),b=parseInt(z[2],16),w=z[1].length;if(z[3]){let v=parseInt(z[3],16);for(let n=a;n<=b&&n-a<4096;n++)map.set(n.toString(16).toUpperCase().padStart(w,"0"),String.fromCharCode(v+n-a));}else if(z[4]){const vals=[...z[4].matchAll(/<([0-9A-Fa-f]+)>/g)];for(let n=a;n<=b&&n-a<vals.length;n++)map.set(n.toString(16).toUpperCase().padStart(w,"0"),pdfHexUtf16(vals[n-a][1]));}}}
+      cmapByObj.set(id,map);
+    }
+    const decodeHex=(h,map)=>{h=h.replace(/\s/g,"").toUpperCase();if(!map||!map.size){if(h.length%4===0&&/^(?:00[0-9A-F]{2})+$/i.test(h))return pdfHexUtf16(h);let z="";for(let j=0;j+1<h.length;j+=2)z+=String.fromCharCode(parseInt(h.slice(j,j+2),16)||0);return z;}const lens=[...new Set([...map.keys()].map(k=>k.length))].sort((a,b)=>b-a);let o="",i=0;while(i<h.length){let found=false;for(const n of lens){const k=h.slice(i,i+n);if(map.has(k)){o+=map.get(k);i+=n;found=true;break;}}if(!found){o+="�";i+=Math.min(4,h.length-i);}}return o;};
+    const unescapeLit=x=>x.replace(/\\([nrtbf()\\])/g,(_,c)=>({n:"\n",r:"\r",t:"\t",b:"\b",f:"\f"}[c]||c)).replace(/\\([0-7]{1,3})/g,(_,o)=>String.fromCharCode(parseInt(o,8))).replace(/\\\r?\n/g,"");
+    const extractContent=(u,fontMaps)=>{const t=new TextDecoder("latin1").decode(u),tok=/(\/[A-Za-z0-9_.+-]+)|(<[0-9A-Fa-f\s]+>)|(\((?:\\.|[^\\)])*\))|(\[|\])|([-+]?(?:\d*\.)?\d+)|([A-Za-z*'"]+)/g;let x,cur="",pending="",arr=[],inArr=false,out="",last=[];const val=v=>v[0]==="<"?decodeHex(v.slice(1,-1),fontMaps[cur]):unescapeLit(v.slice(1,-1));while((x=tok.exec(t))){const v=x[0];if(v[0]==="/"){pending=v.slice(1);continue;}if(v==="Tf"){cur=pending;pending="";last=[];continue;}if(v==="["){inArr=true;arr=[];continue;}if(v==="]"){inArr=false;last=arr.slice();continue;}if(v[0]==="<"||v[0]==="("){const z=val(v);if(inArr)arr.push(z);else last=[z];continue;}if(v==="Tj"||v==="'"||v==='"'){out+=(last.join("")||"")+" ";last=[];continue;}if(v==="TJ"){out+=last.join("")+" ";last=[];continue;}if(v==="Td"||v==="TD"||v==="T*"){out+="\n";last=[];continue;}if(v==="BT"||v==="ET"){out+="\n";last=[];}}
+      return out.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g," ").replace(/[ \t]+/g," ").replace(/\n\s*\n+/g,"\n").trim();};
+    const pages=[];
+    const pageEntries=[];for(const entry of objs){const body=entry[1];if(/\/Type\s*\/Page\b/.test(body)&&!/\/Type\s*\/Pages\b/.test(body))pageEntries.push(entry);}
+    let pageIndex=0;
+    for(const [id,body] of pageEntries){if(cancel)return [];pageIndex++;if(onProgress&&(pageIndex===1||pageIndex%3===0||pageIndex===pageEntries.length))onProgress({phase:"pages",page:pageIndex,totalPages:pageEntries.length});let resBody=body;const rr=body.match(/\/Resources\s+(\d+)\s+\d+\s+R/);if(rr&&objs.has(+rr[1]))resBody+="\n"+objs.get(+rr[1]);const fm={};let fontText="";const fr=resBody.match(/\/Font\s*<<(.*?)>>/s);if(fr)fontText=fr[1];else{const fref=resBody.match(/\/Font\s+(\d+)\s+\d+\s+R/);if(fref&&objs.has(+fref[1]))fontText=objs.get(+fref[1]);}if(fontText){const z=fontText.matchAll(/\/(\w+)\s+(\d+)\s+\d+\s+R/g);for(const a of z){const cm=fontToCmap.get(+a[2]);fm[a[1]]=cmapByObj.get(cm)||null;}}
+      let refs=[];const cr=body.match(/\/Contents\s*\[([\s\S]*?)\]/);if(cr)refs=[...cr[1].matchAll(/(\d+)\s+\d+\s+R/g)].map(a=>+a[1]);else{const one=body.match(/\/Contents\s+(\d+)\s+\d+\s+R/);if(one)refs=[+one[1]];}
+      let text="";for(const rid of refs){const ob=objs.get(rid);if(!ob)continue;const u=await streamOf(ob);if(u)text+="\n"+extractContent(u,fm);}
+      if(text.trim())pages.push({page:pages.length+1,text:text.trim()});
+    }
+    if(!pages.length){/* fallback: scan stream objects for simple uncompressed/Flate text operators */let scanned=0;for(const [id,body] of objs){if(cancel)return [];if(!/\bTj\b|\bTJ\b/.test(body))continue;const u=await streamOf(body);if(u){const t=new TextDecoder("latin1").decode(u);const vals=[...t.matchAll(/\(((?:\\.|[^\\)])*)\)\s*Tj/g)].map(a=>unescapeLit(a[1]));if(vals.join(" ").trim())pages.push({page:pages.length+1,text:vals.join(" ")});}scanned++;if(scanned%50===0){if(onProgress)onProgress({phase:"fallback",page:scanned,totalPages:objs.size,stage:"فحص تدفقات النص البديلة"});await new Promise(r=>setTimeout(r,0));}}}
+    if(onProgress)onProgress({phase:"complete",page:pageEntries.length,totalPages:pageEntries.length,loaded:bytes.length,total:bytes.length,stage:"اكتمل استخراج صفحات PDF"});
+    return pages;
+  }
+  async function learnKnowledge(m){
+    const docs=[],seen=new Set();let files=0,chars=0,empty=0;
+    for(const f of (m.src.files||[])){if(cancel)return post("cancelled");files++;const ext=f.name.toLowerCase().split(".").pop();
+      if(ext==="pdf"){
+        const pages=await parsePdfPages(f,p=>post("knowledgeProgress",{files,docs:docs.length,chars,phase:p.phase||"pdf",stage:p.stage||"",objects:p.objects||0,page:p.page||0,totalPages:p.totalPages||0,bytes:p.loaded||0,totalBytes:p.total||0}));if(!pages.length){empty++;continue;}
+        for(let pgIndex=0;pgIndex<pages.length;pgIndex++){const pg=pages[pgIndex];if(cancel)return post("cancelled");const paras=pg.text.split(/\n+/).map(x=>x.trim()).filter(Boolean);let buf="",part=0;for(let pi=0;pi<paras.length;pi++){if(cancel)return post("cancelled");const para=paras[pi];if((buf+"\n"+para).length>1100&&buf.length>120){const text=buf.trim(),key=text.toLowerCase().replace(/\s+/g," ");if(!seen.has(key)){seen.add(key);docs.push({id:"kd_"+self.__S.hashStr(f.name+"|"+pg.page+"|"+(part+1)+"|"+text).toString(36),source:f.name,category:m.category||"مستند فني",page:pg.page,part:++part,text,createdAt:Date.now()});chars+=text.length;}buf=para;}else buf+=(buf?"\n":"")+para;if((pi&63)===0){post("knowledgeProgress",{files,docs:docs.length,chars,phase:"chunk",page:pgIndex+1,totalPages:pages.length});await new Promise(r=>setTimeout(r,0));}}if(buf.trim().length>35){const text=buf.trim(),key=text.toLowerCase().replace(/\s+/g," ");if(!seen.has(key)){seen.add(key);docs.push({id:"kd_"+self.__S.hashStr(f.name+"|"+pg.page+"|"+(part+1)+"|"+text).toString(36),source:f.name,category:m.category||"مستند فني",page:pg.page,part:++part,text,createdAt:Date.now()});chars+=text.length;}}post("knowledgeProgress",{files,docs:docs.length,chars,phase:"chunk",page:pgIndex+1,totalPages:pages.length});}
+      }else{for await(const r of fileRecords(f)){const txt=String(r.text||"").trim();if(txt.length<25)continue;const chunks=[];let pos=0;while(pos<txt.length){let end=Math.min(txt.length,pos+1100);if(end<txt.length){const cut=txt.lastIndexOf(" ",end);if(cut>pos+500)end=cut;}const part=txt.slice(pos,end).trim();if(part.length>35)chunks.push(part);pos=Math.max(pos+1,end-100);}for(let i=0;i<chunks.length;i++){const text=chunks[i],key=text.toLowerCase().replace(/\s+/g," ");if(seen.has(key))continue;seen.add(key);docs.push({id:"kd_"+self.__S.hashStr(f.name+"|"+(r.page||"")+"|"+i+"|"+text).toString(36),source:f.name,category:r.label||m.category||"مستند فني",page:r.page||null,part:i+1,text,createdAt:Date.now()});chars+=text.length;}}}
+      post("knowledgeProgress",{files,docs:docs.length,chars});await new Promise(r=>setTimeout(r,0));
+    }
+    if(!docs.length)return post("error",{msg:empty?"لم أستطع استخراج نص قابل للبحث من PDF. إذا كان الملف ممسوحًا ضوئيًا كصور، فهو يحتاج OCR؛ وإذا كان نصيًا فقد يكون محميًا أو بتنسيق غير مدعوم.":"لم أجد نصوصًا كافية للتعلم من الملفات المختارة."});
+    // Replace old chunks for these sources only after the new file was parsed successfully.
+    post("knowledgeReplace",{sources:[...new Set(docs.map(x=>x.source))]});
+    for(let i=0;i<docs.length;i+=100)post("knowledgeBatch",{docs:docs.slice(i,i+100)});
+    post("knowledgeDone",{docs:docs.length,chars,files,empty});
+  }
   async function* fileRecords(file){
     const name=file.name.toLowerCase(),ext=name.split(".").pop();
+    if(ext==="pdf"){const pages=await parsePdfPages(file),base=file.name.replace(/\.pdf$/i,"");for(const pg of pages)if(pg.text&&pg.text.length>20)yield {label:base,text:pg.text,group:file.name,page:pg.page};return;}
     if(ext==="json"){
       const t=await file.text(),j=JSON.parse(t);
       if(Array.isArray(j)){for(const o of j){const r=fromObj(o);if(r)yield r;}}
@@ -19234,14 +19311,196 @@ function workerMain(){
     if(src.records){for(const r of src.records){yield r;if(limit&&++n>=limit)return;}return;}
     for(const f of src.files){for await(const r of fileRecords(f)){yield r;if(limit&&++n>=limit)return;}}
   }
-  async function preview(m){
+  async function previewV1(m){
     const lab=new Map(),samples=[];let rows=0,len=0,bad=0;
     for await(const r of records(m.src,m.limit||3000)){
       if(!r.label||!r.text||r.text.length<3){bad++;continue;}rows++;len+=r.text.length;lab.set(r.label,(lab.get(r.label)||0)+1);if(samples.length<5)samples.push({label:r.label,text:r.text.slice(0,140)});
     }
     post("preview",{rows,bad,avgLen:rows?Math.round(len/rows):0,labels:[...lab].sort((a,b)=>b[1]-a[1]).slice(0,60),nLabels:lab.size,samples});
   }
-  async function trainRun(m){
+  /* ===================== v2: تدريب محسّن + منع التسرب + تعلّم تزايدي + متجهات دلالية ===================== */
+  const bloom=bits=>({a:new Uint8Array(bits>>>3),mask:bits-1});
+  const bAdd=(b,x)=>{const p1=x&b.mask,p2=(Math.imul(x,2246822519)>>>5)&b.mask;b.a[p1>>>3]|=1<<(p1&7);b.a[p2>>>3]|=1<<(p2&7);};
+  const bHas=(b,x)=>{const p1=x&b.mask,p2=(Math.imul(x,2246822519)>>>5)&b.mask;return ((b.a[p1>>>3]>>(p1&7))&1)&&((b.a[p2>>>3]>>(p2&7))&1);};
+  const mhKey=(v,j)=>((v^Math.imul(j+1,0x1000193))>>>0);
+  function svdSub(rows,N,Vc,k,iters,rng){
+    let X=Array.from({length:k},()=>{const a=new Float32Array(N);for(let i=0;i<N;i++)a[i]=rng()-.5;return a;});
+    const AtX=x=>{const o=new Float32Array(Vc);for(let i=0;i<N;i++){const xi=x[i];if(!xi)continue;const R=rows[i];for(let j=0;j<R.idx.length;j++)o[R.idx[j]]+=R.val[j]*xi;}return o;};
+    const AZ=z=>{const o=new Float32Array(N);for(let i=0;i<N;i++){const R=rows[i];let s=0;for(let j=0;j<R.idx.length;j++)s+=R.val[j]*z[R.idx[j]];o[i]=s;}return o;};
+    const orth=()=>{for(let j=0;j<k;j++){const v=X[j];for(let i=0;i<j;i++){const u=X[i];let d=0;for(let n=0;n<N;n++)d+=v[n]*u[n];for(let n=0;n<N;n++)v[n]-=d*u[n];}let nr=0;for(let n=0;n<N;n++)nr+=v[n]*v[n];nr=Math.sqrt(nr)||1;for(let n=0;n<N;n++)v[n]/=nr;}};
+    orth();for(let t=0;t<iters;t++){X=X.map(x=>AZ(AtX(x)));orth();}
+    const S=X.map(x=>{const z=AtX(x);let s=0;for(let i=0;i<Vc;i++)s+=z[i]*z[i];return Math.sqrt(s);});
+    return {U:X,S};
+  }
+  async function buildWV(src,wf,wdf,wdocs,maxTok,rng){
+    const cand=[...wf].filter(x=>x[1]>=3).sort((a,b)=>b[1]-a[1]||(a[0]<b[0]?-1:1)).slice(0,2500),V=cand.length;if(V<60)return null;
+    const vocab=cand.map(x=>x[0]),vid=new Map(vocab.map((w,i)=>[w,i])),cnt=new Float32Array(V*V),rs=new Float64Array(V);let total=0,docs=0;
+    for await(const r of records(src)){
+      if(cancel)return null;if(!r.text||r.text.length<3)continue;const ws=self.__S.words(r.text,Math.min(maxTok,150)),ids=[];
+      for(const w of ws){const i=vid.get(w);if(i!==undefined)ids.push(i);}
+      for(let a=0;a<ids.length;a++)for(let b=a+1;b<ids.length&&b<=a+4;b++){const x=ids[a],y=ids[b];if(x===y)continue;cnt[x*V+y]++;cnt[y*V+x]++;rs[x]++;rs[y]++;total+=2;}
+      if(++docs>=120000)break;if((docs&2047)===0)await new Promise(r=>setTimeout(r,0));
+    }
+    if(total<1000)return null;
+    let al=0;const ca=new Float64Array(V);for(let j=0;j<V;j++){ca[j]=Math.pow(rs[j],.75);al+=ca[j];}
+    const rows=[];for(let i=0;i<V;i++){const idx=[],val=[];for(let j=0;j<V;j++){const c=cnt[i*V+j];if(c<=0)continue;const pmi=Math.log((c/total)/((rs[i]/total)*(ca[j]/al)))-Math.LN2;if(pmi>0){idx.push(j);val.push(pmi);}}rows.push({idx:Int32Array.from(idx),val:Float32Array.from(val)});}
+    const dw=48,{U,S}=svdSub(rows,V,V,dw,6,rng),wv=new Int8Array(V*dw);
+    for(let i=0;i<V;i++){let nr=0;const v=new Float32Array(dw);for(let d=0;d<dw;d++){v[d]=U[d][i]*Math.sqrt(S[d]);nr+=v[d]*v[d];}nr=Math.sqrt(nr)||1;for(let d=0;d<dw;d++)wv[i*dw+d]=Math.round(v[d]/nr*127);}
+    const idf=new Float32Array(V);for(let i=0;i<V;i++)idf[i]=Math.log((wdocs+1)/((wdf.get(vocab[i])||0)+1))+1;
+    return {vocab,wv,idf,dw};
+  }
+  const macroF1=(tp,fp,fn)=>{let s=0,n=0;for(let c=0;c<tp.length;c++){if(tp[c]+fn[c]===0)continue;const p=tp[c]+fp[c]?tp[c]/(tp[c]+fp[c]):0,r=tp[c]/(tp[c]+fn[c]);s+=p+r?2*p*r/(p+r):0;n++;}return n?s/n:0;};
+  function evalQuant(P,T,list){
+    const C=P.C,x=new Float32Array(P.D),h=new Float32Array(P.H),z=new Float32Array(C),p=new Float32Array(C),tp=new Int32Array(C),fp=new Int32Array(C),fn=new Int32Array(C),bins=Array.from({length:10},()=>({n:0,ok:0,c:0}));let ok=0,ls=0;
+    for(const d of list){self.__S.embed(P,d.f,x);self.__S.mlp(P,x,h,z);self.__S.softmax(z,C,T,p);let bi=0;for(let c=1;c<C;c++)if(p[c]>p[bi])bi=c;ls+=-Math.log(Math.max(1e-9,p[d.y]));const hit=bi===d.y;if(hit){ok++;tp[bi]++;}else{fp[bi]++;fn[d.y]++;}const b=bins[Math.min(9,Math.floor(p[bi]*10))];b.n++;b.c+=p[bi];if(hit)b.ok++;}
+    const n=list.length||1;let ece=0;bins.forEach(b=>{if(b.n)ece+=b.n/n*Math.abs(b.ok/b.n-b.c/b.n);});
+    return {n:list.length,acc:ok/n,loss:ls/n,f1:macroF1(tp,fp,fn),ece,tp,fp,fn,bins};
+  }
+  function quantE(E,B,D,touched){const Eq=new Int8Array(B*D),Es=new Float32Array(B);for(let r=0;r<B;r++){if(touched&&!touched[r])continue;let mx=0,o=r*D;for(let d=0;d<D;d++){const a=Math.abs(E[o+d]);if(a>mx)mx=a;}Es[r]=mx;if(mx>0){const k=127/mx;for(let d=0;d<D;d++)Eq[o+d]=Math.round(E[o+d]*k);}}return {Eq,Es};}
+  async function trainRunV2(m){
+    const S=self.__S,cfg=m.cfg,base=m.base||null;
+    const B=base?base.meta.B:cfg.B,D=base?base.meta.D:cfg.D,H=base?base.meta.H:cfg.H,maxTok=base?base.meta.maxTok:cfg.maxTok;
+    const rng=rngMk(12345),t0=Date.now(),maskHead=cfg.maskLabel!==false,smooth=cfg.smooth!=null?cfg.smooth:.05,drop=cfg.dropout!=null?cfg.dropout:.1,Bs=cfg.batch||16,balance=cfg.balance!==false;
+    let epochs=base?Math.min(cfg.epochs,8):cfg.epochs,masked=0;
+    const prep=r=>{if(!r.label||!r.text||r.text.length<3)return null;let txt=r.text;if(maskHead){const ln=S.NORM(r.label).trim();if(ln.length>=2){const nt=S.NORM(txt),ix=nt.indexOf(ln);if(ix>=0&&ix<40){txt=nt.slice(0,ix)+" "+nt.slice(ix+ln.length);masked++;}}}return txt;};
+    const splitOf=(r,ck)=>{const gk=r.group!=null?S.hashStr(String(r.group)):ck,u=(Math.imul(gk,2654435761)>>>0)%100;return u<90?0:u<95?1:2;};
+    post("stage",{s:"scan"});
+    const lmap=new Map(),labels=[],counts=[];
+    if(base)base.meta.labels.forEach((l,i)=>{lmap.set(l,i);labels.push(l);counts.push(base.meta.counts[i]);});
+    const holdSet=base&&base.holdHashes?new Set(base.holdHashes):null,dupB=bloom(1<<26),trB=bloom(1<<25);
+    const valL=[],testL=[],CAP=20000,refs=[],refSeen=[],RPC=cfg.refs||40,wf=new Map(),wdf=new Map(),holdAll=[];let wdocs=0,total=0,trainN=0,dups=0,skipped=0,blocked=0,lastP=0,lenSum=0,groupsSeen=false;
+    for await(const r of records(m.src)){
+      if(cancel)return post("cancelled");
+      const txt=prep(r);if(txt===null){skipped++;continue;}
+      const ws=S.words(txt,maxTok);if(ws.length<2){skipped++;continue;}
+      const ck=S.ckey(ws);if(holdSet&&holdSet.has(ck)){blocked++;continue;}
+      if(bHas(dupB,ck)){dups++;continue;}bAdd(dupB,ck);
+      let y=lmap.get(r.label);if(y===undefined){y=labels.length;lmap.set(r.label,y);labels.push(r.label);counts.push(0);}
+      if(r.group!=null)groupsSeen=true;
+      const sp=splitOf(r,ck);total++;lenSum+=txt.length;const mh=S.minhash(ws);
+      if(sp===0){trainN++;counts[y]++;for(let j=0;j<4;j++)bAdd(trB,mhKey(mh[j],j));
+        while(refs.length<labels.length){refs.push([]);refSeen.push(0);}refSeen[y]++;const rf=refs[y];if(rf.length<RPC)rf.push([r.text.slice(0,260),ck]);else{const q=Math.floor(rng()*refSeen[y]);if(q<RPC)rf[q]=[r.text.slice(0,260),ck];}
+        if(wdocs<150000){wdocs++;const seen=new Set();for(const w of ws){if(wf.size<400000||wf.has(w))wf.set(w,(wf.get(w)||0)+1);if(!seen.has(w)){seen.add(w);if(wdf.size<400000||wdf.has(w))wdf.set(w,(wdf.get(w)||0)+1);}}}}
+      else{const arr=sp===1?valL:testL;holdAll.push(ck);if(arr.length<CAP)arr.push({f:S.feats(txt,B,maxTok),y,mh,t:r.text.slice(0,300),ck});}
+      if(Date.now()-lastP>300){lastP=Date.now();post("scan",{docs:total});}
+      if(((total+dups+skipped)&1023)===0)await new Promise(r=>setTimeout(r,0));
+    }
+    const C=labels.length;while(refs.length<C){refs.push([]);refSeen.push(0);}
+    if(C<2)return post("error",{msg:"لازم تصنيفين على الأقل (لقيت "+C+")"});
+    if(trainN<20)return post("error",{msg:"البيانات قليلة جدًا ("+trainN+" نص تدريب)"});
+    /* منع التسرب: استبعاد أي نص تحقق/اختبار قريب جدًا من نص تدريب (MinHash) */
+    const leakF=d=>{let hit=0;for(let j=0;j<4;j++)if(bHas(trB,mhKey(d.mh[j],j)))hit++;return hit<2;};
+    const nv0=valL.length,nt0=testL.length,val=valL.filter(leakF),test=testL.filter(leakF);
+    const leak={total,train:trainN,val:val.length,test:test.length,exactDupRemoved:dups,nearDupRemovedVal:nv0-val.length,nearDupRemovedTest:nt0-test.length,labelHeadMasked:masked,maskedPct:total?+(masked/Math.max(1,total+dups)*100).toFixed(1):0,heldBlocked:blocked,splitBy:groupsSeen?"group":"content",skipped};
+    post("scan",{docs:total,labels:C,skipped,avgLen:Math.round(lenSum/Math.max(1,total)),done:true,leak});
+    const lackEval=!val.length||!test.length,tiny=lackEval&&!(base&&base.testSet&&base.testSet.length),noEval=lackEval,useAll=tiny;if(tiny){leak.tiny=true;for(const d of valL.concat(testL))counts[d.y]++;trainN=total;post("scan",{docs:total,labels:C,leak,tiny:true,done:true});}
+    if(cfg.auto!==false){const need=Math.ceil((base?40000:100000)/Math.max(1,trainN));epochs=Math.min(base?8:200,Math.max(epochs,need));}
+    /* مراجع التدريب فقط (ما فيهاش أي نص تحقق/اختبار) */
+    const refCap=Math.max(4,Math.min(RPC,Math.floor(8000/C)));
+    /* بارامترات الشبكة */
+    const E=new Float32Array(B*D),Eg=new Float32Array(B),touched=new Uint8Array(B);
+    let W1=new Float32Array(D*H),b1=new Float32Array(H),W2=new Float32Array(H*C),b2=new Float32Array(C),C0=0;
+    if(base){C0=base.meta.C;for(let r=0;r<B;r++){const s=base.Es[r]/127,o=r*D;if(s){touched[r]=1;for(let d=0;d<D;d++)E[o+d]=base.E[o+d]*s;}}W1.set(base.W1);b1.set(base.b1);
+      const Wo=Math.sqrt(1/H)*.5;for(let j=0;j<H;j++)for(let c=0;c<C;c++)W2[j*C+c]=c<C0?base.W2[j*C0+c]:(rng()*2-1)*Wo;for(let c=0;c<C0;c++)b2[c]=base.b2[c];}
+    else{const ei=cfg.einit||.25,Wi=Math.sqrt(2/D),Wo=Math.sqrt(1/H);for(let i=0;i<E.length;i++)E[i]=(rng()-.5)*2*ei;for(let i=0;i<W1.length;i++)W1[i]=(rng()*2-1)*Wi;for(let i=0;i<W2.length;i++)W2[i]=(rng()*2-1)*Wo;}
+    const W1a=base?W1.slice():null,W2a=base?W2.slice():null,sp=cfg.sp||3e-2;
+    const mW1=new Float32Array(W1.length),vW1=new Float32Array(W1.length),mW2=new Float32Array(W2.length),vW2=new Float32Array(W2.length),mb1=new Float32Array(H),vb1=new Float32Array(H),mb2=new Float32Array(C),vb2=new Float32Array(C);
+    const gW1=new Float32Array(W1.length),gW2=new Float32Array(W2.length),gb1=new Float32Array(H),gb2=new Float32Array(C);
+    const x=new Float32Array(D),h=new Float32Array(H),hd=new Float32Array(H),mk=new Float32Array(H),z=new Float32Array(C),p=new Float32Array(C),dh=new Float32Array(H),dx=new Float32Array(D);
+    const cw=new Float32Array(C).fill(1);if(balance){const mean=counts.reduce((a,b)=>a+b,0)/Math.max(1,counts.filter(c=>c>0).length);let s=0;for(let c=0;c<C;c++){cw[c]=Math.min(4,Math.max(.25,Math.sqrt(mean/Math.max(1,counts[c]))));s+=cw[c];}const k=C/s;for(let c=0;c<C;c++)cw[c]*=k;}
+    let replay=[];if(base&&cfg.replay!==false){for(const r of (base.refs||[]).concat(base.feedback||[]))replay.push({f:S.feats(r.t,B,maxTok),y:r.l});}
+    /* قياس "قبل" على اختبار النسخة القديمة (لقياس النسيان) */
+    let oldTest=null,oldBefore=null;
+    if(base&&base.testSet&&base.testSet.length){oldTest=base.testSet.map(d=>({f:S.feats(d.t,B,maxTok),y:d.l}));const Pb={D,H,C:C0,B,E:base.E,Es:base.Es,W1:base.W1,b1:base.b1,W2:base.W2,b2:base.b2};oldBefore=evalQuant(Pb,base.meta.T,oldTest).acc;}
+    const lrD=(cfg.lr2||.004)*(base?.25:1),lrE=(cfg.lrE||.06)*(base?.2:1),trainEst=Math.max(1,trainN);let step=0,bstep=0,inBatch=0,adamT=0;const totalSteps=trainEst*epochs;
+    const adam=(lr)=>{adamT++;const b1c=1-Math.pow(.9,adamT),b2c=1-Math.pow(.999,adamT),inv=1/inBatch;
+      const up=(w,g,mm,vv,n,dec,anchor)=>{for(let i=0;i<n;i++){const gg=g[i]*inv+(anchor?sp*(w[i]-anchor[i]):0);mm[i]=.9*mm[i]+.1*gg;vv[i]=.999*vv[i]+.001*gg*gg;w[i]-=lr*(mm[i]/b1c)/(Math.sqrt(vv[i]/b2c)+1e-8)+(dec?lr*1e-4*w[i]:0);g[i]=0;}};
+      up(W1,gW1,mW1,vW1,W1.length,true,W1a);up(W2,gW2,mW2,vW2,W2.length,true,W2a);up(b1,gb1,mb1,vb1,H,false,null);up(b2,gb2,mb2,vb2,C,false,null);inBatch=0;};
+    const trainOne=(f,y,lr,lrEe)=>{
+      const nf=f.length;if(!nf)return 0;x.fill(0);
+      for(let q=0;q<nf;q++){const o=f[q]*D;touched[f[q]]=1;for(let d=0;d<D;d++)x[d]+=E[o+d];}for(let d=0;d<D;d++)x[d]/=nf;
+      for(let j=0;j<H;j++)h[j]=b1[j];for(let d=0;d<D;d++){const xd=x[d],o=d*H;for(let j=0;j<H;j++)h[j]+=xd*W1[o+j];}
+      for(let c=0;c<C;c++)z[c]=b2[c];const ks=1/(1-drop);
+      for(let j=0;j<H;j++){let v=h[j];if(v<=0){mk[j]=0;hd[j]=0;continue;}if(drop>0&&rng()<drop){mk[j]=0;hd[j]=0;continue;}mk[j]=ks;v*=ks;hd[j]=v;const o=j*C;for(let c=0;c<C;c++)z[c]+=v*W2[o+c];}
+      let mx=-1e30;for(let c=0;c<C;c++)if(z[c]>mx)mx=z[c];let s=0;for(let c=0;c<C;c++){p[c]=Math.exp(z[c]-mx);s+=p[c];}for(let c=0;c<C;c++)p[c]/=s;
+      const loss=-Math.log(Math.max(1e-9,p[y])),w=cw[y],tOther=smooth/C,tY=1-smooth+tOther;
+      for(let c=0;c<C;c++)p[c]=(p[c]-(c===y?tY:tOther))*w;
+      for(let j=0;j<H;j++){const v=hd[j];if(mk[j]===0){dh[j]=0;continue;}const o=j*C;let g=0;for(let c=0;c<C;c++){g+=W2[o+c]*p[c];gW2[o+c]+=v*p[c];}dh[j]=g*mk[j];}
+      for(let c=0;c<C;c++)gb2[c]+=p[c];
+      for(let d=0;d<D;d++){const xd=x[d],o=d*H;let g=0;for(let j=0;j<H;j++){const dj=dh[j];if(dj===0)continue;g+=W1[o+j]*dj;gW1[o+j]+=xd*dj;}dx[d]=g;}
+      for(let j=0;j<H;j++)gb1[j]+=dh[j];
+      let gs=0;for(let d=0;d<D;d++)gs+=dx[d]*dx[d];gs/=D*nf*nf;
+      for(let q=0;q<nf;q++){const r=f[q];Eg[r]+=gs;const st=lrEe/(Math.sqrt(Eg[r])+1e-8)/nf,o=r*D;for(let d=0;d<D;d++)E[o+d]-=st*dx[d];}
+      inBatch++;if(inBatch>=Bs)adam(lr);
+      return loss;
+    };
+    const evalFloat=list=>{let ok=0,ls=0;for(const d of list){const f=d.f,nf=f.length;x.fill(0);for(let q=0;q<nf;q++){const o=f[q]*D;for(let k=0;k<D;k++)x[k]+=E[o+k];}for(let k=0;k<D;k++)x[k]/=Math.max(1,nf);
+      for(let j=0;j<H;j++)h[j]=b1[j];for(let k=0;k<D;k++){const xd=x[k],o=k*H;for(let j=0;j<H;j++)h[j]+=xd*W1[o+j];}for(let c=0;c<C;c++)z[c]=b2[c];for(let j=0;j<H;j++){const v=h[j];if(v<=0)continue;const o=j*C;for(let c=0;c<C;c++)z[c]+=v*W2[o+c];}
+      let bi=0,mx=-1e30;for(let c=0;c<C;c++)if(z[c]>mx){mx=z[c];bi=c;}let s=0;for(let c=0;c<C;c++)s+=Math.exp(z[c]-mx);ls+=-(z[d.y]-mx-Math.log(s));if(bi===d.y)ok++;}return {acc:ok/Math.max(1,list.length),loss:ls/Math.max(1,list.length)};};
+    const snap=()=>{const q=quantE(E,B,D,touched);return {Eq:q.Eq,Es:q.Es,W1:W1.slice(),b1:b1.slice(),W2:W2.slice(),b2:b2.slice()};};
+    const SB=Math.min(10000,Math.max(200,trainN)),hist=[];let best=null,bestLoss=1e9,bestEp=0,bad=0;
+    for(let ep=1;ep<=epochs;ep++){
+      let seen=0,eLoss=0,eN=0,lastP2=0;const buf=[],eStart=Date.now(),seenB=bloom(1<<26);
+      const flush=async(f,y)=>{const prog=Math.min(1,step/totalSteps),warm=Math.min(1,(step+1)/((base?.3:.02)*totalSteps+1)),lrT=lrD*warm*(.03+.97*.5*(1+Math.cos(Math.PI*prog))),lrEE=lrE*(.2+.8*.5*(1+Math.cos(Math.PI*prog)));
+        eLoss+=trainOne(f,y,lrT,lrEE);if(replay.length&&rng()<.43){const rp=replay[Math.floor(rng()*replay.length)];trainOne(rp.f,rp.y,lrT,lrEE);}eN++;step++;seen++;
+        if(seen%3000===0)await new Promise(r=>setTimeout(r,0));
+        if(Date.now()-lastP2>250){lastP2=Date.now();post("progress",{epoch:ep,epochs,docs:seen,total:trainN,loss:eN?eLoss/eN:0,rate:Math.round(seen/Math.max(.001,(Date.now()-eStart)/1000)),elapsed:Math.round((Date.now()-t0)/1000)});}};
+      for await(const r of records(m.src)){
+        if(cancel)return post("cancelled",{partial:ep>1});
+        const txt=prep(r);if(txt===null)continue;const info={},f=S.feats(txt,B,maxTok,info);if(f.length<2)continue;
+        const ck=info.ck;if(holdSet&&holdSet.has(ck))continue;if(bHas(seenB,ck))continue;bAdd(seenB,ck);
+        const y=lmap.get(r.label);if(y===undefined||(!useAll&&splitOf(r,ck)!==0))continue;
+        if(buf.length<SB){buf.push([f,y]);continue;}
+        const j=Math.floor(rng()*SB),it=buf[j];buf[j]=[f,y];await flush(it[0],it[1]);
+      }
+      for(let i=buf.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));const t=buf[i];buf[i]=buf[j];buf[j]=t;}
+      for(const it of buf){if(cancel)return post("cancelled",{partial:ep>1});await flush(it[0],it[1]);}
+      if(inBatch>0)adam(lrD*.03);
+      const ev=val.length?evalFloat(val):{acc:0,loss:0};hist.push({ep,loss:+(eLoss/Math.max(1,eN)).toFixed(4),acc:+ev.acc.toFixed(4),vloss:+ev.loss.toFixed(4)});post("epoch",{h:hist[hist.length-1],hist});
+      if(noEval){bestEp=ep;}else if(ev.loss<bestLoss-1e-4){bestLoss=ev.loss;best=snap();bestEp=ep;bad=0;}else{bad++;if(ep>=2&&bad>=(cfg.patience||3)){post("stage",{s:"early-stop"});break;}}
+    }
+    post("stage",{s:"finalize"});
+    const fin=best||snap(),P={D,H,C,B,E:fin.Eq,Es:fin.Es,W1:fin.W1,b1:fin.b1,W2:fin.W2,b2:fin.b2};
+    let bestT=1,bestL=1e30;if(!val.length)bestT=base?base.meta.T:1;else{const lg=val.map(d=>{const zz=new Float32Array(C),xx=new Float32Array(D),hh=new Float32Array(H);S.embed(P,d.f,xx);S.mlp(P,xx,hh,zz);return zz;});for(let T=.5;T<=3.01;T+=.1){let l=0;const pp=new Float32Array(C);for(let i=0;i<lg.length;i++){S.softmax(lg[i],C,T,pp);l+=-Math.log(Math.max(1e-9,pp[val[i].y]));}l/=lg.length;if(l<bestL){bestL=l;bestT=T;}}}
+    bestT=+bestT.toFixed(1);const vq=val.length?evalQuant(P,bestT,val):{n:0,acc:null,loss:null},tq=test.length?evalQuant(P,bestT,test):oldTest?evalQuant(P,bestT,oldTest):{n:0,acc:null,f1:null,ece:null,loss:null,tp:new Int32Array(C),fp:new Int32Array(C),fn:new Int32Array(C)};
+    const per=labels.map((_,c)=>({n:counts[c],p:tq.tp[c]+tq.fp[c]?+(tq.tp[c]/(tq.tp[c]+tq.fp[c])).toFixed(3):0,r:tq.tp[c]+tq.fn[c]?+(tq.tp[c]/(tq.tp[c]+tq.fn[c])).toFixed(3):0}));
+    /* مراجع (تدريب فقط) + نماذج أولية */
+    let refList=[],vx=new Float32Array(D);
+    const embN=t=>{const f=S.feats(t,B,maxTok);S.embed(P,f,vx);let nr=0;for(let d=0;d<D;d++)nr+=vx[d]*vx[d];nr=Math.sqrt(nr)||1;const q=new Int8Array(D);for(let d=0;d<D;d++)q[d]=Math.round(vx[d]/nr*127);return q;};
+    if(base)for(const r of (base.refs||[]))refList.push({l:r.l,t:r.t,x:embN(r.t),k:r.k});
+    for(let c=0;c<C;c++){const own=(refs[c]||[]).slice(0,refCap);for(const [t,k] of own)refList.push({l:c,t,x:embN(t),k});}
+    const per2=new Int32Array(C);refList=refList.filter(r=>{if(per2[r.l]>=refCap)return false;per2[r.l]++;return true;});
+    const protos=new Float32Array(C*D),psum=new Float64Array(C*D);for(const r of refList)for(let d=0;d<D;d++)psum[r.l*D+d]+=r.x[d];
+    for(let c=0;c<C;c++){let nr=0;for(let d=0;d<D;d++)nr+=psum[c*D+d]*psum[c*D+d];nr=Math.sqrt(nr)||1;for(let d=0;d<D;d++)protos[c*D+d]=psum[c*D+d]/nr;}
+    /* مجموعة الاختبار المحفوظة + بصمات الحجب */
+    const tcap=Math.max(5,Math.min(100,Math.floor(8000/C))),tcount=new Int32Array(C),testSet=[];
+    if(base&&base.testSet)for(const d of base.testSet){if(d.l<C&&tcount[d.l]<tcap){testSet.push(d);tcount[d.l]++;}}
+    for(const d of test){if(tcount[d.y]<tcap){testSet.push({l:d.y,t:d.t,k:d.ck});tcount[d.y]++;}}
+    const holdArr=base&&base.holdHashes?Array.from(base.holdHashes):[];for(const k of holdAll)holdArr.push(k);const holdHashes=Uint32Array.from(holdArr.slice(-200000));
+    let wv=base&&base.wv?{vocab:base.meta.wvocab,wv:base.wv,idf:base.wvidf,dw:base.meta.wdim}:null;
+    if(!wv&&cfg.semantic!==false){post("stage",{s:"semantic"});try{wv=await buildWV(m.src,wf,wdf,wdocs,maxTok,rng);}catch(e){wv=null;}}
+    let oldAfter=null;if(oldTest)oldAfter=evalQuant(P,bestT,oldTest).acc;
+    const prevHist=base&&base.meta.history?base.meta.history.slice():[];
+    prevHist.push({at:Date.now(),docs:trainN,newLabels:base?C-C0:C,testAcc:tq.n?+tq.acc.toFixed(4):null,oldTest:oldTest?{before:+oldBefore.toFixed(4),after:+oldAfter.toFixed(4),forgetting:+(oldBefore-oldAfter).toFixed(4)}:null,algo:"v2"});
+    const meta={v:2,algo:"v2",name:base?base.meta.name:cfg.name,labels,counts,C,B,D,H,maxTok,T:bestT,docs:(base?base.meta.docs:0)+trainN,valDocs:val.length,testDocs:tq.n,valAcc:vq.n?+vq.acc.toFixed(4):null,valLoss:vq.n?+vq.loss.toFixed(4):null,
+      test:tq.n?{n:tq.n,acc:+tq.acc.toFixed(4),f1:+tq.f1.toFixed(4),ece:+tq.ece.toFixed(4)}:null,epochs:hist.length,epochsPlanned:epochs,bestEpoch:bestEp,seconds:Math.round((Date.now()-t0)/1000),curve:hist,per,skipped,createdAt:base?base.meta.createdAt:Date.now(),updatedAt:Date.now(),src:cfg.srcName||"",leak,history:prevHist,wvocab:wv?wv.vocab:null,wdim:wv?wv.dw:0,cfg:{lr2:cfg.lr2,lrE:cfg.lrE,epochs,D,H,B,smooth,drop,balance}};
+    const pack={meta,E:fin.Eq,Es:fin.Es,W1:fin.W1,b1:fin.b1,W2:fin.W2,b2:fin.b2,protos,refs:refList,feedback:base?(base.feedback||[]).map(r=>({l:r.l,t:r.t,x:embN(r.t)})):[],testSet,holdHashes,wv:wv?wv.wv:null,wvidf:wv?wv.idf:null};
+    post("done",{pack,incremental:!!base});
+  }
+
+  async function preview(m){
+    const S=self.__S,lab=new Map(),samples=[],seenCk=new Map(),mhIdx=new Map();let rows=0,len=0,bad=0,dupN=0,nearN=0,lit=0,conflict=0,grp=0,uniq=0;
+    for await(const r of records(m.src,m.limit||3000)){
+      if(!r.label||!r.text||r.text.length<3){bad++;continue;}rows++;len+=r.text.length;lab.set(r.label,(lab.get(r.label)||0)+1);if(r.group!=null)grp++;if(samples.length<5)samples.push({label:r.label,text:r.text.slice(0,140)});
+      const ws=S.words(r.text,300);if(ws.length<2)continue;
+      const nt=S.NORM(r.text),ln=S.NORM(r.label).trim();if(ln.length>=2){const ix=nt.indexOf(ln);if(ix>=0&&ix<40)lit++;}
+      const ck=S.ckey(ws),pv=seenCk.get(ck);if(pv!==undefined){dupN++;if(pv!==r.label)conflict++;continue;}seenCk.set(ck,r.label);uniq++;
+      const mh=S.minhash(ws);let hit=0;for(let j=0;j<4;j++)if(mhIdx.has(mhKey(mh[j],j)))hit++;if(hit>=2)nearN++;for(let j=0;j<4;j++)mhIdx.set(mhKey(mh[j],j),1);
+    }
+    post("preview",{rows,bad,avgLen:rows?Math.round(len/rows):0,labels:[...lab].sort((a,b)=>b[1]-a[1]).slice(0,60),nLabels:lab.size,samples,leak:{dupPct:rows?+(dupN/rows*100).toFixed(1):0,nearPct:uniq?+(nearN/uniq*100).toFixed(1):0,headLabelPct:rows?+(lit/rows*100).toFixed(1):0,conflicts:conflict,groups:grp>0}});
+  }
+
+  async function trainRunV1(m){
     const S=self.__S,cfg=m.cfg,B=cfg.B,D=cfg.D,H=cfg.H,maxTok=cfg.maxTok,rng=rngMk(12345),t0=Date.now();let epochs=cfg.epochs;
     /* المرور 1: مسح (تصنيفات + عينات مرجعية) بدون تحويل لخصائص */
     post("stage",{s:"scan"});
@@ -19334,55 +19593,198 @@ const NS="http://www.w3.org/2000/svg";
 const sv=(t,a,...k)=>{const n=document.createElementNS(NS,t);if(a)for(const x in a)n.setAttribute(x,a[x]);k.flat().forEach(c=>{if(c!=null)n.append(c instanceof Node?c:String(c));});return n;};
 const fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"}):"—"}catch(e){return "—"}};
 const fmtB=n=>n>=1073741824?(n/1073741824).toFixed(2)+" GB":n>=1048576?(n/1048576).toFixed(1)+" MB":n>=1024?(n/1024).toFixed(1)+" KB":n+" B";
-const pct1=v=>Math.round(v*1000)/10;
+const pct1=v=>v==null?"—":Math.round(v*1000)/10;
 const toast2=(m,k)=>{try{if(typeof toast==="function")toast(m,k||"ok",6000);}catch(e){}};
 
 /* ---------- IndexedDB منفصلة للحزم (ما بتدخلش في النسخ القديم) ---------- */
 let _db=null;
-const adb=()=>_db||(_db=new Promise(r=>{try{const q=indexedDB.open("WorkshopEquipmentDB_AI",1);q.onupgradeneeded=()=>q.result.createObjectStore("packs",{keyPath:"id"});q.onsuccess=()=>r(q.result);q.onerror=q.onblocked=()=>r(null);}catch(e){r(null);}}));
+const adb=()=>_db||(_db=new Promise(r=>{try{const q=indexedDB.open("WorkshopEquipmentDB_AI",1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains("packs"))q.result.createObjectStore("packs",{keyPath:"id"});};q.onsuccess=()=>r(q.result);q.onerror=q.onblocked=()=>r(null);}catch(e){r(null);}}));
 const idb=async(mode,fn)=>{const d=await adb();if(!d)return null;return new Promise(r=>{try{const tx=d.transaction("packs",mode),st=tx.objectStore("packs"),rq=fn(st);tx.oncomplete=()=>r(rq&&rq.result!==undefined?rq.result:true);tx.onerror=tx.onabort=()=>r(null);}catch(e){r(null);}});};
-const PACKS=new Map();let loaded=false;
+const PACKS=new Map(),PREV=new Map();let loaded=false;
 async function allPacks(){
-  if(!loaded){loaded=true;const arr=await idb("readonly",st=>st.getAll());(arr||[]).forEach(p=>PACKS.set(p.id,p));}
+  if(!loaded){loaded=true;const arr=await idb("readonly",st=>st.getAll());(arr||[]).forEach(p=>{if(String(p.id).endsWith("@prev"))PREV.set(p.id.slice(0,-5),p);else PACKS.set(p.id,p);});}
   return [...PACKS.values()];
 }
+
 function regList(){const s=state.settings;if(!Array.isArray(s.aiPacks))s.aiPacks=[];return s.aiPacks;}
 function regSync(pack){
-  const L=regList(),m=pack.meta,e={id:pack.id,name:m.name,C:m.C,docs:m.docs,valAcc:m.valAcc,createdAt:m.createdAt,ver:pack.ver,active:true};
+  const L=regList(),m=pack.meta,e={id:pack.id,name:m.name,C:m.C,docs:m.docs,valAcc:(m.test?m.test.acc:m.valAcc),createdAt:m.createdAt,ver:pack.ver,active:true};
   const i=L.findIndex(x=>x.id===pack.id);if(i>=0){e.active=L[i].active!==false;L[i]=e;}else L.push(e);
 }
 let _kick=null;
 function kickSync(){try{saveSettings();}catch(e){}clearTimeout(_kick);_kick=setTimeout(()=>{const fs=window.__FS;if(fs&&fs.state&&fs.state.h)try{fs.kick(0);}catch(e){}},1200);}
-async function savePack(pack){
-  pack.ver=(pack.ver||0)+1;PACKS.set(pack.id,pack);_fc.delete(pack.id);regSync(pack);
-  await idb("readwrite",st=>st.put(pack));kickSync();
+async function savePack(pack,opt){
+  opt=opt||{};syncOv(pack);const old=opt.prev;
+  if(old){const pr=Object.assign({},old,{id:old.id+"@prev"});PREV.set(old.id,pr);await idb("readwrite",st=>st.put(pr));}
+  pack.ver=(pack.ver||0)+1;PACKS.set(pack.id,pack);_fc.delete(pack.id);regSync(pack);await idb("readwrite",st=>st.put(pack));kickSync();
+}
+async function rollbackPack(id){
+  await allPacks();const pr=PREV.get(id);if(!pr)return false;const cur=PACKS.get(id),p=Object.assign({},pr,{id,ver:(cur?cur.ver:pr.ver)+1});
+  PACKS.set(id,p);_fc.delete(id);VIEW.delete(p);regSync(p);await idb("readwrite",st=>st.put(p));PREV.delete(id);await idb("readwrite",st=>st.delete(id+"@prev"));kickSync();return true;
 }
 async function deletePack(id){
-  PACKS.delete(id);_fc.delete(id);await idb("readwrite",st=>st.delete(id));
+  PACKS.delete(id);PREV.delete(id);_fc.delete(id);await idb("readwrite",st=>st.delete(id));await idb("readwrite",st=>st.delete(id+"@prev"));
   const L=regList(),i=L.findIndex(x=>x.id===id);if(i>=0)L.splice(i,1);
   try{if(typeof linkedDirHandle!=="undefined"&&linkedDirHandle)await linkedDirHandle.removeEntry("ai-pack-"+id+".json");}catch(e){}
   kickSync();
 }
+
 const activePacks=()=>regList().filter(x=>x.active!==false).map(x=>PACKS.get(x.id)).filter(Boolean);
+/* ---------- ذاكرة المعرفة: تقبل مستندًا واحدًا أو عدة مستندات دون اشتراط تصنيفين ---------- */
+const KNOWLEDGE=new Map();let knowledgeLoaded=false,_kdb=null;
+/* ================= Transformers.js: multilingual semantic layer =================
+   Embedding model: multilingual MiniLM (384-dim, Arabic/English).
+   First initialization requires internet; model files are cached by the browser.
+   After cache warm-up, inference can run offline. This is retrieval, not a generative LLM.
+*/
+const TF_MODEL_ID="onnx-community/paraphrase-multilingual-MiniLM-L12-v2-ONNX";
+let tfPipeline=null,tfLoadPromise=null,tfRuntime=null,tfDevice="wasm";
+async function loadTransformersRuntime(onProgress){
+ if(tfPipeline)return {ok:true,device:tfDevice,cached:true};
+ if(tfLoadPromise)return tfLoadPromise;
+ tfLoadPromise=(async()=>{
+  if(onProgress)onProgress("تحميل مكتبة Transformers.js…");
+  const mod=await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0");
+  tfRuntime=mod;const env=mod.env||{};env.allowRemoteModels=true;env.allowLocalModels=false;env.useBrowserCache=true;
+  try{if(env.backends&&env.backends.onnx&&env.backends.onnx.wasm)env.backends.onnx.wasm.numThreads=1;}catch(e){}
+  const opts={dtype:"q8",progress_callback:x=>{if(onProgress&&x&&x.status)onProgress("تحميل النموذج: "+x.status+(x.progress!=null?" "+Math.round(x.progress)+"%":""));}};
+  if(navigator.gpu){try{tfDevice="webgpu";tfPipeline=await mod.pipeline("feature-extraction",TF_MODEL_ID,{...opts,device:"webgpu"});}catch(e){tfPipeline=null;tfDevice="wasm";}}
+  if(!tfPipeline){tfDevice="wasm";tfPipeline=await mod.pipeline("feature-extraction",TF_MODEL_ID,{...opts,device:"wasm"});}
+  return {ok:true,device:tfDevice,cached:false};
+ })().catch(e=>{tfLoadPromise=null;throw e;});
+ return tfLoadPromise;
+}
+/* ================= Arabic <-> English answer translation =================
+   Separate OPUS-MT translation models; source evidence and stored knowledge are never modified.
+   Models are downloaded once and then reused from the browser cache.
+*/
+const TRANSLATION_MODELS={ar:"onnx-community/opus-mt-en-ar",en:"onnx-community/opus-mt-ar-en"};
+const translationPipelines={ar:null,en:null},translationPromises={ar:null,en:null};
+async function loadAnswerTranslator(target,onProgress){
+ if(!TRANSLATION_MODELS[target])throw new Error("لغة ترجمة غير مدعومة");
+ if(translationPipelines[target])return translationPipelines[target];
+ if(translationPromises[target])return translationPromises[target];
+ translationPromises[target]=(async()=>{
+  if(onProgress)onProgress(target==="ar"?"تحميل نموذج الترجمة إلى العربية…":"تحميل نموذج الترجمة إلى الإنجليزية…");
+  const mod=tfRuntime||await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0");tfRuntime=mod;
+  const pipe=await mod.pipeline("translation",TRANSLATION_MODELS[target],{dtype:"q8",progress_callback:x=>{if(onProgress&&x&&x.status)onProgress("تحميل نموذج الترجمة: "+x.status+(x.progress!=null?" "+Math.round(x.progress)+"%":""));}});
+  translationPipelines[target]=pipe;return pipe;
+ })().catch(e=>{translationPromises[target]=null;throw e;});
+ return translationPromises[target];
+}
+function questionLanguage(q){return /[\u0600-\u06FF]/.test(String(q||""))?"ar":"en";}
+function splitForTranslation(text,max=420){
+ const paras=String(text||"").split(/\n{2,}/),out=[];
+ for(const para of paras){if(para.length<=max){out.push(para);continue;}const lines=para.split(/(?<=[.!?؟])\s+|\n/);let cur="";for(const line of lines){if((cur+" "+line).trim().length>max&&cur){out.push(cur);cur=line;}else cur+=(cur?" ":"")+line;}if(cur)out.push(cur);}
+ return out;
+}
+async function translateAnswerText(text,target,onProgress){
+ const pipe=await loadAnswerTranslator(target,onProgress),lines=String(text||"").split("\n"),out=[];let done=0;
+ for(const line of lines){
+  const hasAr=/[\u0600-\u06FF]/.test(line),hasEn=/[A-Za-z]{2,}/.test(line);
+  const needs=target==="ar"?hasEn:hasAr;
+  if(!line.trim()||!needs){out.push(line);continue;}
+  // Protect model identifiers, electrical values, units and common signal abbreviations.
+  const keep=[];let masked=line.replace(/\b(?:[A-Z]{1,8}\d[A-Z0-9-]*|\d+(?:\.\d+)?\s*(?:\.\.\.?|[-–])\s*\d+(?:\.\d+)?\s*(?:V|mA|A|mm|cm|Hz|kHz|MHz|DC|AC|bar|°C)|\d+(?:\.\d+)?\s*(?:V|mA|A|mm|cm|Hz|kHz|MHz|DC|AC|bar|°C)|PNP|NPN|IP\d{2,3}|M\d{1,2}\s*x\s*\d+(?:\.\d+)?|L\\s*=\\s*\\d+(?:\\.\\d+)?|V\\s*=\\s*I\\s*×\\s*R)\b/gi,m=>{const key="ZXQKEEP"+keep.length+"QXZ";keep.push([key,m]);return key;});
+  const parts=splitForTranslation(masked,380);let translated=[];
+  for(const part of parts){const r=await pipe(part,{max_new_tokens:220});const v=Array.isArray(r)?(r[0]?.translation_text||r[0]?.generated_text):r?.translation_text;if(!v)throw new Error("لم يُرجع نموذج الترجمة نصًا");translated.push(String(v).trim());done++;if(onProgress)onProgress("ترجمة الإجابة: "+done);await new Promise(resolve=>setTimeout(resolve,0));}
+  let result=translated.join(" ");for(const [key,value] of keep)result=result.split(key).join(value);out.push(result);
+ }
+ return out.join("\n");
+}
+async function translateAnswerForQuestion(question,answer,onProgress){
+ if(!answer)return answer;const target=questionLanguage(question);
+ // Translate only user-facing text; preserve source titles, file names and page references.
+ try{
+  if(answer.title)answer.title=await translateAnswerText(answer.title,target,onProgress);
+  if(answer.answer)answer.answer=await translateAnswerText(answer.answer,target,onProgress);
+  if(answer.text)answer.text=await translateAnswerText(answer.text,target,onProgress);
+  if(answer.suggest)answer.suggest=await translateAnswerText(answer.suggest,target,onProgress);
+  if(Array.isArray(answer.sections))for(const section of answer.sections){section.title=await translateAnswerText(section.title||"",target,onProgress);section.text=await translateAnswerText(section.text||"",target,onProgress);}
+  answer.translation={target,model:TRANSLATION_MODELS[target]};
+ }catch(e){answer.translationError=String(e&&e.message||e);}
+ return answer;
+}
+function extractStructuredFacts(text){
+ const lines=String(text||"").replace(/\r/g,"").split(/\n+/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean),facts=[],seen=new Set();
+ const defs=[
+  ["جهد التشغيل / Operating voltage",/(operating voltage|supply voltage|rated voltage|جهد التشغيل|جهد التغذية)/i],
+  ["التيار / Current",/(current consumption|permanent current rating|output current|current rating|التيار|استهلاك التيار)/i],
+  ["نوع الخرج / Output type",/(output function|electrical design|نوع الخرج|تصميم كهربائي)/i],
+  ["مدى الاستشعار / Sensing range",/(sensing range|operating distance|مدى الاستشعار|مسافة التشغيل)/i],
+  ["درجة الحماية / Protection",/(protection class|protection|ingress protection|فئة الحماية|درجة الحماية)/i],
+  ["درجة الحرارة / Temperature",/(ambient temperature|operating temperature|درجة الحرارة)/i],
+  ["التردد / Frequency",/(switching frequency|frequency|التردد)/i],
+  ["الأبعاد / Dimensions",/(dimensions|الأبعاد)/i],
+  ["التوصيل / Connection",/(electrical connection|connector|connection|التوصيل|طرف التوصيل)/i]
+ ];
+ for(let i=0;i<lines.length;i++)for(const [label,rx] of defs){if(!rx.test(lines[i]))continue;let value=lines[i].replace(rx,"").replace(/^\s*(?:\[[^\]]+\]|\([^)]*\))?\s*[:=–-]?\s*/,"").trim();
+  if(!value||value.length<2){const next=[];for(let j=i+1;j<Math.min(lines.length,i+4);j++){if(defs.some(d=>d[1].test(lines[j])))break;next.push(lines[j]);if(next.join(" ").length>100)break;}value=next.join(" ");}
+  if(value&&value.length<140){const key=label+"="+value;if(!seen.has(key)){seen.add(key);facts.push({label,value});}}
+ }
+ return facts;
+}
+function enrichKnowledgeDoc(doc){if(!doc.facts||!doc.facts.length)doc.facts=extractStructuredFacts(doc.text);doc.factsText=(doc.facts||[]).map(x=>x.label+": "+x.value).join("\n");return doc;}
+async function transformerEmbeddings(texts){
+ if(!tfPipeline)throw new Error("نموذج Transformers.js غير محمّل");
+ const clean=texts.map(t=>String(t||"").slice(0,1400));
+ const out=await tfPipeline(clean,{pooling:"mean",normalize:true});
+ let rows=out&&typeof out.tolist==="function"?out.tolist():out;
+ if(rows&&rows.length&&typeof rows[0]==="number")rows=[rows];
+ return rows.map(v=>Float32Array.from(v));
+}
+async function persistKnowledgeEmbeddings(docs){
+ const d=await kdb();if(!d||!docs.length)return;
+ await new Promise((resolve,reject)=>{const tx=d.transaction("docs","readwrite"),st=tx.objectStore("docs");docs.forEach(x=>st.put(x));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("فشل حفظ المتجهات"));});
+ docs.forEach(x=>KNOWLEDGE.set(x.id,x));
+}
+async function indexKnowledgeWithTransformers(onProgress){
+ await allKnowledge();const docs=[...KNOWLEDGE.values()],todo=docs.filter(x=>!x.embedding||x.embedding.length!==384);
+ if(!todo.length){if(onProgress)onProgress("كل المستندات مفهرسة دلاليًا بالفعل");return {count:0,total:docs.length};}
+ let done=0;
+ for(let i=0;i<todo.length;i+=8){const batch=todo.slice(i,i+8),vecs=await transformerEmbeddings(batch.map(x=>x.text+"\n"+(x.factsText||"")));
+  batch.forEach((x,j)=>{x.embedding=vecs[j];x.embeddingModel=TF_MODEL_ID;});await persistKnowledgeEmbeddings(batch);done+=batch.length;
+  if(onProgress)onProgress("فهرسة المعرفة دلاليًا: "+done+" / "+todo.length);await new Promise(r=>setTimeout(r,0));
+ }
+ return {count:done,total:docs.length};
+}
+async function semanticKnowledgeSearch(query,limit=12){
+ if(!tfPipeline)return [];
+ const qv=(await transformerEmbeddings([query]))[0],docs=await allKnowledge(),rank=[];
+ for(const d of docs){if(!d.embedding||d.embedding.length!==qv.length)continue;let dot=0;for(let i=0;i<qv.length;i++)dot+=qv[i]*d.embedding[i];rank.push({d,score:dot});}
+ return rank.sort((a,b)=>b.score-a.score).slice(0,limit).filter(x=>x.score>=0.28).map(x=>({kind:"knowledge",id:x.d.id,title:x.d.source,source:x.d.source,page:x.d.page,text:x.d.text+"\n"+(x.d.factsText||""),semanticScore:x.score,score:x.score}));
+}
+
+const kdb=()=>_kdb||(_kdb=new Promise(resolve=>{try{const q=indexedDB.open("WorkshopEquipmentDB_Knowledge",1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains("docs"))q.result.createObjectStore("docs",{keyPath:"id"});};q.onsuccess=()=>resolve(q.result);q.onerror=q.onblocked=()=>resolve(null);}catch(e){resolve(null);}}));
+async function allKnowledge(){if(!knowledgeLoaded){const d=await kdb();knowledgeLoaded=true;if(d){try{const rows=await new Promise(res=>{const tx=d.transaction("docs","readonly"),q=tx.objectStore("docs").getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>res([]);});rows.forEach(x=>KNOWLEDGE.set(x.id,enrichKnowledgeDoc(x)));}catch(e){}}}return [...KNOWLEDGE.values()];}
+async function saveKnowledgeDocs(docs){docs.forEach(enrichKnowledgeDoc);if(tfPipeline){for(let i=0;i<docs.length;i+=8){const b=docs.slice(i,i+8),v=await transformerEmbeddings(b.map(x=>x.text+"\n"+(x.factsText||"")));b.forEach((x,j)=>{x.embedding=v[j];x.embeddingModel=TF_MODEL_ID;});}}const d=await kdb();if(!d)throw new Error("تعذر فتح قاعدة ذاكرة المعرفة المحلية");await new Promise((resolve,reject)=>{const tx=d.transaction("docs","readwrite"),st=tx.objectStore("docs");for(const x of docs)st.put(x);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("فشل حفظ المعرفة"));});docs.forEach(x=>KNOWLEDGE.set(x.id,x));return docs.length;}
+async function deleteKnowledgeSource(source){const d=await kdb();if(!d)return 0;const rows=await allKnowledge(),ids=rows.filter(x=>x.source===source).map(x=>x.id);if(!ids.length)return 0;await new Promise(resolve=>{const tx=d.transaction("docs","readwrite"),st=tx.objectStore("docs");ids.forEach(id=>st.delete(id));tx.oncomplete=resolve;});ids.forEach(id=>KNOWLEDGE.delete(id));return ids.length;}
+
 
 /* ---------- تسلسل الملف (للمزامنة والتصدير) ---------- */
 const b64=u8=>{let s="";const CH=0x8000;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);};
 const unb64=str=>{const bin=atob(str),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u;};
-const f32=a=>b64(new Uint8Array(a.buffer,a.byteOffset,a.byteLength)),unf32=s=>{const u=unb64(s);return new Float32Array(u.buffer,u.byteOffset,u.byteLength>>2);};
+const TYPED={E:Int8Array,Es:Float32Array,W1:Float32Array,b1:Float32Array,W2:Float32Array,b2:Float32Array,protos:Float32Array,wv:Int8Array,wvidf:Float32Array,holdHashes:Uint32Array};
+const enc=a=>b64(new Uint8Array(a.buffer,a.byteOffset,a.byteLength)),dec=(s,T)=>{const u=unb64(s);return new T(u.buffer,u.byteOffset,u.byteLength/T.BYTES_PER_ELEMENT);};
 const _fc=new Map();
+function syncOv(p){const v=VIEW.get(p);if(!v||!v.ov||!v.ov.size){p.ov=null;return;}const rows=[...v.ov.keys()].sort((a,b)=>a-b),D=p.meta.D;
+  if(rows.length>15000){rows.forEach(r=>{const vec=v.ov.get(r);let mx=0;for(let d=0;d<D;d++)mx=Math.max(mx,Math.abs(vec[d]));p.Es[r]=mx;const k=mx?127/mx:0;for(let d=0;d<D;d++)p.E[r*D+d]=Math.round(vec[d]*k);});p.ov=null;VIEW.delete(p);return;}
+  const data=new Float32Array(rows.length*D);rows.forEach((r,i)=>data.set(v.ov.get(r),i*D));p.ov={rows:Int32Array.from(rows),data};VIEW.delete(p);}
 function packFile(p){
   const c=_fc.get(p.id);if(c&&c.ver===p.ver)return c.s;
-  const o={schema:1,kind:"ai-pack",id:p.id,ver:p.ver,meta:p.meta,E:b64(new Uint8Array(p.E.buffer,p.E.byteOffset,p.E.byteLength)),Es:f32(p.Es),W1:f32(p.W1),b1:f32(p.b1),W2:f32(p.W2),b2:f32(p.b2),protos:f32(p.protos),
-    refs:p.refs.map(r=>({l:r.l,t:r.t,x:b64(new Uint8Array(r.x.buffer,r.x.byteOffset,r.x.byteLength))})),feedback:(p.feedback||[]).map(r=>({l:r.l,t:r.t,x:b64(new Uint8Array(r.x.buffer,r.x.byteOffset,r.x.byteLength))}))};
+  const o={schema:2,kind:"ai-pack",id:p.id,ver:p.ver,meta:p.meta};for(const k in TYPED)if(p[k])o[k]=enc(p[k]);
+  o.refs=p.refs.map(r=>({l:r.l,t:r.t,x:enc(r.x),k:r.k}));o.feedback=(p.feedback||[]).map(r=>({l:r.l,t:r.t,x:enc(r.x)}));o.testSet=p.testSet||[];
+  if(p.ov&&p.ov.rows&&p.ov.rows.length)o.ov={rows:enc(p.ov.rows),data:enc(p.ov.data)};
   const s=JSON.stringify(o);_fc.set(p.id,{ver:p.ver,s});return s;
 }
 function parsePack(text){
   const o=JSON.parse(text);if(o.kind!=="ai-pack")throw new Error("الملف ده مش حزمة مدرَّبة");
-  const u8=s=>{const u=unb64(s);return new Int8Array(u.buffer,u.byteOffset,u.byteLength);};
-  return {id:o.id,ver:o.ver||1,meta:o.meta,E:u8(o.E),Es:unf32(o.Es),W1:unf32(o.W1),b1:unf32(o.b1),W2:unf32(o.W2),b2:unf32(o.b2),protos:unf32(o.protos),refs:o.refs.map(r=>({l:r.l,t:r.t,x:u8(r.x)})),feedback:(o.feedback||[]).map(r=>({l:r.l,t:r.t,x:u8(r.x)}))};
+  const p={id:o.id,ver:o.ver||1,meta:o.meta};for(const k in TYPED)p[k]=o[k]?dec(o[k],TYPED[k]):null;
+  p.refs=o.refs.map(r=>({l:r.l,t:r.t,x:dec(r.x,Int8Array),k:r.k}));p.feedback=(o.feedback||[]).map(r=>({l:r.l,t:r.t,x:dec(r.x,Int8Array)}));p.testSet=o.testSet||[];
+  p.ov=o.ov?{rows:dec(o.ov.rows,Int32Array),data:dec(o.ov.data,Float32Array)}:null;return p;
 }
 async function importPackText(text){
-  const p=parsePack(text),cur=PACKS.get(p.id);await allPacks();
+  const p=parsePack(text);await allPacks();
   if(PACKS.get(p.id)&&PACKS.get(p.id).ver>=p.ver)return {id:p.id,skipped:true,name:p.meta.name};
   PACKS.set(p.id,p);_fc.delete(p.id);regSync(p);await idb("readwrite",st=>st.put(p));kickSync();return {id:p.id,name:p.meta.name,skipped:false};
 }
@@ -19391,19 +19793,20 @@ async function loadFromFolder(){
   let n=0;try{for await(const [name,hd] of h.entries()){if(hd.kind==="file"&&/^ai-pack-.+\.json$/.test(name)){const t=await (await hd.getFile()).text();try{const r=await importPackText(t);if(!r.skipped)n++;}catch(e){}}}}catch(e){return {n,err:e.message};}
   return {n};
 }
-
 /* ---------- الاستدلال (التعرّف) ---------- */
-const VIEW=new WeakMap();const view=p=>{let v=VIEW.get(p);if(!v){const m=p.meta;v={D:m.D,H:m.H,C:m.C,E:p.E,Es:p.Es,W1:p.W1,b1:p.b1,W2:p.W2,b2:p.b2};VIEW.set(p,v);}return v;};
+const VIEW=new WeakMap();
+const view=p=>{let v=VIEW.get(p);if(!v){const m=p.meta;v={D:m.D,H:m.H,C:m.C,E:p.E,Es:p.Es,W1:p.W1,b1:p.b1,W2:p.W2,b2:p.b2,ov:new Map()};if(p.ov&&p.ov.rows)p.ov.rows.forEach((r,i)=>v.ov.set(r,p.ov.data.subarray(i*m.D,(i+1)*m.D)));VIEW.set(p,v);}return v;};
 function classify(pack,text,k){
   const m=pack.meta,f=S.feats(text,m.B,m.maxTok);if(f.length<2)return null;
   const D=m.D,x=new Float32Array(D),h=new Float32Array(m.H),z=new Float32Array(m.C),p=new Float32Array(m.C);
   const P=view(pack);S.embed(P,f,x);S.mlp(P,x,h,z);S.softmax(z,m.C,m.T,p);
   let nr=0;for(let d=0;d<D;d++)nr+=x[d]*x[d];nr=Math.sqrt(nr)||1;const xn=new Float32Array(D);for(let d=0;d<D;d++)xn[d]=x[d]/nr;
   const dot=q=>{let s=0;for(let d=0;d<D;d++)s+=xn[d]*q[d];return s/127;};
-  if(pack.feedback&&pack.feedback.length){let bc=0,bl=-1;for(const fb of pack.feedback){const c=dot(fb.x);if(c>bc){bc=c;bl=fb.l;}}if(bl>=0&&bc>=.9){const w=Math.min(1,(bc-.88)/.08);for(let c=0;c<m.C;c++)p[c]*=(1-w);p[bl]+=w;}}
+  if(pack.feedback&&pack.feedback.length){let bc=0,bl=-1;for(const fb of pack.feedback){const c=dot(fb.x);if(c>bc){bc=c;bl=fb.l;}}if(bl>=0&&bc>=.9&&bl<m.C){const w=Math.min(1,(bc-.88)/.08);for(let c=0;c<m.C;c++)p[c]*=(1-w);p[bl]+=w;}}
   const idx=[...p.keys()].sort((a,b)=>p[b]-p[a]).slice(0,k||3).map(c=>({l:c,label:m.labels[c],prob:p[c]}));
-  const refs=pack.refs.map(r=>({l:r.l,label:m.labels[r.l],t:r.t,sim:dot(r.x)})).sort((a,b)=>b.sim-a.sim).slice(0,3);
-  return {top:idx,refs,nf:f.length,xn};
+  const res={top:idx,nf:f.length,xn,f};
+  Object.defineProperty(res,"refs",{configurable:true,enumerable:true,get(){const v=pack.refs.map(r=>({l:r.l,label:m.labels[r.l],t:r.t,sim:dot(r.x)})).sort((a,b)=>b.sim-a.sim).slice(0,3);Object.defineProperty(res,"refs",{value:v,enumerable:true});return v;}});
+  return res;
 }
 function addFeedback(pack,text,label){
   const m=pack.meta;let l=m.labels.indexOf(label);if(l<0)return false;const r=classify(pack,text,1);if(!r)return false;
@@ -19412,26 +19815,387 @@ function addFeedback(pack,text,label){
   pack.refs.push({l,t:String(text).slice(0,260),x:q});if(pack.refs.length>m.C*40+4000)pack.refs.splice(0,1);
   return true;
 }
+/* ---------- تعلّم تزايدي حقيقي من التصحيحات (تدرّج فعلي + إعادة تشغيل عيّنات قديمة + حارس نسيان) ---------- */
+function onlineStep(pack,f,y,lrH,lrE){
+  const P=view(pack),m=pack.meta,D=m.D,H=m.H,C=m.C,nf=f.length;if(!nf)return;
+  const x=new Float32Array(D),h=new Float32Array(H),z=new Float32Array(C),p=new Float32Array(C),dh=new Float32Array(H),dx=new Float32Array(D);
+  S.embed(P,f,x);S.mlp(P,x,h,z);S.softmax(z,C,1,p);p[y]-=1;
+  for(let j=0;j<H;j++){const v=h[j];if(v<=0)continue;const o=j*C;let g=0;for(let c=0;c<C;c++){g+=P.W2[o+c]*p[c];if(lrH)P.W2[o+c]-=lrH*v*p[c];}dh[j]=g;}
+  if(lrH)for(let c=0;c<C;c++)P.b2[c]-=lrH*p[c];
+  for(let d=0;d<D;d++){const xd=x[d],o=d*H;let g=0;for(let j=0;j<H;j++){const dj=dh[j];if(!dj)continue;g+=P.W1[o+j]*dj;if(lrH)P.W1[o+j]-=lrH*xd*dj;}dx[d]=g;}
+  if(lrH)for(let j=0;j<H;j++)P.b1[j]-=lrH*dh[j];
+  const sc=lrE/nf;for(let q=0;q<nf;q++){const r=f[q];let v=P.ov.get(r);if(!v){v=new Float32Array(D);const s2=P.Es[r]/127,o=r*D;for(let d=0;d<D;d++)v[d]=P.E[o+d]*s2;P.ov.set(r,v);}for(let d=0;d<D;d++)v[d]-=sc*dx[d];}
+}
+function guardAcc(pack,set){let ok=0;for(const d of set){const r=classify(pack,d.t,1);if(r&&r.top[0].l===d.l)ok++;}return set.length?ok/set.length:1;}
+function onlineLearn(pack,text,label){
+  const m=pack.meta,l=m.labels.indexOf(label);if(l<0)return {ok:false,reason:"تصنيف مش موجود في الحزمة"};
+  const f=S.feats(text,m.B,m.maxTok);if(f.length<2)return {ok:false,reason:"النص قصير"};
+  const P=view(pack),snap={W1:P.W1.slice(),b1:P.b1.slice(),W2:P.W2.slice(),b2:P.b2.slice(),ov:new Map([...P.ov].map(([k,v])=>[k,v.slice()]))};
+  let seed=(S.hashStr(text)>>>0)||1;const rnd=()=>{seed^=seed<<13;seed>>>=0;seed^=seed>>>17;seed^=seed<<5;seed>>>=0;return seed/4294967296;};
+  const guard=[];const nG=Math.min(150,pack.refs.length);for(let i=0;i<nG;i++){const r=pack.refs[Math.floor(rnd()*pack.refs.length)];guard.push({t:r.t,l:r.l});}
+  const target=()=>classify(pack,text,m.C).top.find(t=>t.l===l).prob,before=guardAcc(pack,guard),pBefore=target();
+  const rep=[];for(let i=0;i<12&&pack.refs.length;i++){const r=pack.refs[Math.floor(rnd()*pack.refs.length)];rep.push({f:S.feats(r.t,m.B,m.maxTok),y:r.l});}
+  for(const fb of (pack.feedback||[]).slice(-6))rep.push({f:S.feats(fb.t,m.B,m.maxTok),y:fb.l});
+  const run=(lrE,lrH,iters,thr)=>{for(let it=0;it<iters;it++){onlineStep(pack,f,l,lrH,lrE);for(const r of rep.slice(0,10))onlineStep(pack,r.f,r.y,lrH*.5,lrE*.25);if(target()>=thr)break;}};
+  run(3,0,40,.75);let top=classify(pack,text,1).top[0];
+  if(top.l!==l){run(3,.004,25,.75);top=classify(pack,text,1).top[0];}
+  const after=guardAcc(pack,guard);
+  if(before-after>.02||top.l!==l){P.W1.set(snap.W1);P.b1.set(snap.b1);P.W2.set(snap.W2);P.b2.set(snap.b2);P.ov.clear();snap.ov.forEach((v,k)=>P.ov.set(k,v));
+    return {ok:false,reason:top.l!==l?"النموذج ما اتعلّمش التصحيح ده (اتراجع)":"التصحيح كان هيسبّب نسيان "+Math.round((before-after)*100)+" نقطة (اتراجع)",before,after};}
+  addFeedback(pack,text,label);syncOv(pack);m.online=(m.online||0)+1;
+  return {ok:true,pBefore,pAfter:classify(pack,text,m.C).top.find(t=>t.l===l).prob,guardBefore:before,guardAfter:after};
+}
+/* ---------- فهم دلالي: متجهات كلمات (PPMI+SVD) + BM25 + تضمين الشبكة → دمج هجين (RRF) ---------- */
+const maskHead=(label,text)=>{const ln=S.NORM(label).trim();if(ln.length<2)return text;const nt=S.NORM(text),ix=nt.indexOf(ln);return(ix>=0&&ix<40)?nt.slice(0,ix)+" "+nt.slice(ix+ln.length):text;};
+const _wvi=new WeakMap();
+function wvIndex(p){if(!p.wv||!p.meta.wvocab)return null;let x=_wvi.get(p);if(!x){x=new Map(p.meta.wvocab.map((w,i)=>[w,i]));_wvi.set(p,x);}return x;}
+function semVec(p,text){
+  const ix=wvIndex(p);if(!ix)return null;const dw=p.meta.wdim,v=new Float32Array(dw);let n=0;
+  for(const w of S.words(text,300)){const i=ix.get(w);if(i===undefined)continue;const idf=p.wvidf[i],o=i*dw;for(let d=0;d<dw;d++)v[d]+=idf*p.wv[o+d]/127;n++;}
+  if(!n)return null;let nr=0;for(let d=0;d<dw;d++)nr+=v[d]*v[d];nr=Math.sqrt(nr)||1;for(let d=0;d<dw;d++)v[d]/=nr;return v;
+}
+function relatedWords(p,word,k){
+  const ix=wvIndex(p);if(!ix)return [];const w=S.words(word,1)[0],i=ix.get(w);if(i===undefined)return [];const dw=p.meta.wdim,V=p.meta.wvocab.length,out=[];
+  for(let j=0;j<V;j++){if(j===i)continue;let s=0;for(let d=0;d<dw;d++)s+=p.wv[i*dw+d]*p.wv[j*dw+d];out.push([p.meta.wvocab[j],s/16129]);}
+  return out.sort((a,b)=>b[1]-a[1]).slice(0,k||5);
+}
+const bmBuild=docs=>{const N=docs.length,df=new Map();let tl=0;docs.forEach(d=>{d.tf=new Map();for(const t of d.toks)d.tf.set(t,(d.tf.get(t)||0)+1);tl+=d.toks.length;d.tf.forEach((_,t)=>df.set(t,(df.get(t)||0)+1));});return {N,df,avg:tl/Math.max(1,N)};};
+const bmScore=(ix,qt,d)=>{let s=0;for(const t of new Set(qt)){const f=d.tf.get(t);if(!f)continue;const df=ix.df.get(t)||0,idf=Math.log(1+(ix.N-df+.5)/(df+.5));s+=idf*f*2.5/(f+1.5*(.25+.75*d.toks.length/ix.avg));}return s;};
+const INTENTS=[[/(ازاي|كيف|طريقه|خطوات|اعمل)/,"📋 إجراء / خطوات"],[/(ليه|لماذا|سبب|بسبب|ايه اللي)/,"🔍 تشخيص سبب"],[/(الفرق|مقارنه|احسن|افضل|ولا)/,"⚖️ مقارنة"],[/(احسب|حساب|كام|قيمه|قياس|مقاومه|جهد)/,"🧮 حساب / قياس"],[/(كود|برمجه|اكتب|سكريبت)/,"💻 كود"],[/(يعني ايه|ما هو|تعريف|شرح)/,"📖 شرح / تعريف"]];
+const intentOf=q=>{const n=S.NORM(q);for(const [rx,l] of INTENTS)if(rx.test(n))return l;return "❓ استعلام عام";};
+function hybridSearch(query,opt){
+  opt=opt||{};const packs=activePacks(),docs=[];
+  for(const it of (state.items||[]).slice(0,6000)){const t=opt.itemText?opt.itemText(it):(it.name||"");docs.push({kind:"item",id:it.id,title:it.name||"",text:t,toks:S.words(t,400)});}
+  for(const p of packs)for(const r of p.refs.slice(0,4000))docs.push({kind:"ref",label:p.meta.labels[r.l],title:p.meta.labels[r.l],text:r.t,toks:S.words(r.t,200),pack:p});
+  for(const k of KNOWLEDGE.values())docs.push({kind:"knowledge",id:k.id,label:k.category,title:k.source,text:k.text+(k.page?"\nصفحة "+k.page:""),toks:S.words(k.text,260),knowledge:k});
+  if(!docs.length)return {results:[],related:[],intent:intentOf(query)};
+  const ix=bmBuild(docs),qt=S.words(query,50),sc=docs.map(d=>bmScore(ix,qt,d));
+  const rank=(scores)=>{const o=scores.map((s,i)=>[s,i]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,60),m=new Map();o.forEach((x,r)=>m.set(x[1],r+1));return m;};
+  const rb=rank(sc);let rs=null,rn=null;const p0=packs.find(p=>p.wv)||null,pn=packs[0]||null;
+  if(p0){const qv=semVec(p0,query);if(qv){const dw=p0.meta.wdim;rs=rank(docs.map(d=>{if(d._sv===undefined||d._svp!==p0){d._sv=semVec(p0,d.text);d._svp=p0;}if(!d._sv)return 0;let s=0;for(let k=0;k<dw;k++)s+=qv[k]*d._sv[k];return s;}));}}
+  if(pn){const qr=classify(pn,query,1);if(qr){const D=pn.meta.D;rn=rank(docs.map(d=>{if(d._nn===undefined||d._nnp!==pn){const r=classify(pn,d.text,1);d._nn=r?r.xn:null;d._nnp=pn;}if(!d._nn)return 0;let s=0;for(let k=0;k<D;k++)s+=qr.xn[k]*d._nn[k];return s;}));}}
+  const fused=docs.map((d,i)=>{const a=rb.get(i),b=rs&&rs.get(i),c=rn&&rn.get(i);return {d,i,s:(a?1/(60+a):0)+(b?1/(60+b):0)+(c?1/(60+c):0),ranks:{bm25:a||null,sem:b||null,nn:c||null}};}).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,10);
+  const related=[];if(p0)for(const w of S.words(query,6)){const rw=relatedWords(p0,w,4);if(rw.length)related.push([w,rw.map(x=>x[0])]);}
+  return {results:fused.map(x=>({kind:x.d.kind,id:x.d.id,title:x.d.title,label:x.d.label,text:x.d.text.slice(0,1800),source:x.d.knowledge?x.d.knowledge.source:null,page:x.d.knowledge?x.d.knowledge.page:null,ranks:x.ranks,score:x.s})),related,intent:intentOf(query),methods:{bm25:true,sem:!!rs,nn:!!rn}};
+}
+
+/* ---------- مساعد الأسئلة المفتوحة والتشخيص والشرح المركّب (RAG محلي قائم على المراجع) ---------- */
+const QA_STOP=new Set("ما ماذا ايه ازاي كيف هل هو هي في من على علي الى الي عن مع هذا هذه ذلك دي ده اللي التي الذي كان تكون يكون يتم تم قد ثم او ولا انا انت هو هي هم عند بعد قبل لو اذا لما عندما بسبب لماذا ليه ممكن عايز عاوز اريد اشرح اشرحلي وضح لي".split(" "));
+const QA_CAUSE=/(بسبب|نتيجه|لان|لانه|عشان|يؤدي|بيؤدي|ادي الي|يسبب|بيسبب|سبب|ينتج عن|ناتج عن|عطل|توقف|احتراق|تسريب|اهتزاز|ارتفاع|انخفاض)/;
+const QA_STEP=/(افصل|فك|ركب|قس|افحص|استبدل|شغل|اضغط|تاكد|نظف|اغلق|افتح|اضبط|عاير|ثبت|وصل|اربط|تحقق|ابدا|اطفي|راجع|قارن|خطوه|اولا|ثانيا)/;
+const QA_MECH=/(يعمل|تعمل|وظيفه|وظيفته|يقيس|يتحكم|يحول|يتكون|مكون|اشاره|ضغط|حراره|تدفق|هواء|كهرباء|تيار|جهد|حساس|صمام|محرك)/;
+function qaSentenceRows(results,query,mode){
+  const qw=[...new Set(S.words(query,60).filter(w=>w.length>1&&!QA_STOP.has(w)))];
+  const rows=[],seen=new Set();
+  for(const src of results){
+    let full=src.text||"";
+    if(src.kind==="item"){const it=(state.items||[]).find(x=>x.id===src.id);if(it)full=itemTextOf(it);}
+    const parts=String(full).split(/(?:\r?\n+|(?<=[.!؟?؛])\s+|(?<=。)\s*)/).map(x=>x.replace(/^\s*(?:[-•*]|\d+[.)-])\s*/,"").trim()).filter(x=>x.length>=22&&x.length<=420);
+    for(const t of parts){const n=S.NORM(t),key=n.slice(0,220);if(seen.has(key))continue;seen.add(key);
+      const ws=new Set(S.words(t,100));let hit=0;for(const w of qw)if(ws.has(w))hit++;
+      const cause=QA_CAUSE.test(n),step=QA_STEP.test(n),mech=QA_MECH.test(n),warn=WARN_RX.test(n);
+      let score=hit/Math.sqrt(Math.max(1,qw.length));
+      if(src.ranks&&src.ranks.sem)score+=.10;if(src.ranks&&src.ranks.nn)score+=.08;
+      if(mode==="diagnosis"&&cause)score+=.35;
+      if(mode==="diagnosis"&&SYMP_RX.test(n))score+=.15;
+      if(mode==="explain"&&mech)score+=.25;
+      if(mode==="explain"&&step)score+=.12;
+      if(warn)score+=.05;
+      rows.push({text:t,source:src,score,hit,cause,step,mech,warn});
+    }
+  }
+  return rows.sort((a,b)=>b.score-a.score||b.hit-a.hit);
+}
+function composeTechnicalAnswer(question,mode){
+  const r=hybridSearch(question,{itemText:itemTextOf});
+  if(!r.results.length)return {ok:false,message:"لم أجد مراجع مرتبطة بالسؤال في قاعدة بياناتك. أضف شرحًا أو مستندًا عن الموضوع، أو درّب حزمة معرفية مناسبة ثم أعد السؤال.",results:[],methods:r.methods||{}};
+  const rows=qaSentenceRows(r.results,question,mode),relevant=rows.filter(x=>x.hit>0||x.score>=.18);
+  if(!relevant.length)return {ok:false,message:"وجدت عناصر قريبة بالمعنى، لكن لا توجد جمل كافية تسند إجابة موثوقة. جرّب إضافة اسم الجهاز أو الموديل أو وصفًا أدق للأعراض.",results:r.results,methods:r.methods||{}};
+  const take=(arr,n)=>{const out=[],seen=new Set();for(const x of arr){const k=S.NORM(x.text);if(seen.has(k))continue;seen.add(k);out.push(x);if(out.length>=n)break;}return out;};
+  const general=take(relevant,5),causes=take(relevant.filter(x=>x.cause),5),steps=take(relevant.filter(x=>x.step),5),mechanism=take(relevant.filter(x=>x.mech),5),warnings=take(relevant.filter(x=>x.warn),3);
+  const sources=[];for(const x of general.concat(causes,steps,mechanism,warnings)){const s=x.source,k=s.kind+":"+(s.id||s.label);if(!sources.some(z=>z.key===k))sources.push({key:k,source:s});}
+  let sections=[];
+  if(mode==="diagnosis"){
+    if(causes.length)sections.push({title:"الأسباب المحتملة التي تدعمها مراجعك",rows:causes});
+    else sections.push({title:"ما وجدته في المراجع",rows:general.slice(0,4)});
+    if(general.length)sections.push({title:"الأدلة المرتبطة بالأعراض",rows:general.slice(0,4)});
+    if(steps.length)sections.push({title:"خطوات الفحص المذكورة في المراجع",rows:steps});
+    if(warnings.length)sections.push({title:"تحذيرات",rows:warnings});
+  }else if(mode==="explain"){
+    if(mechanism.length)sections.push({title:"الفكرة وطريقة العمل",rows:mechanism});
+    sections.push({title:"تفاصيل فنية مرتبطة بالموضوع",rows:general});
+    if(steps.length)sections.push({title:"خطوات أو إجراءات واردة في المراجع",rows:steps});
+    if(causes.length)sections.push({title:"الأعطال والأسباب المذكورة",rows:causes});
+    if(warnings.length)sections.push({title:"تنبيهات",rows:warnings});
+  }else{
+    sections.push({title:"الإجابة المستندة إلى قاعدة المعرفة",rows:general});
+    if(causes.length)sections.push({title:"علاقات سببية مرتبطة",rows:causes});
+    if(steps.length)sections.push({title:"إجراءات مرتبطة",rows:steps});
+  }
+  sections=sections.filter(x=>x.rows&&x.rows.length);
+  const maxHit=Math.max(0,...relevant.map(x=>x.hit));
+  return {ok:true,mode,question,intent:r.intent,methods:r.methods,sections,sources,maxHit,related:r.related||[],caveat:mode==="diagnosis"&&!causes.length?"لم أجد في المراجع جملة سببية صريحة؛ لذلك لا أستطيع الجزم بسبب العطل. النتائج التالية قرائن للبحث وليست تشخيصًا نهائيًا.":"الإجابة مركبة من نصوص قاعدة بياناتك؛ لا تعتبرها معلومة مؤكدة إذا لم يظهر لها مرجع واضح.",results:r.results};
+}
+function qaSection(close){
+  const ta=el("textarea",{style:"width:100%;min-height:92px;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);resize:vertical"});
+  ta.placeholder="اكتب سؤالًا مفتوحًا: لماذا يفصل البوزيشنر؟ كيف يعمل الريليه الهوائي؟ اشرح طريقة فحص حساس الضغط...";
+  const mode=el("select",{style:"width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"},el("option",{attrs:{value:"open"}},"سؤال مفتوح وإجابة"),el("option",{attrs:{value:"diagnosis"}},"تحليل عطل وأسبابه"),el("option",{attrs:{value:"explain"}},"إنشاء شرح فني مركّب"));
+  const out=el("div"),run=()=>{
+    out.textContent="";const q=ta.value.trim();if(q.length<8){out.appendChild(hint("اكتب سؤالًا أو وصفًا أطول قليلًا."));return;}
+    const a=composeTechnicalAnswer(q,mode.value);
+    if(!a.ok){out.appendChild(hint(a.message));return;}
+    out.appendChild(el("div",{cls:"nn-row"},el("b",null,"النتيجة مبنية على مراجعك"),el("div",{cls:"hx-sm"},"نوع الطلب: "+a.intent+" · طرق الاسترجاع: BM25"+(a.methods&&a.methods.sem?" + دلالي":"")+(a.methods&&a.methods.nn?" + شبكة عصبية":""))));
+    out.appendChild(hint(a.caveat));
+    a.sections.forEach(sec=>{out.appendChild(el("h4",null,sec.title));sec.rows.forEach(x=>{const row=el("div",{cls:"nn-row"});row.appendChild(el("div",null,x.text));row.appendChild(el("div",{cls:"hx-sm"},"المصدر: "+(x.source.kind==="item"?x.source.title:"مرجع تدريبي — "+(x.source.label||"غير مصنف"))));out.appendChild(row);});});
+    if(a.sources.length){out.appendChild(el("h4",null,"المراجع التي بُنيت عليها الإجابة"));a.sources.slice(0,8).forEach(({source})=>{const row=el("div",{cls:"nn-row"});const title=source.kind==="item"?source.title:("مرجع تدريبي: "+(source.label||"غير مصنف"));row.appendChild(el("b",null,title));if(source.kind==="item")row.appendChild(btn("فتح العنصر",()=>{close();window.__HIST.go(source.id,"");}));out.appendChild(row);});}
+    if(a.related&&a.related.length)out.appendChild(hint("مفاهيم مرتبطة: "+a.related.map(([w,z])=>w+" ← "+z.join("، ")).join(" · ")));
+  };
+  ta.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter")run();});
+  return det("🧠 المساعد الفني — سؤال مفتوح / تشخيص / شرح",true,hint("يبحث في عناصر قاعدة البيانات والحزم المدرّبة، ثم يركّب إجابة منظمة من المقاطع ذات الصلة. يعمل محليًا ولا يخترع حقائق غير موجودة في المراجع."),mode,ta,btn("حلّل وأجب",run,"primary"),out);
+}
+/* =========================================================
+   💬 المساعد الفني المحلي v2 — استدلال متخصص + قاعدة معرفة مدمجة + RAG من بيانات المستخدم
+   ملاحظة صريحة: هذا محرك خبير محلي حتمي، وليس LLM توليديًا عامًا.
+   ========================================================= */
+const LOCAL_KB=[
+ {id:'loop420',title:'إشارة التيار 4–20 mA',tags:'4 20 ma ملي امبير تيار لوب حلقة تحكم transmitter مرسل analog',text:'إشارة 4–20 mA هي حلقة تيار تناظرية صناعية. 4 mA تمثل صفر المدى الحي (Live Zero)، و20 mA تمثل نهاية المدى. يمكن كشف قطع السلك غالبًا عندما يهبط التيار قرب الصفر، كما أن التيار أقل تأثرًا بمقاومة الأسلاك من إشارة الجهد. لتحويل التيار إلى قيمة هندسية: القيمة = LRV + (I-4)/16 × (URV-LRV).',
+ answer:'إشارة 4–20 mA هي إشارة تيار تناظرية مستخدمة في القياس والتحكم الصناعي.\n\n- 4 mA = بداية المدى LRV.\n- 20 mA = نهاية المدى URV.\n- 12 mA = 50% من المدى.\n- وجود 4 mA بدل 0 mA يسمى Live Zero ويساعد على تمييز الصفر الحقيقي عن انقطاع الحلقة.',
+ extra:'معادلة التحويل: PV = LRV + ((I − 4) / 16) × (URV − LRV). افحص مقاومة الحمل، قطبية التغذية، التوصيلات، ومصدر 24VDC عند وجود قراءة غير طبيعية.'},
+ {id:'positioner',title:'وظيفة البوزيشنر Positioner',tags:'positioner بوزيشنر صمام كنترول control valve valve actuator feedback 4-20',text:'البوزيشنر يقارن إشارة الطلب Setpoint بموضع ساق الصمام الفعلي Feedback، ثم يتحكم في ضغط الهواء إلى المشغل حتى يقلل الخطأ بين الموضع المطلوب والموضع الفعلي. قد يكون أحادي أو مزدوج الفعل.',answer:'البوزيشنر جهاز تحكم في موضع صمام التحكم. يستقبل عادة إشارة طلب مثل 4–20 mA، ويقيس الموضع الفعلي من وصلة التغذية الراجعة، ثم يعدّل ضغط الهواء للمشغل حتى يصل الصمام إلى الموضع المطلوب.',extra:'المسار الوظيفي: إشارة الطلب → مقارنة مع Feedback → مضخم/مرحلة تحكم → Pilot/Relay → هواء إلى Actuator → حركة الصمام → Feedback جديد.'},
+ {id:'pilotrelay',title:'الريليه الهوائي Pilot Relay',tags:'pilot relay relay valve ريليه هوائي تضخيم هواء positioner بوزيشنر',text:'الريليه الهوائي في البوزيشنر يعمل كمضخم قدرة هوائي. إشارة التحكم الصغيرة تحرك عنصرًا طيارًا أو Pilot، فيتحكم في تدفق هواء التغذية الأكبر إلى المشغل أو في تفريغه. بذلك لا يحتاج عنصر القياس الصغير إلى تمرير كامل هواء المشغل.',answer:'الـ Pilot Relay هو مضخم هوائي: إشارة التحكم الصغيرة لا تحرك المشغل مباشرة، بل تتحكم في صمام ريليه يسمح بمرور كمية هواء أكبر من مصدر التغذية إلى المشغل، أو يفرغ الهواء منه.\n\nالفكرة تشبه ترانزستور يتحكم بتيار صغير في تيار أكبر، لكن هنا يتم تضخيم تدفق/قدرة الهواء.',extra:'في المشغل مزدوج الفعل توجد عادة حجرتا هواء؛ يرفع الريليه ضغط جهة ويخفض/يفرغ الجهة المقابلة وفق اتجاه الحركة. التفاصيل الدقيقة تعتمد على تصميم البوزيشنر.'},
+ {id:'hunting',title:'أسباب Hunting في صمام التحكم',tags:'hunting هنتنج تذبذب اهتزاز oscillation positioner صمام gain sensitivity pilot actuator',text:'قد يحدث Hunting أو تذبذب مستمر في موضع صمام التحكم بسبب زيادة الكسب Proportional Gain أو الحساسية، أو احتكاك/تعليق ميكانيكي ثم انطلاق مفاجئ، أو خلوص وصلة Feedback، أو ضغط هواء غير مستقر، أو عدم ملاءمة حجم/سرعة المشغل، أو ضبط غير مناسب للـ Pilot Relay. يجب تغيير عامل واحد في كل مرة ومراقبة الاستجابة.',answer:'الـ Hunting هو تذبذب متكرر حول الموضع المطلوب بدل استقرار الصمام. لا يوجد سبب واحد مؤكد دون قياسات، لكن أهم الاحتمالات:\n\n1. Proportional Gain مرتفع أكثر من اللازم؛ فيبالغ المتحكم في التصحيح.\n2. Sensitivity عالية أو Pilot Relay شديد الاستجابة.\n3. احتكاك أو Stiction في ساق الصمام/المشغل.\n4. خلوص أو ارتخاء في وصلة Feedback.\n5. ضغط هواء غير ثابت أو تسريب.\n6. ضبط غير مناسب لحجم المشغل أو سرعة الصمام.',extra:'ابدأ بتسجيل Trend للـ Setpoint والـ Position والضغط. افحص ميكانيكا الصمام والتغذية الهوائية أولًا، ثم غيّر Gain أو Sensitivity تدريجيًا وفق دليل الشركة. لا تضبط أكثر من متغير في الوقت نفسه.'},
+ {id:'deadband',title:'Deadband في أجهزة التحكم',tags:'deadband dead band ديدباند نطاق ميت صمام positioner',text:'Deadband هي مقدار التغير في إشارة الدخل الذي لا ينتج عنه تغير ملحوظ في الخرج أو الموضع. قد تنتج من الاحتكاك والخلوص والهيسترة أو تصميم الجهاز. زيادة Deadband تقلل الاستجابة للتغيرات الصغيرة لكنها قد تسبب ضعف الدقة.',answer:'الـ Deadband أو النطاق الميت هو منطقة صغيرة تتغير فيها إشارة الطلب لكن الخرج/موضع الصمام لا يتحرك بصورة ملحوظة. من أسبابه الاحتكاك، الخلوص الميكانيكي، والهيسترة. لا تخلط بينه وبين Gain: الـ Gain يحدد مقدار الاستجابة، أما Deadband فيصف منطقة عدم الاستجابة.'},
+ {id:'gain',title:'Proportional Gain',tags:'prop gain proportional gain كسب تناسبي positioner tuning ضبط',text:'Proportional Gain يحدد مقدار تصحيح الخرج مقابل خطأ الموضع. زيادة Gain تجعل الاستجابة أقوى وأسرع عادة، لكن الزيادة المفرطة قد تسبب تجاوزًا وتذبذبًا Hunting. خفضه قد يزيد البطء والخطأ المتبقي.',answer:'الـ Proportional Gain يحدد مدى قوة رد فعل البوزيشنر على فرق الموضع بين المطلوب والفعلي.\n- Gain أعلى: تصحيح أقوى وأسرع غالبًا، لكن قد يسبب Overshoot أو Hunting إذا زاد.\n- Gain أقل: حركة أهدأ، لكن قد تصبح بطيئة أو لا تتبع الطلب جيدًا.'},
+ {id:'sensitivity',title:'Sensitivity في البوزيشنر',tags:'sensitivity حساسية positioner pilot valve adjustment screw ضبط',text:'Sensitivity تصف مدى استجابة البوزيشنر للتغيرات الصغيرة في إشارة الخطأ. الحساسية العالية تجعل الاستجابة للتغير الصغير أكبر، وقد تزيد قابلية الاهتزاز. الضبط يكون وفق تعليمات الشركة وبخطوات صغيرة مع مراقبة الاستقرار.',answer:'Sensitivity تعني مدى تأثر البوزيشنر بالتغيرات الصغيرة في الخطأ. الحساسية الزائدة قد تجعل الصمام يتحرك باستمرار مع تغييرات صغيرة أو ضوضاء الإشارة. خفضها قد يهدئ الحركة لكنه قد يقلل دقة الاستجابة.'},
+ {id:'actuator',title:'المشغل الهوائي Actuator',tags:'actuator اكتويتور مشغل هوائي diaphragm piston spring double acting single acting',text:'المشغل الهوائي يحول طاقة ضغط الهواء إلى حركة ميكانيكية خطية أو دورانية. قد يكون Single Acting بزنبرك يعيد المشغل عند فقد الهواء، أو Double Acting يستخدم الهواء في الاتجاهين. القوة تعتمد على الضغط ومساحة المكبس/الغشاء.',answer:'المشغل الهوائي يحول ضغط الهواء إلى حركة للصمام.\n- Single Acting: الهواء يحركه في اتجاه، والزنبرك يعيده في الاتجاه الآخر.\n- Double Acting: الهواء يتحكم في الاتجاهين، ويحتاج عادة منفذي ضغط/تفريغ.\nالقوة التقريبية = الضغط × المساحة الفعالة.'},
+ {id:'ohm',title:'قانون أوم',tags:'ohm law قانون اوم مقاومة جهد تيار voltage current resistance v i r',text:'قانون أوم V = I × R. الجهد بالفولت، التيار بالأمبير، والمقاومة بالأوم. ومنه I=V/R و R=V/I.',answer:'قانون أوم يربط الجهد والتيار والمقاومة:\n\n- V = I × R\n- I = V ÷ R\n- R = V ÷ I\n\nحيث V بالفولت، I بالأمبير، وR بالأوم.'},
+ {id:'series',title:'المقاومات على التوالي',tags:'مقاومات توالي series resistors total resistance',text:'في التوصيل على التوالي يمر نفس التيار في جميع المقاومات، والمقاومة المكافئة تساوي مجموع المقاومات: Req=R1+R2+... والجهد الكلي يتوزع بينها.',answer:'في التوالي: المقاومة المكافئة = مجموع المقاومات.\n\nReq = R1 + R2 + R3 ...\n\nالتيار واحد في كل المقاومات، والجهد يتوزع حسب قيمة كل مقاومة.'},
+ {id:'parallel',title:'المقاومات على التوازي',tags:'مقاومات توازي parallel resistors equivalent resistance',text:'في التوازي يكون الجهد متساويًا على كل الفروع، والتيار يتوزع. 1/Req=1/R1+1/R2+... ولمقاومتين Req=R1×R2/(R1+R2).',answer:'في التوازي: الجهد متساوٍ على كل فرع، والتيار يتوزع.\n\nلمقاومتين: Req = (R1 × R2) ÷ (R1 + R2).\n\nالمقاومة المكافئة دائمًا أقل من أصغر مقاومة في الفروع الموجبة.'},
+ {id:'divider',title:'مقسم الجهد',tags:'voltage divider مقسم الجهد مقاومات توالي output',text:'مقسم الجهد بمقاومتين على التوالي: إذا كان الخرج على R2 فإن Vout=Vin×R2/(R1+R2)، بشرط أن يكون تأثير الحمل مهملاً أو محسوبًا.',answer:'مقسم الجهد ينتج جهدًا أقل من جهد المصدر باستخدام مقاومتين على التوالي. إذا أخذت الخرج على R2: Vout = Vin × R2 / (R1 + R2). هذه العلاقة تفترض أن الحمل لا يسحب تيارًا مؤثرًا.'},
+ {id:'adc',title:'ADC محول تناظري رقمي',tags:'adc analog digital converter محول تناظري رقمي resolution reference voltage',text:'ADC يحول جهدًا تناظريًا إلى قيمة رقمية. في محول N-bit عدد المستويات 2^N، والخطوة التقريبية LSB=Vref/(2^N) أو Vref/(2^N-1) حسب تعريف التحويل. الدقة تعتمد على المرجع والضوضاء والتكميم.',answer:'الـ ADC يحول الجهد التناظري إلى رقم يستطيع المتحكم قراءته. محول 10-bit يعطي 1024 مستوى (0 إلى 1023)، ومحول 12-bit يعطي 4096 مستوى. قيمة القراءة تعتمد على جهد الدخل ومرجع Vref.'},
+ {id:'uart',title:'UART اتصال تسلسلي',tags:'uart serial tx rx baud rate start stop bit communication',text:'UART واجهة اتصال تسلسلي غير متزامنة. لا تحتاج خط Clock مشتركًا؛ يتفق الطرفان على Baud Rate وإعدادات الإطار. الإطار غالبًا Start bit ثم Data bits ثم اختيارية Parity ثم Stop bit.',answer:'UART اتصال تسلسلي غير متزامن بين جهازين. أهم الخطوط TX وRX وGND. يتفق الطرفان على Baud Rate وعدد بتات البيانات والـ Parity وStop bits. يبدأ الإطار عادة بـ Start bit ثم البيانات ثم Stop bit.'},
+ {id:'pwm',title:'PWM تعديل عرض النبضة',tags:'pwm pulse width modulation duty cycle frequency',text:'PWM يتحكم في القدرة المتوسطة بتغيير نسبة زمن التشغيل Duty Cycle داخل كل دورة. Duty=Ton/Tperiod×100%. التردد يحدد عدد الدورات في الثانية، والـ Duty يحدد متوسط الخرج في كثير من التطبيقات.',answer:'PWM هو تعديل عرض النبضة. يظل الخرج يتنقل بين ON وOFF بسرعة، ويتم التحكم في المتوسط بتغيير Duty Cycle:\n\nDuty = Ton ÷ Tperiod × 100%.\n\nمثلاً Duty=25% يعني أن الإشارة ON لمدة ربع الدورة.'},
+ {id:'pid',title:'PID Controller',tags:'pid proportional integral derivative controller control loop',text:'PID يجمع ثلاثة أجزاء: P يستجيب للخطأ الحالي، I يراكم الخطأ مع الزمن لإزالة الخطأ المستمر، D يستجيب لمعدل تغير الخطأ ويساعد على توقع التغير لكنه حساس للضوضاء. الضبط يعتمد على العملية.',answer:'متحكم PID يتكون من:\n- P: تصحيح يتناسب مع الخطأ الحالي.\n- I: يجمع الخطأ عبر الزمن لتقليل Offset.\n- D: يستجيب لسرعة تغير الخطأ وقد يقلل التجاوز، لكنه حساس للضوضاء.\nيجب ضبطه حسب ديناميكية العملية وليس بقيم ثابتة لكل الأنظمة.'},
+ {id:'opamp',title:'المضخم العملياتي Op-Amp',tags:'op amp operational amplifier مضخم عملياتي gain inverting noninverting',text:'المضخم العملياتي له مدخلان موجب وغير عاكس (+) وسالب عاكس (-)، وخرج. في التغذية الراجعة السالبة المثالية يكون فرق الجهد بين المدخلين قريبًا من الصفر، وتيار الدخول قريبًا من الصفر ضمن شروط التشغيل الخطية.',answer:'الـ Op-Amp مضخم تفاضلي عالي الكسب، له مدخل (+) غير عاكس ومدخل (−) عاكس وخرج. باستخدام Feedback يمكن بناء مضخمات، مقارنات، مرشحات، ومكيفات إشارات. لا تفترض أنه مثالي خارج حدود جهد التغذية ومجال الـ Common Mode.'},
+ {id:'transistor',title:'الترانزستور BJT',tags:'bjt transistor ترانزستور base collector emitter switch amplifier',text:'ترانزستور BJT له Base وCollector وEmitter. يمكن استخدامه كمفتاح أو مضخم. في تشغيل NPN كمفتاح منخفض الجانب يمر التيار من الحمل إلى المجمع ثم الباعث إلى الأرضي عند تحفيز القاعدة بتيار مناسب.',answer:'ترانزستور BJT عنصر يتحكم فيه تيار القاعدة في تيار المجمع. أطرافه Base وCollector وEmitter. يمكن استخدامه كمفتاح أو مضخم. في تطبيق المفتاح يجب حساب مقاومة القاعدة والتحقق من تيار الحمل وقدرة الترانزستور.'},
+ {id:'startup',title:'Reset Handler ونسخ .data',tags:'startup reset handler data ram flash linker compiler c language',text:'في الأنظمة المضمنة، الـ Linker يحدد عناوين المتغيرات ومناطق الذاكرة ويضع قيم التهيئة في صورة البرنامج. كود الإقلاع Startup/Reset_Handler ينفذ نسخ قسم .data من صورة التهيئة في Flash إلى RAM، ويصفّر .bss، ثم يستدعي تهيئة المكتبة وmain وفق المنصة.',answer:'الذي ينسخ متغيرات .data من صورة التهيئة في Flash إلى RAM هو كود الإقلاع Startup Code داخل Reset_Handler عادةً.\n\n- Compiler: يولد الكود والبيانات.\n- Linker: يحدد العناوين ويجهز صورة التهيئة.\n- Reset_Handler: ينفذ النسخ إلى RAM ويصفّر .bss ثم يصل إلى main().'},
+ {id:'plc',title:'PLC دورة المسح Scan Cycle',tags:'plc programmable logic controller scan cycle input output program',text:'PLC ينفذ دورة مسح متكررة: قراءة المدخلات إلى صورة المدخلات، تنفيذ البرنامج، تحديث صورة المخارج إلى وحدات الخرج، ثم مهام الاتصال والتشخيص بحسب نوع المتحكم.',answer:'دورة المسح في PLC غالبًا تمر بالمراحل التالية:\n1. قراءة حالات المدخلات وتخزينها في Input Image.\n2. تنفيذ البرنامج على القيم المقروءة.\n3. تحديث المخارج Output Image.\n4. تنفيذ خدمات الاتصال والتشخيص والمهام الخلفية حسب الجهاز.'},
+ {id:'sensor4wire',title:'توصيل حساس 4 أسلاك',tags:'sensor transmitter four wire 4 wire 24v power supply output current',text:'الحساس أو المرسل رباعي الأسلاك غالبًا يستخدم سلكين لتغذية الجهاز وسلكين منفصلين لإشارة الخرج، لكن التوصيل الدقيق يعتمد على مخطط الشركة ونوع الخرج. لا تفترض أن كل 4-wire device له نفس ترتيب الأطراف.',answer:'في كثير من أجهزة 4-wire يوجد زوج لتغذية الجهاز (مثل 24VDC و0V) وزوج مستقل لخرج القياس. لكن لا يمكن تحديد أرقام الأطراف من عدد الأسلاك فقط؛ يجب الرجوع إلى Wiring Diagram ورقم الموديل.'},
+ {id:'calibration',title:'معايرة أجهزة القياس',tags:'calibration معايرة transmitter sensor zero span lrv urv',text:'المعايرة تقارن قراءة الجهاز بمعيار مرجعي معروف عبر نقاط متعددة ضمن المدى، وتحدد الخطأ والتكرارية. Zero يخص نقطة البداية وSpan يخص امتداد المدى. يجب توثيق As Found وAs Left وعدم ضبط الجهاز قبل تسجيل حالته الأصلية.',answer:'المعايرة هي مقارنة قراءة الجهاز بمعيار مرجعي معروف عند نقاط من مدى القياس، ثم تقييم الخطأ.\n- As Found: حالة الجهاز قبل الضبط.\n- As Left: حالته بعد الضبط.\n- Zero: نقطة البداية.\n- Span: عرض المدى.\nلا تبدأ بالضبط قبل تسجيل نتائج As Found.'},
+ {id:'safety',title:'السلامة قبل فحص دائرة صناعية',tags:'safety lockout tagout loto electrical pneumatic isolation pressure',text:'قبل صيانة دائرة كهربائية أو هوائية يجب تطبيق إجراءات العزل المناسبة: فصل مصادر الطاقة، Lockout/Tagout حسب نظام الموقع، تفريغ الضغط والطاقة المخزنة، التحقق من انعدام الطاقة بأداة مناسبة، واتباع تصريح العمل وإجراءات المصنع.',answer:'قبل الفحص أو الصيانة: اعزل مصادر الطاقة وفق إجراءات الموقع، طبّق Lockout/Tagout، فرّغ الضغط والطاقة المخزنة، وتحقق من حالة انعدام الطاقة بأداة مناسبة. لا تعتمد على إيقاف التشغيل من الشاشة فقط.'}
+];
+const LOCAL_SYNONYMS={"صمام":"valve","بوزيشنر":"positioner","بوزشنر":"positioner","بوستشنر":"positioner","اكتويتور":"actuator","اكتيويتر":"actuator","ريليه":"relay","ريلاي":"relay","هوائي":"pneumatic air","هوا":"air","اهتزاز":"hunting oscillation","تذبذب":"hunting oscillation","ذبذبه":"hunting oscillation","حساسيه":"sensitivity","كسب":"gain","مقاومه":"resistance resistor","جهد":"voltage","فولت":"voltage","تيار":"current","امبير":"ampere","حساس":"sensor transmitter","مرسل":"transmitter","معايره":"calibration"};
+function localNorm(t){let n=S.NORM(String(t||''));n=n.replace(/[٠-٩]/g,c=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));return n;}
+function localExpand(q){const ws=S.words(localNorm(q),100),out=ws.slice();for(const raw of ws){const w=raw.replace(/^(وال|بال|كال|لل|ال)/,'');const v=LOCAL_SYNONYMS[w];if(v)out.push(...v.split(' '));}return [...new Set(out)].join(' ');}
+function localTokens(t){return S.words(localNorm(t),300).map(w=>w.replace(/^(وال|بال|كال|لل|ال)/,'')).filter(w=>w.length>1&&!QA_STOP.has(w));}
+function localScore(q,d){const qw=new Set(localTokens(q)),dw=new Set(localTokens((d.title||'')+' '+(d.tags||'')+' '+(d.text||'')));let h=0;for(const w of qw)if(dw.has(w))h++;const title=localTokens(d.title||'');let th=0;for(const w of qw)if(title.includes(w))th++;return {score:(h/Math.sqrt(Math.max(1,qw.size)))+th*.16,hit:h,total:qw.size};}
+function localFind(q){const ex=localExpand(q),built=LOCAL_KB.map(d=>({d,sc:localScore(ex,d)})).sort((a,b)=>b.sc.score-a.sc.score);let user=[];try{const r=hybridSearch(ex,{itemText:itemTextOf});user=r.results||[];}catch(e){}return {built,user,expanded:ex};}
+function localOhm(q){
+ const n=localNorm(q),num='([0-9]+(?:\\.[0-9]+)?)\\s*';
+ const get=(rx)=>{const m=n.match(rx);return m?Number(m[1]):null;};
+ let V=get(new RegExp(num+'(?:v|volt|فولت)(?=$|\\s|[^a-z0-9])')),I=get(new RegExp(num+'(?:ma|ملي ?امبير)(?=$|\\s|[^a-z0-9])')),A=get(new RegExp(num+'(?:a|amp|امبير)(?=$|\\s|[^a-z0-9])')),R=get(new RegExp(num+'(?:k ?ohm|kohm|كيلو ?اوم|kΩ)(?=$|\\s|[^a-z0-9])'));
+ if(I==null&&A!=null)I=A*1000;
+ const hasOhm=/(اوم|ohm|مقاومه|تيار|جهد|فولت|امبير|احسب)/.test(n);
+ if(!hasOhm||[V,I,R].filter(x=>x!=null).length<2)return null;
+ if(R!=null&&/k ?ohm|kohm|كيلو ?اوم|kω/.test(n))R*=1000;
+ if(V!=null&&I!=null){const a=I/1000;return {title:'حساب بقانون أوم',text:`R = V ÷ I = ${V} ÷ ${a} = ${(V/a).toFixed(4)} Ω`,detail:'تم تحويل التيار من mA إلى A قبل الحساب.'};}
+ if(V!=null&&R!=null)return {title:'حساب بقانون أوم',text:`I = V ÷ R = ${V} ÷ ${R} = ${(V/R*1000).toFixed(4)} mA`,detail:'النتيجة بالملي أمبير.'};
+ if(I!=null&&R!=null){const a=I/1000;return {title:'حساب بقانون أوم',text:`V = I × R = ${a} × ${R} = ${(a*R).toFixed(4)} V`,detail:'تم تحويل التيار من mA إلى A قبل الحساب.'};}
+ return null;
+}
+function localQuestionIntent(q){
+ const n=localNorm(q);
+ if(/(معماري|architecture|نوع المعالج|cpu|core|نواه|النواه|بنية المعالج)/.test(n))return 'architecture';
+ if(/(جهد|فولت|voltage|تغذيه|power supply|جهد التشغيل)/.test(n))return 'voltage';
+ if(/(تيار|استهلاك|current|سحب)/.test(n))return 'current';
+ if(/(ذاكره|ram|flash|sram|rom)/.test(n))return 'memory';
+ if(/(pinout|ارجل|اطراف|gpio|مداخل|مخارج)/.test(n))return 'pins';
+ if(/(كيف يعمل|طريقه العمل|الية العمل|ميكانيزم|اشرح|وظيفه)/.test(n))return 'explain';
+ if(/(عطل|مش شغال|لا يعمل|مش بيشتغل|يفصل|توقف|تذبذب|هنتنج|hunting|سخن|احتراق|تسريب|ضعف|قراءة غلط)/.test(n))return 'diagnosis';
+ return 'general';
+}
+function localEntityTerms(q){return [...new Set((localNorm(q).match(/[a-z]{2,}\d+[a-z0-9]*|\d+[a-z]{2,}[a-z0-9]*/g)||[]))];}
+function localSentenceEvidence(text,q,intent){
+ // PDF datasheets often store table labels and values in separate text objects/lines.
+ // Build adjacent label:value facts before ranking; do not discard short model/title lines.
+ const qset=new Set(localTokens(q)),raw=String(text||'').replace(/\r/g,'').split(/\n+/).map(x=>x.replace(/^\s*(?:[-•*]\s*|\d{1,2}[.)-]\s+)/,'').trim()).filter(Boolean);
+ const rx={architecture:/(xtensa|risc.?v|معماري|architecture|processor|cpu|نواه|core)/i,voltage:/(جهد التشغيل|جهد التغذية|operating voltage|supply voltage|rated voltage|(^|[\s:])voltage\s*:)/i,current:/(تيار|استهلاك|current|ma|ampere|power consumption|rating)/i,memory:/(ذاكره|ram|flash|sram|rom|memory)/i,pins:/(gpio|pin|ارجل|اطراف|adc|uart|spi|i2c|connection)/i,general:/(inductive|sensor|electrical design|output function|sensing range|operating voltage|current consumption|protection|housing|dimensions)/i,diagnosis:/(سبب|بسبب|عطل|توقف|تذبذب|افحص|تحقق|قياس|تسريب|احتراق)/i,explain:/(sensor|حساس|inductive|inductive full.?metal|وظيفه|function|operating principle)/i};
+ const candidates=[];let ix=0;const add=t=>{t=String(t||'').replace(/\s+/g,' ').trim();if(t.length>=2&&t.length<=1200)candidates.push({t,i:ix++});};
+ raw.forEach((line,i)=>{
+   if(!/^[a-z]{2,}\d+[a-z0-9]*$/i.test(line))add(line);
+   // Pair a table heading with the following unit/value rows (e.g. Operating voltage / [V] / 10...30 DC).
+   if(/(operating voltage|supply voltage|voltage|current consumption|current rating|sensing range|output function|electrical design|protection|ambient temperature|switching frequency|operating distance|connector|connection|نوع الخرج|جهد التشغيل|مدى الاستشعار)/i.test(line)){
+     const vals=[];for(let j=i+1;j<Math.min(raw.length,i+4);j++){if(/(operating voltage|supply voltage|current consumption|sensing range|output function|electrical design|ambient temperature|switching frequency|operating distance|protection|connector|connection)/i.test(raw[j]))break;vals.push(raw[j]);if(vals.join(' ').length>120)break;}
+     if(vals.length)add(line+': '+vals.join(' '));
+   }
+   // Preserve short model + product-description pairs that sentence filters used to lose.
+   if(/[a-z]{2,}\d+[a-z0-9]*/i.test(line)&&raw[i+1])add(line+' — '+raw[i+1]);
+ });
+ const scored=candidates.map(({t,i})=>{const ws=new Set(localTokens(t));let hit=0;for(const w of qset)if(ws.has(w))hit++;const topical=rx[intent]?rx[intent].test(t):false;return {t,i,hit,topical,score:hit/Math.sqrt(Math.max(1,qset.size))+(topical?1.4:0)};});
+ const compact=scored.filter(x=>{const bare=/^(operating voltage|supply voltage|rated voltage|current consumption|sensing range|output function|electrical design|ambient temperature|switching frequency)$/i.test(x.t);return !bare||!scored.some(y=>y!==x&&y.t.toLowerCase().startsWith(x.t.toLowerCase()+':'));});
+ const seen=new Set();return compact.sort((a,b)=>b.score-a.score||a.i-b.i).filter(x=>{const k=localNorm(x.t).replace(/\s+/g,' ').trim();if(seen.has(k))return false;seen.add(k);return true;});
+}
+function answerOffline(question,history,semanticCandidates){
+ const q=String(question||'').trim();if(q.length<3)return {ok:false,text:'اكتب سؤالًا أوضح قليلًا.'};
+ const calc=localOhm(q);if(calc)return {ok:true,kind:'calculation',title:calc.title,answer:calc.text+'\n'+calc.detail,sources:[],confidence:'حساب مباشر'};
+ let searchQ=q;const currentEntities=localEntityTerms(q);const prevUser=Array.isArray(history)?[...history].reverse().find(m=>m&&m.role==='user'&&m.text&&m.text!==q):null;
+ // لا نرث موديل السؤال السابق إذا كان المستخدم كتب موديلًا جديدًا في السؤال الحالي.
+ if(!currentEntities.length&&prevUser&&q.length<55&&/(^(طيب|طب|وكمان|وما|وماذا|اشرح اكتر|ازاي|ليه|ما الفرق|هل|كمان)|\b(it|that|why|how)\b)/i.test(q))searchQ=prevUser.text+' '+q;
+ const intent=localQuestionIntent(searchQ),entities=localEntityTerms(searchQ),found=localFind(searchQ);if(Array.isArray(semanticCandidates)&&semanticCandidates.length){const seenSem=new Set((found.user||[]).map(x=>x.id||((x.source||"")+"|"+(x.page||"")+"|"+(x.text||"").slice(0,80))));for(const x of semanticCandidates){const k=x.id||((x.source||"")+"|"+(x.page||"")+"|"+(x.text||"").slice(0,80));if(!seenSem.has(k)){found.user.unshift(x);seenSem.add(k);}}}
+ // Device/model names are anchors: never let a generic concept (e.g. voltage divider)
+ // outrank the exact device named by the user.
+ let exactItems=(state.items||[]).filter(it=>{const t=localNorm([it.name,it.model,it.manufacturer,itemTextOf(it)].join(' '));return entities.length&&entities.some(e=>new RegExp('(^|[^a-z0-9])'+e.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-z0-9]|$)','i').test(t));});
+ const userCandidates=(found.user||[]).map(x=>{const it=x.kind==='item'?(state.items||[]).find(z=>z.id===x.id):null;const full=it?itemTextOf(it):String(x.text||'');const sc=localScore(searchQ,{title:x.title||x.label||'',tags:'',text:full});const exact=entities.some(e=>new RegExp('(^|[^a-z0-9])'+e.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-z0-9]|$)','i').test(localNorm((x.title||'')+' '+full)));return {...x,full,local:sc,exact};}).sort((a,b)=>(b.exact-a.exact)||(b.local.score-a.local.score)||(b.score-a.score));
+ // Strict entity grounding: a part number (PIC12F675, ESP32-S3, STM32F103, etc.)
+ // must be present in the selected source itself. Never answer from a different device
+ // merely because it shares a generic property word such as voltage or current.
+ const exactUserCandidates=userCandidates.filter(x=>x.exact);
+ const targetModel=entities.find(e=>/^(?:pic|esp|stm|stm32|atmega|attiny|attmega|msp|ch32|rp|nrf|cc|ig|lm)\d/i.test(e)||(/^[a-z]{2,}\d+[a-z0-9]*$/i.test(e)&&e.length>=5)) || (/\bavr\b/i.test(localNorm(searchQ))?'avr':null);
+ const hasPartNumber=!!targetModel;
+ if(hasPartNumber&&!exactItems.length&&!exactUserCandidates.length){
+   const shownModel=targetModel.toUpperCase();
+   return {ok:false,text:`لم أجد الموديل ${shownModel} نفسه في قاعدة المعرفة المحلية. لذلك لن أستخدم مواصفات جهاز آخر لمجرد أن السؤال عن الجهد أو التيار. أضف مرجع ${shownModel} أو ورقة بياناته إلى قاعدة البرنامج، ثم أعد السؤال.`,suggest:`يمكنك إضافة ملف Datasheet أو مقال يحتوي على رقم ${shownModel} ومواصفاته. لا توجد هنا بيانات محلية كافية لهذا الموديل.`,sources:[],confidence:'رفض آمن: لا يوجد مصدر مطابق لرقم الموديل'};
+ }
+ let selected=exactItems.length?userCandidates.filter(x=>x.exact):(exactUserCandidates.length?exactUserCandidates:userCandidates.filter(x=>(x.local.hit>0&&x.local.score>=.34)||(x.semanticScore!=null&&x.semanticScore>=.34)));
+ // When several chunks from one PDF contain the same exact model, answer from their combined text.
+ // Otherwise the top-ranked chunk may be only the wiring page/header and hide the actual specs.
+ if(!exactItems.length&&exactUserCandidates.some(x=>x.kind==='knowledge')){
+   const first=exactUserCandidates.find(x=>x.kind==='knowledge'),same=exactUserCandidates.filter(x=>x.kind==='knowledge'&&x.source===first.source).sort((a,b)=>(a.page||0)-(b.page||0));
+   if(same.length){const pages=[...new Set(same.map(x=>x.page).filter(Boolean))];selected=[{...first,full:same.map(x=>x.full).join('\n'),page:pages.length?pages.join('، '):null,source:first.source},...selected.filter(x=>!(x.kind==='knowledge'&&x.source===first.source))];}
+ }
+ if(exactItems.length&&!selected.length)selected=exactItems.map(it=>({kind:'item',id:it.id,title:it.name,full:itemTextOf(it),exact:true,local:localScore(searchQ,{title:it.name,text:itemTextOf(it)})}));
+ const top=found.built[0],second=found.built[1];
+ // Built-in knowledge is selected only when the subject itself matches, not merely one broad word.
+ const builtMatch=top&&top.sc.hit>=2&&top.sc.score>=.95?top:null;
+ const diag=intent==='diagnosis';let answer='',sources=[],sections=[];
+ if(selected.length){
+   const best=selected[0],evidence=localSentenceEvidence(best.full,searchQ,intent);
+   const chosen=evidence.filter(x=>x.hit>0||x.topical).slice(0,intent==='explain'||intent==='architecture'?7:5);
+   const item=(best.kind==='item'?(state.items||[]).find(it=>it.id===best.id):null);
+   const title=best.title||best.label||(item&&item.name)||'مرجع من قاعدة بياناتك';
+   if(chosen.length){
+     const direct=chosen.filter(x=>x.topical).slice(0,4);const rest=chosen.filter(x=>!x.topical&&(x.hit>=2||((intent==='general'||intent==='explain')&&x.hit>=1))).slice(0,5);
+     answer=(intent==='architecture'?'**المعمارية وبنية المعالجة:**\n':intent==='voltage'?'**جهد التشغيل:**\n':intent==='current'?'**التيار والاستهلاك:**\n':intent==='memory'?'**الذاكرة:**\n':intent==='pins'?'**الأطراف والواجهات:**\n':intent==='diagnosis'?'**معلومات التشخيص الموجودة في المرجع:**\n':'**المعلومات الأكثر ارتباطًا بسؤالك:**\n')+direct.map(x=>'• '+x.t).join('\n');
+     if(rest.length)answer+='\n\n**تفاصيل أخرى من نفس المرجع:**\n'+rest.map(x=>'• '+x.t).join('\n');
+   }else answer='وجدت الجهاز في قاعدة بياناتك، لكن النص المحفوظ له لا يحتوي على معلومة واضحة تجيب عن هذا السؤال تحديدًا.';
+   sources.push({title:best.kind==='knowledge'?best.source||title:title,type:best.kind==='item'?'قاعدة أجهزتك':best.kind==='knowledge'?'مستند متعلّم':'حزمة تدريب',page:best.page||null});
+   if(intent==='architecture'&&/esp32/i.test(searchQ))sections.push({title:'توضيح مهم',text:'اسم ESP32 يشير إلى عائلة شرائح وليس معالجًا واحدًا موحدًا؛ لذلك يجب تحديد رقم الشريحة الكامل مثل ESP32, ESP32-S3 أو ESP32-C3 قبل تعميم نوع النواة أو عددها.'});
+   if(intent==='voltage'&&/esp32/i.test(searchQ))sections.push({title:'تنبيه كهربائي',text:'جهد تشغيل الشريحة 3.3V لا يعني أن مدخلات GPIO تتحمل 5V. تحقق من ورقة بيانات الشريحة واللوحة قبل توصيل أي إشارة.'});
+ }else if(builtMatch){
+   const b=builtMatch.d;answer=b.answer+(b.extra?'\n\nتفاصيل عملية:\n'+b.extra:'');sources.push({title:b.title,type:'معرفة فنية مدمجة'});
+   if(second&&second.sc.score>.8&&second.d.id!==b.id)sections.push({title:'موضوع مرتبط',text:second.d.title+': '+second.d.answer});
+ }else{
+   const domain=/(plc|سيمنز|s7|avr|atmega|pic|stm32|c language|لغة c|الكترون|دائره|حساس|صمام|positioner|بوزيشنر|هواء|كهرباء|مقاومه|تيار|جهد|محرك|موتور|esp\d*)/i.test(localNorm(searchQ));
+   return {ok:false,text:domain?'لم أجد نصًا موثوقًا كافيًا يجيب عن هذا السؤال تحديدًا. أضف شرحًا أو مواصفة أو صورة موضحة للجهاز، أو حدد رقم الموديل.':'هذا السؤال خارج نطاق المعرفة الفنية المحلية المتاحة. لا يوجد نموذج لغوي عام مدمج حاليًا، لذلك لن أخترع إجابة.',suggest:'جرّب كتابة اسم الجهاز أو الموديل مع الخاصية المطلوبة، مثل: ESP32-S3 جهد التشغيل أو ESP32-C3 نوع المعالج.',sources:[]};
+ }
+ const intro=diag?'هذا تحليل مبدئي اعتمادًا على محتوى المرجع، وليس تشخيصًا مؤكدًا دون قياسات.\n\n':'إجابة مستخرجة من المرجع الأقرب لموضوع السؤال، مع إعطاء الأولوية لاسم الجهاز أو الموديل.\n\n';
+ return {ok:true,kind:'knowledge',title:diag?'تحليل فني مبدئي':'إجابة فنية موجهة',answer:intro+answer,sections,sources,confidence:selected.length?'مرتبطة مباشرة بعنصر محدد في قاعدة أجهزتك': 'معرفة فنية مدمجة',expanded:found.expanded,intent};
+}
+function offlineChatSection(close){
+ const root=el('div',{style:'display:flex;flex-direction:column;gap:8px'});
+ const status=el('div',{cls:'nn-row'},el('b',null,'🧠 المحرك الفني المحلي — v12 / Transformers.js + Translation'),el('div',{cls:'hx-sm'},'بحث هجين: كلمات + استرجاع دلالي متعدد اللغات. لا يوجد نموذج توليد عام مدمج.'));allKnowledge().then(a=>{const x=status.querySelector('.hx-sm');if(x)x.textContent+=' · ذاكرة المستندات: '+a.length+' مقطعًا';});
+ const tfStatus=el('div',{cls:'hx-sm',style:'padding:8px;border:1px solid var(--border);border-radius:8px'},'نموذج الفهم الدلالي غير محمّل. يحتاج تنزيلًا أوليًا (~120MB)، ثم يحتفظ المتصفح بنسخة مخبأة.');
+ const tfButton=btn('تحميل نموذج الفهم العربي/الإنجليزي',async()=>{tfButton.disabled=true;tfStatus.textContent='تهيئة Transformers.js…';try{const r=await loadTransformersRuntime(t=>tfStatus.textContent=t);tfStatus.textContent='تم تحميل النموذج على '+r.device+'؛ جارٍ فهرسة المستندات…';const ix=await indexKnowledgeWithTransformers(t=>tfStatus.textContent=t);tfStatus.textContent='جاهز: تم فهرسة '+ix.total+' مقطعًا دلاليًا. البحث العربي/الإنجليزي أصبح متاحًا.';tfButton.textContent='إعادة فهرسة المعرفة';}catch(e){tfStatus.textContent='تعذر تحميل النموذج: '+(e.message||e)+'. تحقق من الإنترنت أول مرة، أو من دعم WebAssembly/WebGPU.';}finally{tfButton.disabled=false;}},'secondary');
+ const tfBar=el('div',{style:'display:flex;flex-direction:column;gap:6px'},tfButton,tfStatus);
+ const log=el('div',{style:'display:flex;flex-direction:column;gap:8px;max-height:48vh;overflow:auto;padding:6px;background:var(--panel2);border:1px solid var(--border);border-radius:10px'});
+ const key='workshop.offlineChat.v2';let msgs=[];try{msgs=JSON.parse(localStorage.getItem(key)||'[]');if(!Array.isArray(msgs))msgs=[];}catch(e){msgs=[];}
+ const persist=()=>{try{localStorage.setItem(key,JSON.stringify(msgs.slice(-80)));}catch(e){}};
+ const render=()=>{log.textContent='';if(!msgs.length)log.appendChild(hint('ابدأ بسؤال فني. مثال: ما وظيفة الريليه الهوائي؟ أو لماذا يحدث Hunting في البوزيشنر؟'));msgs.forEach(m=>{const wrap=el('div',{style:'align-self:'+(m.role==='user'?'flex-start':'stretch')+';max-width:'+(m.role==='user'?'92%':'100%')+';padding:9px;border-radius:9px;border:1px solid var(--border);background:'+(m.role==='user'?'var(--panel3)':'var(--panel)')});wrap.appendChild(el('b',null,m.role==='user'?'أنت':'المساعد الفني المحلي'));wrap.appendChild(el('div',{style:'white-space:pre-wrap;line-height:1.65;margin-top:5px;font-size:13px'},m.text));if(m.sources&&m.sources.length){wrap.appendChild(el('div',{cls:'hx-sm',style:'margin-top:7px'},'المراجع: '+m.sources.map(s=>s.title+' ('+s.type+(s.page?'، صفحة '+s.page:'')+')').join(' · ')));}if(m.confidence)wrap.appendChild(el('div',{cls:'hx-sm',style:'margin-top:3px'},'نوع الإسناد: '+m.confidence));log.appendChild(wrap);});log.scrollTop=log.scrollHeight;};
+ const ta=el('textarea',{attrs:{rows:'3'},style:'width:100%;resize:vertical;min-height:72px'});ta.placeholder='اكتب سؤالك الفني هنا…';
+ const send=async()=>{const q=ta.value.trim();if(!q)return;ta.disabled=true;await allKnowledge();msgs.push({role:'user',text:q});let sem=[];if(tfPipeline){try{sem=await semanticKnowledgeSearch(q,14);}catch(e){tfStatus.textContent='تعذر البحث الدلالي: '+(e.message||e);}}let a=answerOffline(q,msgs,sem);{tfStatus.textContent=questionLanguage(q)==='ar'?'السؤال بالعربية: تجهيز الإجابة بالعربية…':'English question: preparing the answer in English…';a=await translateAnswerForQuestion(q,a,t=>tfStatus.textContent=t);if(a.translationError)tfStatus.textContent='تعذرت الترجمة الآلية: '+a.translationError+' — تم الاحتفاظ بالنص الأصلي دون تغيير.';else tfStatus.textContent=questionLanguage(q)==='ar'?'تم إعداد الإجابة بالعربية.':'Answer prepared in English.';}msgs.push({role:'assistant',text:a.ok?(a.title+'\n\n'+a.answer+(a.sections&&a.sections.length?'\n\n'+a.sections.map(x=>x.title+'\n'+x.text).join('\n\n'):'')):(a.text+'\n'+(a.suggest||'')),sources:a.sources||[],confidence:a.confidence||''});ta.disabled=false;ta.value='';persist();render();};
+ ta.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')send();});
+ const controls=el('div',{style:'display:flex;gap:6px;flex-wrap:wrap'},btn('إرسال السؤال',send,'primary'),btn('مسح المحادثة',()=>{if(confirm('مسح سجل هذه المحادثة من هذا الجهاز؟')){msgs=[];persist();render();}}),btn('اختبار المحرك',()=>{const tests=['ما وظيفة البوزيشنر؟','لماذا يحدث Hunting في صمام التحكم؟','ما الفرق بين ADC وUART؟','احسب التيار عند 12 فولت ومقاومة 1 كيلو أوم','ما هو قانون أوم؟','ما عاصمة فرنسا؟'];const rows=tests.map(q=>{const a=answerOffline(q,[]);return q+' → '+(a.ok?'أجاب':'امتنع عن الإجابة')+(a.title?' ('+a.title+')':'');});msgs.push({role:'assistant',text:'نتائج الاختبار الذاتي:\n'+rows.join('\n')+'\n\nهذا اختبار تغطية داخلي وليس مقياسًا علميًا لجودة نموذج لغوي.'});persist();render();}));
+ root.append(status,tfBar,log,ta,controls,hint('اختصار الإرسال: Ctrl + Enter. المحادثة تحفظ محليًا على هذا الجهاز. لا يحتاج المحرك إلى اتصال بالإنترنت.'));
+ render();return root;
+}
+async function offlineChat(host,close){host.textContent='';host.appendChild(offlineChatSection(close));}
+
+/* ---------- علاقات (رسم معرفة خفيف): فاعل —علاقة→ مفعول ---------- */
+const RELS=[[/^(يقيس|بيقيس|تقيس)$/,"يقيس"],[/^(يتحكم|بيتحكم|تتحكم)$/,"يتحكم في"],[/^(يسبب|بيسبب|تسبب)$/,"يسبّب"],[/^(يحول|بيحول)$/,"يحوّل"],[/^(يوصل|بيوصل)$/,"يوصّل"],[/^(يفصل|بيفصل|يقطع|بيقطع)$/,"يفصل"],[/^(يغذي|بيغذي)$/,"يغذّي"],[/^(يشغل|بيشغل)$/,"يشغّل"],[/^(يستخدم|بيستخدم)$/,"يستخدم"],[/^(يسحب|بيسحب)$/,"يسحب"],[/^(يدفع|بيدفع)$/,"يدفع"],[/^(يؤدي|بيؤدي)$/,"يؤدي إلى"]];
+const KSTOP=new Set("في من علي الي الى ان ثم لو عند كان ده دي اللي الذي التي هذا هذه مع عن بعد قبل لما او كل".split(" "));
+const ent=w=>w.replace(/^(وال|بال|ال)/,"");
+function extractTriples(text){
+  const out=[];for(const ln of String(text||"").split(/[\n\.؟!؛]+/)){const ws=S.words(ln,60);
+    for(let i=1;i<ws.length-1;i++){const rl=RELS.find(r=>r[0].test(ws[i]));if(!rl)continue;let j=i+1;while(j<ws.length&&KSTOP.has(ws[j]))j++;let k=i-1;while(k>=0&&KSTOP.has(ws[k]))k--;if(k<0||j>=ws.length)continue;
+      const s=ent(ws[k]),o=ent(ws[j]);if(s.length>=2&&o.length>=2&&s!==o)out.push({s,r:rl[1],o});}}
+  return out;
+}
+function buildKG(textOf){
+  const g=new Map();const add=(t,src)=>{for(const x of extractTriples(t)){const key=x.s+"|"+x.r+"|"+x.o;let e=g.get(key);if(!e){e={...x,n:0,src:new Set()};g.set(key,e);}e.n++;e.src.add(src);}};
+  for(const it of (state.items||[]))add(textOf(it),it.id);for(const p of activePacks())for(const r of p.refs.slice(0,3000))add(r.t,"ref");for(const k of KNOWLEDGE.values())add(k.text,k.source);
+  return [...g.values()].sort((a,b)=>b.n-a.n);
+}
+/* ---------- تقييم مستقل لجودة الاستدلال ---------- */
+const DEFAULT_OOD=["وصفة الكبسة بالدجاج محتاجة أرز وبصل وبهارات ومرق","المباراة النهائية انتهت بتعادل إيجابي وتأهل الفريق بركلات الترجيح","رحلة الطيران للقاهرة اتأجلت بسبب الطقس وحجز الفندق اتلغى","الانتخابات البرلمانية هتتعمل الشهر الجاي والمرشحين بدأوا الدعاية","الرواية الجديدة بتحكي قصة حب في الإسكندرية في الأربعينات","الحفلة الموسيقية كانت رائعة والجمهور غنى مع المطرب","سعر الذهب ارتفع اليوم والبورصة سجلت مكاسب كبيرة","الدواء ده بيتاخد بعد الأكل مرتين في اليوم لمدة أسبوع","المدرسة بدأت العام الدراسي الجديد والطلبة اشتروا الكتب","اللاعب سجل هدفين في الشوط الثاني واتختار أفضل لاعب","الفيلم الجديد حقق إيرادات عالية في أول أسبوع عرض","الشاطئ كان مزدحم والأطفال بيلعبوا في الرمل والمياه","محتاج أحجز تذكرة قطار لأسوان يوم الجمعة الصبح","الكيك بالشوكولاتة محتاجة بيض وسكر وزبدة وفرن ساخن","اجتماع الإدارة هيناقش الميزانية السنوية وخطة التوسع"];
+const _rngS=seed=>{let s=seed>>>0||1;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296;};};
+function perturb(text,kind,rnd){
+  const ws=text.split(/\s+/);
+  if(kind==="typo")return ws.map(w=>w.length>3&&rnd()<.12?w.slice(0,1+Math.floor(rnd()*(w.length-2)))+w.slice(2+Math.floor(rnd()*(w.length-2))):w).join(" ");
+  if(kind==="drop")return ws.filter(()=>rnd()>.25).join(" ");
+  if(kind==="shuffle")return ws.sort(()=>rnd()-.5).join(" ");
+  if(kind==="dialect")return text.replace(/ة/g,"ه").replace(/ى/g,"ي").replace(/أ|إ|آ/g,"ا");
+  return text;
+}
+function auroc(pos,neg){if(!pos.length||!neg.length)return null;const a=pos.map(v=>[v,1]).concat(neg.map(v=>[v,0])).sort((x,y)=>x[0]-y[0]);let rs=0,i=0;while(i<a.length){let j=i;while(j<a.length&&a[j][0]===a[i][0])j++;const r=(i+j+1)/2;for(let k=i;k<j;k++)if(a[k][1]===1)rs+=r;i=j;}const n1=pos.length,n0=neg.length;return (rs-n1*(n1+1)/2)/(n1*n0);}
+function evaluatePack(pack,extra){
+  const m=pack.meta,T=pack.testSet||[];if(!T.length)return null;extra=extra||{};
+  const C=m.C,tp=new Int32Array(C),fp=new Int32Array(C),fn=new Int32Array(C),conf=new Map(),bins=Array.from({length:10},()=>({n:0,ok:0,c:0})),probs=[],oks=[];let ok=0,top3=0;
+  const t0=performance.now();
+  for(const d of T){const r=classify(pack,d.t,3);if(!r){fn[d.l]++;oks.push(0);probs.push(0);continue;}const t1=r.top[0],hit=t1.l===d.l;probs.push(t1.prob);oks.push(hit?1:0);
+    if(hit){ok++;tp[t1.l]++;}else{fp[t1.l]++;fn[d.l]++;const k=d.l+">"+t1.l;conf.set(k,(conf.get(k)||0)+1);}
+    if(r.top.some(x=>x.l===d.l))top3++;const b=bins[Math.min(9,Math.floor(t1.prob*10))];b.n++;b.c+=t1.prob;if(hit)b.ok++;}
+  const ms=(performance.now()-t0)/T.length,n=T.length;let f1=0,nc=0;for(let c=0;c<C;c++){if(tp[c]+fn[c]===0)continue;const p=tp[c]+fp[c]?tp[c]/(tp[c]+fp[c]):0,r=tp[c]/(tp[c]+fn[c]);f1+=p+r?2*p*r/(p+r):0;nc++;}
+  let ece=0;bins.forEach(b=>{if(b.n)ece+=b.n/n*Math.abs(b.ok/b.n-b.c/b.n);});
+  const sel=[.5,.7,.8,.9,.95].map(t=>{let c=0,k=0;probs.forEach((p,i)=>{if(p>=t){c++;k+=oks[i];}});return {t,cov:c/n,acc:c?k/c:null};});
+  const oodTexts=(extra.ood&&extra.ood.length?extra.ood:DEFAULT_OOD),oodP=oodTexts.map(t=>{const r=classify(pack,t,1);return r?r.top[0].prob:0;});
+  const rnd=_rngS(99),sub=T.slice(0,400),rob={};
+  for(const kind of ["typo","drop","shuffle","dialect"]){let k=0;for(const d of sub){const r=classify(pack,perturb(d.t,kind,rnd),1);if(r&&r.top[0].l===d.l)k++;}rob[kind]=k/sub.length;}
+  let base400=0;for(const d of sub){const r=classify(pack,d.t,1);if(r&&r.top[0].l===d.l)base400++;}rob.clean=base400/sub.length;
+  let mrr=0,p1=0;const rs=T.slice(0,300);for(const d of rs){const r=classify(pack,d.t,1);if(!r)continue;const sc=pack.refs.map(x=>{let s=0;for(let k=0;k<m.D;k++)s+=r.xn[k]*x.x[k];return [s,x.l];}).sort((a,b)=>b[0]-a[0]);const i=sc.slice(0,10).findIndex(x=>x[1]===d.l);if(i===0)p1++;if(i>=0)mrr+=1/(i+1);}
+  const hold=new Set(pack.holdHashes||[]);let inHold=0,overlap=0,withK=0;const refK=new Set();for(const r of pack.refs)if(r.k!=null)refK.add(r.k);
+  for(const d of T){if(d.k==null)continue;withK++;if(hold.has(d.k))inHold++;if(refK.has(d.k))overlap++;}
+  const bytes=["E","Es","W1","b1","W2","b2","wv","protos"].reduce((a,k)=>a+(pack[k]?pack[k].byteLength:0),0);
+  const confs=[...conf].sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>{const [a,b]=k.split(">");return {from:m.labels[+a],to:m.labels[+b],n:v};});
+  const res={at:Date.now(),ver:pack.ver,n,acc:ok/n,f1:nc?f1/nc:0,top3:top3/n,ece,rel:bins.map(b=>({n:b.n,acc:b.n?b.ok/b.n:null,conf:b.n?b.c/b.n:null})),sel,conf:confs,
+    ood:{n:oodTexts.length,falseAccept:oodP.filter(p=>p>=.8).length/oodTexts.length,auroc:auroc(probs,oodP)},robust:rob,retr:{n:rs.length,p1:p1/Math.max(1,rs.length),mrr:mrr/Math.max(1,rs.length)},
+    leak:{testInHold:withK?inHold:n,testTotal:n,verified:withK,refTestOverlap:overlap,trainReport:m.leak||null},perf:{ms,bytes}};
+  const ev=m.evals||(m.evals=[]);const prev=ev[ev.length-1];ev.push({at:res.at,ver:res.ver,acc:+res.acc.toFixed(4),f1:+res.f1.toFixed(4),ece:+res.ece.toFixed(4),oodFA:res.ood.falseAccept,auroc:res.ood.auroc?+res.ood.auroc.toFixed(3):null});if(ev.length>20)ev.shift();
+  res.gate=prev&&prev.acc-res.acc>.03?{warn:true,msg:"الدقة نزلت "+Math.round((prev.acc-res.acc)*100)+" نقطة عن التقييم السابق"}:{warn:false};
+  return res;
+}
 
 /* ---------- التدريب ---------- */
 function makeWorker(){const code="self.__S=("+sharedCode.toString()+")();("+workerMain.toString()+")();";return new Worker(URL.createObjectURL(new Blob([code],{type:"text/javascript"})));}
 async function zipFiles(files){
-  const out=[];for(const f of files){if(/\.zip$/i.test(f.name)&&window.JSZip){const z=await window.JSZip.loadAsync(f);for(const [n,e] of Object.entries(z.files)){if(e.dir||!/\.(jsonl|ndjson|json|csv|tsv|txt)$/i.test(n))continue;out.push(new File([await e.async("blob")],n.split("/").pop()));}}else out.push(f);}
+  const out=[];for(const f of files){if(/\.zip$/i.test(f.name)&&window.JSZip){const z=await window.JSZip.loadAsync(f);for(const [n,e] of Object.entries(z.files)){if(e.dir||!/\.(jsonl|ndjson|json|csv|tsv|txt|pdf)$/i.test(n))continue;out.push(new File([await e.async("blob")],n.split("/").pop()));}}else out.push(f);}
   return out;
 }
 const PRESETS={fast:{D:48,H:96,B:1<<15,epochs:2,lr:.07,maxTok:200,label:"سريع"},balanced:{D:64,H:128,B:1<<16,epochs:3,lr:.06,maxTok:300,label:"متوازن"},deep:{D:96,H:192,B:1<<17,epochs:5,lr:.05,maxTok:400,label:"عميق ودقيق"}};
-function runTrain(src,cfg,cb){
+function bakeBase(p){
+  syncOv(p);const m=p.meta,D=m.D,E=p.E.slice(),Es=p.Es.slice();
+  if(p.ov&&p.ov.rows)p.ov.rows.forEach((r,i)=>{const vec=p.ov.data.subarray(i*D,(i+1)*D);let mx=0;for(let d=0;d<D;d++)mx=Math.max(mx,Math.abs(vec[d]));Es[r]=mx;const k=mx?127/mx:0;for(let d=0;d<D;d++)E[r*D+d]=Math.round(vec[d]*k);});
+  return {meta:p.meta,E,Es,W1:p.W1,b1:p.b1,W2:p.W2,b2:p.b2,refs:p.refs,feedback:p.feedback||[],testSet:p.testSet||[],holdHashes:p.holdHashes,wv:p.wv,wvidf:p.wvidf};
+}
+function runTrain(src,cfg,cb,basePack){
   const w=makeWorker();let done=false;
   w.onmessage=async ev=>{const m=ev.data;
-    if(m.type==="done"){done=true;const pack=m.pack;pack.id="pk_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);await savePack(pack);w.terminate();cb({type:"done",pack});}
+    if(m.type==="done"){done=true;w.terminate();const pack=m.pack;
+      if(basePack){pack.id=basePack.id;pack.ver=basePack.ver;const h=pack.meta.history[pack.meta.history.length-1],fg=h&&h.oldTest?h.oldTest.forgetting:0;
+        if(cfg.autoGuard!==false&&fg>.05){cb({type:"guard",pack,forgetting:fg,accept:async()=>{await savePack(pack,{prev:basePack});cb({type:"done",pack,incremental:true});}});return;}
+        await savePack(pack,{prev:basePack});cb({type:"done",pack,incremental:true});}
+      else{pack.id="pk_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);await savePack(pack);cb({type:"done",pack});}}
     else if(m.type==="error"||m.type==="cancelled"){done=true;w.terminate();cb(m);}
     else cb(m);};
   w.onerror=e=>{if(!done){done=true;cb({type:"error",msg:e.message||"خطأ في الـ Worker"});}};
-  w.postMessage({cmd:"train",src,cfg});
+  w.postMessage({cmd:"train",src,cfg,base:basePack?bakeBase(basePack):null});
   return {cancel(){w.postMessage({cmd:"cancel"});setTimeout(()=>{if(!done){w.terminate();done=true;cb({type:"cancelled"});}},4000);}};
 }
 function runPreview(src,limit){
   return new Promise(res=>{const w=makeWorker();w.onmessage=ev=>{const m=ev.data;if(m.type==="preview"||m.type==="error"){w.terminate();res(m);}};w.onerror=e=>{w.terminate();res({type:"error",msg:e.message});};w.postMessage({cmd:"preview",src,limit});});
+}
+function runKnowledgeImport(src,category,onProgress){
+  const w=makeWorker();let done=false,saved=0,pending=Promise.resolve(),pendingError=null;
+  return new Promise(resolve=>{w.onmessage=async ev=>{const m=ev.data;if(m.type==="knowledgeReplace"){pending=pending.then(async()=>{if(pendingError)throw pendingError;for(const source of (m.sources||[]))await deleteKnowledgeSource(source);}).catch(e=>{pendingError=e;});return;}if(m.type==="knowledgeBatch"){pending=pending.then(async()=>{if(pendingError)throw pendingError;saved+=await saveKnowledgeDocs(m.docs);}).catch(e=>{pendingError=e;});return;}if(m.type==="knowledgeProgress"){if(onProgress)onProgress(m);return;}if(m.type==="knowledgeDone"){try{await pending;if(pendingError)throw pendingError;done=true;w.terminate();resolve({ok:true,...m,docs:saved});}catch(e){done=true;w.terminate();resolve({ok:false,msg:e.message});}return;}if(m.type==="error"||m.type==="cancelled"){done=true;w.terminate();resolve({ok:false,msg:m.msg||"تم إيقاف التعلم"});}};w.onerror=e=>{if(!done){done=true;w.terminate();resolve({ok:false,msg:e.message||"خطأ في قراءة المستند"});}};w.postMessage({cmd:"knowledge",src,category});});
 }
 /* بياناتك أنت كمصدر تدريب */
 const lines2=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean);
@@ -19444,7 +20208,7 @@ function ownRecords(mode){
     const nb=it.notebookData||{};const parts=[nb.explanation];(nb.explanations||[]).forEach(b=>parts.push((b.title||"")+". "+(b.content||"")));(nb.imageGroups||[]).forEach(g=>(g.explanations||[]).forEach(b=>parts.push(b.content)));(nb.images||[]).forEach(x=>parts.push(x.caption));
     const body=parts.filter(Boolean).join("\n");const text=(it.name||"")+". "+(it.notes||"")+" "+body;if(text.length<20)return;
     const label=mode==="cluster"?(K&&K.clusters[K.assign[i]]?K.clusters[K.assign[i]].label.join(" / "):""):mode==="folder"?direct(it.folderId):top(it.folderId);if(!label)return;
-    out.push({label,text});const ls=lines2(body);for(let q=0;q+3<=ls.length;q+=3)out.push({label,text:(it.name||"")+". "+ls.slice(q,q+3).join(" ")});
+    out.push({label,text,group:it.id});const ls=lines2(body);for(let q=0;q+3<=ls.length;q+=3)out.push({label,text:(it.name||"")+". "+ls.slice(q,q+3).join(" "),group:it.id});
   });
   const cnt=new Map();out.forEach(r=>cnt.set(r.label,(cnt.get(r.label)||0)+1));
   return out.filter(r=>cnt.get(r.label)>=3);
@@ -19456,7 +20220,22 @@ const det=(title,open,...k)=>{const d=el("details",{open,style:"margin:8px 0;bor
 const hint=t=>el("div",{cls:"hx-sm",style:"margin:3px 0"},t);
 const btn=(t,fn,cls)=>el("button",{cls:"btn small"+(cls?" "+cls:""),on:{click:fn},style:"margin:2px"},t);
 const probBar=(p,col)=>el("div",{style:"display:inline-block;vertical-align:middle;width:70px;height:6px;background:rgba(128,128,128,.25);border-radius:3px;overflow:hidden;margin:0 6px"},el("div",{style:"height:100%;width:"+Math.round(p*100)+"%;background:"+(col||(p>=.8?"#4ade80":p>=.5?"#fbbf24":"#f87171"))}));
-const itemTextOf=it=>{const nb=it.notebookData||{},parts=[it.name,it.notes,nb.explanation];(nb.explanations||[]).forEach(b=>parts.push((b.title||"")+". "+(b.content||"")));(nb.imageGroups||[]).forEach(g=>(g.explanations||[]).forEach(b=>parts.push(b.content)));(nb.images||[]).forEach(x=>parts.push(x.caption));return parts.filter(Boolean).join("\n").slice(0,6000);};
+const itemTextOf=it=>{
+ const nb=it.notebookData||{},parts=[it.name,it.model,it.manufacturer,it.type,it.serial,it.partNumber,it.notes];
+ Object.entries(it.fields||{}).forEach(([k,v])=>parts.push(k+": "+String(v??"")));
+ const addBox=b=>{if(!b)return;parts.push([b.title,b.label,b.name,b.content,b.text,b.description,b.note,b.details].filter(x=>typeof x==="string"&&x.trim()).join("\n"));};
+ parts.push(nb.explanation||"");(nb.explanations||[]).forEach(addBox);
+ (nb.imageGroups||[]).forEach(g=>{parts.push(g.name||g.title||"");(g.explanations||[]).forEach(addBox);(g.images||[]).forEach(x=>parts.push(x.caption||x.description||x.title||""));});
+ (nb.images||[]).forEach(x=>{parts.push(x.caption||x.description||x.title||x.alt||"");if(x.ann)addBox(x.ann);});
+ (nb.codes||[]).forEach(x=>parts.push([x.title,x.label,x.lang,x.code].filter(Boolean).join("\n")));
+ (nb.faultTracking?.pages||[]).forEach(pg=>{parts.push(pg.name||pg.title||pg.description||"");(pg.hotspots||[]).forEach(h=>{parts.push(h.title||h.label||h.name||h.description||"");addBox(h.content);});});
+ if(nb.mindmap){parts.push(nb.mindmap.title||"");}
+ // Read textual annotations and labels recursively, but never image binaries or URLs.
+ const seen=new WeakSet(),allow=/^(title|label|name|caption|alt|text|content|description|explanation|note|notes|details|cause|solution|symptom|action|instruction|warning|code|lang|value|question|answer)$/i;
+ const walk=(o,depth=0)=>{if(!o||depth>5||typeof o!=="object"||seen.has(o))return;seen.add(o);if(Array.isArray(o)){o.slice(0,250).forEach(v=>walk(v,depth+1));return;}for(const [k,v] of Object.entries(o)){if(/^(blob|data|src|url|imageId|fileId|thumbnail|preview|binary|base64)$/i.test(k))continue;if(typeof v==="string"&&allow.test(k)&&v.trim()&&!/^data:|^https?:\/\//i.test(v))parts.push(v);else if(v&&typeof v==="object")walk(v,depth+1);}};
+ walk(nb.faultTracking);walk(nb.drawing);walk(nb.mindmap);walk(nb.imageGroups);
+ return [...new Set(parts.filter(x=>typeof x==="string"&&x.trim()))].join("\n").slice(0,30000);
+};
 const RC=new Map();
 function recog(pack,it){const key=pack.id+"|"+pack.ver+"|"+it.id+"|"+(it.updatedAt||0)+"|"+itemTextOf(it).length;let r=RC.get(key);if(r===undefined){r=classify(pack,itemTextOf(it),3);RC.set(key,r);if(RC.size>20000)RC.clear();}return r;}
 function chipLab(l,p){return el("span",{cls:"nn-lab"},l+(p!=null?" "+Math.round(p*100)+"%":""));}
@@ -19471,20 +20250,66 @@ function curveSvg(hist){
   svg.appendChild(sv("text",{x:P,y:10,"font-size":9,fill:"#4ade80"},"دقة التحقق"));svg.appendChild(sv("text",{x:W-P,y:10,"font-size":9,fill:"#f87171","text-anchor":"end"},"الخطأ"));
   return svg;
 }
+/* ---------- تقرير منع التسرب + مقياس الجودة المستقل ---------- */
+function leakBox(m){
+  const L=m.leak;if(!L)return el("div",{cls:"hx-sm"},"الحزمة دي اتدرّبت بنسخة قديمة من غير تقرير تسرب.");
+  const rows=[["قسمة البيانات",L.splitBy==="group"?"بالمجموعة (كل نصوص نفس المصدر في قسم واحد)":"بمحتوى النص (النص المكرر دايمًا في نفس القسم)"],["نصوص تدريب / تحقق / اختبار",L.train.toLocaleString("en")+" / "+L.val.toLocaleString("en")+" / "+L.test.toLocaleString("en")],["نصوص مكررة حرفيًا اتشالت",L.exactDupRemoved.toLocaleString("en")],["نصوص تحقق/اختبار شبه مطابقة لتدريب اتشالت",(L.nearDupRemovedVal+L.nearDupRemovedTest).toLocaleString("en")+" (تحقق "+L.nearDupRemovedVal+" · اختبار "+L.nearDupRemovedTest+")"],["اسم التصنيف اتخفى من بداية النص",L.labelHeadMasked.toLocaleString("en")+" نص ("+L.maskedPct+"%)"]];
+  if(L.heldBlocked)rows.push(["نصوص محجوبة (كانت في تحقق/اختبار نسخة سابقة)",L.heldBlocked.toLocaleString("en")]);
+  return el("div",null,rows.map(r=>el("div",{cls:"nn-row"},el("b",null,r[0]+": "),r[1])),hint("مجموعة الاختبار ما اتستخدمتش في أي قرار (لا إيقاف مبكر ولا معايرة ولا اختيار نسخة)."));
+}
+function relSvg(rel){
+  const W=220,H=130,P=18,svg=sv("svg",{viewBox:"0 0 "+W+" "+H,width:"100%",style:"max-width:260px;display:block;margin:4px auto;direction:ltr"});
+  svg.appendChild(sv("line",{x1:P,y1:H-P,x2:W-P,y2:P,stroke:"rgba(128,128,128,.5)","stroke-dasharray":"3 3"}));
+  rel.forEach((b,i)=>{if(b.acc==null)return;const x=P+i*(W-2*P)/10,w=(W-2*P)/10-2,h=b.acc*(H-2*P);svg.appendChild(sv("rect",{x,y:H-P-h,width:w,height:h,fill:"rgba(251,191,36,.75)"},sv("title",null,"ثقة ~"+Math.round(b.conf*100)+"% ← دقة فعلية "+Math.round(b.acc*100)+"% ("+b.n+" نص)")));});
+  svg.appendChild(sv("text",{x:W/2,y:H-3,"font-size":8,fill:"currentColor","text-anchor":"middle",opacity:.7},"الثقة المُعلنة ←"));svg.appendChild(sv("text",{x:4,y:12,"font-size":8,fill:"currentColor",opacity:.7},"الدقة الفعلية"));
+  return svg;
+}
+function evalView(pack,host,rerender){
+  host.textContent="";host.appendChild(hint("⏳ بقيّم على مجموعة الاختبار المحجوزة بمسار الإنتاج نفسه…"));
+  setTimeout(async()=>{
+    const ood=(pack._oodCustom&&pack._oodCustom.length)?pack._oodCustom:null,r=evaluatePack(pack,{ood});host.textContent="";
+    if(!r){host.appendChild(hint("مفيش مجموعة اختبار في الحزمة (اتدرّبت بنسخة قديمة). أعد التدريب."));return;}
+    await savePack(pack);
+    const chips=[["دقة",pct1(r.acc)+"%"],["F1 (متوسط التصنيفات)",pct1(r.f1)+"%"],["أعلى-3",pct1(r.top3)+"%"],["خطأ المعايرة ECE",pct1(r.ece)+"%"],["اختبار",r.n+" نص"]];
+    host.appendChild(el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"},chips.map(c=>chipLab(c[0]+": "+c[1]))));
+    if(r.gate.warn)host.appendChild(el("div",{style:"padding:6px;border:1px solid #f87171;border-radius:8px;font-size:12.5px;margin:4px 0"},"⚠️ "+r.gate.msg+" — راجع آخر تحديث."));
+    host.appendChild(el("h4",null,"📐 معايرة الثقة (هل الثقة المُعلنة = الدقة الفعلية؟)"));host.appendChild(relSvg(r.rel));
+    host.appendChild(el("h4",null,"✋ التنبؤ الانتقائي (لو رفضت الثقة المنخفضة)"));
+    r.sel.forEach(s=>host.appendChild(el("div",{cls:"nn-row"},"ثقة ≥ "+Math.round(s.t*100)+"% ← تغطية "+pct1(s.cov)+"% ودقة "+(s.acc==null?"—":pct1(s.acc)+"%"))));
+    host.appendChild(el("h4",null,"🚫 نصوص من خارج النطاق (OOD)"));
+    host.appendChild(el("div",{cls:"nn-row"},"قبول خاطئ بثقة ≥ 80%: "+pct1(r.ood.falseAccept)+"% من "+r.ood.n+" نص"+(r.ood.auroc!=null?" · فصل الداخل/الخارج (AUROC) "+r.ood.auroc.toFixed(3):"")));
+    const oi=el("textarea",{style:"width:100%;min-height:50px;padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"});oi.placeholder="(اختياري) نصوص من خارج نطاقك، كل نص في سطر — تستخدمها بدل النصوص الافتراضية";oi.value=(pack._oodCustom||[]).join("\n");
+    host.append(oi,btn("↻ أعد التقييم بالنصوص دي",()=>{pack._oodCustom=oi.value.split("\n").map(x=>x.trim()).filter(Boolean);evalView(pack,host,rerender);}));
+    host.appendChild(el("h4",null,"🌪️ متانة النموذج (دقة بعد تشويش الاختبار)"));
+    [["clean","بدون تشويش"],["typo","أخطاء إملائية"],["drop","حذف 25% من الكلمات"],["shuffle","خلط ترتيب الكلمات"],["dialect","توحيد ة/ه ى/ي أ/ا"]].forEach(([k,l])=>host.appendChild(el("div",{cls:"nn-row"},l+": "+pct1(r.robust[k])+"%"+(k!=="clean"?" ("+(r.robust[k]-r.robust.clean>=0?"+":"")+pct1(r.robust[k]-r.robust.clean)+")":""))));
+    host.appendChild(el("h4",null,"🔗 جودة استرجاع المراجع"));host.appendChild(el("div",{cls:"nn-row"},"أقرب مرجع من نفس التصنيف: "+pct1(r.retr.p1)+"% · MRR "+r.retr.mrr.toFixed(3)+" ("+r.retr.n+" استعلام)"));
+    if(r.conf.length){host.appendChild(el("h4",null,"🔀 أكتر التباسات"));r.conf.forEach(c=>host.appendChild(el("div",{cls:"nn-row"},c.from+" ← اتعرّف كـ "+c.to+" ("+c.n+")")));}
+    host.appendChild(el("h4",null,"🛡️ فحص عدم التسرب (وقت التشغيل)"));
+    const L=r.leak;[["كل نصوص الاختبار محجوزة من التدريب",L.testInHold>=L.testTotal*.98,L.testInHold+"/"+L.testTotal],["صفر تداخل بين المراجع (تدريب) والاختبار",L.refTestOverlap===0,L.refTestOverlap+" تداخل"]].forEach(([t,ok,v])=>host.appendChild(el("div",{cls:"nn-row"},(ok?"✅ ":"❌ ")+t+" — "+v)));
+    host.appendChild(el("h4",null,"⚡ الأداء"));host.appendChild(el("div",{cls:"nn-row"},"زمن التعرّف ~"+r.perf.ms.toFixed(2)+" مللي ثانية للنص · حجم النموذج "+fmtB(r.perf.bytes)));
+    const ev=pack.meta.evals||[];if(ev.length>1){host.appendChild(el("h4",null,"📈 تطور التقييمات"));ev.slice(-6).reverse().forEach(e=>host.appendChild(el("div",{cls:"nn-row"},"نسخة "+e.ver+" · "+fmtT(e.at)+" — دقة "+pct1(e.acc)+"% · F1 "+pct1(e.f1)+"% · ECE "+pct1(e.ece)+"%")));}
+    host.appendChild(btn("📋 نسخ التقرير",()=>copyText2("تقييم مستقل — "+pack.meta.name+"\nدقة "+pct1(r.acc)+"% · F1 "+pct1(r.f1)+"% · أعلى-3 "+pct1(r.top3)+"% · ECE "+pct1(r.ece)+"%\nOOD قبول خاطئ "+pct1(r.ood.falseAccept)+"%\nمتانة: "+Object.entries(r.robust).map(([k,v])=>k+" "+pct1(v)+"%").join("، ")+"\nاسترجاع P@1 "+pct1(r.retr.p1)+"%\nتسرب: داخل المحجوز "+L.testInHold+"/"+L.testTotal+"، تداخل مراجع "+L.refTestOverlap)));
+  },30);
+}
+const copyText2=t=>{try{navigator.clipboard.writeText(t);toast2("اتنسخ.");}catch(e){}};
 function packCard(pack,reg,rerender){
-  const m=pack.meta,card=el("div",{cls:"hx-sub"}),size=pack.E.byteLength+pack.W1.byteLength+pack.W2.byteLength+pack.Es.byteLength;
+  const m=pack.meta,card=el("div",{cls:"hx-sub"}),size=pack.E.byteLength+pack.W1.byteLength+pack.W2.byteLength+pack.Es.byteLength+(pack.wv?pack.wv.byteLength:0);
   const act=el("input",{attrs:{type:"checkbox"}});act.checked=reg.active!==false;act.onchange=()=>{reg.active=act.checked;kickSync();};
-  card.appendChild(el("div",{style:"display:flex;justify-content:space-between;gap:8px;align-items:center"},el("b",null,"🧬 "+m.name),el("label",{style:"font-size:12px"},act," مفعّلة")));
-  card.appendChild(el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"},chipLab(m.C+" تصنيف"),chipLab(m.docs.toLocaleString("en")+" نص"),chipLab("دقة "+pct1(m.valAcc)+"%"),chipLab("حجم "+fmtB(size)),chipLab(m.epochs+" دورات / "+m.seconds+"ث"),(m.valDocs<50?chipLab("⚠️ عينة تحقق صغيرة ("+m.valDocs+")"):null),chipLab("تصحيحات: "+(pack.feedback||[]).length)));
-  card.appendChild(hint("اتدرّبت "+fmtT(m.createdAt)+(m.src?" — من: "+m.src:"")));
-  const more=el("div");let shown=false;
+  card.appendChild(el("div",{style:"display:flex;justify-content:space-between;gap:8px;align-items:center"},el("b",null,"🧬 "+m.name+(m.algo==="v2"?"  v2":"")),el("label",{style:"font-size:12px"},act," مفعّلة")));
+  const t=m.test;card.appendChild(el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"},chipLab(m.C+" تصنيف"),chipLab(m.docs.toLocaleString("en")+" نص"),t?chipLab("اختبار مستقل "+pct1(t.acc)+"% · F1 "+pct1(t.f1)+"%"):chipLab("تحقق "+pct1(m.valAcc)+"%"),chipLab("حجم "+fmtB(size)),chipLab(m.epochs+" دورات"+(m.bestEpoch?" (الأفضل "+m.bestEpoch+")":"")+" / "+m.seconds+"ث"),m.wvocab?chipLab("🔤 متجهات دلالية "+m.wvocab.length):null,(m.online?chipLab("تعلّم تزايدي: "+m.online+" تصحيح"):null),chipLab("نسخة "+pack.ver)));
+  card.appendChild(hint("اتدرّبت "+fmtT(m.createdAt)+(m.updatedAt&&m.updatedAt!==m.createdAt?" · آخر تحديث "+fmtT(m.updatedAt):"")+(m.src?" — من: "+m.src:"")));
+  const more=el("div"),evh=el("div"),inc=el("div");let shown=false,evOn=false,incOn=false;
   const showMore=()=>{if(shown){more.textContent="";shown=false;return;}shown=true;more.appendChild(curveSvg(m.curve));
+    more.appendChild(el("h4",null,"🛡️ منع تسرب البيانات"));more.appendChild(leakBox(m));
     const rows=m.labels.map((l,i)=>({l,n:m.per[i].n,p:m.per[i].p,r:m.per[i].r,f:m.per[i].p+m.per[i].r?2*m.per[i].p*m.per[i].r/(m.per[i].p+m.per[i].r):0})).sort((a,b)=>a.f-b.f);
-    more.appendChild(el("h4",null,"📉 أضعف التصنيفات (محتاجة بيانات أكتر)"));
-    rows.slice(0,12).forEach(x=>more.appendChild(el("div",{cls:"nn-row"},x.l+" — دقة "+pct1(x.p)+"% · استرجاع "+pct1(x.r)+"% · "+x.n+" نص"+(x.n<20?" ⚠️ قليل":""))));
+    more.appendChild(el("h4",null,"📉 أضعف التصنيفات (على الاختبار المستقل)"));rows.slice(0,10).forEach(x=>more.appendChild(el("div",{cls:"nn-row"},x.l+" — دقة "+pct1(x.p)+"% · استرجاع "+pct1(x.r)+"% · "+x.n+" نص"+(x.n<20?" ⚠️ قليل":""))));
+    if(m.history&&m.history.length>1){more.appendChild(el("h4",null,"🕘 تاريخ التحديثات التزايدية"));m.history.slice().reverse().forEach(h=>more.appendChild(el("div",{cls:"nn-row"},fmtT(h.at)+" — "+h.docs.toLocaleString("en")+" نص جديد"+(h.newLabels?"، "+h.newLabels+" تصنيف جديد":"")+" · اختبار "+pct1(h.testAcc)+"%"+(h.oldTest?" · نسيان القديم "+(h.oldTest.forgetting>0?"-":"+")+pct1(Math.abs(h.oldTest.forgetting))+" نقطة":""))));}
     more.appendChild(el("h4",null,"🏷️ كل التصنيفات"));more.appendChild(el("div",{style:"display:flex;flex-wrap:wrap;gap:4px"},m.labels.slice(0,300).map(l=>chipLab(l))));};
-  card.appendChild(el("div",null,btn("📊 تفاصيل",showMore),btn("⬇️ تصدير الحزمة",()=>{const b=new Blob([packFile(pack)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="ai-pack-"+pack.id+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),60000);}),btn("🗑️ حذف",async()=>{if(!confirm("حذف الحزمة «"+m.name+"»؟"))return;await deletePack(pack.id);rerender();},"danger")));
-  card.appendChild(more);return card;
+  const acts=el("div",null,btn("📊 تفاصيل",showMore),btn("🧪 تقييم مستقل",()=>{if(evOn){evh.textContent="";evOn=false;return;}evOn=true;evalView(pack,evh,rerender);},"primary"),btn("➕ زوّد تدريب",()=>{if(incOn){inc.textContent="";incOn=false;return;}incOn=true;inc.appendChild(trainBox(rerender,pack));}),
+    PREV.has(pack.id)?btn("↩️ رجوع للنسخة السابقة",async()=>{if(!confirm("الرجوع للنسخة السابقة؟"))return;await rollbackPack(pack.id);RC.clear();rerender();}):null,
+    btn("⬇️ تصدير",()=>{const b=new Blob([packFile(pack)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="ai-pack-"+pack.id+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),60000);}),
+    btn("🗑️ حذف",async()=>{if(!confirm("حذف الحزمة «"+m.name+"»؟"))return;await deletePack(pack.id);rerender();},"danger"));
+  card.append(acts,more,evh,inc);return card;
 }
 
 /* ---------- قوالب وصيغ البيانات ---------- */
@@ -19500,49 +20325,63 @@ function formatSection(){
     el("h4",null,"4) TXT — بصيغة fastText: __label__ترموستات نص…  أو  تصنيف⇥نص (بالتاب). أو ملف باسم التصنيف وفقراته (يفصلها سطر فاضي) هي النصوص."),
     el("h4",null,"5) ZIP — فيه أي من اللي فوق (بيتفك قبل التدريب)"),
     hint("أسماء الحقول المعروفة: label/topic/category/class/تصنيف/الفئة/الموضوع للتصنيف — و text/body/content/description/نص/شرح/محتوى/وصف للنص — و title/name/عنوان/اسم عنوان اختياري."),
-    hint("نصايح: 50–200 نص على الأقل لكل تصنيف. الملف المخلوط أحسن (البرنامج بيخلط بمخزن 10,000 نص). التصنيفات المتشابهة جدًا بتقلل الدقة."),
+    hint("لمنع التسرب: لو نصوصك متقطّعة من نفس المستند/المصدر أضف حقل group (أو source/item_id) عشان كل نصوص المصدر تفضل في نفس القسم (تدريب/تحقق/اختبار). النصوص المكررة والمتشابهة بتتشال تلقائيًا."),hint("نصايح: 50–200 نص على الأقل لكل تصنيف. الملف المخلوط أحسن (البرنامج بيخلط بمخزن 10,000 نص). التصنيفات المتشابهة جدًا بتقلل الدقة."),
     el("div",null,btn("⬇️ قالب JSONL",()=>dl("training-template.jsonl",TPL_JSONL)),btn("⬇️ قالب CSV",()=>dl("training-template.csv","\ufeff"+TPL_CSV))));
 }
 
 /* ---------- التدريب ---------- */
+/* ---------- التدريب (جديد أو إضافي) ---------- */
 let lastMsg="",bannerEl=null;
-function trainSection(rerender){
-  const box=det("🚀 تدريب حزمة جديدة",true),st={files:[],job:null};
-  const fi=el("input",{attrs:{type:"file",multiple:"",accept:".jsonl,.ndjson,.json,.csv,.tsv,.txt,.zip"}}),nameI=el("input",{style:"width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);margin:4px 0"}),preset=el("select",{style:"padding:5px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});
+function trainBox(rerender,base){
+  const box=base?el("div",{style:"margin-top:6px;padding:6px;border:1px dashed var(--border);border-radius:8px"}):det("🚀 تدريب حزمة جديدة",true),st={files:[],job:null};
+  const fi=el("input",{attrs:{type:"file",multiple:"",accept:".pdf,.jsonl,.ndjson,.json,.csv,.tsv,.txt,.zip"}}),nameI=el("input",{style:"width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);margin:4px 0"}),preset=el("select",{style:"padding:5px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});
   nameI.placeholder="اسم الحزمة (مثلًا: مرجع الأجهزة الحرارية)";nameI.value="حزمتي";
   Object.entries(PRESETS).forEach(([k,v])=>preset.appendChild(el("option",{attrs:{value:k}},v.label+" ("+v.epochs+" دورات، "+v.D+"×"+v.H+")")));preset.value="balanced";
   const adv=el("details",null,el("summary",{style:"cursor:pointer;font-size:12px"},"إعدادات متقدمة")),advIn={};
-  [["epochs","عدد الدورات"],["D","بُعد التضمين"],["H","الطبقة المخفية"],["lr","معدل التعلّم"],["maxTok","أقصى كلمات للنص"],["refs","مراجع لكل تصنيف"]].forEach(([k,l])=>{const i=el("input",{style:"width:90px;padding:4px;border-radius:6px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});i.placeholder="تلقائي";advIn[k]=i;adv.appendChild(el("div",{style:"font-size:12px;margin:3px 0"},l+": ",i));});
+  [["epochs","عدد الدورات (حد أدنى)"],["D","بُعد التضمين"],["H","الطبقة المخفية"],["lr2","معدل التعلّم (Adam)"],["lrE","معدل التعلّم للتضمين"],["maxTok","أقصى كلمات للنص"],["refs","مراجع لكل تصنيف"],["patience","صبر الإيقاف المبكر"]].forEach(([k,l])=>{const i=el("input",{style:"width:90px;padding:4px;border-radius:6px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});i.placeholder="تلقائي";advIn[k]=i;adv.appendChild(el("div",{style:"font-size:12px;margin:3px 0"},l+": ",i));});
+  const ck=(txt,on)=>{const c=el("input",{attrs:{type:"checkbox"}});c.checked=on;return {c,row:el("label",{style:"display:block;font-size:12px;margin:3px 0"},c," "+txt)};};
+  const optMask=ck("منع التسرب: إخفاء اسم التصنيف لو ظهر في بداية النص",true),optBal=ck("موازنة التصنيفات (وزن أكبر للتصنيفات القليلة)",true),optSem=ck("بناء متجهات الكلمات الدلالية (للبحث الهجين)",true),optGuard=ck("حارس النسيان (إلغاء التحديث التزايدي لو أضرّ بالقديم)",true);
+  adv.append(optMask.row,optBal.row,optSem.row);if(base)adv.appendChild(optGuard.row);
   const pre=el("div"),prog=el("div");
-  const buildCfg=()=>{const c=Object.assign({},PRESETS[preset.value]);delete c.label;for(const k in advIn){const v=parseFloat(advIn[k].value);if(v>0)c[k]=v;}c.D=Math.round(c.D);c.H=Math.round(c.H);c.epochs=Math.round(c.epochs);c.B=PRESETS[preset.value].B;c.name=nameI.value.trim()||"حزمتي";c.srcName=st.files.map(f=>f.name).slice(0,3).join("، ");return c;};
+  const buildCfg=()=>{const c=Object.assign({},PRESETS[preset.value]);delete c.label;for(const k in advIn){const v=parseFloat(advIn[k].value);if(v>0)c[k]=v;}c.D=Math.round(c.D);c.H=Math.round(c.H);c.epochs=Math.round(c.epochs);c.B=PRESETS[preset.value].B;c.name=nameI.value.trim()||"حزمتي";c.srcName=st.files.map(f=>f.name).slice(0,3).join("، ");c.maskLabel=optMask.c.checked;c.balance=optBal.c.checked;c.semantic=optSem.c.checked;c.autoGuard=optGuard.c.checked;c.algo="v2";return c;};
   const fileInfo=el("div",{cls:"hx-sm"});fi.onchange=()=>{st.files=[...fi.files];fileInfo.textContent=st.files.map(f=>f.name+" ("+fmtB(f.size)+")").join(" · ");};
-  const doPreview=async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}pre.textContent="⏳ بقرا أول 3000 سجل…";const files=await zipFiles(st.files),r=await runPreview({files},3000);pre.textContent="";
+  const doPreview=async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}const files=await zipFiles(st.files);if(files.some(f=>/\.pdf$/i.test(f.name))){pre.textContent="📄 ملف PDF ليس ملف سجلات لتدريب المصنّف؛ لذلك تم إيقاف معاينة أول 3000 سجل لهذا النوع. استخدم «تعلّم محتوى الملف» أو «ابدأ التعلم / التدريب» لاستيراد PDF مباشرة كمعرفة دون معاينة المصنّف.";return;}pre.textContent="⏳ بقرا أول 3000 سجل…";const r=await runPreview({files},3000);pre.textContent="";
     if(r.type==="error"){pre.appendChild(hint("❌ "+r.msg));return;}
-    pre.appendChild(el("div",{style:"font-size:12.5px"},"✅ "+r.rows.toLocaleString("en")+" سجل صالح في العينة"+(r.bad?"، "+r.bad+" سجل مرفوض (فاضي/قصير)":"")+"، "+r.nLabels+" تصنيف، متوسط الطول "+r.avgLen+" حرف."));
-    if(!r.rows)pre.appendChild(hint("⚠️ مفيش سجلات مقروءة. راجع صيغة الملف (القسم تحت)."));
-    if(r.nLabels<2)pre.appendChild(hint("⚠️ لازم تصنيفين على الأقل."));
+    pre.appendChild(el("div",{style:"font-size:12.5px"},"✅ "+r.rows.toLocaleString("en")+" سجل صالح في العينة"+(r.bad?"، "+r.bad+" سجل مرفوض":"")+"، "+r.nLabels+" تصنيف، متوسط الطول "+r.avgLen+" حرف."));
+    if(!r.rows)pre.appendChild(hint("⚠️ مفيش سجلات مقروءة. راجع صيغة الملف (القسم تحت)."));if(r.nLabels<2)pre.appendChild(hint("ℹ️ تم العثور على تصنيف واحد. استخدم «تعلّم محتوى الملف» لحفظ المعرفة؛ تدريب المصنّف يحتاج تصنيفين أو أكثر."));
     pre.appendChild(el("div",{style:"display:flex;flex-wrap:wrap;gap:4px;margin:4px 0"},r.labels.slice(0,40).map(([l,n])=>chipLab(l+" ×"+n))));
     r.samples.forEach(s=>pre.appendChild(el("div",{cls:"nn-row"},el("b",null,s.label+": "),s.text)));
-    const mn=Math.min(...r.labels.map(x=>x[1])),mx=Math.max(...r.labels.map(x=>x[1]));if(r.labels.length>1&&mx>mn*20)pre.appendChild(hint("⚠️ عدم توازن كبير بين التصنيفات (من "+mn+" لـ"+mx+" في العينة)."));};
+    const mn=Math.min(...r.labels.map(x=>x[1])),mx=Math.max(...r.labels.map(x=>x[1])),L=r.leak,W=[];
+    if(r.labels.length>1&&mx>mn*20)W.push("عدم توازن كبير بين التصنيفات ("+mn+" ↔ "+mx+") — الموازنة التلقائية هتخفف الأثر");
+    if(L.dupPct>1)W.push(L.dupPct+"% نصوص مكررة حرفيًا — هتتشال تلقائيًا من التدريب/التحقق/الاختبار");
+    if(L.nearPct>3)W.push(L.nearPct+"% نصوص شبه مكررة — أي نسخة شبيهة بتدريب هتتشال من التحقق/الاختبار");
+    if(L.headLabelPct>10)W.push(L.headLabelPct+"% من النصوص بتبدأ باسم التصنيف نفسه (تسرب) — هيتخفى تلقائيًا");
+    if(L.conflicts>0)W.push(L.conflicts+" نص ظاهر بتصنيفين مختلفين — راجع البيانات");
+    if(!L.groups&&r.rows>200)W.push("مفيش عمود مجموعة/مصدر (group/source): نصوص نفس المصدر ممكن تتوزع على أقسام مختلفة. لو في نصوص متقطّعة من نفس المستند، أضف عمود group");
+    pre.appendChild(el("h4",null,"🛡️ فحص التسرب (على العينة)"));if(W.length)W.forEach(w=>pre.appendChild(el("div",{style:"font-size:12px;margin:3px 0"},"⚠️ "+w)));else pre.appendChild(hint("✅ مفيش مؤشرات تسرب واضحة في العينة."));};
   const cancelBtn=btn("⏹ إيقاف",()=>{if(st.job)st.job.cancel();},"danger");cancelBtn.style.display="none";
+  const learnStatus=el("div",{cls:"hx-sm"});
+  const learnBtn=btn("📚 تعلّم محتوى الملف (يقبل تصنيفًا واحدًا)",async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}learnBtn.disabled=true;learnStatus.textContent="⏳ استخراج المعرفة من المستندات…";const src={files:await zipFiles(st.files)},r=await runKnowledgeImport(src,nameI.value.trim()||"مستند فني",m=>{learnStatus.textContent=m.phase==="pdf"?(m.totalPages?`📄 قراءة صفحات PDF: ${m.page}/${m.totalPages} — ${m.docs} مقطعًا حتى الآن`:`📄 تجهيز بيانات PDF… ${Math.round(100*m.bytes/Math.max(1,m.totalBytes))}%`):m.phase==="objects"?`🔎 ${m.stage||"فهرسة PDF"} — ${m.objects||0} كائن، ${m.docs||0} مقطعًا`:m.phase==="pages"?`📖 استخراج الصفحة ${m.page||0}/${m.totalPages||0}…`:m.phase==="fallback"?`🔍 ${m.stage||"استخراج النص"} — ${m.page||0} من ${m.totalPages||0}`:m.phase==="chunk"?`🧩 تقسيم المعرفة: الصفحة ${m.page||0}/${m.totalPages||0} — ${m.docs||0} مقطعًا، ${(m.chars||0).toLocaleString("en")} حرفًا`:m.phase==="complete"?`📄 اكتمل استخراج PDF؛ جارٍ تقسيم النص وحفظ المعرفة…`:`📖 قراءة ${m.files} ملف — استخراج ${m.docs} مقطعًا، ${m.chars.toLocaleString("en")} حرفًا…`;});learnBtn.disabled=false;if(r.ok){learnStatus.textContent="✅ تم تعلّم "+r.docs.toLocaleString("en")+" مقطعًا من "+r.files+" ملفًا ("+r.chars.toLocaleString("en")+" حرفًا). تم حفظها محليًا وأصبحت متاحة للشات.";toast2("اكتمل تعلم المعرفة من المستندات.");}else{learnStatus.textContent="❌ "+r.msg;toast2(r.msg,"err");}} ,"primary");
   const startWith=(src,srcName)=>{
     lastMsg="";if(bannerEl){bannerEl.remove();bannerEl=null;}const cfg=buildCfg();if(srcName)cfg.srcName=srcName;cancelBtn.style.display="";prog.textContent="";
-    const stage=el("div",{style:"font-size:12.5px"},"⏳ بدء…"),bar=el("div",{cls:"nn-bar"},el("div")),info=el("div",{cls:"hx-sm"}),curve=el("div");prog.append(stage,bar,info,curve);
-    const t0=Date.now();
-    st.job=runTrain(src,cfg,m=>{
-      if(m.type==="stage")stage.textContent=m.s==="scan"?"🔎 مسح البيانات…":"🧮 معايرة وضغط النموذج…";
-      else if(m.type==="scan")stage.textContent="🔎 مسح البيانات: "+m.docs.toLocaleString("en")+" نص"+(m.labels?" — "+m.labels+" تصنيف":"");
-      else if(m.type==="progress"){const fr=((m.epoch-1)+m.docs/Math.max(1,m.total))/m.epochs;bar.firstChild.style.width=Math.min(99,fr*100)+"%";stage.textContent="🧠 دورة "+m.epoch+"/"+m.epochs+" — "+m.docs.toLocaleString("en")+" / "+m.total.toLocaleString("en")+" نص";const eta=m.rate?Math.round((m.total*(m.epochs-m.epoch+1)-m.docs)/m.rate):0;info.textContent="السرعة "+m.rate.toLocaleString("en")+" نص/ث · الخطأ "+m.loss.toFixed(3)+" · الوقت "+m.elapsed+"ث"+(eta?" · متبقي ~"+eta+"ث":"");}
-      else if(m.type==="epoch"){curve.textContent="";curve.appendChild(curveSvg(m.hist));info.textContent="✅ دورة "+m.h.ep+": دقة التحقق "+pct1(m.h.acc)+"% — خطأ "+m.h.vloss;}
-      else if(m.type==="done"){cancelBtn.style.display="none";bar.firstChild.style.width="100%";const pm=m.pack.meta;stage.textContent="🎉 خلص التدريب — دقة التحقق "+pct1(pm.valAcc)+"% على "+pm.valDocs.toLocaleString("en")+" نص غير مرئي، "+pm.C+" تصنيف، في "+pm.seconds+" ثانية. الحزمة اتحفظت واتفعّلت.";toast2("اتدرّبت الحزمة «"+pm.name+"» بدقة "+pct1(pm.valAcc)+"%");lastMsg=stage.textContent;rerender();}
-      else if(m.type==="error"){cancelBtn.style.display="none";stage.textContent="❌ "+m.msg;}
-      else if(m.type==="cancelled"){cancelBtn.style.display="none";stage.textContent="⏹ اتوقف التدريب.";}
-    });
+    const stage=el("div",{style:"font-size:12.5px"},"⏳ بدء…"),bar=el("div",{cls:"nn-bar"},el("div")),info=el("div",{cls:"hx-sm"}),leakI=el("div",{style:"font-size:12px"}),curve=el("div");prog.append(stage,bar,info,leakI,curve);
+    st.job=runTrain(src,cfg,msg=>{
+      if(msg.type==="stage")stage.textContent=msg.s==="scan"?"🔎 مسح البيانات وفحص التسرب…":msg.s==="semantic"?"🔤 بناء المتجهات الدلالية…":msg.s==="early-stop"?"⏹ إيقاف مبكر (التحسن وقف)…":"🧮 معايرة وتقييم على الاختبار المستقل…";
+      else if(msg.type==="scan"&&msg.tiny){leakI.textContent="⚠️ بيانات قليلة جدًا للاختبار المستقل: هيتدرّب على كل البيانات من غير رقم دقة موثوق.";}
+      else if(msg.type==="scan"){stage.textContent="🔎 مسح البيانات: "+msg.docs.toLocaleString("en")+" نص"+(msg.labels?" — "+msg.labels+" تصنيف":"");if(msg.leak){const L=msg.leak;leakI.textContent="🛡️ اتشال "+L.exactDupRemoved.toLocaleString("en")+" نص مكرر و"+(L.nearDupRemovedVal+L.nearDupRemovedTest).toLocaleString("en")+" شبه مطابق من التحقق/الاختبار"+(L.maskedPct?" · اتخفى اسم التصنيف من "+L.maskedPct+"% من النصوص":"")+" · القسمة: "+(L.splitBy==="group"?"بالمجموعة":"بالمحتوى");}}
+      else if(msg.type==="progress"){const fr=((msg.epoch-1)+msg.docs/Math.max(1,msg.total))/msg.epochs;bar.firstChild.style.width=Math.min(99,fr*100)+"%";stage.textContent="🧠 دورة "+msg.epoch+"/"+msg.epochs+" — "+msg.docs.toLocaleString("en")+" / "+msg.total.toLocaleString("en")+" نص";const eta=msg.rate?Math.round((msg.total*(msg.epochs-msg.epoch+1)-msg.docs)/msg.rate):0;info.textContent="السرعة "+msg.rate.toLocaleString("en")+" نص/ث · الخطأ "+msg.loss.toFixed(3)+" · الوقت "+msg.elapsed+"ث"+(eta?" · متبقي ~"+eta+"ث":"");}
+      else if(msg.type==="epoch"){curve.textContent="";curve.appendChild(curveSvg(msg.hist));info.textContent="✅ دورة "+msg.h.ep+": دقة التحقق "+pct1(msg.h.acc)+"% — خطأ "+msg.h.vloss;}
+      else if(msg.type==="guard"){cancelBtn.style.display="none";stage.textContent="🛑 اتلغى التحديث التزايدي: كان هيسبّب نسيان "+pct1(msg.forgetting)+" نقطة في التصنيفات القديمة. النسخة الحالية اتحفظت زي ما هي.";prog.appendChild(btn("قبول التحديث رغم النسيان",async()=>{await msg.accept();}));}
+      else if(msg.type==="done"){cancelBtn.style.display="none";bar.firstChild.style.width="100%";const pm=msg.pack.meta,t=pm.test,h=pm.history[pm.history.length-1];stage.textContent="🎉 خلص التدريب — "+(t?"اختبار مستقل "+pct1(t.acc)+"% (F1 "+pct1(t.f1)+"%) على "+pm.testDocs.toLocaleString("en")+" نص محجوز":"⚠️ مفيش اختبار مستقل (بيانات قليلة جدًا) — اتدرّب على كل البيانات والدقة غير مقاسة")+"، "+pm.C+" تصنيف، "+pm.epochs+" دورات (الأفضل "+pm.bestEpoch+") في "+pm.seconds+" ثانية."+(h&&h.oldTest?" نسيان القديم: "+(h.oldTest.forgetting>0?"-":"+")+pct1(Math.abs(h.oldTest.forgetting))+" نقطة.":"")+" الحزمة اتحفظت واتفعّلت.";toast2("اتدرّبت الحزمة «"+pm.name+"»"+(t?" — اختبار مستقل "+pct1(t.acc)+"%":" (من غير اختبار مستقل)"));lastMsg=stage.textContent;rerender();}
+      else if(msg.type==="error"){cancelBtn.style.display="none";stage.textContent="❌ "+msg.msg;}
+      else if(msg.type==="cancelled"){cancelBtn.style.display="none";stage.textContent="⏹ اتوقف التدريب.";}
+    },base);
   };
-  const startBtn=btn("🚀 ابدأ التدريب",async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}startWith({files:await zipFiles(st.files)});},"primary");
+  const startBtn=btn(base?"🚀 ابدأ التدريب الإضافي":"🚀 ابدأ التعلم / التدريب",async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}const src={files:await zipFiles(st.files)};if(!base){const hasPdf=src.files.some(f=>/\.pdf$/i.test(f.name));if(hasPdf){learnStatus.textContent="📚 ملف PDF: سيتم استخراج المعرفة مباشرة دون تشغيل معاينة التدريب أولًا لتجنب قراءة الملف مرتين…";learnBtn.disabled=true;const r=await runKnowledgeImport(src,nameI.value.trim()||"مستند فني",m=>{learnStatus.textContent=m.phase==="pdf"?(m.totalPages?`📄 قراءة صفحات PDF: ${m.page}/${m.totalPages} — ${m.docs} مقطعًا حتى الآن`:`📄 تجهيز بيانات PDF… ${Math.round(100*m.bytes/Math.max(1,m.totalBytes))}%`):m.phase==="objects"?`🔎 ${m.stage||"فهرسة PDF"} — ${m.objects||0} كائن`:m.phase==="pages"?`📖 استخراج الصفحة ${m.page||0}/${m.totalPages||0}…`:m.phase==="fallback"?`🔍 ${m.stage||"استخراج النص"} — ${m.page||0} من ${m.totalPages||0}`:m.phase==="chunk"?`🧩 تقسيم المعرفة: الصفحة ${m.page||0}/${m.totalPages||0} — ${m.docs||0} مقطعًا، ${(m.chars||0).toLocaleString("en")} حرفًا`:m.phase==="complete"?`📄 اكتمل استخراج PDF؛ جارٍ تقسيم النص وحفظ المعرفة…`:`📖 استخراج المعرفة… ${m.docs} مقطعًا، ${m.chars.toLocaleString("en")} حرفًا`;});learnBtn.disabled=false;learnStatus.textContent=r.ok?"✅ تم تعلم "+r.docs.toLocaleString("en")+" مقطعًا من "+r.files+" ملفًا ("+r.chars.toLocaleString("en")+" حرفًا). أصبحت متاحة للشات.":"❌ "+r.msg;toast2(r.ok?"اكتمل تعلم المعرفة":"تعذر التعلم: "+r.msg,r.ok?"ok":"err");return;}learnStatus.textContent="⏳ بفحص عدد التصنيفات لتحديد طريقة التعلم المناسبة…";const pv=await runPreview(src,3000);if(pv.type==="preview"&&pv.nLabels<2){learnStatus.textContent="📚 تصنيف واحد أو أقل: سيتم حفظ محتوى المستند كمعرفة بدل تدريب مصنّف لا يمكنه التعلم من فئة واحدة.";learnBtn.disabled=true;const r=await runKnowledgeImport(src,nameI.value.trim()||"مستند فني",m=>{learnStatus.textContent="📖 استخراج المعرفة… "+m.docs+" مقطعًا، "+m.chars.toLocaleString("en")+" حرفًا";});learnBtn.disabled=false;learnStatus.textContent=r.ok?"✅ تم تعلم "+r.docs.toLocaleString("en")+" مقطعًا من المستندات وحفظها محليًا. أصبحت متاحة للشات.":"❌ "+r.msg;toast2(r.ok?"اكتمل تعلم المعرفة":"تعذر التعلم: "+r.msg,r.ok?"ok":"err");return;}if(pv.type==="error"){learnStatus.textContent="❌ "+pv.msg;return;}}learnStatus.textContent="";startWith(src);},"primary");
   const ownSel=el("select",{style:"padding:5px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"},el("option",{attrs:{value:"top"}},"المجلد الرئيسي"),el("option",{attrs:{value:"folder"}},"المجلد المباشر"),el("option",{attrs:{value:"cluster"}},"المواضيع المكتشفة"));
-  const ownBtn=btn("🎓 درّب على بياناتي",()=>{const recs=ownRecords(ownSel.value);if(recs.length<20){toast2("بياناتك قليلة أو من غير تصنيفات كفاية ("+recs.length+" سجل).","err");return;}const lb=new Set(recs.map(r=>r.label));if(lb.size<2){toast2("محتاج تصنيفين على الأقل.","err");return;}startWith({records:recs},"بياناتي ("+ownSel.value+")");});
-  box.append(hint("اختار ملف/ملفات التدريب (أو ZIP). مفيش حد أقصى للحجم — بيتقرا بالبث."),fi,fileInfo,nameI,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة",doPreview),startBtn,cancelBtn),pre,prog,el("hr",{style:"opacity:.2"}),hint("أو درّب على محتواك أنت (كل عنصر = نص، وتصنيفه من:)"),el("div",null,ownSel,ownBtn));
+  const ownBtn=btn("🎓 درّب على بياناتي",()=>{const recs=ownRecords(ownSel.value);if(recs.length<20){toast2("بياناتك قليلة أو من غير تصنيفات كفاية ("+recs.length+" سجل).","err");return;}const lb=new Set(recs.map(r=>r.label));if(lb.size<2&&!base){toast2("محتاج تصنيفين على الأقل.","err");return;}startWith({records:recs},"بياناتي ("+ownSel.value+")");});
+  if(base){box.append(hint("التدريب الإضافي بيكمّل من أوزان «"+base.meta.name+"» (من غير ما يبدأ من الصفر): بيضيف تصنيفات جديدة، وبيعيد تشغيل أمثلة قديمة مع الجديد، وبيقيس النسيان على اختبار النسخة القديمة، وبيحجب أي نص كان في تحقق/اختبار النسخة القديمة."),fi,fileInfo,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة",doPreview),learnBtn,startBtn,cancelBtn),learnStatus,pre,prog,el("hr",{style:"opacity:.2"}),el("div",null,ownSel,ownBtn));}
+  else box.append(hint("اختار ملف/ملفات التدريب (أو ZIP). ملفات PDF تُستورد مباشرة كمعرفة لتجنب تحليلها مرتين؛ تدريب المصنّف يظل مسارًا منفصلًا. النظام بيمنع التسرب تلقائيًا (تكرار، تشابه، اسم التصنيف داخل النص) ويقيس الدقة على اختبار مستقل."),fi,fileInfo,nameI,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة وفحص التسرب",doPreview),learnBtn,startBtn,cancelBtn),learnStatus,pre,prog,el("hr",{style:"opacity:.2"}),hint("أو درّب على محتواك أنت (كل عنصر = نص، وتصنيفه من:) — النصوص المقسّمة من نفس العنصر بتفضل في نفس القسم:"),el("div",null,ownSel,ownBtn));
   return box;
 }
 
@@ -19576,16 +20415,32 @@ function importSection(rerender){
 }
 
 /* ---------- التبويب ---------- */
+/* ---------- بحث دلالي هجين + علاقات ---------- */
+function searchSection(close){
+  const inp=el("input",{style:"width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"}),out=el("div");inp.placeholder="اسأل أو ابحث (مثلًا: إزاي أعرف إن الحساس بايظ؟)";
+  const run=()=>{out.textContent="";const q=inp.value.trim();if(!q)return;const r=hybridSearch(q,{itemText:itemTextOf});
+    out.appendChild(el("div",{style:"font-size:12.5px;margin:4px 0"},"النية: "+r.intent+" · طرق البحث: BM25"+(r.methods&&r.methods.sem?" + متجهات دلالية":"")+(r.methods&&r.methods.nn?" + تضمين الشبكة":"")));
+    if(r.related.length)out.appendChild(el("div",{style:"font-size:12px;margin:4px 0"},"🔤 مفاهيم مرتبطة: "+r.related.map(([w,a])=>w+" ≈ "+a.join("، ")).join(" · ")));
+    if(!r.results.length){out.appendChild(hint("مفيش نتايج."));return;}
+    r.results.forEach(x=>{const row=el("div",{cls:"nn-row",style:x.kind==="item"?"cursor:pointer":""});row.appendChild(el("b",null,(x.kind==="item"?"📦 ":"📖 ["+x.label+"] ")+(x.kind==="item"?x.title:"")));row.appendChild(el("div",{cls:"hx-sm"},x.text));
+      row.appendChild(el("div",{cls:"hx-sm"},"ترتيب: "+["bm25","sem","nn"].map(k=>k+" "+(x.ranks[k]||"—")).join(" · ")));if(x.kind==="item")row.onclick=()=>{close();window.__HIST.go(x.id,"");};out.appendChild(row);});
+    const kg=buildKG(itemTextOf),qn=new Set(S.words(q,20).map(w=>w.replace(/^(وال|بال|ال)/,"")));const rel=kg.filter(t=>qn.has(t.s)||qn.has(t.o)).slice(0,8);
+    if(rel.length){out.appendChild(el("h4",null,"🕸️ علاقات مستخرجة متعلقة بسؤالك"));rel.forEach(t=>out.appendChild(el("div",{cls:"nn-row"},t.s+" —"+t.r+"→ "+t.o+"  ("+t.n+")"))); }};
+  const kgBtn=btn("🕸️ أهم العلاقات المستخرجة",()=>{out.textContent="";const kg=buildKG(itemTextOf).slice(0,30);if(!kg.length){out.appendChild(hint("مفيش علاقات (فاعل-فعل-مفعول) اتلقت في الشرح لسه."));return;}kg.forEach(t=>out.appendChild(el("div",{cls:"nn-row"},t.s+" —"+t.r+"→ "+t.o+"  ("+t.n+")")));});
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")run();});
+  return det("🔎 بحث دلالي هجين + علاقات",false,hint("بيدمج 3 طرق (كلمات BM25 + متجهات كلمات متعلَّمة من بياناتك + تضمين الشبكة) بدمج الترتيب RRF، فبيلاقي المعنى حتى لو الكلمات مختلفة."),inp,btn("🔍 ابحث",run,"primary"),kgBtn,out);
+}
+/* ---------- التبويب ---------- */
 async function neural(host,close){
   host.textContent="";await allPacks();
   const rerender=()=>neural(host,close);
   bannerEl=null;if(lastMsg){bannerEl=el("div",{style:"padding:8px;border:1px solid #4ade80;border-radius:8px;margin-bottom:6px;font-size:12.5px"},lastMsg);host.appendChild(bannerEl);}
-  host.appendChild(el("div",{cls:"hx-sm",style:"margin-bottom:6px"},"🧬 شبكة عصبية (تضمين مُجزّأ للكلمات والمقاطع ← طبقة ReLU ← softmax) بتتدرّب على بياناتك الخارجية بأي كمية وتبقى مرجعك: بتتعرّف على مواضيعك فورًا من غير ما تستنى تتعلّم من شغلك، وبتقدّم أقرب مرجع. التدريب على جهازك (Worker) بدون إنترنت، والحزمة بتتحفظ وبتتزامن كملف ai-pack-….json."));
+  host.appendChild(el("div",{cls:"hx-sm",style:"margin-bottom:6px"},"🧬 شبكة عصبية بتتدرّب على بياناتك الخارجية بأي كمية وتبقى مرجعك. التدريب على جهازك (Worker) بدون إنترنت، مع: منع تسرب البيانات، محسّن Adam/AdaGrad مع إيقاف مبكر، تعلّم تزايدي بدون نسيان، فهم دلالي هجين، وتقييم مستقل. الحزمة بتتحفظ وبتتزامن كملف ai-pack-….json."));
   const reg=regList(),pk=el("div");
   if(!reg.length)pk.appendChild(hint("لسه مفيش حزم. درّب أول حزمة من الأسفل."));
   reg.forEach(r=>{const p=PACKS.get(r.id);if(p)pk.appendChild(packCard(p,r,rerender));else pk.appendChild(el("div",{cls:"hx-sub"},"🧬 "+r.name+" — غير محمّلة على الجهاز ده. استخدم «تحميل الحزم من مجلد المزامنة» تحت.",btn("🗑️ شيل من القائمة",()=>{reg.splice(reg.indexOf(r),1);kickSync();rerender();})));});
   host.appendChild(det("🧬 الحزم المدرّبة ("+reg.length+")",true,pk));
-  host.appendChild(trainSection(rerender));host.appendChild(trySection());host.appendChild(recSection(close));host.appendChild(importSection(rerender));host.appendChild(formatSection());
+  host.appendChild(trainBox(rerender,null));host.appendChild(qaSection(close));host.appendChild(searchSection(close));host.appendChild(trySection());host.appendChild(recSection(close));host.appendChild(importSection(rerender));host.appendChild(formatSection());
 }
 
 /* ---------- تكامل مع تبويب التحليل ---------- */
@@ -19617,16 +20472,18 @@ function itemExtra(it,close){
     r.top.forEach(t=>box.appendChild(el("div",{cls:"nn-row"},t.label,probBar(t.prob),Math.round(t.prob*100)+"%")));
     r.refs.slice(0,2).forEach(x=>box.appendChild(el("div",{style:"font-size:12px;margin:2px 0"},"📖 ["+x.label+" "+Math.round(x.sim*100)+"%] "+x.t)));
     const dlId="dl"+Math.random().toString(36).slice(2,7),inp=el("input",{attrs:{list:dlId,placeholder:"تصحيح التصنيف…"},style:"padding:4px 6px;border-radius:6px;background:var(--panel2);color:var(--text);border:1px solid var(--border);width:60%"}),dlist=el("datalist",{attrs:{id:dlId}},p.meta.labels.slice(0,500).map(l=>el("option",{attrs:{value:l}})));
-    box.appendChild(el("div",{style:"margin-top:4px"},inp,dlist,btn("✔ صحّح وتعلّم",async()=>{if(addFeedback(p,text,inp.value.trim())){await savePack(p);RC.clear();toast2("اتعلّم التصحيح: «"+inp.value.trim()+"»");}else toast2("اختار تصنيف موجود في الحزمة.","err");})));
+    box.appendChild(el("div",{style:"margin-top:4px"},inp,dlist,btn("✔ صحّح وتعلّم",async()=>{const r=onlineLearn(p,text,inp.value.trim());if(r.ok){await savePack(p);RC.clear();toast2("اتعلّم التصحيح فعليًا (ثقة «"+inp.value.trim()+"» "+Math.round(r.pBefore*100)+"% ← "+Math.round(r.pAfter*100)+"%)");}else toast2(r.reason,"err");})));
   });
   return box;
 }
 
-window.__NN={allPacks,packFile,activePacks,classify,addFeedback,savePack,deletePack,importPackText,loadFromFolder,runTrain,runPreview,ownRecords,PRESETS,analysisSection,reportLines,itemExtra,recog};
+window.__NN={parsePack,allPacks,allKnowledge,saveKnowledgeDocs,deleteKnowledgeSource,runKnowledgeImport,packFile,activePacks,classify,addFeedback,onlineLearn,savePack,rollbackPack,deletePack,importPackText,loadFromFolder,runTrain,runPreview,ownRecords,PRESETS,analysisSection,reportLines,itemExtra,recog,evaluatePack,hybridSearch,composeTechnicalAnswer,qaSection,buildKG,extractTriples,semVec,relatedWords,intentOf,answerOffline,offlineChatSection,translateAnswerForQuestion,questionLanguage,loadAnswerTranslator,LOCAL_KB,PREV,view,S};
 window.__HIST.neural=neural;
+window.__HIST.offlineChat=offlineChat;
 setTimeout(async()=>{try{await allPacks();const reg=regList();if(reg.some(r=>!PACKS.has(r.id)))await loadFromFolder();}catch(e){}},4000);
 
 })();
+
 </script>
 <script id="change-log-and-thumbs">
 /* =========================================================
@@ -19668,11 +20525,11 @@ function open(itemId){
     if(rows.length>lim){ const mb=document.createElement("button"); mb.type="button"; mb.className="btn small"; mb.textContent="عرض المزيد ("+(rows.length-lim)+")"; mb.onclick=()=>{lim+=150;paint();}; list.appendChild(mb); } };
   inp.oninput=()=>{ q=inp.value.trim().toLowerCase(); lim=150; paint(); };
   body.append(chips,inp,list); drawChips(); paint();
-  const body0=ov.querySelector(".si-body"),tabs=document.createElement("div"),hb=document.createElement("div"),ib=document.createElement("div"),ab=document.createElement("div"),nb2=document.createElement("div");
+  const body0=ov.querySelector(".si-body"),tabs=document.createElement("div"),hb=document.createElement("div"),ib=document.createElement("div"),ab=document.createElement("div"),nb2=document.createElement("div"),chat2=document.createElement("div");
   tabs.style.cssText="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap";
-  [["🕘 السجل",body],["📜 الهيستوري",hb,"history"],["📊 الحصر",ib,"inventory"],["🧠 التحليل",ab,"analysis"],["🧬 التدريب",nb2,"neural"]].forEach(([l,el,fn],ix)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(ix?"":" primary"); b.textContent=l;
-    b.onclick=()=>{ [body,hb,ib,ab,nb2].forEach(x=>x.style.display="none"); el.style.display=""; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); if(fn&&!el.dataset.d&&window.__HIST){ el.dataset.d=1; window.__HIST[fn](el,close,itemId); } }; tabs.appendChild(b); });
-  hb.style.display=ib.style.display=ab.style.display=nb2.style.display="none"; body0.append(...(window.__HIST&&window.__HIST.bar?[window.__HIST.bar()]:[]),tabs,body,hb,ib,ab,nb2);
+  [["🕘 السجل",body],["📜 الهيستوري",hb,"history"],["📊 الحصر",ib,"inventory"],["🧠 التحليل",ab,"analysis"],["🧬 التدريب",nb2,"neural"],["💬 الشات المحلي",chat2,"offlineChat"]].forEach(([l,el,fn],ix)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(ix?"":" primary"); b.textContent=l;
+    b.onclick=()=>{ [body,hb,ib,ab,nb2,chat2].forEach(x=>x.style.display="none"); el.style.display=""; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); if(fn&&!el.dataset.d&&window.__HIST){ el.dataset.d=1; window.__HIST[fn](el,close,itemId); } }; tabs.appendChild(b); });
+  hb.style.display=ib.style.display=ab.style.display=nb2.style.display=chat2.style.display="none"; body0.append(...(window.__HIST&&window.__HIST.bar?[window.__HIST.bar()]:[]),tabs,body,hb,ib,ab,nb2,chat2);
   ov.querySelector(".si-x").onclick=close; ov.addEventListener("click",e=>{ if(e.target===ov) close(); }); document.body.appendChild(ov);
 }
 
