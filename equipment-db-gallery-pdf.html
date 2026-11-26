@@ -6309,28 +6309,30 @@ async function boot(){
   const syncStateRow = metaRows.find(m=>m.key==="syncLogState");
   if(syncStateRow && syncStateRow.value) state.syncLogState = Object.assign(state.syncLogState, syncStateRow.value);
 
-  // استرجاع مرجع المجلد المرتبط من IndexedDB دون فحص الصلاحية أو قراءة المجلد
-  // أثناء الإقلاع. بعض متصفحات الهاتف قد تعلق داخل queryPermission/getFile
-  // عند استعادة FileSystemDirectoryHandle بعد إعادة فتح الصفحة.
-  // نعرض الواجهة أولاً، ثم تتم مطالبة المستخدم بتفعيل المجلد من داخل الإعدادات
-  // بضغطة فعلية (activateLinkedFolder)؛ لا نمسح ولا نستبدل أي بيانات هنا.
+  // إذا كان هناك مجلد مرتبط سابقًا، فملف project.json داخله هو المصدر الخارجي
+  // الفعلي. لا نستخدم IndexedDB بدلًا منه؛ نحمّل منه عند فتح البرنامج كلما كانت
+  // الصلاحية متاحة. إذا كانت الصلاحية تحتاج تفاعلًا من المستخدم، تظهر حالة
+  // "تفعيل" في الإعدادات بدل محاولة requestPermission خارج gesture.
   if(STORAGE_MODE!=="memory"){
     const linkedDirRow = metaRows.find(m=>m.key==="linkedDir");
     if(linkedDirRow && linkedDirRow.value){
       linkedDirHandle = linkedDirRow.value;
-      folderPermissionNeedsActivation = true;
+      try{
+        const granted = await ensureFolderPermission(linkedDirHandle,false);
+        if(granted){
+          const snap = await readFolderSnapshot(linkedDirHandle);
+          if(snap){
+            await restoreAllFromFolder(linkedDirHandle,snap);
+            applyTheme(state.settings.theme || "amber");
+          }
+        }
+      }catch(e){ console.warn("تعذر تحميل التخزين من المجلد المرتبط:",e); }
     }
   }
 
   bindGlobalEvents();
   renderSidebarTree();
   navigateTo({type:"home"});
-  if(linkedDirHandle){
-    try{ renderFolderLinkStatus(); }catch(e){}
-    setTimeout(()=>{
-      toast("تم العثور على مجلد التخزين المرتبط. افتح الإعدادات واضغط تفعيل/استعادة المجلد لمزامنة بياناته.","warn",8000);
-    },700);
-  }
   initGalleryAuditTracker();
   try{ restartActivityLogScheduler(); }catch(e){}
   try{
@@ -19123,6 +19125,7 @@ setTimeout(learn,6000);setInterval(()=>{if(document.visibilityState==="visible")
 })();
 </script>
 <script id="ai-neural">
+
 /* =========================================================
    🧬 الشبكة العصبية: تدريب على بيانات خارجية (بالبث داخل Worker) + حزم مرجعية + تعرّف فوري + تعلّم من التصحيحات
    ========================================================= */
@@ -19135,22 +19138,22 @@ function sharedCode(){
   const TOK=/[\p{L}\p{N}]+/gu;
   const fnv=(h,c)=>Math.imul(h^c,16777619)>>>0;
   /* كل كلمة → خصائص: الكلمة + ثنائي الكلمتين + مقاطع حروف (3-gram) = شبكة بتتحمّل اللهجات والأخطاء الإملائية */
-  function feats(text,B,maxTok){
-    const t=NORM(text),out=[];let prev=0,n=0,m;TOK.lastIndex=0;
+  function feats(text,B,maxTok,info){
+    const t=NORM(text),out=[];let prev=0,n=0,m,ck=2166136261;TOK.lastIndex=0;
     while(n<maxTok&&(m=TOK.exec(t))){
       const w=m[0];if(w.length<2&&!(w>="0"&&w<="9"))continue;n++;
       let h=2166136261;for(let i=0;i<w.length;i++)h=fnv(h,w.charCodeAt(i));
-      out.push(h%B);
+      ck=Math.imul(ck^h,16777619)>>>0;out.push(h%B);
       if(prev)out.push((Math.imul(prev,31)+h>>>0)%B);
       prev=h;
       if(w.length>=4){const s="<"+w+">";for(let i=0;i+3<=s.length;i++){let g=2166136261;g=fnv(g,s.charCodeAt(i));g=fnv(g,s.charCodeAt(i+1));g=fnv(g,s.charCodeAt(i+2));out.push(((g^0x5bd1e995)>>>0)%B);}}
     }
-    return Int32Array.from(out);
+    if(info)info.ck=ck;return Int32Array.from(out);
   }
   /* استدلال على نموذج مضغوط (E=int8 لكل صف + scale) */
   function embed(P,f,x){
-    const D=P.D,E=P.E,Es=P.Es;x.fill(0);const nf=f.length;if(!nf)return 0;
-    for(let q=0;q<nf;q++){const r=f[q],s=Es[r]/127,o=r*D;for(let d=0;d<D;d++)x[d]+=E[o+d]*s;}
+    const D=P.D,E=P.E,Es=P.Es,ov=P.ov&&P.ov.size?P.ov:null;x.fill(0);const nf=f.length;if(!nf)return 0;
+    for(let q=0;q<nf;q++){const r=f[q],o=r*D;if(ov){const v=ov.get(r);if(v){for(let d=0;d<D;d++)x[d]+=v[d];continue;}}const s=Es[r]/127;for(let d=0;d<D;d++)x[d]+=E[o+d]*s;}
     for(let d=0;d<D;d++)x[d]/=nf;return nf;
   }
   function mlp(P,x,h,z){
@@ -19161,7 +19164,13 @@ function sharedCode(){
     for(let j=0;j<H;j++){let v=h[j];if(v<0){h[j]=0;continue;}const o=j*C;for(let c=0;c<C;c++)z[c]+=v*W2[o+c];}
   }
   function softmax(z,C,T,p){let mx=-1e30;for(let c=0;c<C;c++)if(z[c]>mx)mx=z[c];let s=0;for(let c=0;c<C;c++){p[c]=Math.exp((z[c]-mx)/T);s+=p[c];}for(let c=0;c<C;c++)p[c]/=s;}
-  return {NORM,feats,embed,mlp,softmax};
+  function whash(w){let h=2166136261;for(let i=0;i<w.length;i++)h=fnv(h,w.charCodeAt(i));return h;}
+  function words(text,maxTok){const t=NORM(text),out=[];let m;TOK.lastIndex=0;while(out.length<maxTok&&(m=TOK.exec(t))){const w=m[0];if(w.length<2&&!(w>="0"&&w<="9"))continue;out.push(w);}return out;}
+  function ckey(ws){let h=2166136261;for(const w of ws)h=Math.imul(h^whash(w),16777619)>>>0;return h>>>0;}
+  function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++)h=fnv(h,s.charCodeAt(i));return h>>>0;}
+  const MHC=[0x9e3779b1,0x85ebca6b,0xc2b2ae35,0x27d4eb2f];
+  function minhash(ws){const out=new Uint32Array(4).fill(0xffffffff),n=ws.length,hs=ws.map(whash),k=n>=3?3:1;for(let i=0;i+k<=n;i++){let s=hs[i];if(k===3)s=(Math.imul(hs[i],31)+Math.imul(hs[i+1],131)+hs[i+2])>>>0;for(let j=0;j<4;j++){let x=Math.imul(s^MHC[j],MHC[(j+1)&3])>>>0;x^=x>>>15;x=Math.imul(x,0x2c1b3c6d)>>>0;x^=x>>>12;if(x<out[j])out[j]=x;}}return out;}
+  return {NORM,feats,embed,mlp,softmax,words,ckey,hashStr,minhash,whash};
 }
 
 /* ===== Worker: قراءة بالبث + تدريب شبكة عصبية (embedding → ReLU → softmax) ===== */
@@ -19171,15 +19180,16 @@ function workerMain(){
   const post=(type,o)=>self.postMessage(Object.assign({type},o||{}));
   self.onmessage=async ev=>{
     const m=ev.data;if(m.cmd==="cancel"){cancel=true;return;}
-    try{cancel=false;if(m.cmd==="preview")await preview(m);else if(m.cmd==="train")await trainRun(m);}
+    try{cancel=false;if(m.cmd==="preview")await preview(m);else if(m.cmd==="train"){if(m.cfg&&m.cfg.algo==="v1")await trainRunV1(m);else await trainRunV2(m);}}
     catch(e){post("error",{msg:String(e&&e.message||e)});}
   };
   const LK=["label","topic","category","class","تصنيف","الفئة","الموضوع","التصنيف","فئة","موضوع","labels"],TK=["text","body","content","description","desc","نص","شرح","الشرح","محتوى","وصف","المحتوى"],NK=["title","name","عنوان","الاسم","اسم"];
   const pickKey=(o,ks)=>{for(const k of Object.keys(o))if(ks.includes(k.toLowerCase().trim()))return k;return null;};
+  const GK=["group","source","src","doc_id","item_id","item","مصدر","مجموعة"];
   function fromObj(o){
     if(!o||typeof o!=="object")return null;const lk=pickKey(o,LK),tk=pickKey(o,TK),nk=pickKey(o,NK);if(!lk||!tk)return null;
     let l=o[lk];if(Array.isArray(l))l=l[0];if(l==null||o[tk]==null)return null;
-    return {label:String(l).trim(),text:(nk&&o[nk]?o[nk]+". ":"")+o[tk]};
+    const gk=pickKey(o,GK);return {label:String(l).trim(),text:(nk&&o[nk]?o[nk]+". ":"")+o[tk],group:gk&&o[gk]!=null?String(o[gk]):null};
   }
   async function* lineGen(file){
     const rd=file.stream().getReader(),dec=new TextDecoder("utf-8");let buf="";
@@ -19234,14 +19244,196 @@ function workerMain(){
     if(src.records){for(const r of src.records){yield r;if(limit&&++n>=limit)return;}return;}
     for(const f of src.files){for await(const r of fileRecords(f)){yield r;if(limit&&++n>=limit)return;}}
   }
-  async function preview(m){
+  async function previewV1(m){
     const lab=new Map(),samples=[];let rows=0,len=0,bad=0;
     for await(const r of records(m.src,m.limit||3000)){
       if(!r.label||!r.text||r.text.length<3){bad++;continue;}rows++;len+=r.text.length;lab.set(r.label,(lab.get(r.label)||0)+1);if(samples.length<5)samples.push({label:r.label,text:r.text.slice(0,140)});
     }
     post("preview",{rows,bad,avgLen:rows?Math.round(len/rows):0,labels:[...lab].sort((a,b)=>b[1]-a[1]).slice(0,60),nLabels:lab.size,samples});
   }
-  async function trainRun(m){
+  /* ===================== v2: تدريب محسّن + منع التسرب + تعلّم تزايدي + متجهات دلالية ===================== */
+  const bloom=bits=>({a:new Uint8Array(bits>>>3),mask:bits-1});
+  const bAdd=(b,x)=>{const p1=x&b.mask,p2=(Math.imul(x,2246822519)>>>5)&b.mask;b.a[p1>>>3]|=1<<(p1&7);b.a[p2>>>3]|=1<<(p2&7);};
+  const bHas=(b,x)=>{const p1=x&b.mask,p2=(Math.imul(x,2246822519)>>>5)&b.mask;return ((b.a[p1>>>3]>>(p1&7))&1)&&((b.a[p2>>>3]>>(p2&7))&1);};
+  const mhKey=(v,j)=>((v^Math.imul(j+1,0x1000193))>>>0);
+  function svdSub(rows,N,Vc,k,iters,rng){
+    let X=Array.from({length:k},()=>{const a=new Float32Array(N);for(let i=0;i<N;i++)a[i]=rng()-.5;return a;});
+    const AtX=x=>{const o=new Float32Array(Vc);for(let i=0;i<N;i++){const xi=x[i];if(!xi)continue;const R=rows[i];for(let j=0;j<R.idx.length;j++)o[R.idx[j]]+=R.val[j]*xi;}return o;};
+    const AZ=z=>{const o=new Float32Array(N);for(let i=0;i<N;i++){const R=rows[i];let s=0;for(let j=0;j<R.idx.length;j++)s+=R.val[j]*z[R.idx[j]];o[i]=s;}return o;};
+    const orth=()=>{for(let j=0;j<k;j++){const v=X[j];for(let i=0;i<j;i++){const u=X[i];let d=0;for(let n=0;n<N;n++)d+=v[n]*u[n];for(let n=0;n<N;n++)v[n]-=d*u[n];}let nr=0;for(let n=0;n<N;n++)nr+=v[n]*v[n];nr=Math.sqrt(nr)||1;for(let n=0;n<N;n++)v[n]/=nr;}};
+    orth();for(let t=0;t<iters;t++){X=X.map(x=>AZ(AtX(x)));orth();}
+    const S=X.map(x=>{const z=AtX(x);let s=0;for(let i=0;i<Vc;i++)s+=z[i]*z[i];return Math.sqrt(s);});
+    return {U:X,S};
+  }
+  async function buildWV(src,wf,wdf,wdocs,maxTok,rng){
+    const cand=[...wf].filter(x=>x[1]>=3).sort((a,b)=>b[1]-a[1]||(a[0]<b[0]?-1:1)).slice(0,2500),V=cand.length;if(V<60)return null;
+    const vocab=cand.map(x=>x[0]),vid=new Map(vocab.map((w,i)=>[w,i])),cnt=new Float32Array(V*V),rs=new Float64Array(V);let total=0,docs=0;
+    for await(const r of records(src)){
+      if(cancel)return null;if(!r.text||r.text.length<3)continue;const ws=self.__S.words(r.text,Math.min(maxTok,150)),ids=[];
+      for(const w of ws){const i=vid.get(w);if(i!==undefined)ids.push(i);}
+      for(let a=0;a<ids.length;a++)for(let b=a+1;b<ids.length&&b<=a+4;b++){const x=ids[a],y=ids[b];if(x===y)continue;cnt[x*V+y]++;cnt[y*V+x]++;rs[x]++;rs[y]++;total+=2;}
+      if(++docs>=120000)break;if((docs&2047)===0)await new Promise(r=>setTimeout(r,0));
+    }
+    if(total<1000)return null;
+    let al=0;const ca=new Float64Array(V);for(let j=0;j<V;j++){ca[j]=Math.pow(rs[j],.75);al+=ca[j];}
+    const rows=[];for(let i=0;i<V;i++){const idx=[],val=[];for(let j=0;j<V;j++){const c=cnt[i*V+j];if(c<=0)continue;const pmi=Math.log((c/total)/((rs[i]/total)*(ca[j]/al)))-Math.LN2;if(pmi>0){idx.push(j);val.push(pmi);}}rows.push({idx:Int32Array.from(idx),val:Float32Array.from(val)});}
+    const dw=48,{U,S}=svdSub(rows,V,V,dw,6,rng),wv=new Int8Array(V*dw);
+    for(let i=0;i<V;i++){let nr=0;const v=new Float32Array(dw);for(let d=0;d<dw;d++){v[d]=U[d][i]*Math.sqrt(S[d]);nr+=v[d]*v[d];}nr=Math.sqrt(nr)||1;for(let d=0;d<dw;d++)wv[i*dw+d]=Math.round(v[d]/nr*127);}
+    const idf=new Float32Array(V);for(let i=0;i<V;i++)idf[i]=Math.log((wdocs+1)/((wdf.get(vocab[i])||0)+1))+1;
+    return {vocab,wv,idf,dw};
+  }
+  const macroF1=(tp,fp,fn)=>{let s=0,n=0;for(let c=0;c<tp.length;c++){if(tp[c]+fn[c]===0)continue;const p=tp[c]+fp[c]?tp[c]/(tp[c]+fp[c]):0,r=tp[c]/(tp[c]+fn[c]);s+=p+r?2*p*r/(p+r):0;n++;}return n?s/n:0;};
+  function evalQuant(P,T,list){
+    const C=P.C,x=new Float32Array(P.D),h=new Float32Array(P.H),z=new Float32Array(C),p=new Float32Array(C),tp=new Int32Array(C),fp=new Int32Array(C),fn=new Int32Array(C),bins=Array.from({length:10},()=>({n:0,ok:0,c:0}));let ok=0,ls=0;
+    for(const d of list){self.__S.embed(P,d.f,x);self.__S.mlp(P,x,h,z);self.__S.softmax(z,C,T,p);let bi=0;for(let c=1;c<C;c++)if(p[c]>p[bi])bi=c;ls+=-Math.log(Math.max(1e-9,p[d.y]));const hit=bi===d.y;if(hit){ok++;tp[bi]++;}else{fp[bi]++;fn[d.y]++;}const b=bins[Math.min(9,Math.floor(p[bi]*10))];b.n++;b.c+=p[bi];if(hit)b.ok++;}
+    const n=list.length||1;let ece=0;bins.forEach(b=>{if(b.n)ece+=b.n/n*Math.abs(b.ok/b.n-b.c/b.n);});
+    return {n:list.length,acc:ok/n,loss:ls/n,f1:macroF1(tp,fp,fn),ece,tp,fp,fn,bins};
+  }
+  function quantE(E,B,D,touched){const Eq=new Int8Array(B*D),Es=new Float32Array(B);for(let r=0;r<B;r++){if(touched&&!touched[r])continue;let mx=0,o=r*D;for(let d=0;d<D;d++){const a=Math.abs(E[o+d]);if(a>mx)mx=a;}Es[r]=mx;if(mx>0){const k=127/mx;for(let d=0;d<D;d++)Eq[o+d]=Math.round(E[o+d]*k);}}return {Eq,Es};}
+  async function trainRunV2(m){
+    const S=self.__S,cfg=m.cfg,base=m.base||null;
+    const B=base?base.meta.B:cfg.B,D=base?base.meta.D:cfg.D,H=base?base.meta.H:cfg.H,maxTok=base?base.meta.maxTok:cfg.maxTok;
+    const rng=rngMk(12345),t0=Date.now(),maskHead=cfg.maskLabel!==false,smooth=cfg.smooth!=null?cfg.smooth:.05,drop=cfg.dropout!=null?cfg.dropout:.1,Bs=cfg.batch||16,balance=cfg.balance!==false;
+    let epochs=base?Math.min(cfg.epochs,8):cfg.epochs,masked=0;
+    const prep=r=>{if(!r.label||!r.text||r.text.length<3)return null;let txt=r.text;if(maskHead){const ln=S.NORM(r.label).trim();if(ln.length>=2){const nt=S.NORM(txt),ix=nt.indexOf(ln);if(ix>=0&&ix<40){txt=nt.slice(0,ix)+" "+nt.slice(ix+ln.length);masked++;}}}return txt;};
+    const splitOf=(r,ck)=>{const gk=r.group!=null?S.hashStr(String(r.group)):ck,u=(Math.imul(gk,2654435761)>>>0)%100;return u<90?0:u<95?1:2;};
+    post("stage",{s:"scan"});
+    const lmap=new Map(),labels=[],counts=[];
+    if(base)base.meta.labels.forEach((l,i)=>{lmap.set(l,i);labels.push(l);counts.push(base.meta.counts[i]);});
+    const holdSet=base&&base.holdHashes?new Set(base.holdHashes):null,dupB=bloom(1<<26),trB=bloom(1<<25);
+    const valL=[],testL=[],CAP=20000,refs=[],refSeen=[],RPC=cfg.refs||40,wf=new Map(),wdf=new Map(),holdAll=[];let wdocs=0,total=0,trainN=0,dups=0,skipped=0,blocked=0,lastP=0,lenSum=0,groupsSeen=false;
+    for await(const r of records(m.src)){
+      if(cancel)return post("cancelled");
+      const txt=prep(r);if(txt===null){skipped++;continue;}
+      const ws=S.words(txt,maxTok);if(ws.length<2){skipped++;continue;}
+      const ck=S.ckey(ws);if(holdSet&&holdSet.has(ck)){blocked++;continue;}
+      if(bHas(dupB,ck)){dups++;continue;}bAdd(dupB,ck);
+      let y=lmap.get(r.label);if(y===undefined){y=labels.length;lmap.set(r.label,y);labels.push(r.label);counts.push(0);}
+      if(r.group!=null)groupsSeen=true;
+      const sp=splitOf(r,ck);total++;lenSum+=txt.length;const mh=S.minhash(ws);
+      if(sp===0){trainN++;counts[y]++;for(let j=0;j<4;j++)bAdd(trB,mhKey(mh[j],j));
+        while(refs.length<labels.length){refs.push([]);refSeen.push(0);}refSeen[y]++;const rf=refs[y];if(rf.length<RPC)rf.push([r.text.slice(0,260),ck]);else{const q=Math.floor(rng()*refSeen[y]);if(q<RPC)rf[q]=[r.text.slice(0,260),ck];}
+        if(wdocs<150000){wdocs++;const seen=new Set();for(const w of ws){if(wf.size<400000||wf.has(w))wf.set(w,(wf.get(w)||0)+1);if(!seen.has(w)){seen.add(w);if(wdf.size<400000||wdf.has(w))wdf.set(w,(wdf.get(w)||0)+1);}}}}
+      else{const arr=sp===1?valL:testL;holdAll.push(ck);if(arr.length<CAP)arr.push({f:S.feats(txt,B,maxTok),y,mh,t:r.text.slice(0,300),ck});}
+      if(Date.now()-lastP>300){lastP=Date.now();post("scan",{docs:total});}
+      if(((total+dups+skipped)&1023)===0)await new Promise(r=>setTimeout(r,0));
+    }
+    const C=labels.length;while(refs.length<C){refs.push([]);refSeen.push(0);}
+    if(C<2)return post("error",{msg:"لازم تصنيفين على الأقل (لقيت "+C+")"});
+    if(trainN<20)return post("error",{msg:"البيانات قليلة جدًا ("+trainN+" نص تدريب)"});
+    /* منع التسرب: استبعاد أي نص تحقق/اختبار قريب جدًا من نص تدريب (MinHash) */
+    const leakF=d=>{let hit=0;for(let j=0;j<4;j++)if(bHas(trB,mhKey(d.mh[j],j)))hit++;return hit<2;};
+    const nv0=valL.length,nt0=testL.length,val=valL.filter(leakF),test=testL.filter(leakF);
+    const leak={total,train:trainN,val:val.length,test:test.length,exactDupRemoved:dups,nearDupRemovedVal:nv0-val.length,nearDupRemovedTest:nt0-test.length,labelHeadMasked:masked,maskedPct:total?+(masked/Math.max(1,total+dups)*100).toFixed(1):0,heldBlocked:blocked,splitBy:groupsSeen?"group":"content",skipped};
+    post("scan",{docs:total,labels:C,skipped,avgLen:Math.round(lenSum/Math.max(1,total)),done:true,leak});
+    const lackEval=!val.length||!test.length,tiny=lackEval&&!(base&&base.testSet&&base.testSet.length),noEval=lackEval,useAll=tiny;if(tiny){leak.tiny=true;for(const d of valL.concat(testL))counts[d.y]++;trainN=total;post("scan",{docs:total,labels:C,leak,tiny:true,done:true});}
+    if(cfg.auto!==false){const need=Math.ceil((base?40000:100000)/Math.max(1,trainN));epochs=Math.min(base?8:200,Math.max(epochs,need));}
+    /* مراجع التدريب فقط (ما فيهاش أي نص تحقق/اختبار) */
+    const refCap=Math.max(4,Math.min(RPC,Math.floor(8000/C)));
+    /* بارامترات الشبكة */
+    const E=new Float32Array(B*D),Eg=new Float32Array(B),touched=new Uint8Array(B);
+    let W1=new Float32Array(D*H),b1=new Float32Array(H),W2=new Float32Array(H*C),b2=new Float32Array(C),C0=0;
+    if(base){C0=base.meta.C;for(let r=0;r<B;r++){const s=base.Es[r]/127,o=r*D;if(s){touched[r]=1;for(let d=0;d<D;d++)E[o+d]=base.E[o+d]*s;}}W1.set(base.W1);b1.set(base.b1);
+      const Wo=Math.sqrt(1/H)*.5;for(let j=0;j<H;j++)for(let c=0;c<C;c++)W2[j*C+c]=c<C0?base.W2[j*C0+c]:(rng()*2-1)*Wo;for(let c=0;c<C0;c++)b2[c]=base.b2[c];}
+    else{const ei=cfg.einit||.25,Wi=Math.sqrt(2/D),Wo=Math.sqrt(1/H);for(let i=0;i<E.length;i++)E[i]=(rng()-.5)*2*ei;for(let i=0;i<W1.length;i++)W1[i]=(rng()*2-1)*Wi;for(let i=0;i<W2.length;i++)W2[i]=(rng()*2-1)*Wo;}
+    const W1a=base?W1.slice():null,W2a=base?W2.slice():null,sp=cfg.sp||3e-2;
+    const mW1=new Float32Array(W1.length),vW1=new Float32Array(W1.length),mW2=new Float32Array(W2.length),vW2=new Float32Array(W2.length),mb1=new Float32Array(H),vb1=new Float32Array(H),mb2=new Float32Array(C),vb2=new Float32Array(C);
+    const gW1=new Float32Array(W1.length),gW2=new Float32Array(W2.length),gb1=new Float32Array(H),gb2=new Float32Array(C);
+    const x=new Float32Array(D),h=new Float32Array(H),hd=new Float32Array(H),mk=new Float32Array(H),z=new Float32Array(C),p=new Float32Array(C),dh=new Float32Array(H),dx=new Float32Array(D);
+    const cw=new Float32Array(C).fill(1);if(balance){const mean=counts.reduce((a,b)=>a+b,0)/Math.max(1,counts.filter(c=>c>0).length);let s=0;for(let c=0;c<C;c++){cw[c]=Math.min(4,Math.max(.25,Math.sqrt(mean/Math.max(1,counts[c]))));s+=cw[c];}const k=C/s;for(let c=0;c<C;c++)cw[c]*=k;}
+    let replay=[];if(base&&cfg.replay!==false){for(const r of (base.refs||[]).concat(base.feedback||[]))replay.push({f:S.feats(r.t,B,maxTok),y:r.l});}
+    /* قياس "قبل" على اختبار النسخة القديمة (لقياس النسيان) */
+    let oldTest=null,oldBefore=null;
+    if(base&&base.testSet&&base.testSet.length){oldTest=base.testSet.map(d=>({f:S.feats(d.t,B,maxTok),y:d.l}));const Pb={D,H,C:C0,B,E:base.E,Es:base.Es,W1:base.W1,b1:base.b1,W2:base.W2,b2:base.b2};oldBefore=evalQuant(Pb,base.meta.T,oldTest).acc;}
+    const lrD=(cfg.lr2||.004)*(base?.25:1),lrE=(cfg.lrE||.06)*(base?.2:1),trainEst=Math.max(1,trainN);let step=0,bstep=0,inBatch=0,adamT=0;const totalSteps=trainEst*epochs;
+    const adam=(lr)=>{adamT++;const b1c=1-Math.pow(.9,adamT),b2c=1-Math.pow(.999,adamT),inv=1/inBatch;
+      const up=(w,g,mm,vv,n,dec,anchor)=>{for(let i=0;i<n;i++){const gg=g[i]*inv+(anchor?sp*(w[i]-anchor[i]):0);mm[i]=.9*mm[i]+.1*gg;vv[i]=.999*vv[i]+.001*gg*gg;w[i]-=lr*(mm[i]/b1c)/(Math.sqrt(vv[i]/b2c)+1e-8)+(dec?lr*1e-4*w[i]:0);g[i]=0;}};
+      up(W1,gW1,mW1,vW1,W1.length,true,W1a);up(W2,gW2,mW2,vW2,W2.length,true,W2a);up(b1,gb1,mb1,vb1,H,false,null);up(b2,gb2,mb2,vb2,C,false,null);inBatch=0;};
+    const trainOne=(f,y,lr,lrEe)=>{
+      const nf=f.length;if(!nf)return 0;x.fill(0);
+      for(let q=0;q<nf;q++){const o=f[q]*D;touched[f[q]]=1;for(let d=0;d<D;d++)x[d]+=E[o+d];}for(let d=0;d<D;d++)x[d]/=nf;
+      for(let j=0;j<H;j++)h[j]=b1[j];for(let d=0;d<D;d++){const xd=x[d],o=d*H;for(let j=0;j<H;j++)h[j]+=xd*W1[o+j];}
+      for(let c=0;c<C;c++)z[c]=b2[c];const ks=1/(1-drop);
+      for(let j=0;j<H;j++){let v=h[j];if(v<=0){mk[j]=0;hd[j]=0;continue;}if(drop>0&&rng()<drop){mk[j]=0;hd[j]=0;continue;}mk[j]=ks;v*=ks;hd[j]=v;const o=j*C;for(let c=0;c<C;c++)z[c]+=v*W2[o+c];}
+      let mx=-1e30;for(let c=0;c<C;c++)if(z[c]>mx)mx=z[c];let s=0;for(let c=0;c<C;c++){p[c]=Math.exp(z[c]-mx);s+=p[c];}for(let c=0;c<C;c++)p[c]/=s;
+      const loss=-Math.log(Math.max(1e-9,p[y])),w=cw[y],tOther=smooth/C,tY=1-smooth+tOther;
+      for(let c=0;c<C;c++)p[c]=(p[c]-(c===y?tY:tOther))*w;
+      for(let j=0;j<H;j++){const v=hd[j];if(mk[j]===0){dh[j]=0;continue;}const o=j*C;let g=0;for(let c=0;c<C;c++){g+=W2[o+c]*p[c];gW2[o+c]+=v*p[c];}dh[j]=g*mk[j];}
+      for(let c=0;c<C;c++)gb2[c]+=p[c];
+      for(let d=0;d<D;d++){const xd=x[d],o=d*H;let g=0;for(let j=0;j<H;j++){const dj=dh[j];if(dj===0)continue;g+=W1[o+j]*dj;gW1[o+j]+=xd*dj;}dx[d]=g;}
+      for(let j=0;j<H;j++)gb1[j]+=dh[j];
+      let gs=0;for(let d=0;d<D;d++)gs+=dx[d]*dx[d];gs/=D*nf*nf;
+      for(let q=0;q<nf;q++){const r=f[q];Eg[r]+=gs;const st=lrEe/(Math.sqrt(Eg[r])+1e-8)/nf,o=r*D;for(let d=0;d<D;d++)E[o+d]-=st*dx[d];}
+      inBatch++;if(inBatch>=Bs)adam(lr);
+      return loss;
+    };
+    const evalFloat=list=>{let ok=0,ls=0;for(const d of list){const f=d.f,nf=f.length;x.fill(0);for(let q=0;q<nf;q++){const o=f[q]*D;for(let k=0;k<D;k++)x[k]+=E[o+k];}for(let k=0;k<D;k++)x[k]/=Math.max(1,nf);
+      for(let j=0;j<H;j++)h[j]=b1[j];for(let k=0;k<D;k++){const xd=x[k],o=k*H;for(let j=0;j<H;j++)h[j]+=xd*W1[o+j];}for(let c=0;c<C;c++)z[c]=b2[c];for(let j=0;j<H;j++){const v=h[j];if(v<=0)continue;const o=j*C;for(let c=0;c<C;c++)z[c]+=v*W2[o+c];}
+      let bi=0,mx=-1e30;for(let c=0;c<C;c++)if(z[c]>mx){mx=z[c];bi=c;}let s=0;for(let c=0;c<C;c++)s+=Math.exp(z[c]-mx);ls+=-(z[d.y]-mx-Math.log(s));if(bi===d.y)ok++;}return {acc:ok/Math.max(1,list.length),loss:ls/Math.max(1,list.length)};};
+    const snap=()=>{const q=quantE(E,B,D,touched);return {Eq:q.Eq,Es:q.Es,W1:W1.slice(),b1:b1.slice(),W2:W2.slice(),b2:b2.slice()};};
+    const SB=Math.min(10000,Math.max(200,trainN)),hist=[];let best=null,bestLoss=1e9,bestEp=0,bad=0;
+    for(let ep=1;ep<=epochs;ep++){
+      let seen=0,eLoss=0,eN=0,lastP2=0;const buf=[],eStart=Date.now(),seenB=bloom(1<<26);
+      const flush=async(f,y)=>{const prog=Math.min(1,step/totalSteps),warm=Math.min(1,(step+1)/((base?.3:.02)*totalSteps+1)),lrT=lrD*warm*(.03+.97*.5*(1+Math.cos(Math.PI*prog))),lrEE=lrE*(.2+.8*.5*(1+Math.cos(Math.PI*prog)));
+        eLoss+=trainOne(f,y,lrT,lrEE);if(replay.length&&rng()<.43){const rp=replay[Math.floor(rng()*replay.length)];trainOne(rp.f,rp.y,lrT,lrEE);}eN++;step++;seen++;
+        if(seen%3000===0)await new Promise(r=>setTimeout(r,0));
+        if(Date.now()-lastP2>250){lastP2=Date.now();post("progress",{epoch:ep,epochs,docs:seen,total:trainN,loss:eN?eLoss/eN:0,rate:Math.round(seen/Math.max(.001,(Date.now()-eStart)/1000)),elapsed:Math.round((Date.now()-t0)/1000)});}};
+      for await(const r of records(m.src)){
+        if(cancel)return post("cancelled",{partial:ep>1});
+        const txt=prep(r);if(txt===null)continue;const info={},f=S.feats(txt,B,maxTok,info);if(f.length<2)continue;
+        const ck=info.ck;if(holdSet&&holdSet.has(ck))continue;if(bHas(seenB,ck))continue;bAdd(seenB,ck);
+        const y=lmap.get(r.label);if(y===undefined||(!useAll&&splitOf(r,ck)!==0))continue;
+        if(buf.length<SB){buf.push([f,y]);continue;}
+        const j=Math.floor(rng()*SB),it=buf[j];buf[j]=[f,y];await flush(it[0],it[1]);
+      }
+      for(let i=buf.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));const t=buf[i];buf[i]=buf[j];buf[j]=t;}
+      for(const it of buf){if(cancel)return post("cancelled",{partial:ep>1});await flush(it[0],it[1]);}
+      if(inBatch>0)adam(lrD*.03);
+      const ev=val.length?evalFloat(val):{acc:0,loss:0};hist.push({ep,loss:+(eLoss/Math.max(1,eN)).toFixed(4),acc:+ev.acc.toFixed(4),vloss:+ev.loss.toFixed(4)});post("epoch",{h:hist[hist.length-1],hist});
+      if(noEval){bestEp=ep;}else if(ev.loss<bestLoss-1e-4){bestLoss=ev.loss;best=snap();bestEp=ep;bad=0;}else{bad++;if(ep>=2&&bad>=(cfg.patience||3)){post("stage",{s:"early-stop"});break;}}
+    }
+    post("stage",{s:"finalize"});
+    const fin=best||snap(),P={D,H,C,B,E:fin.Eq,Es:fin.Es,W1:fin.W1,b1:fin.b1,W2:fin.W2,b2:fin.b2};
+    let bestT=1,bestL=1e30;if(!val.length)bestT=base?base.meta.T:1;else{const lg=val.map(d=>{const zz=new Float32Array(C),xx=new Float32Array(D),hh=new Float32Array(H);S.embed(P,d.f,xx);S.mlp(P,xx,hh,zz);return zz;});for(let T=.5;T<=3.01;T+=.1){let l=0;const pp=new Float32Array(C);for(let i=0;i<lg.length;i++){S.softmax(lg[i],C,T,pp);l+=-Math.log(Math.max(1e-9,pp[val[i].y]));}l/=lg.length;if(l<bestL){bestL=l;bestT=T;}}}
+    bestT=+bestT.toFixed(1);const vq=val.length?evalQuant(P,bestT,val):{n:0,acc:null,loss:null},tq=test.length?evalQuant(P,bestT,test):oldTest?evalQuant(P,bestT,oldTest):{n:0,acc:null,f1:null,ece:null,loss:null,tp:new Int32Array(C),fp:new Int32Array(C),fn:new Int32Array(C)};
+    const per=labels.map((_,c)=>({n:counts[c],p:tq.tp[c]+tq.fp[c]?+(tq.tp[c]/(tq.tp[c]+tq.fp[c])).toFixed(3):0,r:tq.tp[c]+tq.fn[c]?+(tq.tp[c]/(tq.tp[c]+tq.fn[c])).toFixed(3):0}));
+    /* مراجع (تدريب فقط) + نماذج أولية */
+    let refList=[],vx=new Float32Array(D);
+    const embN=t=>{const f=S.feats(t,B,maxTok);S.embed(P,f,vx);let nr=0;for(let d=0;d<D;d++)nr+=vx[d]*vx[d];nr=Math.sqrt(nr)||1;const q=new Int8Array(D);for(let d=0;d<D;d++)q[d]=Math.round(vx[d]/nr*127);return q;};
+    if(base)for(const r of (base.refs||[]))refList.push({l:r.l,t:r.t,x:embN(r.t),k:r.k});
+    for(let c=0;c<C;c++){const own=(refs[c]||[]).slice(0,refCap);for(const [t,k] of own)refList.push({l:c,t,x:embN(t),k});}
+    const per2=new Int32Array(C);refList=refList.filter(r=>{if(per2[r.l]>=refCap)return false;per2[r.l]++;return true;});
+    const protos=new Float32Array(C*D),psum=new Float64Array(C*D);for(const r of refList)for(let d=0;d<D;d++)psum[r.l*D+d]+=r.x[d];
+    for(let c=0;c<C;c++){let nr=0;for(let d=0;d<D;d++)nr+=psum[c*D+d]*psum[c*D+d];nr=Math.sqrt(nr)||1;for(let d=0;d<D;d++)protos[c*D+d]=psum[c*D+d]/nr;}
+    /* مجموعة الاختبار المحفوظة + بصمات الحجب */
+    const tcap=Math.max(5,Math.min(100,Math.floor(8000/C))),tcount=new Int32Array(C),testSet=[];
+    if(base&&base.testSet)for(const d of base.testSet){if(d.l<C&&tcount[d.l]<tcap){testSet.push(d);tcount[d.l]++;}}
+    for(const d of test){if(tcount[d.y]<tcap){testSet.push({l:d.y,t:d.t,k:d.ck});tcount[d.y]++;}}
+    const holdArr=base&&base.holdHashes?Array.from(base.holdHashes):[];for(const k of holdAll)holdArr.push(k);const holdHashes=Uint32Array.from(holdArr.slice(-200000));
+    let wv=base&&base.wv?{vocab:base.meta.wvocab,wv:base.wv,idf:base.wvidf,dw:base.meta.wdim}:null;
+    if(!wv&&cfg.semantic!==false){post("stage",{s:"semantic"});try{wv=await buildWV(m.src,wf,wdf,wdocs,maxTok,rng);}catch(e){wv=null;}}
+    let oldAfter=null;if(oldTest)oldAfter=evalQuant(P,bestT,oldTest).acc;
+    const prevHist=base&&base.meta.history?base.meta.history.slice():[];
+    prevHist.push({at:Date.now(),docs:trainN,newLabels:base?C-C0:C,testAcc:tq.n?+tq.acc.toFixed(4):null,oldTest:oldTest?{before:+oldBefore.toFixed(4),after:+oldAfter.toFixed(4),forgetting:+(oldBefore-oldAfter).toFixed(4)}:null,algo:"v2"});
+    const meta={v:2,algo:"v2",name:base?base.meta.name:cfg.name,labels,counts,C,B,D,H,maxTok,T:bestT,docs:(base?base.meta.docs:0)+trainN,valDocs:val.length,testDocs:tq.n,valAcc:vq.n?+vq.acc.toFixed(4):null,valLoss:vq.n?+vq.loss.toFixed(4):null,
+      test:tq.n?{n:tq.n,acc:+tq.acc.toFixed(4),f1:+tq.f1.toFixed(4),ece:+tq.ece.toFixed(4)}:null,epochs:hist.length,epochsPlanned:epochs,bestEpoch:bestEp,seconds:Math.round((Date.now()-t0)/1000),curve:hist,per,skipped,createdAt:base?base.meta.createdAt:Date.now(),updatedAt:Date.now(),src:cfg.srcName||"",leak,history:prevHist,wvocab:wv?wv.vocab:null,wdim:wv?wv.dw:0,cfg:{lr2:cfg.lr2,lrE:cfg.lrE,epochs,D,H,B,smooth,drop,balance}};
+    const pack={meta,E:fin.Eq,Es:fin.Es,W1:fin.W1,b1:fin.b1,W2:fin.W2,b2:fin.b2,protos,refs:refList,feedback:base?(base.feedback||[]).map(r=>({l:r.l,t:r.t,x:embN(r.t)})):[],testSet,holdHashes,wv:wv?wv.wv:null,wvidf:wv?wv.idf:null};
+    post("done",{pack,incremental:!!base});
+  }
+
+  async function preview(m){
+    const S=self.__S,lab=new Map(),samples=[],seenCk=new Map(),mhIdx=new Map();let rows=0,len=0,bad=0,dupN=0,nearN=0,lit=0,conflict=0,grp=0,uniq=0;
+    for await(const r of records(m.src,m.limit||3000)){
+      if(!r.label||!r.text||r.text.length<3){bad++;continue;}rows++;len+=r.text.length;lab.set(r.label,(lab.get(r.label)||0)+1);if(r.group!=null)grp++;if(samples.length<5)samples.push({label:r.label,text:r.text.slice(0,140)});
+      const ws=S.words(r.text,300);if(ws.length<2)continue;
+      const nt=S.NORM(r.text),ln=S.NORM(r.label).trim();if(ln.length>=2){const ix=nt.indexOf(ln);if(ix>=0&&ix<40)lit++;}
+      const ck=S.ckey(ws),pv=seenCk.get(ck);if(pv!==undefined){dupN++;if(pv!==r.label)conflict++;continue;}seenCk.set(ck,r.label);uniq++;
+      const mh=S.minhash(ws);let hit=0;for(let j=0;j<4;j++)if(mhIdx.has(mhKey(mh[j],j)))hit++;if(hit>=2)nearN++;for(let j=0;j<4;j++)mhIdx.set(mhKey(mh[j],j),1);
+    }
+    post("preview",{rows,bad,avgLen:rows?Math.round(len/rows):0,labels:[...lab].sort((a,b)=>b[1]-a[1]).slice(0,60),nLabels:lab.size,samples,leak:{dupPct:rows?+(dupN/rows*100).toFixed(1):0,nearPct:uniq?+(nearN/uniq*100).toFixed(1):0,headLabelPct:rows?+(lit/rows*100).toFixed(1):0,conflicts:conflict,groups:grp>0}});
+  }
+
+  async function trainRunV1(m){
     const S=self.__S,cfg=m.cfg,B=cfg.B,D=cfg.D,H=cfg.H,maxTok=cfg.maxTok,rng=rngMk(12345),t0=Date.now();let epochs=cfg.epochs;
     /* المرور 1: مسح (تصنيفات + عينات مرجعية) بدون تحويل لخصائص */
     post("stage",{s:"scan"});
@@ -19334,55 +19526,68 @@ const NS="http://www.w3.org/2000/svg";
 const sv=(t,a,...k)=>{const n=document.createElementNS(NS,t);if(a)for(const x in a)n.setAttribute(x,a[x]);k.flat().forEach(c=>{if(c!=null)n.append(c instanceof Node?c:String(c));});return n;};
 const fmtT=t=>{try{return t?new Date(t).toLocaleString("ar-EG-u-nu-latn",{dateStyle:"medium",timeStyle:"short"}):"—"}catch(e){return "—"}};
 const fmtB=n=>n>=1073741824?(n/1073741824).toFixed(2)+" GB":n>=1048576?(n/1048576).toFixed(1)+" MB":n>=1024?(n/1024).toFixed(1)+" KB":n+" B";
-const pct1=v=>Math.round(v*1000)/10;
+const pct1=v=>v==null?"—":Math.round(v*1000)/10;
 const toast2=(m,k)=>{try{if(typeof toast==="function")toast(m,k||"ok",6000);}catch(e){}};
 
 /* ---------- IndexedDB منفصلة للحزم (ما بتدخلش في النسخ القديم) ---------- */
 let _db=null;
 const adb=()=>_db||(_db=new Promise(r=>{try{const q=indexedDB.open("WorkshopEquipmentDB_AI",1);q.onupgradeneeded=()=>q.result.createObjectStore("packs",{keyPath:"id"});q.onsuccess=()=>r(q.result);q.onerror=q.onblocked=()=>r(null);}catch(e){r(null);}}));
 const idb=async(mode,fn)=>{const d=await adb();if(!d)return null;return new Promise(r=>{try{const tx=d.transaction("packs",mode),st=tx.objectStore("packs"),rq=fn(st);tx.oncomplete=()=>r(rq&&rq.result!==undefined?rq.result:true);tx.onerror=tx.onabort=()=>r(null);}catch(e){r(null);}});};
-const PACKS=new Map();let loaded=false;
+const PACKS=new Map(),PREV=new Map();let loaded=false;
 async function allPacks(){
-  if(!loaded){loaded=true;const arr=await idb("readonly",st=>st.getAll());(arr||[]).forEach(p=>PACKS.set(p.id,p));}
+  if(!loaded){loaded=true;const arr=await idb("readonly",st=>st.getAll());(arr||[]).forEach(p=>{if(String(p.id).endsWith("@prev"))PREV.set(p.id.slice(0,-5),p);else PACKS.set(p.id,p);});}
   return [...PACKS.values()];
 }
+
 function regList(){const s=state.settings;if(!Array.isArray(s.aiPacks))s.aiPacks=[];return s.aiPacks;}
 function regSync(pack){
-  const L=regList(),m=pack.meta,e={id:pack.id,name:m.name,C:m.C,docs:m.docs,valAcc:m.valAcc,createdAt:m.createdAt,ver:pack.ver,active:true};
+  const L=regList(),m=pack.meta,e={id:pack.id,name:m.name,C:m.C,docs:m.docs,valAcc:(m.test?m.test.acc:m.valAcc),createdAt:m.createdAt,ver:pack.ver,active:true};
   const i=L.findIndex(x=>x.id===pack.id);if(i>=0){e.active=L[i].active!==false;L[i]=e;}else L.push(e);
 }
 let _kick=null;
 function kickSync(){try{saveSettings();}catch(e){}clearTimeout(_kick);_kick=setTimeout(()=>{const fs=window.__FS;if(fs&&fs.state&&fs.state.h)try{fs.kick(0);}catch(e){}},1200);}
-async function savePack(pack){
-  pack.ver=(pack.ver||0)+1;PACKS.set(pack.id,pack);_fc.delete(pack.id);regSync(pack);
-  await idb("readwrite",st=>st.put(pack));kickSync();
+async function savePack(pack,opt){
+  opt=opt||{};syncOv(pack);const old=opt.prev;
+  if(old){const pr=Object.assign({},old,{id:old.id+"@prev"});PREV.set(old.id,pr);await idb("readwrite",st=>st.put(pr));}
+  pack.ver=(pack.ver||0)+1;PACKS.set(pack.id,pack);_fc.delete(pack.id);regSync(pack);await idb("readwrite",st=>st.put(pack));kickSync();
+}
+async function rollbackPack(id){
+  await allPacks();const pr=PREV.get(id);if(!pr)return false;const cur=PACKS.get(id),p=Object.assign({},pr,{id,ver:(cur?cur.ver:pr.ver)+1});
+  PACKS.set(id,p);_fc.delete(id);VIEW.delete(p);regSync(p);await idb("readwrite",st=>st.put(p));PREV.delete(id);await idb("readwrite",st=>st.delete(id+"@prev"));kickSync();return true;
 }
 async function deletePack(id){
-  PACKS.delete(id);_fc.delete(id);await idb("readwrite",st=>st.delete(id));
+  PACKS.delete(id);PREV.delete(id);_fc.delete(id);await idb("readwrite",st=>st.delete(id));await idb("readwrite",st=>st.delete(id+"@prev"));
   const L=regList(),i=L.findIndex(x=>x.id===id);if(i>=0)L.splice(i,1);
   try{if(typeof linkedDirHandle!=="undefined"&&linkedDirHandle)await linkedDirHandle.removeEntry("ai-pack-"+id+".json");}catch(e){}
   kickSync();
 }
+
 const activePacks=()=>regList().filter(x=>x.active!==false).map(x=>PACKS.get(x.id)).filter(Boolean);
 
 /* ---------- تسلسل الملف (للمزامنة والتصدير) ---------- */
 const b64=u8=>{let s="";const CH=0x8000;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);};
 const unb64=str=>{const bin=atob(str),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u;};
-const f32=a=>b64(new Uint8Array(a.buffer,a.byteOffset,a.byteLength)),unf32=s=>{const u=unb64(s);return new Float32Array(u.buffer,u.byteOffset,u.byteLength>>2);};
+const TYPED={E:Int8Array,Es:Float32Array,W1:Float32Array,b1:Float32Array,W2:Float32Array,b2:Float32Array,protos:Float32Array,wv:Int8Array,wvidf:Float32Array,holdHashes:Uint32Array};
+const enc=a=>b64(new Uint8Array(a.buffer,a.byteOffset,a.byteLength)),dec=(s,T)=>{const u=unb64(s);return new T(u.buffer,u.byteOffset,u.byteLength/T.BYTES_PER_ELEMENT);};
 const _fc=new Map();
+function syncOv(p){const v=VIEW.get(p);if(!v||!v.ov||!v.ov.size){p.ov=null;return;}const rows=[...v.ov.keys()].sort((a,b)=>a-b),D=p.meta.D;
+  if(rows.length>15000){rows.forEach(r=>{const vec=v.ov.get(r);let mx=0;for(let d=0;d<D;d++)mx=Math.max(mx,Math.abs(vec[d]));p.Es[r]=mx;const k=mx?127/mx:0;for(let d=0;d<D;d++)p.E[r*D+d]=Math.round(vec[d]*k);});p.ov=null;VIEW.delete(p);return;}
+  const data=new Float32Array(rows.length*D);rows.forEach((r,i)=>data.set(v.ov.get(r),i*D));p.ov={rows:Int32Array.from(rows),data};VIEW.delete(p);}
 function packFile(p){
   const c=_fc.get(p.id);if(c&&c.ver===p.ver)return c.s;
-  const o={schema:1,kind:"ai-pack",id:p.id,ver:p.ver,meta:p.meta,E:b64(new Uint8Array(p.E.buffer,p.E.byteOffset,p.E.byteLength)),Es:f32(p.Es),W1:f32(p.W1),b1:f32(p.b1),W2:f32(p.W2),b2:f32(p.b2),protos:f32(p.protos),
-    refs:p.refs.map(r=>({l:r.l,t:r.t,x:b64(new Uint8Array(r.x.buffer,r.x.byteOffset,r.x.byteLength))})),feedback:(p.feedback||[]).map(r=>({l:r.l,t:r.t,x:b64(new Uint8Array(r.x.buffer,r.x.byteOffset,r.x.byteLength))}))};
+  const o={schema:2,kind:"ai-pack",id:p.id,ver:p.ver,meta:p.meta};for(const k in TYPED)if(p[k])o[k]=enc(p[k]);
+  o.refs=p.refs.map(r=>({l:r.l,t:r.t,x:enc(r.x),k:r.k}));o.feedback=(p.feedback||[]).map(r=>({l:r.l,t:r.t,x:enc(r.x)}));o.testSet=p.testSet||[];
+  if(p.ov&&p.ov.rows&&p.ov.rows.length)o.ov={rows:enc(p.ov.rows),data:enc(p.ov.data)};
   const s=JSON.stringify(o);_fc.set(p.id,{ver:p.ver,s});return s;
 }
 function parsePack(text){
   const o=JSON.parse(text);if(o.kind!=="ai-pack")throw new Error("الملف ده مش حزمة مدرَّبة");
-  const u8=s=>{const u=unb64(s);return new Int8Array(u.buffer,u.byteOffset,u.byteLength);};
-  return {id:o.id,ver:o.ver||1,meta:o.meta,E:u8(o.E),Es:unf32(o.Es),W1:unf32(o.W1),b1:unf32(o.b1),W2:unf32(o.W2),b2:unf32(o.b2),protos:unf32(o.protos),refs:o.refs.map(r=>({l:r.l,t:r.t,x:u8(r.x)})),feedback:(o.feedback||[]).map(r=>({l:r.l,t:r.t,x:u8(r.x)}))};
+  const p={id:o.id,ver:o.ver||1,meta:o.meta};for(const k in TYPED)p[k]=o[k]?dec(o[k],TYPED[k]):null;
+  p.refs=o.refs.map(r=>({l:r.l,t:r.t,x:dec(r.x,Int8Array),k:r.k}));p.feedback=(o.feedback||[]).map(r=>({l:r.l,t:r.t,x:dec(r.x,Int8Array)}));p.testSet=o.testSet||[];
+  p.ov=o.ov?{rows:dec(o.ov.rows,Int32Array),data:dec(o.ov.data,Float32Array)}:null;return p;
 }
 async function importPackText(text){
-  const p=parsePack(text),cur=PACKS.get(p.id);await allPacks();
+  const p=parsePack(text);await allPacks();
   if(PACKS.get(p.id)&&PACKS.get(p.id).ver>=p.ver)return {id:p.id,skipped:true,name:p.meta.name};
   PACKS.set(p.id,p);_fc.delete(p.id);regSync(p);await idb("readwrite",st=>st.put(p));kickSync();return {id:p.id,name:p.meta.name,skipped:false};
 }
@@ -19391,19 +19596,20 @@ async function loadFromFolder(){
   let n=0;try{for await(const [name,hd] of h.entries()){if(hd.kind==="file"&&/^ai-pack-.+\.json$/.test(name)){const t=await (await hd.getFile()).text();try{const r=await importPackText(t);if(!r.skipped)n++;}catch(e){}}}}catch(e){return {n,err:e.message};}
   return {n};
 }
-
 /* ---------- الاستدلال (التعرّف) ---------- */
-const VIEW=new WeakMap();const view=p=>{let v=VIEW.get(p);if(!v){const m=p.meta;v={D:m.D,H:m.H,C:m.C,E:p.E,Es:p.Es,W1:p.W1,b1:p.b1,W2:p.W2,b2:p.b2};VIEW.set(p,v);}return v;};
+const VIEW=new WeakMap();
+const view=p=>{let v=VIEW.get(p);if(!v){const m=p.meta;v={D:m.D,H:m.H,C:m.C,E:p.E,Es:p.Es,W1:p.W1,b1:p.b1,W2:p.W2,b2:p.b2,ov:new Map()};if(p.ov&&p.ov.rows)p.ov.rows.forEach((r,i)=>v.ov.set(r,p.ov.data.subarray(i*m.D,(i+1)*m.D)));VIEW.set(p,v);}return v;};
 function classify(pack,text,k){
   const m=pack.meta,f=S.feats(text,m.B,m.maxTok);if(f.length<2)return null;
   const D=m.D,x=new Float32Array(D),h=new Float32Array(m.H),z=new Float32Array(m.C),p=new Float32Array(m.C);
   const P=view(pack);S.embed(P,f,x);S.mlp(P,x,h,z);S.softmax(z,m.C,m.T,p);
   let nr=0;for(let d=0;d<D;d++)nr+=x[d]*x[d];nr=Math.sqrt(nr)||1;const xn=new Float32Array(D);for(let d=0;d<D;d++)xn[d]=x[d]/nr;
   const dot=q=>{let s=0;for(let d=0;d<D;d++)s+=xn[d]*q[d];return s/127;};
-  if(pack.feedback&&pack.feedback.length){let bc=0,bl=-1;for(const fb of pack.feedback){const c=dot(fb.x);if(c>bc){bc=c;bl=fb.l;}}if(bl>=0&&bc>=.9){const w=Math.min(1,(bc-.88)/.08);for(let c=0;c<m.C;c++)p[c]*=(1-w);p[bl]+=w;}}
+  if(pack.feedback&&pack.feedback.length){let bc=0,bl=-1;for(const fb of pack.feedback){const c=dot(fb.x);if(c>bc){bc=c;bl=fb.l;}}if(bl>=0&&bc>=.9&&bl<m.C){const w=Math.min(1,(bc-.88)/.08);for(let c=0;c<m.C;c++)p[c]*=(1-w);p[bl]+=w;}}
   const idx=[...p.keys()].sort((a,b)=>p[b]-p[a]).slice(0,k||3).map(c=>({l:c,label:m.labels[c],prob:p[c]}));
-  const refs=pack.refs.map(r=>({l:r.l,label:m.labels[r.l],t:r.t,sim:dot(r.x)})).sort((a,b)=>b.sim-a.sim).slice(0,3);
-  return {top:idx,refs,nf:f.length,xn};
+  const res={top:idx,nf:f.length,xn,f};
+  Object.defineProperty(res,"refs",{configurable:true,enumerable:true,get(){const v=pack.refs.map(r=>({l:r.l,label:m.labels[r.l],t:r.t,sim:dot(r.x)})).sort((a,b)=>b.sim-a.sim).slice(0,3);Object.defineProperty(res,"refs",{value:v,enumerable:true});return v;}});
+  return res;
 }
 function addFeedback(pack,text,label){
   const m=pack.meta;let l=m.labels.indexOf(label);if(l<0)return false;const r=classify(pack,text,1);if(!r)return false;
@@ -19411,6 +19617,121 @@ function addFeedback(pack,text,label){
   pack.feedback=pack.feedback||[];pack.feedback.push({l,t:String(text).slice(0,200),x:q});if(pack.feedback.length>2000)pack.feedback.shift();
   pack.refs.push({l,t:String(text).slice(0,260),x:q});if(pack.refs.length>m.C*40+4000)pack.refs.splice(0,1);
   return true;
+}
+/* ---------- تعلّم تزايدي حقيقي من التصحيحات (تدرّج فعلي + إعادة تشغيل عيّنات قديمة + حارس نسيان) ---------- */
+function onlineStep(pack,f,y,lrH,lrE){
+  const P=view(pack),m=pack.meta,D=m.D,H=m.H,C=m.C,nf=f.length;if(!nf)return;
+  const x=new Float32Array(D),h=new Float32Array(H),z=new Float32Array(C),p=new Float32Array(C),dh=new Float32Array(H),dx=new Float32Array(D);
+  S.embed(P,f,x);S.mlp(P,x,h,z);S.softmax(z,C,1,p);p[y]-=1;
+  for(let j=0;j<H;j++){const v=h[j];if(v<=0)continue;const o=j*C;let g=0;for(let c=0;c<C;c++){g+=P.W2[o+c]*p[c];if(lrH)P.W2[o+c]-=lrH*v*p[c];}dh[j]=g;}
+  if(lrH)for(let c=0;c<C;c++)P.b2[c]-=lrH*p[c];
+  for(let d=0;d<D;d++){const xd=x[d],o=d*H;let g=0;for(let j=0;j<H;j++){const dj=dh[j];if(!dj)continue;g+=P.W1[o+j]*dj;if(lrH)P.W1[o+j]-=lrH*xd*dj;}dx[d]=g;}
+  if(lrH)for(let j=0;j<H;j++)P.b1[j]-=lrH*dh[j];
+  const sc=lrE/nf;for(let q=0;q<nf;q++){const r=f[q];let v=P.ov.get(r);if(!v){v=new Float32Array(D);const s2=P.Es[r]/127,o=r*D;for(let d=0;d<D;d++)v[d]=P.E[o+d]*s2;P.ov.set(r,v);}for(let d=0;d<D;d++)v[d]-=sc*dx[d];}
+}
+function guardAcc(pack,set){let ok=0;for(const d of set){const r=classify(pack,d.t,1);if(r&&r.top[0].l===d.l)ok++;}return set.length?ok/set.length:1;}
+function onlineLearn(pack,text,label){
+  const m=pack.meta,l=m.labels.indexOf(label);if(l<0)return {ok:false,reason:"تصنيف مش موجود في الحزمة"};
+  const f=S.feats(text,m.B,m.maxTok);if(f.length<2)return {ok:false,reason:"النص قصير"};
+  const P=view(pack),snap={W1:P.W1.slice(),b1:P.b1.slice(),W2:P.W2.slice(),b2:P.b2.slice(),ov:new Map([...P.ov].map(([k,v])=>[k,v.slice()]))};
+  let seed=(S.hashStr(text)>>>0)||1;const rnd=()=>{seed^=seed<<13;seed>>>=0;seed^=seed>>>17;seed^=seed<<5;seed>>>=0;return seed/4294967296;};
+  const guard=[];const nG=Math.min(150,pack.refs.length);for(let i=0;i<nG;i++){const r=pack.refs[Math.floor(rnd()*pack.refs.length)];guard.push({t:r.t,l:r.l});}
+  const target=()=>classify(pack,text,m.C).top.find(t=>t.l===l).prob,before=guardAcc(pack,guard),pBefore=target();
+  const rep=[];for(let i=0;i<12&&pack.refs.length;i++){const r=pack.refs[Math.floor(rnd()*pack.refs.length)];rep.push({f:S.feats(r.t,m.B,m.maxTok),y:r.l});}
+  for(const fb of (pack.feedback||[]).slice(-6))rep.push({f:S.feats(fb.t,m.B,m.maxTok),y:fb.l});
+  const run=(lrE,lrH,iters,thr)=>{for(let it=0;it<iters;it++){onlineStep(pack,f,l,lrH,lrE);for(const r of rep.slice(0,10))onlineStep(pack,r.f,r.y,lrH*.5,lrE*.25);if(target()>=thr)break;}};
+  run(3,0,40,.75);let top=classify(pack,text,1).top[0];
+  if(top.l!==l){run(3,.004,25,.75);top=classify(pack,text,1).top[0];}
+  const after=guardAcc(pack,guard);
+  if(before-after>.02||top.l!==l){P.W1.set(snap.W1);P.b1.set(snap.b1);P.W2.set(snap.W2);P.b2.set(snap.b2);P.ov.clear();snap.ov.forEach((v,k)=>P.ov.set(k,v));
+    return {ok:false,reason:top.l!==l?"النموذج ما اتعلّمش التصحيح ده (اتراجع)":"التصحيح كان هيسبّب نسيان "+Math.round((before-after)*100)+" نقطة (اتراجع)",before,after};}
+  addFeedback(pack,text,label);syncOv(pack);m.online=(m.online||0)+1;
+  return {ok:true,pBefore,pAfter:classify(pack,text,m.C).top.find(t=>t.l===l).prob,guardBefore:before,guardAfter:after};
+}
+/* ---------- فهم دلالي: متجهات كلمات (PPMI+SVD) + BM25 + تضمين الشبكة → دمج هجين (RRF) ---------- */
+const maskHead=(label,text)=>{const ln=S.NORM(label).trim();if(ln.length<2)return text;const nt=S.NORM(text),ix=nt.indexOf(ln);return(ix>=0&&ix<40)?nt.slice(0,ix)+" "+nt.slice(ix+ln.length):text;};
+const _wvi=new WeakMap();
+function wvIndex(p){if(!p.wv||!p.meta.wvocab)return null;let x=_wvi.get(p);if(!x){x=new Map(p.meta.wvocab.map((w,i)=>[w,i]));_wvi.set(p,x);}return x;}
+function semVec(p,text){
+  const ix=wvIndex(p);if(!ix)return null;const dw=p.meta.wdim,v=new Float32Array(dw);let n=0;
+  for(const w of S.words(text,300)){const i=ix.get(w);if(i===undefined)continue;const idf=p.wvidf[i],o=i*dw;for(let d=0;d<dw;d++)v[d]+=idf*p.wv[o+d]/127;n++;}
+  if(!n)return null;let nr=0;for(let d=0;d<dw;d++)nr+=v[d]*v[d];nr=Math.sqrt(nr)||1;for(let d=0;d<dw;d++)v[d]/=nr;return v;
+}
+function relatedWords(p,word,k){
+  const ix=wvIndex(p);if(!ix)return [];const w=S.words(word,1)[0],i=ix.get(w);if(i===undefined)return [];const dw=p.meta.wdim,V=p.meta.wvocab.length,out=[];
+  for(let j=0;j<V;j++){if(j===i)continue;let s=0;for(let d=0;d<dw;d++)s+=p.wv[i*dw+d]*p.wv[j*dw+d];out.push([p.meta.wvocab[j],s/16129]);}
+  return out.sort((a,b)=>b[1]-a[1]).slice(0,k||5);
+}
+const bmBuild=docs=>{const N=docs.length,df=new Map();let tl=0;docs.forEach(d=>{d.tf=new Map();for(const t of d.toks)d.tf.set(t,(d.tf.get(t)||0)+1);tl+=d.toks.length;d.tf.forEach((_,t)=>df.set(t,(df.get(t)||0)+1));});return {N,df,avg:tl/Math.max(1,N)};};
+const bmScore=(ix,qt,d)=>{let s=0;for(const t of new Set(qt)){const f=d.tf.get(t);if(!f)continue;const df=ix.df.get(t)||0,idf=Math.log(1+(ix.N-df+.5)/(df+.5));s+=idf*f*2.5/(f+1.5*(.25+.75*d.toks.length/ix.avg));}return s;};
+const INTENTS=[[/(ازاي|كيف|طريقه|خطوات|اعمل)/,"📋 إجراء / خطوات"],[/(ليه|لماذا|سبب|بسبب|ايه اللي)/,"🔍 تشخيص سبب"],[/(الفرق|مقارنه|احسن|افضل|ولا)/,"⚖️ مقارنة"],[/(احسب|حساب|كام|قيمه|قياس|مقاومه|جهد)/,"🧮 حساب / قياس"],[/(كود|برمجه|اكتب|سكريبت)/,"💻 كود"],[/(يعني ايه|ما هو|تعريف|شرح)/,"📖 شرح / تعريف"]];
+const intentOf=q=>{const n=S.NORM(q);for(const [rx,l] of INTENTS)if(rx.test(n))return l;return "❓ استعلام عام";};
+function hybridSearch(query,opt){
+  opt=opt||{};const packs=activePacks(),docs=[];
+  for(const it of (state.items||[]).slice(0,6000)){const t=opt.itemText?opt.itemText(it):(it.name||"");docs.push({kind:"item",id:it.id,title:it.name||"",text:t,toks:S.words(t,400)});}
+  for(const p of packs)for(const r of p.refs.slice(0,4000))docs.push({kind:"ref",label:p.meta.labels[r.l],title:p.meta.labels[r.l],text:r.t,toks:S.words(r.t,200),pack:p});
+  if(!docs.length)return {results:[],related:[],intent:intentOf(query)};
+  const ix=bmBuild(docs),qt=S.words(query,50),sc=docs.map(d=>bmScore(ix,qt,d));
+  const rank=(scores)=>{const o=scores.map((s,i)=>[s,i]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,60),m=new Map();o.forEach((x,r)=>m.set(x[1],r+1));return m;};
+  const rb=rank(sc);let rs=null,rn=null;const p0=packs.find(p=>p.wv)||null,pn=packs[0]||null;
+  if(p0){const qv=semVec(p0,query);if(qv){const dw=p0.meta.wdim;rs=rank(docs.map(d=>{if(d._sv===undefined||d._svp!==p0){d._sv=semVec(p0,d.text);d._svp=p0;}if(!d._sv)return 0;let s=0;for(let k=0;k<dw;k++)s+=qv[k]*d._sv[k];return s;}));}}
+  if(pn){const qr=classify(pn,query,1);if(qr){const D=pn.meta.D;rn=rank(docs.map(d=>{if(d._nn===undefined||d._nnp!==pn){const r=classify(pn,d.text,1);d._nn=r?r.xn:null;d._nnp=pn;}if(!d._nn)return 0;let s=0;for(let k=0;k<D;k++)s+=qr.xn[k]*d._nn[k];return s;}));}}
+  const fused=docs.map((d,i)=>{const a=rb.get(i),b=rs&&rs.get(i),c=rn&&rn.get(i);return {d,i,s:(a?1/(60+a):0)+(b?1/(60+b):0)+(c?1/(60+c):0),ranks:{bm25:a||null,sem:b||null,nn:c||null}};}).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,10);
+  const related=[];if(p0)for(const w of S.words(query,6)){const rw=relatedWords(p0,w,4);if(rw.length)related.push([w,rw.map(x=>x[0])]);}
+  return {results:fused.map(x=>({kind:x.d.kind,id:x.d.id,title:x.d.title,label:x.d.label,text:x.d.text.slice(0,160),ranks:x.ranks,score:x.s})),related,intent:intentOf(query),methods:{bm25:true,sem:!!rs,nn:!!rn}};
+}
+/* ---------- علاقات (رسم معرفة خفيف): فاعل —علاقة→ مفعول ---------- */
+const RELS=[[/^(يقيس|بيقيس|تقيس)$/,"يقيس"],[/^(يتحكم|بيتحكم|تتحكم)$/,"يتحكم في"],[/^(يسبب|بيسبب|تسبب)$/,"يسبّب"],[/^(يحول|بيحول)$/,"يحوّل"],[/^(يوصل|بيوصل)$/,"يوصّل"],[/^(يفصل|بيفصل|يقطع|بيقطع)$/,"يفصل"],[/^(يغذي|بيغذي)$/,"يغذّي"],[/^(يشغل|بيشغل)$/,"يشغّل"],[/^(يستخدم|بيستخدم)$/,"يستخدم"],[/^(يسحب|بيسحب)$/,"يسحب"],[/^(يدفع|بيدفع)$/,"يدفع"],[/^(يؤدي|بيؤدي)$/,"يؤدي إلى"]];
+const KSTOP=new Set("في من علي الي الى ان ثم لو عند كان ده دي اللي الذي التي هذا هذه مع عن بعد قبل لما او كل".split(" "));
+const ent=w=>w.replace(/^(وال|بال|ال)/,"");
+function extractTriples(text){
+  const out=[];for(const ln of String(text||"").split(/[\n\.؟!؛]+/)){const ws=S.words(ln,60);
+    for(let i=1;i<ws.length-1;i++){const rl=RELS.find(r=>r[0].test(ws[i]));if(!rl)continue;let j=i+1;while(j<ws.length&&KSTOP.has(ws[j]))j++;let k=i-1;while(k>=0&&KSTOP.has(ws[k]))k--;if(k<0||j>=ws.length)continue;
+      const s=ent(ws[k]),o=ent(ws[j]);if(s.length>=2&&o.length>=2&&s!==o)out.push({s,r:rl[1],o});}}
+  return out;
+}
+function buildKG(textOf){
+  const g=new Map();const add=(t,src)=>{for(const x of extractTriples(t)){const key=x.s+"|"+x.r+"|"+x.o;let e=g.get(key);if(!e){e={...x,n:0,src:new Set()};g.set(key,e);}e.n++;e.src.add(src);}};
+  for(const it of (state.items||[]))add(textOf(it),it.id);for(const p of activePacks())for(const r of p.refs.slice(0,3000))add(r.t,"ref");
+  return [...g.values()].sort((a,b)=>b.n-a.n);
+}
+/* ---------- تقييم مستقل لجودة الاستدلال ---------- */
+const DEFAULT_OOD=["وصفة الكبسة بالدجاج محتاجة أرز وبصل وبهارات ومرق","المباراة النهائية انتهت بتعادل إيجابي وتأهل الفريق بركلات الترجيح","رحلة الطيران للقاهرة اتأجلت بسبب الطقس وحجز الفندق اتلغى","الانتخابات البرلمانية هتتعمل الشهر الجاي والمرشحين بدأوا الدعاية","الرواية الجديدة بتحكي قصة حب في الإسكندرية في الأربعينات","الحفلة الموسيقية كانت رائعة والجمهور غنى مع المطرب","سعر الذهب ارتفع اليوم والبورصة سجلت مكاسب كبيرة","الدواء ده بيتاخد بعد الأكل مرتين في اليوم لمدة أسبوع","المدرسة بدأت العام الدراسي الجديد والطلبة اشتروا الكتب","اللاعب سجل هدفين في الشوط الثاني واتختار أفضل لاعب","الفيلم الجديد حقق إيرادات عالية في أول أسبوع عرض","الشاطئ كان مزدحم والأطفال بيلعبوا في الرمل والمياه","محتاج أحجز تذكرة قطار لأسوان يوم الجمعة الصبح","الكيك بالشوكولاتة محتاجة بيض وسكر وزبدة وفرن ساخن","اجتماع الإدارة هيناقش الميزانية السنوية وخطة التوسع"];
+const _rngS=seed=>{let s=seed>>>0||1;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296;};};
+function perturb(text,kind,rnd){
+  const ws=text.split(/\s+/);
+  if(kind==="typo")return ws.map(w=>w.length>3&&rnd()<.12?w.slice(0,1+Math.floor(rnd()*(w.length-2)))+w.slice(2+Math.floor(rnd()*(w.length-2))):w).join(" ");
+  if(kind==="drop")return ws.filter(()=>rnd()>.25).join(" ");
+  if(kind==="shuffle")return ws.sort(()=>rnd()-.5).join(" ");
+  if(kind==="dialect")return text.replace(/ة/g,"ه").replace(/ى/g,"ي").replace(/أ|إ|آ/g,"ا");
+  return text;
+}
+function auroc(pos,neg){if(!pos.length||!neg.length)return null;const a=pos.map(v=>[v,1]).concat(neg.map(v=>[v,0])).sort((x,y)=>x[0]-y[0]);let rs=0,i=0;while(i<a.length){let j=i;while(j<a.length&&a[j][0]===a[i][0])j++;const r=(i+j+1)/2;for(let k=i;k<j;k++)if(a[k][1]===1)rs+=r;i=j;}const n1=pos.length,n0=neg.length;return (rs-n1*(n1+1)/2)/(n1*n0);}
+function evaluatePack(pack,extra){
+  const m=pack.meta,T=pack.testSet||[];if(!T.length)return null;extra=extra||{};
+  const C=m.C,tp=new Int32Array(C),fp=new Int32Array(C),fn=new Int32Array(C),conf=new Map(),bins=Array.from({length:10},()=>({n:0,ok:0,c:0})),probs=[],oks=[];let ok=0,top3=0;
+  const t0=performance.now();
+  for(const d of T){const r=classify(pack,d.t,3);if(!r){fn[d.l]++;oks.push(0);probs.push(0);continue;}const t1=r.top[0],hit=t1.l===d.l;probs.push(t1.prob);oks.push(hit?1:0);
+    if(hit){ok++;tp[t1.l]++;}else{fp[t1.l]++;fn[d.l]++;const k=d.l+">"+t1.l;conf.set(k,(conf.get(k)||0)+1);}
+    if(r.top.some(x=>x.l===d.l))top3++;const b=bins[Math.min(9,Math.floor(t1.prob*10))];b.n++;b.c+=t1.prob;if(hit)b.ok++;}
+  const ms=(performance.now()-t0)/T.length,n=T.length;let f1=0,nc=0;for(let c=0;c<C;c++){if(tp[c]+fn[c]===0)continue;const p=tp[c]+fp[c]?tp[c]/(tp[c]+fp[c]):0,r=tp[c]/(tp[c]+fn[c]);f1+=p+r?2*p*r/(p+r):0;nc++;}
+  let ece=0;bins.forEach(b=>{if(b.n)ece+=b.n/n*Math.abs(b.ok/b.n-b.c/b.n);});
+  const sel=[.5,.7,.8,.9,.95].map(t=>{let c=0,k=0;probs.forEach((p,i)=>{if(p>=t){c++;k+=oks[i];}});return {t,cov:c/n,acc:c?k/c:null};});
+  const oodTexts=(extra.ood&&extra.ood.length?extra.ood:DEFAULT_OOD),oodP=oodTexts.map(t=>{const r=classify(pack,t,1);return r?r.top[0].prob:0;});
+  const rnd=_rngS(99),sub=T.slice(0,400),rob={};
+  for(const kind of ["typo","drop","shuffle","dialect"]){let k=0;for(const d of sub){const r=classify(pack,perturb(d.t,kind,rnd),1);if(r&&r.top[0].l===d.l)k++;}rob[kind]=k/sub.length;}
+  let base400=0;for(const d of sub){const r=classify(pack,d.t,1);if(r&&r.top[0].l===d.l)base400++;}rob.clean=base400/sub.length;
+  let mrr=0,p1=0;const rs=T.slice(0,300);for(const d of rs){const r=classify(pack,d.t,1);if(!r)continue;const sc=pack.refs.map(x=>{let s=0;for(let k=0;k<m.D;k++)s+=r.xn[k]*x.x[k];return [s,x.l];}).sort((a,b)=>b[0]-a[0]);const i=sc.slice(0,10).findIndex(x=>x[1]===d.l);if(i===0)p1++;if(i>=0)mrr+=1/(i+1);}
+  const hold=new Set(pack.holdHashes||[]);let inHold=0,overlap=0,withK=0;const refK=new Set();for(const r of pack.refs)if(r.k!=null)refK.add(r.k);
+  for(const d of T){if(d.k==null)continue;withK++;if(hold.has(d.k))inHold++;if(refK.has(d.k))overlap++;}
+  const bytes=["E","Es","W1","b1","W2","b2","wv","protos"].reduce((a,k)=>a+(pack[k]?pack[k].byteLength:0),0);
+  const confs=[...conf].sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>{const [a,b]=k.split(">");return {from:m.labels[+a],to:m.labels[+b],n:v};});
+  const res={at:Date.now(),ver:pack.ver,n,acc:ok/n,f1:nc?f1/nc:0,top3:top3/n,ece,rel:bins.map(b=>({n:b.n,acc:b.n?b.ok/b.n:null,conf:b.n?b.c/b.n:null})),sel,conf:confs,
+    ood:{n:oodTexts.length,falseAccept:oodP.filter(p=>p>=.8).length/oodTexts.length,auroc:auroc(probs,oodP)},robust:rob,retr:{n:rs.length,p1:p1/Math.max(1,rs.length),mrr:mrr/Math.max(1,rs.length)},
+    leak:{testInHold:withK?inHold:n,testTotal:n,verified:withK,refTestOverlap:overlap,trainReport:m.leak||null},perf:{ms,bytes}};
+  const ev=m.evals||(m.evals=[]);const prev=ev[ev.length-1];ev.push({at:res.at,ver:res.ver,acc:+res.acc.toFixed(4),f1:+res.f1.toFixed(4),ece:+res.ece.toFixed(4),oodFA:res.ood.falseAccept,auroc:res.ood.auroc?+res.ood.auroc.toFixed(3):null});if(ev.length>20)ev.shift();
+  res.gate=prev&&prev.acc-res.acc>.03?{warn:true,msg:"الدقة نزلت "+Math.round((prev.acc-res.acc)*100)+" نقطة عن التقييم السابق"}:{warn:false};
+  return res;
 }
 
 /* ---------- التدريب ---------- */
@@ -19420,14 +19741,23 @@ async function zipFiles(files){
   return out;
 }
 const PRESETS={fast:{D:48,H:96,B:1<<15,epochs:2,lr:.07,maxTok:200,label:"سريع"},balanced:{D:64,H:128,B:1<<16,epochs:3,lr:.06,maxTok:300,label:"متوازن"},deep:{D:96,H:192,B:1<<17,epochs:5,lr:.05,maxTok:400,label:"عميق ودقيق"}};
-function runTrain(src,cfg,cb){
+function bakeBase(p){
+  syncOv(p);const m=p.meta,D=m.D,E=p.E.slice(),Es=p.Es.slice();
+  if(p.ov&&p.ov.rows)p.ov.rows.forEach((r,i)=>{const vec=p.ov.data.subarray(i*D,(i+1)*D);let mx=0;for(let d=0;d<D;d++)mx=Math.max(mx,Math.abs(vec[d]));Es[r]=mx;const k=mx?127/mx:0;for(let d=0;d<D;d++)E[r*D+d]=Math.round(vec[d]*k);});
+  return {meta:p.meta,E,Es,W1:p.W1,b1:p.b1,W2:p.W2,b2:p.b2,refs:p.refs,feedback:p.feedback||[],testSet:p.testSet||[],holdHashes:p.holdHashes,wv:p.wv,wvidf:p.wvidf};
+}
+function runTrain(src,cfg,cb,basePack){
   const w=makeWorker();let done=false;
   w.onmessage=async ev=>{const m=ev.data;
-    if(m.type==="done"){done=true;const pack=m.pack;pack.id="pk_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);await savePack(pack);w.terminate();cb({type:"done",pack});}
+    if(m.type==="done"){done=true;w.terminate();const pack=m.pack;
+      if(basePack){pack.id=basePack.id;pack.ver=basePack.ver;const h=pack.meta.history[pack.meta.history.length-1],fg=h&&h.oldTest?h.oldTest.forgetting:0;
+        if(cfg.autoGuard!==false&&fg>.05){cb({type:"guard",pack,forgetting:fg,accept:async()=>{await savePack(pack,{prev:basePack});cb({type:"done",pack,incremental:true});}});return;}
+        await savePack(pack,{prev:basePack});cb({type:"done",pack,incremental:true});}
+      else{pack.id="pk_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);await savePack(pack);cb({type:"done",pack});}}
     else if(m.type==="error"||m.type==="cancelled"){done=true;w.terminate();cb(m);}
     else cb(m);};
   w.onerror=e=>{if(!done){done=true;cb({type:"error",msg:e.message||"خطأ في الـ Worker"});}};
-  w.postMessage({cmd:"train",src,cfg});
+  w.postMessage({cmd:"train",src,cfg,base:basePack?bakeBase(basePack):null});
   return {cancel(){w.postMessage({cmd:"cancel"});setTimeout(()=>{if(!done){w.terminate();done=true;cb({type:"cancelled"});}},4000);}};
 }
 function runPreview(src,limit){
@@ -19444,7 +19774,7 @@ function ownRecords(mode){
     const nb=it.notebookData||{};const parts=[nb.explanation];(nb.explanations||[]).forEach(b=>parts.push((b.title||"")+". "+(b.content||"")));(nb.imageGroups||[]).forEach(g=>(g.explanations||[]).forEach(b=>parts.push(b.content)));(nb.images||[]).forEach(x=>parts.push(x.caption));
     const body=parts.filter(Boolean).join("\n");const text=(it.name||"")+". "+(it.notes||"")+" "+body;if(text.length<20)return;
     const label=mode==="cluster"?(K&&K.clusters[K.assign[i]]?K.clusters[K.assign[i]].label.join(" / "):""):mode==="folder"?direct(it.folderId):top(it.folderId);if(!label)return;
-    out.push({label,text});const ls=lines2(body);for(let q=0;q+3<=ls.length;q+=3)out.push({label,text:(it.name||"")+". "+ls.slice(q,q+3).join(" ")});
+    out.push({label,text,group:it.id});const ls=lines2(body);for(let q=0;q+3<=ls.length;q+=3)out.push({label,text:(it.name||"")+". "+ls.slice(q,q+3).join(" "),group:it.id});
   });
   const cnt=new Map();out.forEach(r=>cnt.set(r.label,(cnt.get(r.label)||0)+1));
   return out.filter(r=>cnt.get(r.label)>=3);
@@ -19471,20 +19801,66 @@ function curveSvg(hist){
   svg.appendChild(sv("text",{x:P,y:10,"font-size":9,fill:"#4ade80"},"دقة التحقق"));svg.appendChild(sv("text",{x:W-P,y:10,"font-size":9,fill:"#f87171","text-anchor":"end"},"الخطأ"));
   return svg;
 }
+/* ---------- تقرير منع التسرب + مقياس الجودة المستقل ---------- */
+function leakBox(m){
+  const L=m.leak;if(!L)return el("div",{cls:"hx-sm"},"الحزمة دي اتدرّبت بنسخة قديمة من غير تقرير تسرب.");
+  const rows=[["قسمة البيانات",L.splitBy==="group"?"بالمجموعة (كل نصوص نفس المصدر في قسم واحد)":"بمحتوى النص (النص المكرر دايمًا في نفس القسم)"],["نصوص تدريب / تحقق / اختبار",L.train.toLocaleString("en")+" / "+L.val.toLocaleString("en")+" / "+L.test.toLocaleString("en")],["نصوص مكررة حرفيًا اتشالت",L.exactDupRemoved.toLocaleString("en")],["نصوص تحقق/اختبار شبه مطابقة لتدريب اتشالت",(L.nearDupRemovedVal+L.nearDupRemovedTest).toLocaleString("en")+" (تحقق "+L.nearDupRemovedVal+" · اختبار "+L.nearDupRemovedTest+")"],["اسم التصنيف اتخفى من بداية النص",L.labelHeadMasked.toLocaleString("en")+" نص ("+L.maskedPct+"%)"]];
+  if(L.heldBlocked)rows.push(["نصوص محجوبة (كانت في تحقق/اختبار نسخة سابقة)",L.heldBlocked.toLocaleString("en")]);
+  return el("div",null,rows.map(r=>el("div",{cls:"nn-row"},el("b",null,r[0]+": "),r[1])),hint("مجموعة الاختبار ما اتستخدمتش في أي قرار (لا إيقاف مبكر ولا معايرة ولا اختيار نسخة)."));
+}
+function relSvg(rel){
+  const W=220,H=130,P=18,svg=sv("svg",{viewBox:"0 0 "+W+" "+H,width:"100%",style:"max-width:260px;display:block;margin:4px auto;direction:ltr"});
+  svg.appendChild(sv("line",{x1:P,y1:H-P,x2:W-P,y2:P,stroke:"rgba(128,128,128,.5)","stroke-dasharray":"3 3"}));
+  rel.forEach((b,i)=>{if(b.acc==null)return;const x=P+i*(W-2*P)/10,w=(W-2*P)/10-2,h=b.acc*(H-2*P);svg.appendChild(sv("rect",{x,y:H-P-h,width:w,height:h,fill:"rgba(251,191,36,.75)"},sv("title",null,"ثقة ~"+Math.round(b.conf*100)+"% ← دقة فعلية "+Math.round(b.acc*100)+"% ("+b.n+" نص)")));});
+  svg.appendChild(sv("text",{x:W/2,y:H-3,"font-size":8,fill:"currentColor","text-anchor":"middle",opacity:.7},"الثقة المُعلنة ←"));svg.appendChild(sv("text",{x:4,y:12,"font-size":8,fill:"currentColor",opacity:.7},"الدقة الفعلية"));
+  return svg;
+}
+function evalView(pack,host,rerender){
+  host.textContent="";host.appendChild(hint("⏳ بقيّم على مجموعة الاختبار المحجوزة بمسار الإنتاج نفسه…"));
+  setTimeout(async()=>{
+    const ood=(pack._oodCustom&&pack._oodCustom.length)?pack._oodCustom:null,r=evaluatePack(pack,{ood});host.textContent="";
+    if(!r){host.appendChild(hint("مفيش مجموعة اختبار في الحزمة (اتدرّبت بنسخة قديمة). أعد التدريب."));return;}
+    await savePack(pack);
+    const chips=[["دقة",pct1(r.acc)+"%"],["F1 (متوسط التصنيفات)",pct1(r.f1)+"%"],["أعلى-3",pct1(r.top3)+"%"],["خطأ المعايرة ECE",pct1(r.ece)+"%"],["اختبار",r.n+" نص"]];
+    host.appendChild(el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"},chips.map(c=>chipLab(c[0]+": "+c[1]))));
+    if(r.gate.warn)host.appendChild(el("div",{style:"padding:6px;border:1px solid #f87171;border-radius:8px;font-size:12.5px;margin:4px 0"},"⚠️ "+r.gate.msg+" — راجع آخر تحديث."));
+    host.appendChild(el("h4",null,"📐 معايرة الثقة (هل الثقة المُعلنة = الدقة الفعلية؟)"));host.appendChild(relSvg(r.rel));
+    host.appendChild(el("h4",null,"✋ التنبؤ الانتقائي (لو رفضت الثقة المنخفضة)"));
+    r.sel.forEach(s=>host.appendChild(el("div",{cls:"nn-row"},"ثقة ≥ "+Math.round(s.t*100)+"% ← تغطية "+pct1(s.cov)+"% ودقة "+(s.acc==null?"—":pct1(s.acc)+"%"))));
+    host.appendChild(el("h4",null,"🚫 نصوص من خارج النطاق (OOD)"));
+    host.appendChild(el("div",{cls:"nn-row"},"قبول خاطئ بثقة ≥ 80%: "+pct1(r.ood.falseAccept)+"% من "+r.ood.n+" نص"+(r.ood.auroc!=null?" · فصل الداخل/الخارج (AUROC) "+r.ood.auroc.toFixed(3):"")));
+    const oi=el("textarea",{style:"width:100%;min-height:50px;padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"});oi.placeholder="(اختياري) نصوص من خارج نطاقك، كل نص في سطر — تستخدمها بدل النصوص الافتراضية";oi.value=(pack._oodCustom||[]).join("\n");
+    host.append(oi,btn("↻ أعد التقييم بالنصوص دي",()=>{pack._oodCustom=oi.value.split("\n").map(x=>x.trim()).filter(Boolean);evalView(pack,host,rerender);}));
+    host.appendChild(el("h4",null,"🌪️ متانة النموذج (دقة بعد تشويش الاختبار)"));
+    [["clean","بدون تشويش"],["typo","أخطاء إملائية"],["drop","حذف 25% من الكلمات"],["shuffle","خلط ترتيب الكلمات"],["dialect","توحيد ة/ه ى/ي أ/ا"]].forEach(([k,l])=>host.appendChild(el("div",{cls:"nn-row"},l+": "+pct1(r.robust[k])+"%"+(k!=="clean"?" ("+(r.robust[k]-r.robust.clean>=0?"+":"")+pct1(r.robust[k]-r.robust.clean)+")":""))));
+    host.appendChild(el("h4",null,"🔗 جودة استرجاع المراجع"));host.appendChild(el("div",{cls:"nn-row"},"أقرب مرجع من نفس التصنيف: "+pct1(r.retr.p1)+"% · MRR "+r.retr.mrr.toFixed(3)+" ("+r.retr.n+" استعلام)"));
+    if(r.conf.length){host.appendChild(el("h4",null,"🔀 أكتر التباسات"));r.conf.forEach(c=>host.appendChild(el("div",{cls:"nn-row"},c.from+" ← اتعرّف كـ "+c.to+" ("+c.n+")")));}
+    host.appendChild(el("h4",null,"🛡️ فحص عدم التسرب (وقت التشغيل)"));
+    const L=r.leak;[["كل نصوص الاختبار محجوزة من التدريب",L.testInHold>=L.testTotal*.98,L.testInHold+"/"+L.testTotal],["صفر تداخل بين المراجع (تدريب) والاختبار",L.refTestOverlap===0,L.refTestOverlap+" تداخل"]].forEach(([t,ok,v])=>host.appendChild(el("div",{cls:"nn-row"},(ok?"✅ ":"❌ ")+t+" — "+v)));
+    host.appendChild(el("h4",null,"⚡ الأداء"));host.appendChild(el("div",{cls:"nn-row"},"زمن التعرّف ~"+r.perf.ms.toFixed(2)+" مللي ثانية للنص · حجم النموذج "+fmtB(r.perf.bytes)));
+    const ev=pack.meta.evals||[];if(ev.length>1){host.appendChild(el("h4",null,"📈 تطور التقييمات"));ev.slice(-6).reverse().forEach(e=>host.appendChild(el("div",{cls:"nn-row"},"نسخة "+e.ver+" · "+fmtT(e.at)+" — دقة "+pct1(e.acc)+"% · F1 "+pct1(e.f1)+"% · ECE "+pct1(e.ece)+"%")));}
+    host.appendChild(btn("📋 نسخ التقرير",()=>copyText2("تقييم مستقل — "+pack.meta.name+"\nدقة "+pct1(r.acc)+"% · F1 "+pct1(r.f1)+"% · أعلى-3 "+pct1(r.top3)+"% · ECE "+pct1(r.ece)+"%\nOOD قبول خاطئ "+pct1(r.ood.falseAccept)+"%\nمتانة: "+Object.entries(r.robust).map(([k,v])=>k+" "+pct1(v)+"%").join("، ")+"\nاسترجاع P@1 "+pct1(r.retr.p1)+"%\nتسرب: داخل المحجوز "+L.testInHold+"/"+L.testTotal+"، تداخل مراجع "+L.refTestOverlap)));
+  },30);
+}
+const copyText2=t=>{try{navigator.clipboard.writeText(t);toast2("اتنسخ.");}catch(e){}};
 function packCard(pack,reg,rerender){
-  const m=pack.meta,card=el("div",{cls:"hx-sub"}),size=pack.E.byteLength+pack.W1.byteLength+pack.W2.byteLength+pack.Es.byteLength;
+  const m=pack.meta,card=el("div",{cls:"hx-sub"}),size=pack.E.byteLength+pack.W1.byteLength+pack.W2.byteLength+pack.Es.byteLength+(pack.wv?pack.wv.byteLength:0);
   const act=el("input",{attrs:{type:"checkbox"}});act.checked=reg.active!==false;act.onchange=()=>{reg.active=act.checked;kickSync();};
-  card.appendChild(el("div",{style:"display:flex;justify-content:space-between;gap:8px;align-items:center"},el("b",null,"🧬 "+m.name),el("label",{style:"font-size:12px"},act," مفعّلة")));
-  card.appendChild(el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"},chipLab(m.C+" تصنيف"),chipLab(m.docs.toLocaleString("en")+" نص"),chipLab("دقة "+pct1(m.valAcc)+"%"),chipLab("حجم "+fmtB(size)),chipLab(m.epochs+" دورات / "+m.seconds+"ث"),(m.valDocs<50?chipLab("⚠️ عينة تحقق صغيرة ("+m.valDocs+")"):null),chipLab("تصحيحات: "+(pack.feedback||[]).length)));
-  card.appendChild(hint("اتدرّبت "+fmtT(m.createdAt)+(m.src?" — من: "+m.src:"")));
-  const more=el("div");let shown=false;
+  card.appendChild(el("div",{style:"display:flex;justify-content:space-between;gap:8px;align-items:center"},el("b",null,"🧬 "+m.name+(m.algo==="v2"?"  v2":"")),el("label",{style:"font-size:12px"},act," مفعّلة")));
+  const t=m.test;card.appendChild(el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"},chipLab(m.C+" تصنيف"),chipLab(m.docs.toLocaleString("en")+" نص"),t?chipLab("اختبار مستقل "+pct1(t.acc)+"% · F1 "+pct1(t.f1)+"%"):chipLab("تحقق "+pct1(m.valAcc)+"%"),chipLab("حجم "+fmtB(size)),chipLab(m.epochs+" دورات"+(m.bestEpoch?" (الأفضل "+m.bestEpoch+")":"")+" / "+m.seconds+"ث"),m.wvocab?chipLab("🔤 متجهات دلالية "+m.wvocab.length):null,(m.online?chipLab("تعلّم تزايدي: "+m.online+" تصحيح"):null),chipLab("نسخة "+pack.ver)));
+  card.appendChild(hint("اتدرّبت "+fmtT(m.createdAt)+(m.updatedAt&&m.updatedAt!==m.createdAt?" · آخر تحديث "+fmtT(m.updatedAt):"")+(m.src?" — من: "+m.src:"")));
+  const more=el("div"),evh=el("div"),inc=el("div");let shown=false,evOn=false,incOn=false;
   const showMore=()=>{if(shown){more.textContent="";shown=false;return;}shown=true;more.appendChild(curveSvg(m.curve));
+    more.appendChild(el("h4",null,"🛡️ منع تسرب البيانات"));more.appendChild(leakBox(m));
     const rows=m.labels.map((l,i)=>({l,n:m.per[i].n,p:m.per[i].p,r:m.per[i].r,f:m.per[i].p+m.per[i].r?2*m.per[i].p*m.per[i].r/(m.per[i].p+m.per[i].r):0})).sort((a,b)=>a.f-b.f);
-    more.appendChild(el("h4",null,"📉 أضعف التصنيفات (محتاجة بيانات أكتر)"));
-    rows.slice(0,12).forEach(x=>more.appendChild(el("div",{cls:"nn-row"},x.l+" — دقة "+pct1(x.p)+"% · استرجاع "+pct1(x.r)+"% · "+x.n+" نص"+(x.n<20?" ⚠️ قليل":""))));
+    more.appendChild(el("h4",null,"📉 أضعف التصنيفات (على الاختبار المستقل)"));rows.slice(0,10).forEach(x=>more.appendChild(el("div",{cls:"nn-row"},x.l+" — دقة "+pct1(x.p)+"% · استرجاع "+pct1(x.r)+"% · "+x.n+" نص"+(x.n<20?" ⚠️ قليل":""))));
+    if(m.history&&m.history.length>1){more.appendChild(el("h4",null,"🕘 تاريخ التحديثات التزايدية"));m.history.slice().reverse().forEach(h=>more.appendChild(el("div",{cls:"nn-row"},fmtT(h.at)+" — "+h.docs.toLocaleString("en")+" نص جديد"+(h.newLabels?"، "+h.newLabels+" تصنيف جديد":"")+" · اختبار "+pct1(h.testAcc)+"%"+(h.oldTest?" · نسيان القديم "+(h.oldTest.forgetting>0?"-":"+")+pct1(Math.abs(h.oldTest.forgetting))+" نقطة":""))));}
     more.appendChild(el("h4",null,"🏷️ كل التصنيفات"));more.appendChild(el("div",{style:"display:flex;flex-wrap:wrap;gap:4px"},m.labels.slice(0,300).map(l=>chipLab(l))));};
-  card.appendChild(el("div",null,btn("📊 تفاصيل",showMore),btn("⬇️ تصدير الحزمة",()=>{const b=new Blob([packFile(pack)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="ai-pack-"+pack.id+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),60000);}),btn("🗑️ حذف",async()=>{if(!confirm("حذف الحزمة «"+m.name+"»؟"))return;await deletePack(pack.id);rerender();},"danger")));
-  card.appendChild(more);return card;
+  const acts=el("div",null,btn("📊 تفاصيل",showMore),btn("🧪 تقييم مستقل",()=>{if(evOn){evh.textContent="";evOn=false;return;}evOn=true;evalView(pack,evh,rerender);},"primary"),btn("➕ زوّد تدريب",()=>{if(incOn){inc.textContent="";incOn=false;return;}incOn=true;inc.appendChild(trainBox(rerender,pack));}),
+    PREV.has(pack.id)?btn("↩️ رجوع للنسخة السابقة",async()=>{if(!confirm("الرجوع للنسخة السابقة؟"))return;await rollbackPack(pack.id);RC.clear();rerender();}):null,
+    btn("⬇️ تصدير",()=>{const b=new Blob([packFile(pack)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="ai-pack-"+pack.id+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),60000);}),
+    btn("🗑️ حذف",async()=>{if(!confirm("حذف الحزمة «"+m.name+"»؟"))return;await deletePack(pack.id);rerender();},"danger"));
+  card.append(acts,more,evh,inc);return card;
 }
 
 /* ---------- قوالب وصيغ البيانات ---------- */
@@ -19500,49 +19876,61 @@ function formatSection(){
     el("h4",null,"4) TXT — بصيغة fastText: __label__ترموستات نص…  أو  تصنيف⇥نص (بالتاب). أو ملف باسم التصنيف وفقراته (يفصلها سطر فاضي) هي النصوص."),
     el("h4",null,"5) ZIP — فيه أي من اللي فوق (بيتفك قبل التدريب)"),
     hint("أسماء الحقول المعروفة: label/topic/category/class/تصنيف/الفئة/الموضوع للتصنيف — و text/body/content/description/نص/شرح/محتوى/وصف للنص — و title/name/عنوان/اسم عنوان اختياري."),
-    hint("نصايح: 50–200 نص على الأقل لكل تصنيف. الملف المخلوط أحسن (البرنامج بيخلط بمخزن 10,000 نص). التصنيفات المتشابهة جدًا بتقلل الدقة."),
+    hint("لمنع التسرب: لو نصوصك متقطّعة من نفس المستند/المصدر أضف حقل group (أو source/item_id) عشان كل نصوص المصدر تفضل في نفس القسم (تدريب/تحقق/اختبار). النصوص المكررة والمتشابهة بتتشال تلقائيًا."),hint("نصايح: 50–200 نص على الأقل لكل تصنيف. الملف المخلوط أحسن (البرنامج بيخلط بمخزن 10,000 نص). التصنيفات المتشابهة جدًا بتقلل الدقة."),
     el("div",null,btn("⬇️ قالب JSONL",()=>dl("training-template.jsonl",TPL_JSONL)),btn("⬇️ قالب CSV",()=>dl("training-template.csv","\ufeff"+TPL_CSV))));
 }
 
 /* ---------- التدريب ---------- */
+/* ---------- التدريب (جديد أو إضافي) ---------- */
 let lastMsg="",bannerEl=null;
-function trainSection(rerender){
-  const box=det("🚀 تدريب حزمة جديدة",true),st={files:[],job:null};
+function trainBox(rerender,base){
+  const box=base?el("div",{style:"margin-top:6px;padding:6px;border:1px dashed var(--border);border-radius:8px"}):det("🚀 تدريب حزمة جديدة",true),st={files:[],job:null};
   const fi=el("input",{attrs:{type:"file",multiple:"",accept:".jsonl,.ndjson,.json,.csv,.tsv,.txt,.zip"}}),nameI=el("input",{style:"width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);margin:4px 0"}),preset=el("select",{style:"padding:5px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});
   nameI.placeholder="اسم الحزمة (مثلًا: مرجع الأجهزة الحرارية)";nameI.value="حزمتي";
   Object.entries(PRESETS).forEach(([k,v])=>preset.appendChild(el("option",{attrs:{value:k}},v.label+" ("+v.epochs+" دورات، "+v.D+"×"+v.H+")")));preset.value="balanced";
   const adv=el("details",null,el("summary",{style:"cursor:pointer;font-size:12px"},"إعدادات متقدمة")),advIn={};
-  [["epochs","عدد الدورات"],["D","بُعد التضمين"],["H","الطبقة المخفية"],["lr","معدل التعلّم"],["maxTok","أقصى كلمات للنص"],["refs","مراجع لكل تصنيف"]].forEach(([k,l])=>{const i=el("input",{style:"width:90px;padding:4px;border-radius:6px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});i.placeholder="تلقائي";advIn[k]=i;adv.appendChild(el("div",{style:"font-size:12px;margin:3px 0"},l+": ",i));});
+  [["epochs","عدد الدورات (حد أدنى)"],["D","بُعد التضمين"],["H","الطبقة المخفية"],["lr2","معدل التعلّم (Adam)"],["lrE","معدل التعلّم للتضمين"],["maxTok","أقصى كلمات للنص"],["refs","مراجع لكل تصنيف"],["patience","صبر الإيقاف المبكر"]].forEach(([k,l])=>{const i=el("input",{style:"width:90px;padding:4px;border-radius:6px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});i.placeholder="تلقائي";advIn[k]=i;adv.appendChild(el("div",{style:"font-size:12px;margin:3px 0"},l+": ",i));});
+  const ck=(txt,on)=>{const c=el("input",{attrs:{type:"checkbox"}});c.checked=on;return {c,row:el("label",{style:"display:block;font-size:12px;margin:3px 0"},c," "+txt)};};
+  const optMask=ck("منع التسرب: إخفاء اسم التصنيف لو ظهر في بداية النص",true),optBal=ck("موازنة التصنيفات (وزن أكبر للتصنيفات القليلة)",true),optSem=ck("بناء متجهات الكلمات الدلالية (للبحث الهجين)",true),optGuard=ck("حارس النسيان (إلغاء التحديث التزايدي لو أضرّ بالقديم)",true);
+  adv.append(optMask.row,optBal.row,optSem.row);if(base)adv.appendChild(optGuard.row);
   const pre=el("div"),prog=el("div");
-  const buildCfg=()=>{const c=Object.assign({},PRESETS[preset.value]);delete c.label;for(const k in advIn){const v=parseFloat(advIn[k].value);if(v>0)c[k]=v;}c.D=Math.round(c.D);c.H=Math.round(c.H);c.epochs=Math.round(c.epochs);c.B=PRESETS[preset.value].B;c.name=nameI.value.trim()||"حزمتي";c.srcName=st.files.map(f=>f.name).slice(0,3).join("، ");return c;};
+  const buildCfg=()=>{const c=Object.assign({},PRESETS[preset.value]);delete c.label;for(const k in advIn){const v=parseFloat(advIn[k].value);if(v>0)c[k]=v;}c.D=Math.round(c.D);c.H=Math.round(c.H);c.epochs=Math.round(c.epochs);c.B=PRESETS[preset.value].B;c.name=nameI.value.trim()||"حزمتي";c.srcName=st.files.map(f=>f.name).slice(0,3).join("، ");c.maskLabel=optMask.c.checked;c.balance=optBal.c.checked;c.semantic=optSem.c.checked;c.autoGuard=optGuard.c.checked;c.algo="v2";return c;};
   const fileInfo=el("div",{cls:"hx-sm"});fi.onchange=()=>{st.files=[...fi.files];fileInfo.textContent=st.files.map(f=>f.name+" ("+fmtB(f.size)+")").join(" · ");};
   const doPreview=async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}pre.textContent="⏳ بقرا أول 3000 سجل…";const files=await zipFiles(st.files),r=await runPreview({files},3000);pre.textContent="";
     if(r.type==="error"){pre.appendChild(hint("❌ "+r.msg));return;}
-    pre.appendChild(el("div",{style:"font-size:12.5px"},"✅ "+r.rows.toLocaleString("en")+" سجل صالح في العينة"+(r.bad?"، "+r.bad+" سجل مرفوض (فاضي/قصير)":"")+"، "+r.nLabels+" تصنيف، متوسط الطول "+r.avgLen+" حرف."));
-    if(!r.rows)pre.appendChild(hint("⚠️ مفيش سجلات مقروءة. راجع صيغة الملف (القسم تحت)."));
-    if(r.nLabels<2)pre.appendChild(hint("⚠️ لازم تصنيفين على الأقل."));
+    pre.appendChild(el("div",{style:"font-size:12.5px"},"✅ "+r.rows.toLocaleString("en")+" سجل صالح في العينة"+(r.bad?"، "+r.bad+" سجل مرفوض":"")+"، "+r.nLabels+" تصنيف، متوسط الطول "+r.avgLen+" حرف."));
+    if(!r.rows)pre.appendChild(hint("⚠️ مفيش سجلات مقروءة. راجع صيغة الملف (القسم تحت)."));if(r.nLabels<2)pre.appendChild(hint("⚠️ لازم تصنيفين على الأقل."));
     pre.appendChild(el("div",{style:"display:flex;flex-wrap:wrap;gap:4px;margin:4px 0"},r.labels.slice(0,40).map(([l,n])=>chipLab(l+" ×"+n))));
     r.samples.forEach(s=>pre.appendChild(el("div",{cls:"nn-row"},el("b",null,s.label+": "),s.text)));
-    const mn=Math.min(...r.labels.map(x=>x[1])),mx=Math.max(...r.labels.map(x=>x[1]));if(r.labels.length>1&&mx>mn*20)pre.appendChild(hint("⚠️ عدم توازن كبير بين التصنيفات (من "+mn+" لـ"+mx+" في العينة)."));};
+    const mn=Math.min(...r.labels.map(x=>x[1])),mx=Math.max(...r.labels.map(x=>x[1])),L=r.leak,W=[];
+    if(r.labels.length>1&&mx>mn*20)W.push("عدم توازن كبير بين التصنيفات ("+mn+" ↔ "+mx+") — الموازنة التلقائية هتخفف الأثر");
+    if(L.dupPct>1)W.push(L.dupPct+"% نصوص مكررة حرفيًا — هتتشال تلقائيًا من التدريب/التحقق/الاختبار");
+    if(L.nearPct>3)W.push(L.nearPct+"% نصوص شبه مكررة — أي نسخة شبيهة بتدريب هتتشال من التحقق/الاختبار");
+    if(L.headLabelPct>10)W.push(L.headLabelPct+"% من النصوص بتبدأ باسم التصنيف نفسه (تسرب) — هيتخفى تلقائيًا");
+    if(L.conflicts>0)W.push(L.conflicts+" نص ظاهر بتصنيفين مختلفين — راجع البيانات");
+    if(!L.groups&&r.rows>200)W.push("مفيش عمود مجموعة/مصدر (group/source): نصوص نفس المصدر ممكن تتوزع على أقسام مختلفة. لو في نصوص متقطّعة من نفس المستند، أضف عمود group");
+    pre.appendChild(el("h4",null,"🛡️ فحص التسرب (على العينة)"));if(W.length)W.forEach(w=>pre.appendChild(el("div",{style:"font-size:12px;margin:3px 0"},"⚠️ "+w)));else pre.appendChild(hint("✅ مفيش مؤشرات تسرب واضحة في العينة."));};
   const cancelBtn=btn("⏹ إيقاف",()=>{if(st.job)st.job.cancel();},"danger");cancelBtn.style.display="none";
   const startWith=(src,srcName)=>{
     lastMsg="";if(bannerEl){bannerEl.remove();bannerEl=null;}const cfg=buildCfg();if(srcName)cfg.srcName=srcName;cancelBtn.style.display="";prog.textContent="";
-    const stage=el("div",{style:"font-size:12.5px"},"⏳ بدء…"),bar=el("div",{cls:"nn-bar"},el("div")),info=el("div",{cls:"hx-sm"}),curve=el("div");prog.append(stage,bar,info,curve);
-    const t0=Date.now();
-    st.job=runTrain(src,cfg,m=>{
-      if(m.type==="stage")stage.textContent=m.s==="scan"?"🔎 مسح البيانات…":"🧮 معايرة وضغط النموذج…";
-      else if(m.type==="scan")stage.textContent="🔎 مسح البيانات: "+m.docs.toLocaleString("en")+" نص"+(m.labels?" — "+m.labels+" تصنيف":"");
-      else if(m.type==="progress"){const fr=((m.epoch-1)+m.docs/Math.max(1,m.total))/m.epochs;bar.firstChild.style.width=Math.min(99,fr*100)+"%";stage.textContent="🧠 دورة "+m.epoch+"/"+m.epochs+" — "+m.docs.toLocaleString("en")+" / "+m.total.toLocaleString("en")+" نص";const eta=m.rate?Math.round((m.total*(m.epochs-m.epoch+1)-m.docs)/m.rate):0;info.textContent="السرعة "+m.rate.toLocaleString("en")+" نص/ث · الخطأ "+m.loss.toFixed(3)+" · الوقت "+m.elapsed+"ث"+(eta?" · متبقي ~"+eta+"ث":"");}
-      else if(m.type==="epoch"){curve.textContent="";curve.appendChild(curveSvg(m.hist));info.textContent="✅ دورة "+m.h.ep+": دقة التحقق "+pct1(m.h.acc)+"% — خطأ "+m.h.vloss;}
-      else if(m.type==="done"){cancelBtn.style.display="none";bar.firstChild.style.width="100%";const pm=m.pack.meta;stage.textContent="🎉 خلص التدريب — دقة التحقق "+pct1(pm.valAcc)+"% على "+pm.valDocs.toLocaleString("en")+" نص غير مرئي، "+pm.C+" تصنيف، في "+pm.seconds+" ثانية. الحزمة اتحفظت واتفعّلت.";toast2("اتدرّبت الحزمة «"+pm.name+"» بدقة "+pct1(pm.valAcc)+"%");lastMsg=stage.textContent;rerender();}
-      else if(m.type==="error"){cancelBtn.style.display="none";stage.textContent="❌ "+m.msg;}
-      else if(m.type==="cancelled"){cancelBtn.style.display="none";stage.textContent="⏹ اتوقف التدريب.";}
-    });
+    const stage=el("div",{style:"font-size:12.5px"},"⏳ بدء…"),bar=el("div",{cls:"nn-bar"},el("div")),info=el("div",{cls:"hx-sm"}),leakI=el("div",{style:"font-size:12px"}),curve=el("div");prog.append(stage,bar,info,leakI,curve);
+    st.job=runTrain(src,cfg,msg=>{
+      if(msg.type==="stage")stage.textContent=msg.s==="scan"?"🔎 مسح البيانات وفحص التسرب…":msg.s==="semantic"?"🔤 بناء المتجهات الدلالية…":msg.s==="early-stop"?"⏹ إيقاف مبكر (التحسن وقف)…":"🧮 معايرة وتقييم على الاختبار المستقل…";
+      else if(msg.type==="scan"&&msg.tiny){leakI.textContent="⚠️ بيانات قليلة جدًا للاختبار المستقل: هيتدرّب على كل البيانات من غير رقم دقة موثوق.";}
+      else if(msg.type==="scan"){stage.textContent="🔎 مسح البيانات: "+msg.docs.toLocaleString("en")+" نص"+(msg.labels?" — "+msg.labels+" تصنيف":"");if(msg.leak){const L=msg.leak;leakI.textContent="🛡️ اتشال "+L.exactDupRemoved.toLocaleString("en")+" نص مكرر و"+(L.nearDupRemovedVal+L.nearDupRemovedTest).toLocaleString("en")+" شبه مطابق من التحقق/الاختبار"+(L.maskedPct?" · اتخفى اسم التصنيف من "+L.maskedPct+"% من النصوص":"")+" · القسمة: "+(L.splitBy==="group"?"بالمجموعة":"بالمحتوى");}}
+      else if(msg.type==="progress"){const fr=((msg.epoch-1)+msg.docs/Math.max(1,msg.total))/msg.epochs;bar.firstChild.style.width=Math.min(99,fr*100)+"%";stage.textContent="🧠 دورة "+msg.epoch+"/"+msg.epochs+" — "+msg.docs.toLocaleString("en")+" / "+msg.total.toLocaleString("en")+" نص";const eta=msg.rate?Math.round((msg.total*(msg.epochs-msg.epoch+1)-msg.docs)/msg.rate):0;info.textContent="السرعة "+msg.rate.toLocaleString("en")+" نص/ث · الخطأ "+msg.loss.toFixed(3)+" · الوقت "+msg.elapsed+"ث"+(eta?" · متبقي ~"+eta+"ث":"");}
+      else if(msg.type==="epoch"){curve.textContent="";curve.appendChild(curveSvg(msg.hist));info.textContent="✅ دورة "+msg.h.ep+": دقة التحقق "+pct1(msg.h.acc)+"% — خطأ "+msg.h.vloss;}
+      else if(msg.type==="guard"){cancelBtn.style.display="none";stage.textContent="🛑 اتلغى التحديث التزايدي: كان هيسبّب نسيان "+pct1(msg.forgetting)+" نقطة في التصنيفات القديمة. النسخة الحالية اتحفظت زي ما هي.";prog.appendChild(btn("قبول التحديث رغم النسيان",async()=>{await msg.accept();}));}
+      else if(msg.type==="done"){cancelBtn.style.display="none";bar.firstChild.style.width="100%";const pm=msg.pack.meta,t=pm.test,h=pm.history[pm.history.length-1];stage.textContent="🎉 خلص التدريب — "+(t?"اختبار مستقل "+pct1(t.acc)+"% (F1 "+pct1(t.f1)+"%) على "+pm.testDocs.toLocaleString("en")+" نص محجوز":"⚠️ مفيش اختبار مستقل (بيانات قليلة جدًا) — اتدرّب على كل البيانات والدقة غير مقاسة")+"، "+pm.C+" تصنيف، "+pm.epochs+" دورات (الأفضل "+pm.bestEpoch+") في "+pm.seconds+" ثانية."+(h&&h.oldTest?" نسيان القديم: "+(h.oldTest.forgetting>0?"-":"+")+pct1(Math.abs(h.oldTest.forgetting))+" نقطة.":"")+" الحزمة اتحفظت واتفعّلت.";toast2("اتدرّبت الحزمة «"+pm.name+"»"+(t?" — اختبار مستقل "+pct1(t.acc)+"%":" (من غير اختبار مستقل)"));lastMsg=stage.textContent;rerender();}
+      else if(msg.type==="error"){cancelBtn.style.display="none";stage.textContent="❌ "+msg.msg;}
+      else if(msg.type==="cancelled"){cancelBtn.style.display="none";stage.textContent="⏹ اتوقف التدريب.";}
+    },base);
   };
-  const startBtn=btn("🚀 ابدأ التدريب",async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}startWith({files:await zipFiles(st.files)});},"primary");
+  const startBtn=btn(base?"🚀 ابدأ التدريب الإضافي":"🚀 ابدأ التدريب",async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}startWith({files:await zipFiles(st.files)});},"primary");
   const ownSel=el("select",{style:"padding:5px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"},el("option",{attrs:{value:"top"}},"المجلد الرئيسي"),el("option",{attrs:{value:"folder"}},"المجلد المباشر"),el("option",{attrs:{value:"cluster"}},"المواضيع المكتشفة"));
-  const ownBtn=btn("🎓 درّب على بياناتي",()=>{const recs=ownRecords(ownSel.value);if(recs.length<20){toast2("بياناتك قليلة أو من غير تصنيفات كفاية ("+recs.length+" سجل).","err");return;}const lb=new Set(recs.map(r=>r.label));if(lb.size<2){toast2("محتاج تصنيفين على الأقل.","err");return;}startWith({records:recs},"بياناتي ("+ownSel.value+")");});
-  box.append(hint("اختار ملف/ملفات التدريب (أو ZIP). مفيش حد أقصى للحجم — بيتقرا بالبث."),fi,fileInfo,nameI,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة",doPreview),startBtn,cancelBtn),pre,prog,el("hr",{style:"opacity:.2"}),hint("أو درّب على محتواك أنت (كل عنصر = نص، وتصنيفه من:)"),el("div",null,ownSel,ownBtn));
+  const ownBtn=btn("🎓 درّب على بياناتي",()=>{const recs=ownRecords(ownSel.value);if(recs.length<20){toast2("بياناتك قليلة أو من غير تصنيفات كفاية ("+recs.length+" سجل).","err");return;}const lb=new Set(recs.map(r=>r.label));if(lb.size<2&&!base){toast2("محتاج تصنيفين على الأقل.","err");return;}startWith({records:recs},"بياناتي ("+ownSel.value+")");});
+  if(base){box.append(hint("التدريب الإضافي بيكمّل من أوزان «"+base.meta.name+"» (من غير ما يبدأ من الصفر): بيضيف تصنيفات جديدة، وبيعيد تشغيل أمثلة قديمة مع الجديد، وبيقيس النسيان على اختبار النسخة القديمة، وبيحجب أي نص كان في تحقق/اختبار النسخة القديمة."),fi,fileInfo,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة",doPreview),startBtn,cancelBtn),pre,prog,el("hr",{style:"opacity:.2"}),el("div",null,ownSel,ownBtn));}
+  else box.append(hint("اختار ملف/ملفات التدريب (أو ZIP). مفيش حد أقصى للحجم — بيتقرا بالبث. النظام بيمنع التسرب تلقائيًا (تكرار، تشابه، اسم التصنيف داخل النص) ويقيس الدقة على اختبار مستقل."),fi,fileInfo,nameI,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة وفحص التسرب",doPreview),startBtn,cancelBtn),pre,prog,el("hr",{style:"opacity:.2"}),hint("أو درّب على محتواك أنت (كل عنصر = نص، وتصنيفه من:) — النصوص المقسّمة من نفس العنصر بتفضل في نفس القسم:"),el("div",null,ownSel,ownBtn));
   return box;
 }
 
@@ -19576,16 +19964,32 @@ function importSection(rerender){
 }
 
 /* ---------- التبويب ---------- */
+/* ---------- بحث دلالي هجين + علاقات ---------- */
+function searchSection(close){
+  const inp=el("input",{style:"width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"}),out=el("div");inp.placeholder="اسأل أو ابحث (مثلًا: إزاي أعرف إن الحساس بايظ؟)";
+  const run=()=>{out.textContent="";const q=inp.value.trim();if(!q)return;const r=hybridSearch(q,{itemText:itemTextOf});
+    out.appendChild(el("div",{style:"font-size:12.5px;margin:4px 0"},"النية: "+r.intent+" · طرق البحث: BM25"+(r.methods&&r.methods.sem?" + متجهات دلالية":"")+(r.methods&&r.methods.nn?" + تضمين الشبكة":"")));
+    if(r.related.length)out.appendChild(el("div",{style:"font-size:12px;margin:4px 0"},"🔤 مفاهيم مرتبطة: "+r.related.map(([w,a])=>w+" ≈ "+a.join("، ")).join(" · ")));
+    if(!r.results.length){out.appendChild(hint("مفيش نتايج."));return;}
+    r.results.forEach(x=>{const row=el("div",{cls:"nn-row",style:x.kind==="item"?"cursor:pointer":""});row.appendChild(el("b",null,(x.kind==="item"?"📦 ":"📖 ["+x.label+"] ")+(x.kind==="item"?x.title:"")));row.appendChild(el("div",{cls:"hx-sm"},x.text));
+      row.appendChild(el("div",{cls:"hx-sm"},"ترتيب: "+["bm25","sem","nn"].map(k=>k+" "+(x.ranks[k]||"—")).join(" · ")));if(x.kind==="item")row.onclick=()=>{close();window.__HIST.go(x.id,"");};out.appendChild(row);});
+    const kg=buildKG(itemTextOf),qn=new Set(S.words(q,20).map(w=>w.replace(/^(وال|بال|ال)/,"")));const rel=kg.filter(t=>qn.has(t.s)||qn.has(t.o)).slice(0,8);
+    if(rel.length){out.appendChild(el("h4",null,"🕸️ علاقات مستخرجة متعلقة بسؤالك"));rel.forEach(t=>out.appendChild(el("div",{cls:"nn-row"},t.s+" —"+t.r+"→ "+t.o+"  ("+t.n+")"))); }};
+  const kgBtn=btn("🕸️ أهم العلاقات المستخرجة",()=>{out.textContent="";const kg=buildKG(itemTextOf).slice(0,30);if(!kg.length){out.appendChild(hint("مفيش علاقات (فاعل-فعل-مفعول) اتلقت في الشرح لسه."));return;}kg.forEach(t=>out.appendChild(el("div",{cls:"nn-row"},t.s+" —"+t.r+"→ "+t.o+"  ("+t.n+")")));});
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")run();});
+  return det("🔎 بحث دلالي هجين + علاقات",false,hint("بيدمج 3 طرق (كلمات BM25 + متجهات كلمات متعلَّمة من بياناتك + تضمين الشبكة) بدمج الترتيب RRF، فبيلاقي المعنى حتى لو الكلمات مختلفة."),inp,btn("🔍 ابحث",run,"primary"),kgBtn,out);
+}
+/* ---------- التبويب ---------- */
 async function neural(host,close){
   host.textContent="";await allPacks();
   const rerender=()=>neural(host,close);
   bannerEl=null;if(lastMsg){bannerEl=el("div",{style:"padding:8px;border:1px solid #4ade80;border-radius:8px;margin-bottom:6px;font-size:12.5px"},lastMsg);host.appendChild(bannerEl);}
-  host.appendChild(el("div",{cls:"hx-sm",style:"margin-bottom:6px"},"🧬 شبكة عصبية (تضمين مُجزّأ للكلمات والمقاطع ← طبقة ReLU ← softmax) بتتدرّب على بياناتك الخارجية بأي كمية وتبقى مرجعك: بتتعرّف على مواضيعك فورًا من غير ما تستنى تتعلّم من شغلك، وبتقدّم أقرب مرجع. التدريب على جهازك (Worker) بدون إنترنت، والحزمة بتتحفظ وبتتزامن كملف ai-pack-….json."));
+  host.appendChild(el("div",{cls:"hx-sm",style:"margin-bottom:6px"},"🧬 شبكة عصبية بتتدرّب على بياناتك الخارجية بأي كمية وتبقى مرجعك. التدريب على جهازك (Worker) بدون إنترنت، مع: منع تسرب البيانات، محسّن Adam/AdaGrad مع إيقاف مبكر، تعلّم تزايدي بدون نسيان، فهم دلالي هجين، وتقييم مستقل. الحزمة بتتحفظ وبتتزامن كملف ai-pack-….json."));
   const reg=regList(),pk=el("div");
   if(!reg.length)pk.appendChild(hint("لسه مفيش حزم. درّب أول حزمة من الأسفل."));
   reg.forEach(r=>{const p=PACKS.get(r.id);if(p)pk.appendChild(packCard(p,r,rerender));else pk.appendChild(el("div",{cls:"hx-sub"},"🧬 "+r.name+" — غير محمّلة على الجهاز ده. استخدم «تحميل الحزم من مجلد المزامنة» تحت.",btn("🗑️ شيل من القائمة",()=>{reg.splice(reg.indexOf(r),1);kickSync();rerender();})));});
   host.appendChild(det("🧬 الحزم المدرّبة ("+reg.length+")",true,pk));
-  host.appendChild(trainSection(rerender));host.appendChild(trySection());host.appendChild(recSection(close));host.appendChild(importSection(rerender));host.appendChild(formatSection());
+  host.appendChild(trainBox(rerender,null));host.appendChild(searchSection(close));host.appendChild(trySection());host.appendChild(recSection(close));host.appendChild(importSection(rerender));host.appendChild(formatSection());
 }
 
 /* ---------- تكامل مع تبويب التحليل ---------- */
@@ -19617,16 +20021,17 @@ function itemExtra(it,close){
     r.top.forEach(t=>box.appendChild(el("div",{cls:"nn-row"},t.label,probBar(t.prob),Math.round(t.prob*100)+"%")));
     r.refs.slice(0,2).forEach(x=>box.appendChild(el("div",{style:"font-size:12px;margin:2px 0"},"📖 ["+x.label+" "+Math.round(x.sim*100)+"%] "+x.t)));
     const dlId="dl"+Math.random().toString(36).slice(2,7),inp=el("input",{attrs:{list:dlId,placeholder:"تصحيح التصنيف…"},style:"padding:4px 6px;border-radius:6px;background:var(--panel2);color:var(--text);border:1px solid var(--border);width:60%"}),dlist=el("datalist",{attrs:{id:dlId}},p.meta.labels.slice(0,500).map(l=>el("option",{attrs:{value:l}})));
-    box.appendChild(el("div",{style:"margin-top:4px"},inp,dlist,btn("✔ صحّح وتعلّم",async()=>{if(addFeedback(p,text,inp.value.trim())){await savePack(p);RC.clear();toast2("اتعلّم التصحيح: «"+inp.value.trim()+"»");}else toast2("اختار تصنيف موجود في الحزمة.","err");})));
+    box.appendChild(el("div",{style:"margin-top:4px"},inp,dlist,btn("✔ صحّح وتعلّم",async()=>{const r=onlineLearn(p,text,inp.value.trim());if(r.ok){await savePack(p);RC.clear();toast2("اتعلّم التصحيح فعليًا (ثقة «"+inp.value.trim()+"» "+Math.round(r.pBefore*100)+"% ← "+Math.round(r.pAfter*100)+"%)");}else toast2(r.reason,"err");})));
   });
   return box;
 }
 
-window.__NN={allPacks,packFile,activePacks,classify,addFeedback,savePack,deletePack,importPackText,loadFromFolder,runTrain,runPreview,ownRecords,PRESETS,analysisSection,reportLines,itemExtra,recog};
+window.__NN={parsePack,allPacks,packFile,activePacks,classify,addFeedback,onlineLearn,savePack,rollbackPack,deletePack,importPackText,loadFromFolder,runTrain,runPreview,ownRecords,PRESETS,analysisSection,reportLines,itemExtra,recog,evaluatePack,hybridSearch,buildKG,extractTriples,semVec,relatedWords,intentOf,PREV,view,S};
 window.__HIST.neural=neural;
 setTimeout(async()=>{try{await allPacks();const reg=regList();if(reg.some(r=>!PACKS.has(r.id)))await loadFromFolder();}catch(e){}},4000);
 
 })();
+
 </script>
 <script id="change-log-and-thumbs">
 /* =========================================================
