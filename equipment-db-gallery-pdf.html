@@ -6309,28 +6309,30 @@ async function boot(){
   const syncStateRow = metaRows.find(m=>m.key==="syncLogState");
   if(syncStateRow && syncStateRow.value) state.syncLogState = Object.assign(state.syncLogState, syncStateRow.value);
 
-  // استرجاع مرجع المجلد المرتبط من IndexedDB دون فحص الصلاحية أو قراءة المجلد
-  // أثناء الإقلاع. بعض متصفحات الهاتف قد تعلق داخل queryPermission/getFile
-  // عند استعادة FileSystemDirectoryHandle بعد إعادة فتح الصفحة.
-  // نعرض الواجهة أولاً، ثم تتم مطالبة المستخدم بتفعيل المجلد من داخل الإعدادات
-  // بضغطة فعلية (activateLinkedFolder)؛ لا نمسح ولا نستبدل أي بيانات هنا.
+  // إذا كان هناك مجلد مرتبط سابقًا، فملف project.json داخله هو المصدر الخارجي
+  // الفعلي. لا نستخدم IndexedDB بدلًا منه؛ نحمّل منه عند فتح البرنامج كلما كانت
+  // الصلاحية متاحة. إذا كانت الصلاحية تحتاج تفاعلًا من المستخدم، تظهر حالة
+  // "تفعيل" في الإعدادات بدل محاولة requestPermission خارج gesture.
   if(STORAGE_MODE!=="memory"){
     const linkedDirRow = metaRows.find(m=>m.key==="linkedDir");
     if(linkedDirRow && linkedDirRow.value){
       linkedDirHandle = linkedDirRow.value;
-      folderPermissionNeedsActivation = true;
+      try{
+        const granted = await ensureFolderPermission(linkedDirHandle,false);
+        if(granted){
+          const snap = await readFolderSnapshot(linkedDirHandle);
+          if(snap){
+            await restoreAllFromFolder(linkedDirHandle,snap);
+            applyTheme(state.settings.theme || "amber");
+          }
+        }
+      }catch(e){ console.warn("تعذر تحميل التخزين من المجلد المرتبط:",e); }
     }
   }
 
   bindGlobalEvents();
   renderSidebarTree();
   navigateTo({type:"home"});
-  if(linkedDirHandle){
-    try{ renderFolderLinkStatus(); }catch(e){}
-    setTimeout(()=>{
-      toast("تم العثور على مجلد التخزين المرتبط. افتح الإعدادات واضغط تفعيل/استعادة المجلد لمزامنة بياناته.","warn",8000);
-    },700);
-  }
   initGalleryAuditTracker();
   try{ restartActivityLogScheduler(); }catch(e){}
   try{
