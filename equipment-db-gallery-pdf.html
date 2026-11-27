@@ -6126,6 +6126,18 @@ function renderItemsSheetView(c){
   renderRows();
 }
 
+/* بديل آمن للمتصفحات التي لا تدعم اختيار مجلد محلي: مزامنة يدوية عبر ZIP.
+   المتصفح لا يسمح بتحديث ملف ZIP محفوظ على الجهاز تلقائيًا دون File System Access API. */
+async function runZipSyncFallback(action){
+  if(action==="import"){
+    const input=document.getElementById("hiddenImportInput");
+    if(input) input.click();
+    else toast("تعذر فتح اختيار ملف النسخة الاحتياطية.","err");
+    return;
+  }
+  await exportProject();
+}
+
 async function linkBackupFolder(){
   if(!FS_ACCESS_SUPPORTED){ toast("هذا المتصفح لا يدعم ربط مجلد حقيقي. استخدم Chrome/Edge بإصدار يدعم File System Access API.","err",6000); return; }
   try{
@@ -6188,9 +6200,9 @@ async function renderFolderLinkStatus(){
   const unlinkBtn=document.getElementById("unlinkFolderBtn");
   if(!box) return;
   if(!FS_ACCESS_SUPPORTED){
-    box.innerHTML="⚠️ المتصفح لا يدعم ربط مجلد حقيقي.";
-    if(linkBtn){ linkBtn.disabled=true; linkBtn.textContent="🗂 ربط مجلد"; }
-    if(pullBtn) pullBtn.disabled=true;
+    box.innerHTML="⚠️ الربط التلقائي المباشر غير متاح في هذا المتصفح. استخدم النسخ الاحتياطي ZIP: صدّر نسخة إلى مجلد المزامنة، وعند التحديث صدّر نسخة جديدة؛ ويمكنك استيراد النسخة السابقة من هنا. لا يستطيع المتصفح تحديث ملف ZIP المحفوظ تلقائيًا.";
+    if(linkBtn){ linkBtn.disabled=false; linkBtn.textContent="📦 تصدير / استيراد نسخة ZIP"; }
+    if(pullBtn){ pullBtn.disabled=false; pullBtn.textContent="⬆️ استعادة من ZIP"; }
     if(unlinkBtn) unlinkBtn.style.display="none";
     return;
   }
@@ -7596,7 +7608,7 @@ async function renderSettingsView(c){
     <div class="panel">
       <h3>🗂 مجلد التخزين الفعلي والتزامن التلقائي</h3>
       <div style="font-size:11.5px;color:var(--dim2);margin-bottom:8px">
-        اربط مجلدًا حقيقيًا على جهازك (كمبيوتر أو أندرويد عبر Chrome/Edge)، وسيقوم البرنامج بنسخ كل تعديل (بيانات وصور) إليه تلقائيًا فور حدوثه. لو تصفح البرنامج بعد كده حذف بيانات IndexedDB لأي سبب، هيسترجع تلقائيًا من هذا المجلد عند إعادة الفتح.
+        في المتصفحات الداعمة، اربط مجلدًا حقيقيًا لتُزامَن التعديلات إليه تلقائيًا. إذا لم يدعم المتصفح ربط المجلدات، سيظهر بديل ZIP لتصدير نسخة كاملة إلى مجلد تختاره واستيرادها لاحقًا؛ هذا البديل يدوي وليس مزامنة تلقائية.
       </div>
       <div id="folderLinkStatus" style="font-size:12px;margin-bottom:8px;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -7628,11 +7640,16 @@ async function renderSettingsView(c){
   });
   await renderFolderLinkStatus();
   document.getElementById("linkFolderBtn").onclick = async ()=>{
+    if(!FS_ACCESS_SUPPORTED){
+      const doExport=confirm("هذا المتصفح لا يسمح بالربط التلقائي بمجلد الجهاز.\n\nموافق: إنشاء نسخة ZIP كاملة الآن لحفظها في مجلد المزامنة الذي تختاره.\nإلغاء: اختيار ملف ZIP سابق لاستعادة/دمج البيانات.");
+      await runZipSyncFallback(doExport?"export":"import");
+      return;
+    }
     if(linkedDirHandle) await activateLinkedFolder();
     else await linkBackupFolder();
     await renderFolderLinkStatus();
   };
-  document.getElementById("pullFolderBtn").onclick = async ()=>{ await pullFolderData(); };
+  document.getElementById("pullFolderBtn").onclick = async ()=>{ if(!FS_ACCESS_SUPPORTED) await runZipSyncFallback("import"); else await pullFolderData(); };
   document.getElementById("openItemsSheetBtn").onclick = ()=> navigateTo({type:"items-sheet"});
   document.getElementById("unlinkFolderBtn").onclick = async ()=>{ await unlinkBackupFolder(); renderFolderLinkStatus(); };
   document.getElementById("exportBtn").onclick = exportProject;
@@ -7672,7 +7689,7 @@ async function exportProject(){
       const clone = JSON.parse(JSON.stringify(it));
       const folder = zip.folder("equipment/" + it.id);
       const imageNames = [];
-      for(const fid of (it.imageIds||[])){
+      for(const fid of [...new Set([...(it.imageIds||[]), it.mainImageId].filter(Boolean))]){
         const frec = fileMap.get(fid);
         if(!frec){ missingFiles.push({item:it.name||it.id, type:"صورة", id:fid}); continue; }
         const ext = guessExt(frec.mime, frec.name);
