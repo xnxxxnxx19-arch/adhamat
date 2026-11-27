@@ -19180,7 +19180,7 @@ function workerMain(){
   const post=(type,o)=>self.postMessage(Object.assign({type},o||{}));
   self.onmessage=async ev=>{
     const m=ev.data;if(m.cmd==="cancel"){cancel=true;return;}
-    try{cancel=false;if(m.cmd==="preview")await preview(m);else if(m.cmd==="train"){if(m.cfg&&m.cfg.algo==="v1")await trainRunV1(m);else await trainRunV2(m);}}
+    try{cancel=false;if(m.cmd==="preview")await preview(m);else if(m.cmd==="knowledge")await learnKnowledge(m);else if(m.cmd==="train"){if(m.cfg&&m.cfg.algo==="v1")await trainRunV1(m);else await trainRunV2(m);}}
     catch(e){post("error",{msg:String(e&&e.message||e)});}
   };
   const LK=["label","topic","category","class","تصنيف","الفئة","الموضوع","التصنيف","فئة","موضوع","labels"],TK=["text","body","content","description","desc","نص","شرح","الشرح","محتوى","وصف","المحتوى"],NK=["title","name","عنوان","الاسم","اسم"];
@@ -19199,8 +19199,75 @@ function workerMain(){
   }
   function splitCSV(line,d){const out=[];let cur="",q=false;for(let i=0;i<line.length;i++){const c=line[i];if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=c;}else if(c==='"')q=true;else if(c===d){out.push(cur);cur="";}else cur+=c;}out.push(cur);return out;}
   const qcount=s=>{let n=0;for(let i=0;i<s.length;i++)if(s.charCodeAt(i)===34)n++;return n;};
+  async function inflatePdfBytes(u8){
+    // Consume the readable side concurrently; waiting for close() before reading can deadlock on back-pressure.
+    try{
+      if(typeof DecompressionStream==="undefined")return null;
+      const ds=new DecompressionStream("deflate"),w=ds.writable.getWriter();
+      const readPromise=new Response(ds.readable).arrayBuffer();
+      await w.write(u8);await w.close();
+      const out=await readPromise;
+      if(out.byteLength>64*1024*1024)return null;
+      return new Uint8Array(out);
+    }catch(e){return null;}
+  }
+  function decodeAscii85(u8){const s=Array.from(u8,b=>String.fromCharCode(b)).join("").replace(/\s/g,"").replace(/<~/,""),out=[];let g=[];for(let i=0;i<s.length;i++){const c=s[i];if(c==="~")break;if(c==="z"&&!g.length){out.push(0,0,0,0);continue;}const n=c.charCodeAt(0)-33;if(n<0||n>84)continue;g.push(n);if(g.length===5){let v=0;for(const x of g)v=v*85+x;out.push((v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255);g=[];}}if(g.length>1){const len=g.length;while(g.length<5)g.push(84);let v=0;for(const x of g)v=v*85+x;const a=[(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255];out.push(...a.slice(0,len-1));}return new Uint8Array(out);}
+  const pdfHexBytes=h=>{h=String(h||"").replace(/\s/g,"");const a=new Uint8Array(Math.floor(h.length/2));for(let i=0;i<a.length;i++)a[i]=parseInt(h.slice(i*2,i*2+2),16)||0;return a;};
+  const pdfHexUtf16=h=>{h=String(h||"").replace(/\s/g,"");let out="";for(let i=0;i+3<h.length;i+=4)out+=String.fromCharCode(parseInt(h.slice(i,i+4),16)||0);return out;};
+  async function parsePdfPages(file,onProgress){
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    // تحويل ثنائي أسرع وأقل استهلاكًا للذاكرة من Array.from(...).join() على كل بايت.
+    const rawParts=[];for(let i=0;i<bytes.length;i+=32768){rawParts.push(String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+32768,bytes.length))));if((i&262143)===0){if(cancel)return [];if(onProgress)onProgress({phase:"bytes",loaded:Math.min(i+32768,bytes.length),total:bytes.length});await new Promise(r=>setTimeout(r,0));}}
+    const raw=rawParts.join("");
+    // لا تترك شريط التقدم عالقًا عند 17% للملفات الأصغر من 256KB.
+    if(onProgress)onProgress({phase:"objects",loaded:bytes.length,total:bytes.length,stage:"فهرسة كائنات PDF"});
+    await new Promise(r=>setTimeout(r,0));
+    const objs=new Map(),re=/(\d+)\s+\d+\s+obj\b([\s\S]*?)endobj/g;let m,objCount=0,lastObjYield=Date.now();
+    while((m=re.exec(raw))){objs.set(+m[1],m[2]);objCount++;if(objCount%250===0&&Date.now()-lastObjYield>20){if(cancel)return [];if(onProgress)onProgress({phase:"objects",objects:objCount,loaded:bytes.length,total:bytes.length,stage:"فهرسة كائنات PDF"});lastObjYield=Date.now();await new Promise(r=>setTimeout(r,0));}}
+    if(onProgress)onProgress({phase:"objects",objects:objCount,loaded:bytes.length,total:bytes.length,stage:"اكتمل فهرسة كائنات PDF"});
+    const streamOf=async body=>{const a=body.indexOf("stream");if(a<0)return null;let st=a+6;if(body[st]==="\r"&&body[st+1]==="\n")st+=2;else if(body[st]==="\n"||body[st]==="\r")st++;let en=body.indexOf("endstream",st);if(en<0)return null;let e=en;if(body[e-1]==="\n")e--;if(body[e-1]==="\r")e--;let u=new Uint8Array(e-st);for(let i=0;i<u.length;i++)u[i]=body.charCodeAt(st+i)&255;const dict=body.slice(0,a);if(/\/ASCII85Decode|\/A85/.test(dict))u=decodeAscii85(u);if(/\/FlateDecode/.test(dict)){const z=await inflatePdfBytes(u);if(z)u=z;else return null;}return u;};
+    const cmapByObj=new Map(),fontToCmap=new Map();
+    for(const [id,body] of objs){const ref=body.match(/\/ToUnicode\s+(\d+)\s+\d+\s+R/);if(ref)fontToCmap.set(id,+ref[1]);}
+    const cmapIds=new Set(fontToCmap.values());
+    for(const [id,body] of objs){if(!cmapIds.has(id))continue;const u=await streamOf(body);if(!u)continue;const t=new TextDecoder("latin1").decode(u),map=new Map();let q;
+      const bf=/beginbfchar([\s\S]*?)endbfchar/g;while((q=bf.exec(t))){const rr=/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;let z;while((z=rr.exec(q[1])))map.set(z[1].toUpperCase(),pdfHexUtf16(z[2]));}
+      const br=/beginbfrange([\s\S]*?)endbfrange/g;while((q=br.exec(t))){const rr=/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(?:<([0-9A-Fa-f]+)>|\[([\s\S]*?)\])/g;let z;while((z=rr.exec(q[1]))){let a=parseInt(z[1],16),b=parseInt(z[2],16),w=z[1].length;if(z[3]){let v=parseInt(z[3],16);for(let n=a;n<=b&&n-a<4096;n++)map.set(n.toString(16).toUpperCase().padStart(w,"0"),String.fromCharCode(v+n-a));}else if(z[4]){const vals=[...z[4].matchAll(/<([0-9A-Fa-f]+)>/g)];for(let n=a;n<=b&&n-a<vals.length;n++)map.set(n.toString(16).toUpperCase().padStart(w,"0"),pdfHexUtf16(vals[n-a][1]));}}}
+      cmapByObj.set(id,map);
+    }
+    const decodeHex=(h,map)=>{h=h.replace(/\s/g,"").toUpperCase();if(!map||!map.size){if(h.length%4===0&&/^(?:00[0-9A-F]{2})+$/i.test(h))return pdfHexUtf16(h);let z="";for(let j=0;j+1<h.length;j+=2)z+=String.fromCharCode(parseInt(h.slice(j,j+2),16)||0);return z;}const lens=[...new Set([...map.keys()].map(k=>k.length))].sort((a,b)=>b-a);let o="",i=0;while(i<h.length){let found=false;for(const n of lens){const k=h.slice(i,i+n);if(map.has(k)){o+=map.get(k);i+=n;found=true;break;}}if(!found){o+="�";i+=Math.min(4,h.length-i);}}return o;};
+    const unescapeLit=x=>x.replace(/\\([nrtbf()\\])/g,(_,c)=>({n:"\n",r:"\r",t:"\t",b:"\b",f:"\f"}[c]||c)).replace(/\\([0-7]{1,3})/g,(_,o)=>String.fromCharCode(parseInt(o,8))).replace(/\\\r?\n/g,"");
+    const extractContent=(u,fontMaps)=>{const t=new TextDecoder("latin1").decode(u),tok=/(\/[A-Za-z0-9_.+-]+)|(<[0-9A-Fa-f\s]+>)|(\((?:\\.|[^\\)])*\))|(\[|\])|([-+]?(?:\d*\.)?\d+)|([A-Za-z*'"]+)/g;let x,cur="",pending="",arr=[],inArr=false,out="",last=[];const val=v=>v[0]==="<"?decodeHex(v.slice(1,-1),fontMaps[cur]):unescapeLit(v.slice(1,-1));while((x=tok.exec(t))){const v=x[0];if(v[0]==="/"){pending=v.slice(1);continue;}if(v==="Tf"){cur=pending;pending="";last=[];continue;}if(v==="["){inArr=true;arr=[];continue;}if(v==="]"){inArr=false;last=arr.slice();continue;}if(v[0]==="<"||v[0]==="("){const z=val(v);if(inArr)arr.push(z);else last=[z];continue;}if(v==="Tj"||v==="'"||v==='"'){out+=(last.join("")||"")+" ";last=[];continue;}if(v==="TJ"){out+=last.join("")+" ";last=[];continue;}if(v==="Td"||v==="TD"||v==="T*"){out+="\n";last=[];continue;}if(v==="BT"||v==="ET"){out+="\n";last=[];}}
+      return out.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g," ").replace(/[ \t]+/g," ").replace(/\n\s*\n+/g,"\n").trim();};
+    const pages=[];
+    const pageEntries=[];for(const entry of objs){const body=entry[1];if(/\/Type\s*\/Page\b/.test(body)&&!/\/Type\s*\/Pages\b/.test(body))pageEntries.push(entry);}
+    let pageIndex=0;
+    for(const [id,body] of pageEntries){if(cancel)return [];pageIndex++;if(onProgress&&(pageIndex===1||pageIndex%3===0||pageIndex===pageEntries.length))onProgress({phase:"pages",page:pageIndex,totalPages:pageEntries.length});let resBody=body;const rr=body.match(/\/Resources\s+(\d+)\s+\d+\s+R/);if(rr&&objs.has(+rr[1]))resBody+="\n"+objs.get(+rr[1]);const fm={};let fontText="";const fr=resBody.match(/\/Font\s*<<(.*?)>>/s);if(fr)fontText=fr[1];else{const fref=resBody.match(/\/Font\s+(\d+)\s+\d+\s+R/);if(fref&&objs.has(+fref[1]))fontText=objs.get(+fref[1]);}if(fontText){const z=fontText.matchAll(/\/(\w+)\s+(\d+)\s+\d+\s+R/g);for(const a of z){const cm=fontToCmap.get(+a[2]);fm[a[1]]=cmapByObj.get(cm)||null;}}
+      let refs=[];const cr=body.match(/\/Contents\s*\[([\s\S]*?)\]/);if(cr)refs=[...cr[1].matchAll(/(\d+)\s+\d+\s+R/g)].map(a=>+a[1]);else{const one=body.match(/\/Contents\s+(\d+)\s+\d+\s+R/);if(one)refs=[+one[1]];}
+      let text="";for(const rid of refs){const ob=objs.get(rid);if(!ob)continue;const u=await streamOf(ob);if(u)text+="\n"+extractContent(u,fm);}
+      if(text.trim())pages.push({page:pages.length+1,text:text.trim()});
+    }
+    if(!pages.length){/* fallback: scan stream objects for simple uncompressed/Flate text operators */let scanned=0;for(const [id,body] of objs){if(cancel)return [];if(!/\bTj\b|\bTJ\b/.test(body))continue;const u=await streamOf(body);if(u){const t=new TextDecoder("latin1").decode(u);const vals=[...t.matchAll(/\(((?:\\.|[^\\)])*)\)\s*Tj/g)].map(a=>unescapeLit(a[1]));if(vals.join(" ").trim())pages.push({page:pages.length+1,text:vals.join(" ")});}scanned++;if(scanned%50===0){if(onProgress)onProgress({phase:"fallback",page:scanned,totalPages:objs.size,stage:"فحص تدفقات النص البديلة"});await new Promise(r=>setTimeout(r,0));}}}
+    if(onProgress)onProgress({phase:"complete",page:pageEntries.length,totalPages:pageEntries.length,loaded:bytes.length,total:bytes.length,stage:"اكتمل استخراج صفحات PDF"});
+    return pages;
+  }
+  async function learnKnowledge(m){
+    const docs=[],seen=new Set();let files=0,chars=0,empty=0;
+    for(const f of (m.src.files||[])){if(cancel)return post("cancelled");files++;const ext=f.name.toLowerCase().split(".").pop();
+      if(ext==="pdf"){
+        const pages=await parsePdfPages(f,p=>post("knowledgeProgress",{files,docs:docs.length,chars,phase:p.phase||"pdf",stage:p.stage||"",objects:p.objects||0,page:p.page||0,totalPages:p.totalPages||0,bytes:p.loaded||0,totalBytes:p.total||0}));if(!pages.length){empty++;continue;}
+        for(let pgIndex=0;pgIndex<pages.length;pgIndex++){const pg=pages[pgIndex];if(cancel)return post("cancelled");const paras=pg.text.split(/\n+/).map(x=>x.trim()).filter(Boolean);let buf="",part=0;for(let pi=0;pi<paras.length;pi++){if(cancel)return post("cancelled");const para=paras[pi];if((buf+"\n"+para).length>1100&&buf.length>120){const text=buf.trim(),key=text.toLowerCase().replace(/\s+/g," ");if(!seen.has(key)){seen.add(key);docs.push({id:"kd_"+self.__S.hashStr(f.name+"|"+pg.page+"|"+(part+1)+"|"+text).toString(36),source:f.name,category:m.category||"مستند فني",page:pg.page,part:++part,text,createdAt:Date.now()});chars+=text.length;}buf=para;}else buf+=(buf?"\n":"")+para;if((pi&63)===0){post("knowledgeProgress",{files,docs:docs.length,chars,phase:"chunk",page:pgIndex+1,totalPages:pages.length});await new Promise(r=>setTimeout(r,0));}}if(buf.trim().length>35){const text=buf.trim(),key=text.toLowerCase().replace(/\s+/g," ");if(!seen.has(key)){seen.add(key);docs.push({id:"kd_"+self.__S.hashStr(f.name+"|"+pg.page+"|"+(part+1)+"|"+text).toString(36),source:f.name,category:m.category||"مستند فني",page:pg.page,part:++part,text,createdAt:Date.now()});chars+=text.length;}}post("knowledgeProgress",{files,docs:docs.length,chars,phase:"chunk",page:pgIndex+1,totalPages:pages.length});}
+      }else{for await(const r of fileRecords(f)){const txt=String(r.text||"").trim();if(txt.length<25)continue;const chunks=[];let pos=0;while(pos<txt.length){let end=Math.min(txt.length,pos+1100);if(end<txt.length){const cut=txt.lastIndexOf(" ",end);if(cut>pos+500)end=cut;}const part=txt.slice(pos,end).trim();if(part.length>35)chunks.push(part);pos=Math.max(pos+1,end-100);}for(let i=0;i<chunks.length;i++){const text=chunks[i],key=text.toLowerCase().replace(/\s+/g," ");if(seen.has(key))continue;seen.add(key);docs.push({id:"kd_"+self.__S.hashStr(f.name+"|"+(r.page||"")+"|"+i+"|"+text).toString(36),source:f.name,category:r.label||m.category||"مستند فني",page:r.page||null,part:i+1,text,createdAt:Date.now()});chars+=text.length;}}}
+      post("knowledgeProgress",{files,docs:docs.length,chars});await new Promise(r=>setTimeout(r,0));
+    }
+    if(!docs.length)return post("error",{msg:empty?"لم أستطع استخراج نص قابل للبحث من PDF. إذا كان الملف ممسوحًا ضوئيًا كصور، فهو يحتاج OCR؛ وإذا كان نصيًا فقد يكون محميًا أو بتنسيق غير مدعوم.":"لم أجد نصوصًا كافية للتعلم من الملفات المختارة."});
+    // Replace old chunks for these sources only after the new file was parsed successfully.
+    post("knowledgeReplace",{sources:[...new Set(docs.map(x=>x.source))]});
+    for(let i=0;i<docs.length;i+=100)post("knowledgeBatch",{docs:docs.slice(i,i+100)});
+    post("knowledgeDone",{docs:docs.length,chars,files,empty});
+  }
   async function* fileRecords(file){
     const name=file.name.toLowerCase(),ext=name.split(".").pop();
+    if(ext==="pdf"){const pages=await parsePdfPages(file),base=file.name.replace(/\.pdf$/i,"");for(const pg of pages)if(pg.text&&pg.text.length>20)yield {label:base,text:pg.text,group:file.name,page:pg.page};return;}
     if(ext==="json"){
       const t=await file.text(),j=JSON.parse(t);
       if(Array.isArray(j)){for(const o of j){const r=fromObj(o);if(r)yield r;}}
@@ -19531,7 +19598,7 @@ const toast2=(m,k)=>{try{if(typeof toast==="function")toast(m,k||"ok",6000);}cat
 
 /* ---------- IndexedDB منفصلة للحزم (ما بتدخلش في النسخ القديم) ---------- */
 let _db=null;
-const adb=()=>_db||(_db=new Promise(r=>{try{const q=indexedDB.open("WorkshopEquipmentDB_AI",1);q.onupgradeneeded=()=>q.result.createObjectStore("packs",{keyPath:"id"});q.onsuccess=()=>r(q.result);q.onerror=q.onblocked=()=>r(null);}catch(e){r(null);}}));
+const adb=()=>_db||(_db=new Promise(r=>{try{const q=indexedDB.open("WorkshopEquipmentDB_AI",1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains("packs"))q.result.createObjectStore("packs",{keyPath:"id"});};q.onsuccess=()=>r(q.result);q.onerror=q.onblocked=()=>r(null);}catch(e){r(null);}}));
 const idb=async(mode,fn)=>{const d=await adb();if(!d)return null;return new Promise(r=>{try{const tx=d.transaction("packs",mode),st=tx.objectStore("packs"),rq=fn(st);tx.oncomplete=()=>r(rq&&rq.result!==undefined?rq.result:true);tx.onerror=tx.onabort=()=>r(null);}catch(e){r(null);}});};
 const PACKS=new Map(),PREV=new Map();let loaded=false;
 async function allPacks(){
@@ -19563,6 +19630,136 @@ async function deletePack(id){
 }
 
 const activePacks=()=>regList().filter(x=>x.active!==false).map(x=>PACKS.get(x.id)).filter(Boolean);
+/* ---------- ذاكرة المعرفة: تقبل مستندًا واحدًا أو عدة مستندات دون اشتراط تصنيفين ---------- */
+const KNOWLEDGE=new Map();let knowledgeLoaded=false,_kdb=null;
+/* ================= Transformers.js: multilingual semantic layer =================
+   Embedding model: multilingual MiniLM (384-dim, Arabic/English).
+   First initialization requires internet; model files are cached by the browser.
+   After cache warm-up, inference can run offline. This is retrieval, not a generative LLM.
+*/
+const TF_MODEL_ID="onnx-community/paraphrase-multilingual-MiniLM-L12-v2-ONNX";
+let tfPipeline=null,tfLoadPromise=null,tfRuntime=null,tfDevice="wasm";
+async function loadTransformersRuntime(onProgress){
+ if(tfPipeline)return {ok:true,device:tfDevice,cached:true};
+ if(tfLoadPromise)return tfLoadPromise;
+ tfLoadPromise=(async()=>{
+  if(onProgress)onProgress("تحميل مكتبة Transformers.js…");
+  const mod=await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0");
+  tfRuntime=mod;const env=mod.env||{};env.allowRemoteModels=true;env.allowLocalModels=false;env.useBrowserCache=true;
+  try{if(env.backends&&env.backends.onnx&&env.backends.onnx.wasm)env.backends.onnx.wasm.numThreads=1;}catch(e){}
+  const opts={dtype:"q8",progress_callback:x=>{if(onProgress&&x&&x.status)onProgress("تحميل النموذج: "+x.status+(x.progress!=null?" "+Math.round(x.progress)+"%":""));}};
+  if(navigator.gpu){try{tfDevice="webgpu";tfPipeline=await mod.pipeline("feature-extraction",TF_MODEL_ID,{...opts,device:"webgpu"});}catch(e){tfPipeline=null;tfDevice="wasm";}}
+  if(!tfPipeline){tfDevice="wasm";tfPipeline=await mod.pipeline("feature-extraction",TF_MODEL_ID,{...opts,device:"wasm"});}
+  return {ok:true,device:tfDevice,cached:false};
+ })().catch(e=>{tfLoadPromise=null;throw e;});
+ return tfLoadPromise;
+}
+/* ================= Arabic <-> English answer translation =================
+   Separate OPUS-MT translation models; source evidence and stored knowledge are never modified.
+   Models are downloaded once and then reused from the browser cache.
+*/
+const TRANSLATION_MODELS={ar:"onnx-community/opus-mt-en-ar",en:"onnx-community/opus-mt-ar-en"};
+const translationPipelines={ar:null,en:null},translationPromises={ar:null,en:null};
+async function loadAnswerTranslator(target,onProgress){
+ if(!TRANSLATION_MODELS[target])throw new Error("لغة ترجمة غير مدعومة");
+ if(translationPipelines[target])return translationPipelines[target];
+ if(translationPromises[target])return translationPromises[target];
+ translationPromises[target]=(async()=>{
+  if(onProgress)onProgress(target==="ar"?"تحميل نموذج الترجمة إلى العربية…":"تحميل نموذج الترجمة إلى الإنجليزية…");
+  const mod=tfRuntime||await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0");tfRuntime=mod;
+  const pipe=await mod.pipeline("translation",TRANSLATION_MODELS[target],{dtype:"q8",progress_callback:x=>{if(onProgress&&x&&x.status)onProgress("تحميل نموذج الترجمة: "+x.status+(x.progress!=null?" "+Math.round(x.progress)+"%":""));}});
+  translationPipelines[target]=pipe;return pipe;
+ })().catch(e=>{translationPromises[target]=null;throw e;});
+ return translationPromises[target];
+}
+function questionLanguage(q){return /[\u0600-\u06FF]/.test(String(q||""))?"ar":"en";}
+function splitForTranslation(text,max=420){
+ const paras=String(text||"").split(/\n{2,}/),out=[];
+ for(const para of paras){if(para.length<=max){out.push(para);continue;}const lines=para.split(/(?<=[.!?؟])\s+|\n/);let cur="";for(const line of lines){if((cur+" "+line).trim().length>max&&cur){out.push(cur);cur=line;}else cur+=(cur?" ":"")+line;}if(cur)out.push(cur);}
+ return out;
+}
+async function translateAnswerText(text,target,onProgress){
+ const pipe=await loadAnswerTranslator(target,onProgress),lines=String(text||"").split("\n"),out=[];let done=0;
+ for(const line of lines){
+  const hasAr=/[\u0600-\u06FF]/.test(line),hasEn=/[A-Za-z]{2,}/.test(line);
+  const needs=target==="ar"?hasEn:hasAr;
+  if(!line.trim()||!needs){out.push(line);continue;}
+  // Protect model identifiers, electrical values, units and common signal abbreviations.
+  const keep=[];let masked=line.replace(/\b(?:[A-Z]{1,8}\d[A-Z0-9-]*|\d+(?:\.\d+)?\s*(?:\.\.\.?|[-–])\s*\d+(?:\.\d+)?\s*(?:V|mA|A|mm|cm|Hz|kHz|MHz|DC|AC|bar|°C)|\d+(?:\.\d+)?\s*(?:V|mA|A|mm|cm|Hz|kHz|MHz|DC|AC|bar|°C)|PNP|NPN|IP\d{2,3}|M\d{1,2}\s*x\s*\d+(?:\.\d+)?|L\\s*=\\s*\\d+(?:\\.\\d+)?|V\\s*=\\s*I\\s*×\\s*R)\b/gi,m=>{const key="ZXQKEEP"+keep.length+"QXZ";keep.push([key,m]);return key;});
+  const parts=splitForTranslation(masked,380);let translated=[];
+  for(const part of parts){const r=await pipe(part,{max_new_tokens:220});const v=Array.isArray(r)?(r[0]?.translation_text||r[0]?.generated_text):r?.translation_text;if(!v)throw new Error("لم يُرجع نموذج الترجمة نصًا");translated.push(String(v).trim());done++;if(onProgress)onProgress("ترجمة الإجابة: "+done);await new Promise(resolve=>setTimeout(resolve,0));}
+  let result=translated.join(" ");for(const [key,value] of keep)result=result.split(key).join(value);out.push(result);
+ }
+ return out.join("\n");
+}
+async function translateAnswerForQuestion(question,answer,onProgress){
+ if(!answer)return answer;const target=questionLanguage(question);
+ // Translate only user-facing text; preserve source titles, file names and page references.
+ try{
+  if(answer.title)answer.title=await translateAnswerText(answer.title,target,onProgress);
+  if(answer.answer)answer.answer=await translateAnswerText(answer.answer,target,onProgress);
+  if(answer.text)answer.text=await translateAnswerText(answer.text,target,onProgress);
+  if(answer.suggest)answer.suggest=await translateAnswerText(answer.suggest,target,onProgress);
+  if(Array.isArray(answer.sections))for(const section of answer.sections){section.title=await translateAnswerText(section.title||"",target,onProgress);section.text=await translateAnswerText(section.text||"",target,onProgress);}
+  answer.translation={target,model:TRANSLATION_MODELS[target]};
+ }catch(e){answer.translationError=String(e&&e.message||e);}
+ return answer;
+}
+function extractStructuredFacts(text){
+ const lines=String(text||"").replace(/\r/g,"").split(/\n+/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean),facts=[],seen=new Set();
+ const defs=[
+  ["جهد التشغيل / Operating voltage",/(operating voltage|supply voltage|rated voltage|جهد التشغيل|جهد التغذية)/i],
+  ["التيار / Current",/(current consumption|permanent current rating|output current|current rating|التيار|استهلاك التيار)/i],
+  ["نوع الخرج / Output type",/(output function|electrical design|نوع الخرج|تصميم كهربائي)/i],
+  ["مدى الاستشعار / Sensing range",/(sensing range|operating distance|مدى الاستشعار|مسافة التشغيل)/i],
+  ["درجة الحماية / Protection",/(protection class|protection|ingress protection|فئة الحماية|درجة الحماية)/i],
+  ["درجة الحرارة / Temperature",/(ambient temperature|operating temperature|درجة الحرارة)/i],
+  ["التردد / Frequency",/(switching frequency|frequency|التردد)/i],
+  ["الأبعاد / Dimensions",/(dimensions|الأبعاد)/i],
+  ["التوصيل / Connection",/(electrical connection|connector|connection|التوصيل|طرف التوصيل)/i]
+ ];
+ for(let i=0;i<lines.length;i++)for(const [label,rx] of defs){if(!rx.test(lines[i]))continue;let value=lines[i].replace(rx,"").replace(/^\s*(?:\[[^\]]+\]|\([^)]*\))?\s*[:=–-]?\s*/,"").trim();
+  if(!value||value.length<2){const next=[];for(let j=i+1;j<Math.min(lines.length,i+4);j++){if(defs.some(d=>d[1].test(lines[j])))break;next.push(lines[j]);if(next.join(" ").length>100)break;}value=next.join(" ");}
+  if(value&&value.length<140){const key=label+"="+value;if(!seen.has(key)){seen.add(key);facts.push({label,value});}}
+ }
+ return facts;
+}
+function enrichKnowledgeDoc(doc){if(!doc.facts||!doc.facts.length)doc.facts=extractStructuredFacts(doc.text);doc.factsText=(doc.facts||[]).map(x=>x.label+": "+x.value).join("\n");return doc;}
+async function transformerEmbeddings(texts){
+ if(!tfPipeline)throw new Error("نموذج Transformers.js غير محمّل");
+ const clean=texts.map(t=>String(t||"").slice(0,1400));
+ const out=await tfPipeline(clean,{pooling:"mean",normalize:true});
+ let rows=out&&typeof out.tolist==="function"?out.tolist():out;
+ if(rows&&rows.length&&typeof rows[0]==="number")rows=[rows];
+ return rows.map(v=>Float32Array.from(v));
+}
+async function persistKnowledgeEmbeddings(docs){
+ const d=await kdb();if(!d||!docs.length)return;
+ await new Promise((resolve,reject)=>{const tx=d.transaction("docs","readwrite"),st=tx.objectStore("docs");docs.forEach(x=>st.put(x));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("فشل حفظ المتجهات"));});
+ docs.forEach(x=>KNOWLEDGE.set(x.id,x));
+}
+async function indexKnowledgeWithTransformers(onProgress){
+ await allKnowledge();const docs=[...KNOWLEDGE.values()],todo=docs.filter(x=>!x.embedding||x.embedding.length!==384);
+ if(!todo.length){if(onProgress)onProgress("كل المستندات مفهرسة دلاليًا بالفعل");return {count:0,total:docs.length};}
+ let done=0;
+ for(let i=0;i<todo.length;i+=8){const batch=todo.slice(i,i+8),vecs=await transformerEmbeddings(batch.map(x=>x.text+"\n"+(x.factsText||"")));
+  batch.forEach((x,j)=>{x.embedding=vecs[j];x.embeddingModel=TF_MODEL_ID;});await persistKnowledgeEmbeddings(batch);done+=batch.length;
+  if(onProgress)onProgress("فهرسة المعرفة دلاليًا: "+done+" / "+todo.length);await new Promise(r=>setTimeout(r,0));
+ }
+ return {count:done,total:docs.length};
+}
+async function semanticKnowledgeSearch(query,limit=12){
+ if(!tfPipeline)return [];
+ const qv=(await transformerEmbeddings([query]))[0],docs=await allKnowledge(),rank=[];
+ for(const d of docs){if(!d.embedding||d.embedding.length!==qv.length)continue;let dot=0;for(let i=0;i<qv.length;i++)dot+=qv[i]*d.embedding[i];rank.push({d,score:dot});}
+ return rank.sort((a,b)=>b.score-a.score).slice(0,limit).filter(x=>x.score>=0.28).map(x=>({kind:"knowledge",id:x.d.id,title:x.d.source,source:x.d.source,page:x.d.page,text:x.d.text+"\n"+(x.d.factsText||""),semanticScore:x.score,score:x.score}));
+}
+
+const kdb=()=>_kdb||(_kdb=new Promise(resolve=>{try{const q=indexedDB.open("WorkshopEquipmentDB_Knowledge",1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains("docs"))q.result.createObjectStore("docs",{keyPath:"id"});};q.onsuccess=()=>resolve(q.result);q.onerror=q.onblocked=()=>resolve(null);}catch(e){resolve(null);}}));
+async function allKnowledge(){if(!knowledgeLoaded){const d=await kdb();knowledgeLoaded=true;if(d){try{const rows=await new Promise(res=>{const tx=d.transaction("docs","readonly"),q=tx.objectStore("docs").getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>res([]);});rows.forEach(x=>KNOWLEDGE.set(x.id,enrichKnowledgeDoc(x)));}catch(e){}}}return [...KNOWLEDGE.values()];}
+async function saveKnowledgeDocs(docs){docs.forEach(enrichKnowledgeDoc);if(tfPipeline){for(let i=0;i<docs.length;i+=8){const b=docs.slice(i,i+8),v=await transformerEmbeddings(b.map(x=>x.text+"\n"+(x.factsText||"")));b.forEach((x,j)=>{x.embedding=v[j];x.embeddingModel=TF_MODEL_ID;});}}const d=await kdb();if(!d)throw new Error("تعذر فتح قاعدة ذاكرة المعرفة المحلية");await new Promise((resolve,reject)=>{const tx=d.transaction("docs","readwrite"),st=tx.objectStore("docs");for(const x of docs)st.put(x);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("فشل حفظ المعرفة"));});docs.forEach(x=>KNOWLEDGE.set(x.id,x));return docs.length;}
+async function deleteKnowledgeSource(source){const d=await kdb();if(!d)return 0;const rows=await allKnowledge(),ids=rows.filter(x=>x.source===source).map(x=>x.id);if(!ids.length)return 0;await new Promise(resolve=>{const tx=d.transaction("docs","readwrite"),st=tx.objectStore("docs");ids.forEach(id=>st.delete(id));tx.oncomplete=resolve;});ids.forEach(id=>KNOWLEDGE.delete(id));return ids.length;}
+
 
 /* ---------- تسلسل الملف (للمزامنة والتصدير) ---------- */
 const b64=u8=>{let s="";const CH=0x8000;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);};
@@ -19670,6 +19867,7 @@ function hybridSearch(query,opt){
   opt=opt||{};const packs=activePacks(),docs=[];
   for(const it of (state.items||[]).slice(0,6000)){const t=opt.itemText?opt.itemText(it):(it.name||"");docs.push({kind:"item",id:it.id,title:it.name||"",text:t,toks:S.words(t,400)});}
   for(const p of packs)for(const r of p.refs.slice(0,4000))docs.push({kind:"ref",label:p.meta.labels[r.l],title:p.meta.labels[r.l],text:r.t,toks:S.words(r.t,200),pack:p});
+  for(const k of KNOWLEDGE.values())docs.push({kind:"knowledge",id:k.id,label:k.category,title:k.source,text:k.text+(k.page?"\nصفحة "+k.page:""),toks:S.words(k.text,260),knowledge:k});
   if(!docs.length)return {results:[],related:[],intent:intentOf(query)};
   const ix=bmBuild(docs),qt=S.words(query,50),sc=docs.map(d=>bmScore(ix,qt,d));
   const rank=(scores)=>{const o=scores.map((s,i)=>[s,i]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,60),m=new Map();o.forEach((x,r)=>m.set(x[1],r+1));return m;};
@@ -19678,8 +19876,240 @@ function hybridSearch(query,opt){
   if(pn){const qr=classify(pn,query,1);if(qr){const D=pn.meta.D;rn=rank(docs.map(d=>{if(d._nn===undefined||d._nnp!==pn){const r=classify(pn,d.text,1);d._nn=r?r.xn:null;d._nnp=pn;}if(!d._nn)return 0;let s=0;for(let k=0;k<D;k++)s+=qr.xn[k]*d._nn[k];return s;}));}}
   const fused=docs.map((d,i)=>{const a=rb.get(i),b=rs&&rs.get(i),c=rn&&rn.get(i);return {d,i,s:(a?1/(60+a):0)+(b?1/(60+b):0)+(c?1/(60+c):0),ranks:{bm25:a||null,sem:b||null,nn:c||null}};}).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,10);
   const related=[];if(p0)for(const w of S.words(query,6)){const rw=relatedWords(p0,w,4);if(rw.length)related.push([w,rw.map(x=>x[0])]);}
-  return {results:fused.map(x=>({kind:x.d.kind,id:x.d.id,title:x.d.title,label:x.d.label,text:x.d.text.slice(0,160),ranks:x.ranks,score:x.s})),related,intent:intentOf(query),methods:{bm25:true,sem:!!rs,nn:!!rn}};
+  return {results:fused.map(x=>({kind:x.d.kind,id:x.d.id,title:x.d.title,label:x.d.label,text:x.d.text.slice(0,1800),source:x.d.knowledge?x.d.knowledge.source:null,page:x.d.knowledge?x.d.knowledge.page:null,ranks:x.ranks,score:x.s})),related,intent:intentOf(query),methods:{bm25:true,sem:!!rs,nn:!!rn}};
 }
+
+/* ---------- مساعد الأسئلة المفتوحة والتشخيص والشرح المركّب (RAG محلي قائم على المراجع) ---------- */
+const QA_STOP=new Set("ما ماذا ايه ازاي كيف هل هو هي في من على علي الى الي عن مع هذا هذه ذلك دي ده اللي التي الذي كان تكون يكون يتم تم قد ثم او ولا انا انت هو هي هم عند بعد قبل لو اذا لما عندما بسبب لماذا ليه ممكن عايز عاوز اريد اشرح اشرحلي وضح لي".split(" "));
+const QA_CAUSE=/(بسبب|نتيجه|لان|لانه|عشان|يؤدي|بيؤدي|ادي الي|يسبب|بيسبب|سبب|ينتج عن|ناتج عن|عطل|توقف|احتراق|تسريب|اهتزاز|ارتفاع|انخفاض)/;
+const QA_STEP=/(افصل|فك|ركب|قس|افحص|استبدل|شغل|اضغط|تاكد|نظف|اغلق|افتح|اضبط|عاير|ثبت|وصل|اربط|تحقق|ابدا|اطفي|راجع|قارن|خطوه|اولا|ثانيا)/;
+const QA_MECH=/(يعمل|تعمل|وظيفه|وظيفته|يقيس|يتحكم|يحول|يتكون|مكون|اشاره|ضغط|حراره|تدفق|هواء|كهرباء|تيار|جهد|حساس|صمام|محرك)/;
+function qaSentenceRows(results,query,mode){
+  const qw=[...new Set(S.words(query,60).filter(w=>w.length>1&&!QA_STOP.has(w)))];
+  const rows=[],seen=new Set();
+  for(const src of results){
+    let full=src.text||"";
+    if(src.kind==="item"){const it=(state.items||[]).find(x=>x.id===src.id);if(it)full=itemTextOf(it);}
+    const parts=String(full).split(/(?:\r?\n+|(?<=[.!؟?؛])\s+|(?<=。)\s*)/).map(x=>x.replace(/^\s*(?:[-•*]|\d+[.)-])\s*/,"").trim()).filter(x=>x.length>=22&&x.length<=420);
+    for(const t of parts){const n=S.NORM(t),key=n.slice(0,220);if(seen.has(key))continue;seen.add(key);
+      const ws=new Set(S.words(t,100));let hit=0;for(const w of qw)if(ws.has(w))hit++;
+      const cause=QA_CAUSE.test(n),step=QA_STEP.test(n),mech=QA_MECH.test(n),warn=WARN_RX.test(n);
+      let score=hit/Math.sqrt(Math.max(1,qw.length));
+      if(src.ranks&&src.ranks.sem)score+=.10;if(src.ranks&&src.ranks.nn)score+=.08;
+      if(mode==="diagnosis"&&cause)score+=.35;
+      if(mode==="diagnosis"&&SYMP_RX.test(n))score+=.15;
+      if(mode==="explain"&&mech)score+=.25;
+      if(mode==="explain"&&step)score+=.12;
+      if(warn)score+=.05;
+      rows.push({text:t,source:src,score,hit,cause,step,mech,warn});
+    }
+  }
+  return rows.sort((a,b)=>b.score-a.score||b.hit-a.hit);
+}
+function composeTechnicalAnswer(question,mode){
+  const r=hybridSearch(question,{itemText:itemTextOf});
+  if(!r.results.length)return {ok:false,message:"لم أجد مراجع مرتبطة بالسؤال في قاعدة بياناتك. أضف شرحًا أو مستندًا عن الموضوع، أو درّب حزمة معرفية مناسبة ثم أعد السؤال.",results:[],methods:r.methods||{}};
+  const rows=qaSentenceRows(r.results,question,mode),relevant=rows.filter(x=>x.hit>0||x.score>=.18);
+  if(!relevant.length)return {ok:false,message:"وجدت عناصر قريبة بالمعنى، لكن لا توجد جمل كافية تسند إجابة موثوقة. جرّب إضافة اسم الجهاز أو الموديل أو وصفًا أدق للأعراض.",results:r.results,methods:r.methods||{}};
+  const take=(arr,n)=>{const out=[],seen=new Set();for(const x of arr){const k=S.NORM(x.text);if(seen.has(k))continue;seen.add(k);out.push(x);if(out.length>=n)break;}return out;};
+  const general=take(relevant,5),causes=take(relevant.filter(x=>x.cause),5),steps=take(relevant.filter(x=>x.step),5),mechanism=take(relevant.filter(x=>x.mech),5),warnings=take(relevant.filter(x=>x.warn),3);
+  const sources=[];for(const x of general.concat(causes,steps,mechanism,warnings)){const s=x.source,k=s.kind+":"+(s.id||s.label);if(!sources.some(z=>z.key===k))sources.push({key:k,source:s});}
+  let sections=[];
+  if(mode==="diagnosis"){
+    if(causes.length)sections.push({title:"الأسباب المحتملة التي تدعمها مراجعك",rows:causes});
+    else sections.push({title:"ما وجدته في المراجع",rows:general.slice(0,4)});
+    if(general.length)sections.push({title:"الأدلة المرتبطة بالأعراض",rows:general.slice(0,4)});
+    if(steps.length)sections.push({title:"خطوات الفحص المذكورة في المراجع",rows:steps});
+    if(warnings.length)sections.push({title:"تحذيرات",rows:warnings});
+  }else if(mode==="explain"){
+    if(mechanism.length)sections.push({title:"الفكرة وطريقة العمل",rows:mechanism});
+    sections.push({title:"تفاصيل فنية مرتبطة بالموضوع",rows:general});
+    if(steps.length)sections.push({title:"خطوات أو إجراءات واردة في المراجع",rows:steps});
+    if(causes.length)sections.push({title:"الأعطال والأسباب المذكورة",rows:causes});
+    if(warnings.length)sections.push({title:"تنبيهات",rows:warnings});
+  }else{
+    sections.push({title:"الإجابة المستندة إلى قاعدة المعرفة",rows:general});
+    if(causes.length)sections.push({title:"علاقات سببية مرتبطة",rows:causes});
+    if(steps.length)sections.push({title:"إجراءات مرتبطة",rows:steps});
+  }
+  sections=sections.filter(x=>x.rows&&x.rows.length);
+  const maxHit=Math.max(0,...relevant.map(x=>x.hit));
+  return {ok:true,mode,question,intent:r.intent,methods:r.methods,sections,sources,maxHit,related:r.related||[],caveat:mode==="diagnosis"&&!causes.length?"لم أجد في المراجع جملة سببية صريحة؛ لذلك لا أستطيع الجزم بسبب العطل. النتائج التالية قرائن للبحث وليست تشخيصًا نهائيًا.":"الإجابة مركبة من نصوص قاعدة بياناتك؛ لا تعتبرها معلومة مؤكدة إذا لم يظهر لها مرجع واضح.",results:r.results};
+}
+function qaSection(close){
+  const ta=el("textarea",{style:"width:100%;min-height:92px;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);resize:vertical"});
+  ta.placeholder="اكتب سؤالًا مفتوحًا: لماذا يفصل البوزيشنر؟ كيف يعمل الريليه الهوائي؟ اشرح طريقة فحص حساس الضغط...";
+  const mode=el("select",{style:"width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)"},el("option",{attrs:{value:"open"}},"سؤال مفتوح وإجابة"),el("option",{attrs:{value:"diagnosis"}},"تحليل عطل وأسبابه"),el("option",{attrs:{value:"explain"}},"إنشاء شرح فني مركّب"));
+  const out=el("div"),run=()=>{
+    out.textContent="";const q=ta.value.trim();if(q.length<8){out.appendChild(hint("اكتب سؤالًا أو وصفًا أطول قليلًا."));return;}
+    const a=composeTechnicalAnswer(q,mode.value);
+    if(!a.ok){out.appendChild(hint(a.message));return;}
+    out.appendChild(el("div",{cls:"nn-row"},el("b",null,"النتيجة مبنية على مراجعك"),el("div",{cls:"hx-sm"},"نوع الطلب: "+a.intent+" · طرق الاسترجاع: BM25"+(a.methods&&a.methods.sem?" + دلالي":"")+(a.methods&&a.methods.nn?" + شبكة عصبية":""))));
+    out.appendChild(hint(a.caveat));
+    a.sections.forEach(sec=>{out.appendChild(el("h4",null,sec.title));sec.rows.forEach(x=>{const row=el("div",{cls:"nn-row"});row.appendChild(el("div",null,x.text));row.appendChild(el("div",{cls:"hx-sm"},"المصدر: "+(x.source.kind==="item"?x.source.title:"مرجع تدريبي — "+(x.source.label||"غير مصنف"))));out.appendChild(row);});});
+    if(a.sources.length){out.appendChild(el("h4",null,"المراجع التي بُنيت عليها الإجابة"));a.sources.slice(0,8).forEach(({source})=>{const row=el("div",{cls:"nn-row"});const title=source.kind==="item"?source.title:("مرجع تدريبي: "+(source.label||"غير مصنف"));row.appendChild(el("b",null,title));if(source.kind==="item")row.appendChild(btn("فتح العنصر",()=>{close();window.__HIST.go(source.id,"");}));out.appendChild(row);});}
+    if(a.related&&a.related.length)out.appendChild(hint("مفاهيم مرتبطة: "+a.related.map(([w,z])=>w+" ← "+z.join("، ")).join(" · ")));
+  };
+  ta.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter")run();});
+  return det("🧠 المساعد الفني — سؤال مفتوح / تشخيص / شرح",true,hint("يبحث في عناصر قاعدة البيانات والحزم المدرّبة، ثم يركّب إجابة منظمة من المقاطع ذات الصلة. يعمل محليًا ولا يخترع حقائق غير موجودة في المراجع."),mode,ta,btn("حلّل وأجب",run,"primary"),out);
+}
+/* =========================================================
+   💬 المساعد الفني المحلي v2 — استدلال متخصص + قاعدة معرفة مدمجة + RAG من بيانات المستخدم
+   ملاحظة صريحة: هذا محرك خبير محلي حتمي، وليس LLM توليديًا عامًا.
+   ========================================================= */
+const LOCAL_KB=[
+ {id:'loop420',title:'إشارة التيار 4–20 mA',tags:'4 20 ma ملي امبير تيار لوب حلقة تحكم transmitter مرسل analog',text:'إشارة 4–20 mA هي حلقة تيار تناظرية صناعية. 4 mA تمثل صفر المدى الحي (Live Zero)، و20 mA تمثل نهاية المدى. يمكن كشف قطع السلك غالبًا عندما يهبط التيار قرب الصفر، كما أن التيار أقل تأثرًا بمقاومة الأسلاك من إشارة الجهد. لتحويل التيار إلى قيمة هندسية: القيمة = LRV + (I-4)/16 × (URV-LRV).',
+ answer:'إشارة 4–20 mA هي إشارة تيار تناظرية مستخدمة في القياس والتحكم الصناعي.\n\n- 4 mA = بداية المدى LRV.\n- 20 mA = نهاية المدى URV.\n- 12 mA = 50% من المدى.\n- وجود 4 mA بدل 0 mA يسمى Live Zero ويساعد على تمييز الصفر الحقيقي عن انقطاع الحلقة.',
+ extra:'معادلة التحويل: PV = LRV + ((I − 4) / 16) × (URV − LRV). افحص مقاومة الحمل، قطبية التغذية، التوصيلات، ومصدر 24VDC عند وجود قراءة غير طبيعية.'},
+ {id:'positioner',title:'وظيفة البوزيشنر Positioner',tags:'positioner بوزيشنر صمام كنترول control valve valve actuator feedback 4-20',text:'البوزيشنر يقارن إشارة الطلب Setpoint بموضع ساق الصمام الفعلي Feedback، ثم يتحكم في ضغط الهواء إلى المشغل حتى يقلل الخطأ بين الموضع المطلوب والموضع الفعلي. قد يكون أحادي أو مزدوج الفعل.',answer:'البوزيشنر جهاز تحكم في موضع صمام التحكم. يستقبل عادة إشارة طلب مثل 4–20 mA، ويقيس الموضع الفعلي من وصلة التغذية الراجعة، ثم يعدّل ضغط الهواء للمشغل حتى يصل الصمام إلى الموضع المطلوب.',extra:'المسار الوظيفي: إشارة الطلب → مقارنة مع Feedback → مضخم/مرحلة تحكم → Pilot/Relay → هواء إلى Actuator → حركة الصمام → Feedback جديد.'},
+ {id:'pilotrelay',title:'الريليه الهوائي Pilot Relay',tags:'pilot relay relay valve ريليه هوائي تضخيم هواء positioner بوزيشنر',text:'الريليه الهوائي في البوزيشنر يعمل كمضخم قدرة هوائي. إشارة التحكم الصغيرة تحرك عنصرًا طيارًا أو Pilot، فيتحكم في تدفق هواء التغذية الأكبر إلى المشغل أو في تفريغه. بذلك لا يحتاج عنصر القياس الصغير إلى تمرير كامل هواء المشغل.',answer:'الـ Pilot Relay هو مضخم هوائي: إشارة التحكم الصغيرة لا تحرك المشغل مباشرة، بل تتحكم في صمام ريليه يسمح بمرور كمية هواء أكبر من مصدر التغذية إلى المشغل، أو يفرغ الهواء منه.\n\nالفكرة تشبه ترانزستور يتحكم بتيار صغير في تيار أكبر، لكن هنا يتم تضخيم تدفق/قدرة الهواء.',extra:'في المشغل مزدوج الفعل توجد عادة حجرتا هواء؛ يرفع الريليه ضغط جهة ويخفض/يفرغ الجهة المقابلة وفق اتجاه الحركة. التفاصيل الدقيقة تعتمد على تصميم البوزيشنر.'},
+ {id:'hunting',title:'أسباب Hunting في صمام التحكم',tags:'hunting هنتنج تذبذب اهتزاز oscillation positioner صمام gain sensitivity pilot actuator',text:'قد يحدث Hunting أو تذبذب مستمر في موضع صمام التحكم بسبب زيادة الكسب Proportional Gain أو الحساسية، أو احتكاك/تعليق ميكانيكي ثم انطلاق مفاجئ، أو خلوص وصلة Feedback، أو ضغط هواء غير مستقر، أو عدم ملاءمة حجم/سرعة المشغل، أو ضبط غير مناسب للـ Pilot Relay. يجب تغيير عامل واحد في كل مرة ومراقبة الاستجابة.',answer:'الـ Hunting هو تذبذب متكرر حول الموضع المطلوب بدل استقرار الصمام. لا يوجد سبب واحد مؤكد دون قياسات، لكن أهم الاحتمالات:\n\n1. Proportional Gain مرتفع أكثر من اللازم؛ فيبالغ المتحكم في التصحيح.\n2. Sensitivity عالية أو Pilot Relay شديد الاستجابة.\n3. احتكاك أو Stiction في ساق الصمام/المشغل.\n4. خلوص أو ارتخاء في وصلة Feedback.\n5. ضغط هواء غير ثابت أو تسريب.\n6. ضبط غير مناسب لحجم المشغل أو سرعة الصمام.',extra:'ابدأ بتسجيل Trend للـ Setpoint والـ Position والضغط. افحص ميكانيكا الصمام والتغذية الهوائية أولًا، ثم غيّر Gain أو Sensitivity تدريجيًا وفق دليل الشركة. لا تضبط أكثر من متغير في الوقت نفسه.'},
+ {id:'deadband',title:'Deadband في أجهزة التحكم',tags:'deadband dead band ديدباند نطاق ميت صمام positioner',text:'Deadband هي مقدار التغير في إشارة الدخل الذي لا ينتج عنه تغير ملحوظ في الخرج أو الموضع. قد تنتج من الاحتكاك والخلوص والهيسترة أو تصميم الجهاز. زيادة Deadband تقلل الاستجابة للتغيرات الصغيرة لكنها قد تسبب ضعف الدقة.',answer:'الـ Deadband أو النطاق الميت هو منطقة صغيرة تتغير فيها إشارة الطلب لكن الخرج/موضع الصمام لا يتحرك بصورة ملحوظة. من أسبابه الاحتكاك، الخلوص الميكانيكي، والهيسترة. لا تخلط بينه وبين Gain: الـ Gain يحدد مقدار الاستجابة، أما Deadband فيصف منطقة عدم الاستجابة.'},
+ {id:'gain',title:'Proportional Gain',tags:'prop gain proportional gain كسب تناسبي positioner tuning ضبط',text:'Proportional Gain يحدد مقدار تصحيح الخرج مقابل خطأ الموضع. زيادة Gain تجعل الاستجابة أقوى وأسرع عادة، لكن الزيادة المفرطة قد تسبب تجاوزًا وتذبذبًا Hunting. خفضه قد يزيد البطء والخطأ المتبقي.',answer:'الـ Proportional Gain يحدد مدى قوة رد فعل البوزيشنر على فرق الموضع بين المطلوب والفعلي.\n- Gain أعلى: تصحيح أقوى وأسرع غالبًا، لكن قد يسبب Overshoot أو Hunting إذا زاد.\n- Gain أقل: حركة أهدأ، لكن قد تصبح بطيئة أو لا تتبع الطلب جيدًا.'},
+ {id:'sensitivity',title:'Sensitivity في البوزيشنر',tags:'sensitivity حساسية positioner pilot valve adjustment screw ضبط',text:'Sensitivity تصف مدى استجابة البوزيشنر للتغيرات الصغيرة في إشارة الخطأ. الحساسية العالية تجعل الاستجابة للتغير الصغير أكبر، وقد تزيد قابلية الاهتزاز. الضبط يكون وفق تعليمات الشركة وبخطوات صغيرة مع مراقبة الاستقرار.',answer:'Sensitivity تعني مدى تأثر البوزيشنر بالتغيرات الصغيرة في الخطأ. الحساسية الزائدة قد تجعل الصمام يتحرك باستمرار مع تغييرات صغيرة أو ضوضاء الإشارة. خفضها قد يهدئ الحركة لكنه قد يقلل دقة الاستجابة.'},
+ {id:'actuator',title:'المشغل الهوائي Actuator',tags:'actuator اكتويتور مشغل هوائي diaphragm piston spring double acting single acting',text:'المشغل الهوائي يحول طاقة ضغط الهواء إلى حركة ميكانيكية خطية أو دورانية. قد يكون Single Acting بزنبرك يعيد المشغل عند فقد الهواء، أو Double Acting يستخدم الهواء في الاتجاهين. القوة تعتمد على الضغط ومساحة المكبس/الغشاء.',answer:'المشغل الهوائي يحول ضغط الهواء إلى حركة للصمام.\n- Single Acting: الهواء يحركه في اتجاه، والزنبرك يعيده في الاتجاه الآخر.\n- Double Acting: الهواء يتحكم في الاتجاهين، ويحتاج عادة منفذي ضغط/تفريغ.\nالقوة التقريبية = الضغط × المساحة الفعالة.'},
+ {id:'ohm',title:'قانون أوم',tags:'ohm law قانون اوم مقاومة جهد تيار voltage current resistance v i r',text:'قانون أوم V = I × R. الجهد بالفولت، التيار بالأمبير، والمقاومة بالأوم. ومنه I=V/R و R=V/I.',answer:'قانون أوم يربط الجهد والتيار والمقاومة:\n\n- V = I × R\n- I = V ÷ R\n- R = V ÷ I\n\nحيث V بالفولت، I بالأمبير، وR بالأوم.'},
+ {id:'series',title:'المقاومات على التوالي',tags:'مقاومات توالي series resistors total resistance',text:'في التوصيل على التوالي يمر نفس التيار في جميع المقاومات، والمقاومة المكافئة تساوي مجموع المقاومات: Req=R1+R2+... والجهد الكلي يتوزع بينها.',answer:'في التوالي: المقاومة المكافئة = مجموع المقاومات.\n\nReq = R1 + R2 + R3 ...\n\nالتيار واحد في كل المقاومات، والجهد يتوزع حسب قيمة كل مقاومة.'},
+ {id:'parallel',title:'المقاومات على التوازي',tags:'مقاومات توازي parallel resistors equivalent resistance',text:'في التوازي يكون الجهد متساويًا على كل الفروع، والتيار يتوزع. 1/Req=1/R1+1/R2+... ولمقاومتين Req=R1×R2/(R1+R2).',answer:'في التوازي: الجهد متساوٍ على كل فرع، والتيار يتوزع.\n\nلمقاومتين: Req = (R1 × R2) ÷ (R1 + R2).\n\nالمقاومة المكافئة دائمًا أقل من أصغر مقاومة في الفروع الموجبة.'},
+ {id:'divider',title:'مقسم الجهد',tags:'voltage divider مقسم الجهد مقاومات توالي output',text:'مقسم الجهد بمقاومتين على التوالي: إذا كان الخرج على R2 فإن Vout=Vin×R2/(R1+R2)، بشرط أن يكون تأثير الحمل مهملاً أو محسوبًا.',answer:'مقسم الجهد ينتج جهدًا أقل من جهد المصدر باستخدام مقاومتين على التوالي. إذا أخذت الخرج على R2: Vout = Vin × R2 / (R1 + R2). هذه العلاقة تفترض أن الحمل لا يسحب تيارًا مؤثرًا.'},
+ {id:'adc',title:'ADC محول تناظري رقمي',tags:'adc analog digital converter محول تناظري رقمي resolution reference voltage',text:'ADC يحول جهدًا تناظريًا إلى قيمة رقمية. في محول N-bit عدد المستويات 2^N، والخطوة التقريبية LSB=Vref/(2^N) أو Vref/(2^N-1) حسب تعريف التحويل. الدقة تعتمد على المرجع والضوضاء والتكميم.',answer:'الـ ADC يحول الجهد التناظري إلى رقم يستطيع المتحكم قراءته. محول 10-bit يعطي 1024 مستوى (0 إلى 1023)، ومحول 12-bit يعطي 4096 مستوى. قيمة القراءة تعتمد على جهد الدخل ومرجع Vref.'},
+ {id:'uart',title:'UART اتصال تسلسلي',tags:'uart serial tx rx baud rate start stop bit communication',text:'UART واجهة اتصال تسلسلي غير متزامنة. لا تحتاج خط Clock مشتركًا؛ يتفق الطرفان على Baud Rate وإعدادات الإطار. الإطار غالبًا Start bit ثم Data bits ثم اختيارية Parity ثم Stop bit.',answer:'UART اتصال تسلسلي غير متزامن بين جهازين. أهم الخطوط TX وRX وGND. يتفق الطرفان على Baud Rate وعدد بتات البيانات والـ Parity وStop bits. يبدأ الإطار عادة بـ Start bit ثم البيانات ثم Stop bit.'},
+ {id:'pwm',title:'PWM تعديل عرض النبضة',tags:'pwm pulse width modulation duty cycle frequency',text:'PWM يتحكم في القدرة المتوسطة بتغيير نسبة زمن التشغيل Duty Cycle داخل كل دورة. Duty=Ton/Tperiod×100%. التردد يحدد عدد الدورات في الثانية، والـ Duty يحدد متوسط الخرج في كثير من التطبيقات.',answer:'PWM هو تعديل عرض النبضة. يظل الخرج يتنقل بين ON وOFF بسرعة، ويتم التحكم في المتوسط بتغيير Duty Cycle:\n\nDuty = Ton ÷ Tperiod × 100%.\n\nمثلاً Duty=25% يعني أن الإشارة ON لمدة ربع الدورة.'},
+ {id:'pid',title:'PID Controller',tags:'pid proportional integral derivative controller control loop',text:'PID يجمع ثلاثة أجزاء: P يستجيب للخطأ الحالي، I يراكم الخطأ مع الزمن لإزالة الخطأ المستمر، D يستجيب لمعدل تغير الخطأ ويساعد على توقع التغير لكنه حساس للضوضاء. الضبط يعتمد على العملية.',answer:'متحكم PID يتكون من:\n- P: تصحيح يتناسب مع الخطأ الحالي.\n- I: يجمع الخطأ عبر الزمن لتقليل Offset.\n- D: يستجيب لسرعة تغير الخطأ وقد يقلل التجاوز، لكنه حساس للضوضاء.\nيجب ضبطه حسب ديناميكية العملية وليس بقيم ثابتة لكل الأنظمة.'},
+ {id:'opamp',title:'المضخم العملياتي Op-Amp',tags:'op amp operational amplifier مضخم عملياتي gain inverting noninverting',text:'المضخم العملياتي له مدخلان موجب وغير عاكس (+) وسالب عاكس (-)، وخرج. في التغذية الراجعة السالبة المثالية يكون فرق الجهد بين المدخلين قريبًا من الصفر، وتيار الدخول قريبًا من الصفر ضمن شروط التشغيل الخطية.',answer:'الـ Op-Amp مضخم تفاضلي عالي الكسب، له مدخل (+) غير عاكس ومدخل (−) عاكس وخرج. باستخدام Feedback يمكن بناء مضخمات، مقارنات، مرشحات، ومكيفات إشارات. لا تفترض أنه مثالي خارج حدود جهد التغذية ومجال الـ Common Mode.'},
+ {id:'transistor',title:'الترانزستور BJT',tags:'bjt transistor ترانزستور base collector emitter switch amplifier',text:'ترانزستور BJT له Base وCollector وEmitter. يمكن استخدامه كمفتاح أو مضخم. في تشغيل NPN كمفتاح منخفض الجانب يمر التيار من الحمل إلى المجمع ثم الباعث إلى الأرضي عند تحفيز القاعدة بتيار مناسب.',answer:'ترانزستور BJT عنصر يتحكم فيه تيار القاعدة في تيار المجمع. أطرافه Base وCollector وEmitter. يمكن استخدامه كمفتاح أو مضخم. في تطبيق المفتاح يجب حساب مقاومة القاعدة والتحقق من تيار الحمل وقدرة الترانزستور.'},
+ {id:'startup',title:'Reset Handler ونسخ .data',tags:'startup reset handler data ram flash linker compiler c language',text:'في الأنظمة المضمنة، الـ Linker يحدد عناوين المتغيرات ومناطق الذاكرة ويضع قيم التهيئة في صورة البرنامج. كود الإقلاع Startup/Reset_Handler ينفذ نسخ قسم .data من صورة التهيئة في Flash إلى RAM، ويصفّر .bss، ثم يستدعي تهيئة المكتبة وmain وفق المنصة.',answer:'الذي ينسخ متغيرات .data من صورة التهيئة في Flash إلى RAM هو كود الإقلاع Startup Code داخل Reset_Handler عادةً.\n\n- Compiler: يولد الكود والبيانات.\n- Linker: يحدد العناوين ويجهز صورة التهيئة.\n- Reset_Handler: ينفذ النسخ إلى RAM ويصفّر .bss ثم يصل إلى main().'},
+ {id:'plc',title:'PLC دورة المسح Scan Cycle',tags:'plc programmable logic controller scan cycle input output program',text:'PLC ينفذ دورة مسح متكررة: قراءة المدخلات إلى صورة المدخلات، تنفيذ البرنامج، تحديث صورة المخارج إلى وحدات الخرج، ثم مهام الاتصال والتشخيص بحسب نوع المتحكم.',answer:'دورة المسح في PLC غالبًا تمر بالمراحل التالية:\n1. قراءة حالات المدخلات وتخزينها في Input Image.\n2. تنفيذ البرنامج على القيم المقروءة.\n3. تحديث المخارج Output Image.\n4. تنفيذ خدمات الاتصال والتشخيص والمهام الخلفية حسب الجهاز.'},
+ {id:'sensor4wire',title:'توصيل حساس 4 أسلاك',tags:'sensor transmitter four wire 4 wire 24v power supply output current',text:'الحساس أو المرسل رباعي الأسلاك غالبًا يستخدم سلكين لتغذية الجهاز وسلكين منفصلين لإشارة الخرج، لكن التوصيل الدقيق يعتمد على مخطط الشركة ونوع الخرج. لا تفترض أن كل 4-wire device له نفس ترتيب الأطراف.',answer:'في كثير من أجهزة 4-wire يوجد زوج لتغذية الجهاز (مثل 24VDC و0V) وزوج مستقل لخرج القياس. لكن لا يمكن تحديد أرقام الأطراف من عدد الأسلاك فقط؛ يجب الرجوع إلى Wiring Diagram ورقم الموديل.'},
+ {id:'calibration',title:'معايرة أجهزة القياس',tags:'calibration معايرة transmitter sensor zero span lrv urv',text:'المعايرة تقارن قراءة الجهاز بمعيار مرجعي معروف عبر نقاط متعددة ضمن المدى، وتحدد الخطأ والتكرارية. Zero يخص نقطة البداية وSpan يخص امتداد المدى. يجب توثيق As Found وAs Left وعدم ضبط الجهاز قبل تسجيل حالته الأصلية.',answer:'المعايرة هي مقارنة قراءة الجهاز بمعيار مرجعي معروف عند نقاط من مدى القياس، ثم تقييم الخطأ.\n- As Found: حالة الجهاز قبل الضبط.\n- As Left: حالته بعد الضبط.\n- Zero: نقطة البداية.\n- Span: عرض المدى.\nلا تبدأ بالضبط قبل تسجيل نتائج As Found.'},
+ {id:'safety',title:'السلامة قبل فحص دائرة صناعية',tags:'safety lockout tagout loto electrical pneumatic isolation pressure',text:'قبل صيانة دائرة كهربائية أو هوائية يجب تطبيق إجراءات العزل المناسبة: فصل مصادر الطاقة، Lockout/Tagout حسب نظام الموقع، تفريغ الضغط والطاقة المخزنة، التحقق من انعدام الطاقة بأداة مناسبة، واتباع تصريح العمل وإجراءات المصنع.',answer:'قبل الفحص أو الصيانة: اعزل مصادر الطاقة وفق إجراءات الموقع، طبّق Lockout/Tagout، فرّغ الضغط والطاقة المخزنة، وتحقق من حالة انعدام الطاقة بأداة مناسبة. لا تعتمد على إيقاف التشغيل من الشاشة فقط.'}
+];
+const LOCAL_SYNONYMS={"صمام":"valve","بوزيشنر":"positioner","بوزشنر":"positioner","بوستشنر":"positioner","اكتويتور":"actuator","اكتيويتر":"actuator","ريليه":"relay","ريلاي":"relay","هوائي":"pneumatic air","هوا":"air","اهتزاز":"hunting oscillation","تذبذب":"hunting oscillation","ذبذبه":"hunting oscillation","حساسيه":"sensitivity","كسب":"gain","مقاومه":"resistance resistor","جهد":"voltage","فولت":"voltage","تيار":"current","امبير":"ampere","حساس":"sensor transmitter","مرسل":"transmitter","معايره":"calibration"};
+function localNorm(t){let n=S.NORM(String(t||''));n=n.replace(/[٠-٩]/g,c=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));return n;}
+function localExpand(q){const ws=S.words(localNorm(q),100),out=ws.slice();for(const raw of ws){const w=raw.replace(/^(وال|بال|كال|لل|ال)/,'');const v=LOCAL_SYNONYMS[w];if(v)out.push(...v.split(' '));}return [...new Set(out)].join(' ');}
+function localTokens(t){return S.words(localNorm(t),300).map(w=>w.replace(/^(وال|بال|كال|لل|ال)/,'')).filter(w=>w.length>1&&!QA_STOP.has(w));}
+function localScore(q,d){const qw=new Set(localTokens(q)),dw=new Set(localTokens((d.title||'')+' '+(d.tags||'')+' '+(d.text||'')));let h=0;for(const w of qw)if(dw.has(w))h++;const title=localTokens(d.title||'');let th=0;for(const w of qw)if(title.includes(w))th++;return {score:(h/Math.sqrt(Math.max(1,qw.size)))+th*.16,hit:h,total:qw.size};}
+function localFind(q){const ex=localExpand(q),built=LOCAL_KB.map(d=>({d,sc:localScore(ex,d)})).sort((a,b)=>b.sc.score-a.sc.score);let user=[];try{const r=hybridSearch(ex,{itemText:itemTextOf});user=r.results||[];}catch(e){}return {built,user,expanded:ex};}
+function localOhm(q){
+ const n=localNorm(q),num='([0-9]+(?:\\.[0-9]+)?)\\s*';
+ const get=(rx)=>{const m=n.match(rx);return m?Number(m[1]):null;};
+ let V=get(new RegExp(num+'(?:v|volt|فولت)(?=$|\\s|[^a-z0-9])')),I=get(new RegExp(num+'(?:ma|ملي ?امبير)(?=$|\\s|[^a-z0-9])')),A=get(new RegExp(num+'(?:a|amp|امبير)(?=$|\\s|[^a-z0-9])')),R=get(new RegExp(num+'(?:k ?ohm|kohm|كيلو ?اوم|kΩ)(?=$|\\s|[^a-z0-9])'));
+ if(I==null&&A!=null)I=A*1000;
+ const hasOhm=/(اوم|ohm|مقاومه|تيار|جهد|فولت|امبير|احسب)/.test(n);
+ if(!hasOhm||[V,I,R].filter(x=>x!=null).length<2)return null;
+ if(R!=null&&/k ?ohm|kohm|كيلو ?اوم|kω/.test(n))R*=1000;
+ if(V!=null&&I!=null){const a=I/1000;return {title:'حساب بقانون أوم',text:`R = V ÷ I = ${V} ÷ ${a} = ${(V/a).toFixed(4)} Ω`,detail:'تم تحويل التيار من mA إلى A قبل الحساب.'};}
+ if(V!=null&&R!=null)return {title:'حساب بقانون أوم',text:`I = V ÷ R = ${V} ÷ ${R} = ${(V/R*1000).toFixed(4)} mA`,detail:'النتيجة بالملي أمبير.'};
+ if(I!=null&&R!=null){const a=I/1000;return {title:'حساب بقانون أوم',text:`V = I × R = ${a} × ${R} = ${(a*R).toFixed(4)} V`,detail:'تم تحويل التيار من mA إلى A قبل الحساب.'};}
+ return null;
+}
+function localQuestionIntent(q){
+ const n=localNorm(q);
+ if(/(معماري|architecture|نوع المعالج|cpu|core|نواه|النواه|بنية المعالج)/.test(n))return 'architecture';
+ if(/(جهد|فولت|voltage|تغذيه|power supply|جهد التشغيل)/.test(n))return 'voltage';
+ if(/(تيار|استهلاك|current|سحب)/.test(n))return 'current';
+ if(/(ذاكره|ram|flash|sram|rom)/.test(n))return 'memory';
+ if(/(pinout|ارجل|اطراف|gpio|مداخل|مخارج)/.test(n))return 'pins';
+ if(/(كيف يعمل|طريقه العمل|الية العمل|ميكانيزم|اشرح|وظيفه)/.test(n))return 'explain';
+ if(/(عطل|مش شغال|لا يعمل|مش بيشتغل|يفصل|توقف|تذبذب|هنتنج|hunting|سخن|احتراق|تسريب|ضعف|قراءة غلط)/.test(n))return 'diagnosis';
+ return 'general';
+}
+function localEntityTerms(q){return [...new Set((localNorm(q).match(/[a-z]{2,}\d+[a-z0-9]*|\d+[a-z]{2,}[a-z0-9]*/g)||[]))];}
+function localSentenceEvidence(text,q,intent){
+ // PDF datasheets often store table labels and values in separate text objects/lines.
+ // Build adjacent label:value facts before ranking; do not discard short model/title lines.
+ const qset=new Set(localTokens(q)),raw=String(text||'').replace(/\r/g,'').split(/\n+/).map(x=>x.replace(/^\s*(?:[-•*]\s*|\d{1,2}[.)-]\s+)/,'').trim()).filter(Boolean);
+ const rx={architecture:/(xtensa|risc.?v|معماري|architecture|processor|cpu|نواه|core)/i,voltage:/(جهد التشغيل|جهد التغذية|operating voltage|supply voltage|rated voltage|(^|[\s:])voltage\s*:)/i,current:/(تيار|استهلاك|current|ma|ampere|power consumption|rating)/i,memory:/(ذاكره|ram|flash|sram|rom|memory)/i,pins:/(gpio|pin|ارجل|اطراف|adc|uart|spi|i2c|connection)/i,general:/(inductive|sensor|electrical design|output function|sensing range|operating voltage|current consumption|protection|housing|dimensions)/i,diagnosis:/(سبب|بسبب|عطل|توقف|تذبذب|افحص|تحقق|قياس|تسريب|احتراق)/i,explain:/(sensor|حساس|inductive|inductive full.?metal|وظيفه|function|operating principle)/i};
+ const candidates=[];let ix=0;const add=t=>{t=String(t||'').replace(/\s+/g,' ').trim();if(t.length>=2&&t.length<=1200)candidates.push({t,i:ix++});};
+ raw.forEach((line,i)=>{
+   if(!/^[a-z]{2,}\d+[a-z0-9]*$/i.test(line))add(line);
+   // Pair a table heading with the following unit/value rows (e.g. Operating voltage / [V] / 10...30 DC).
+   if(/(operating voltage|supply voltage|voltage|current consumption|current rating|sensing range|output function|electrical design|protection|ambient temperature|switching frequency|operating distance|connector|connection|نوع الخرج|جهد التشغيل|مدى الاستشعار)/i.test(line)){
+     const vals=[];for(let j=i+1;j<Math.min(raw.length,i+4);j++){if(/(operating voltage|supply voltage|current consumption|sensing range|output function|electrical design|ambient temperature|switching frequency|operating distance|protection|connector|connection)/i.test(raw[j]))break;vals.push(raw[j]);if(vals.join(' ').length>120)break;}
+     if(vals.length)add(line+': '+vals.join(' '));
+   }
+   // Preserve short model + product-description pairs that sentence filters used to lose.
+   if(/[a-z]{2,}\d+[a-z0-9]*/i.test(line)&&raw[i+1])add(line+' — '+raw[i+1]);
+ });
+ const scored=candidates.map(({t,i})=>{const ws=new Set(localTokens(t));let hit=0;for(const w of qset)if(ws.has(w))hit++;const topical=rx[intent]?rx[intent].test(t):false;return {t,i,hit,topical,score:hit/Math.sqrt(Math.max(1,qset.size))+(topical?1.4:0)};});
+ const compact=scored.filter(x=>{const bare=/^(operating voltage|supply voltage|rated voltage|current consumption|sensing range|output function|electrical design|ambient temperature|switching frequency)$/i.test(x.t);return !bare||!scored.some(y=>y!==x&&y.t.toLowerCase().startsWith(x.t.toLowerCase()+':'));});
+ const seen=new Set();return compact.sort((a,b)=>b.score-a.score||a.i-b.i).filter(x=>{const k=localNorm(x.t).replace(/\s+/g,' ').trim();if(seen.has(k))return false;seen.add(k);return true;});
+}
+function answerOffline(question,history,semanticCandidates){
+ const q=String(question||'').trim();if(q.length<3)return {ok:false,text:'اكتب سؤالًا أوضح قليلًا.'};
+ const calc=localOhm(q);if(calc)return {ok:true,kind:'calculation',title:calc.title,answer:calc.text+'\n'+calc.detail,sources:[],confidence:'حساب مباشر'};
+ let searchQ=q;const currentEntities=localEntityTerms(q);const prevUser=Array.isArray(history)?[...history].reverse().find(m=>m&&m.role==='user'&&m.text&&m.text!==q):null;
+ // لا نرث موديل السؤال السابق إذا كان المستخدم كتب موديلًا جديدًا في السؤال الحالي.
+ if(!currentEntities.length&&prevUser&&q.length<55&&/(^(طيب|طب|وكمان|وما|وماذا|اشرح اكتر|ازاي|ليه|ما الفرق|هل|كمان)|\b(it|that|why|how)\b)/i.test(q))searchQ=prevUser.text+' '+q;
+ const intent=localQuestionIntent(searchQ),entities=localEntityTerms(searchQ),found=localFind(searchQ);if(Array.isArray(semanticCandidates)&&semanticCandidates.length){const seenSem=new Set((found.user||[]).map(x=>x.id||((x.source||"")+"|"+(x.page||"")+"|"+(x.text||"").slice(0,80))));for(const x of semanticCandidates){const k=x.id||((x.source||"")+"|"+(x.page||"")+"|"+(x.text||"").slice(0,80));if(!seenSem.has(k)){found.user.unshift(x);seenSem.add(k);}}}
+ // Device/model names are anchors: never let a generic concept (e.g. voltage divider)
+ // outrank the exact device named by the user.
+ let exactItems=(state.items||[]).filter(it=>{const t=localNorm([it.name,it.model,it.manufacturer,itemTextOf(it)].join(' '));return entities.length&&entities.some(e=>new RegExp('(^|[^a-z0-9])'+e.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-z0-9]|$)','i').test(t));});
+ const userCandidates=(found.user||[]).map(x=>{const it=x.kind==='item'?(state.items||[]).find(z=>z.id===x.id):null;const full=it?itemTextOf(it):String(x.text||'');const sc=localScore(searchQ,{title:x.title||x.label||'',tags:'',text:full});const exact=entities.some(e=>new RegExp('(^|[^a-z0-9])'+e.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-z0-9]|$)','i').test(localNorm((x.title||'')+' '+full)));return {...x,full,local:sc,exact};}).sort((a,b)=>(b.exact-a.exact)||(b.local.score-a.local.score)||(b.score-a.score));
+ // Strict entity grounding: a part number (PIC12F675, ESP32-S3, STM32F103, etc.)
+ // must be present in the selected source itself. Never answer from a different device
+ // merely because it shares a generic property word such as voltage or current.
+ const exactUserCandidates=userCandidates.filter(x=>x.exact);
+ const targetModel=entities.find(e=>/^(?:pic|esp|stm|stm32|atmega|attiny|attmega|msp|ch32|rp|nrf|cc|ig|lm)\d/i.test(e)||(/^[a-z]{2,}\d+[a-z0-9]*$/i.test(e)&&e.length>=5)) || (/\bavr\b/i.test(localNorm(searchQ))?'avr':null);
+ const hasPartNumber=!!targetModel;
+ if(hasPartNumber&&!exactItems.length&&!exactUserCandidates.length){
+   const shownModel=targetModel.toUpperCase();
+   return {ok:false,text:`لم أجد الموديل ${shownModel} نفسه في قاعدة المعرفة المحلية. لذلك لن أستخدم مواصفات جهاز آخر لمجرد أن السؤال عن الجهد أو التيار. أضف مرجع ${shownModel} أو ورقة بياناته إلى قاعدة البرنامج، ثم أعد السؤال.`,suggest:`يمكنك إضافة ملف Datasheet أو مقال يحتوي على رقم ${shownModel} ومواصفاته. لا توجد هنا بيانات محلية كافية لهذا الموديل.`,sources:[],confidence:'رفض آمن: لا يوجد مصدر مطابق لرقم الموديل'};
+ }
+ let selected=exactItems.length?userCandidates.filter(x=>x.exact):(exactUserCandidates.length?exactUserCandidates:userCandidates.filter(x=>(x.local.hit>0&&x.local.score>=.34)||(x.semanticScore!=null&&x.semanticScore>=.34)));
+ // When several chunks from one PDF contain the same exact model, answer from their combined text.
+ // Otherwise the top-ranked chunk may be only the wiring page/header and hide the actual specs.
+ if(!exactItems.length&&exactUserCandidates.some(x=>x.kind==='knowledge')){
+   const first=exactUserCandidates.find(x=>x.kind==='knowledge'),same=exactUserCandidates.filter(x=>x.kind==='knowledge'&&x.source===first.source).sort((a,b)=>(a.page||0)-(b.page||0));
+   if(same.length){const pages=[...new Set(same.map(x=>x.page).filter(Boolean))];selected=[{...first,full:same.map(x=>x.full).join('\n'),page:pages.length?pages.join('، '):null,source:first.source},...selected.filter(x=>!(x.kind==='knowledge'&&x.source===first.source))];}
+ }
+ if(exactItems.length&&!selected.length)selected=exactItems.map(it=>({kind:'item',id:it.id,title:it.name,full:itemTextOf(it),exact:true,local:localScore(searchQ,{title:it.name,text:itemTextOf(it)})}));
+ const top=found.built[0],second=found.built[1];
+ // Built-in knowledge is selected only when the subject itself matches, not merely one broad word.
+ const builtMatch=top&&top.sc.hit>=2&&top.sc.score>=.95?top:null;
+ const diag=intent==='diagnosis';let answer='',sources=[],sections=[];
+ if(selected.length){
+   const best=selected[0],evidence=localSentenceEvidence(best.full,searchQ,intent);
+   const chosen=evidence.filter(x=>x.hit>0||x.topical).slice(0,intent==='explain'||intent==='architecture'?7:5);
+   const item=(best.kind==='item'?(state.items||[]).find(it=>it.id===best.id):null);
+   const title=best.title||best.label||(item&&item.name)||'مرجع من قاعدة بياناتك';
+   if(chosen.length){
+     const direct=chosen.filter(x=>x.topical).slice(0,4);const rest=chosen.filter(x=>!x.topical&&(x.hit>=2||((intent==='general'||intent==='explain')&&x.hit>=1))).slice(0,5);
+     answer=(intent==='architecture'?'**المعمارية وبنية المعالجة:**\n':intent==='voltage'?'**جهد التشغيل:**\n':intent==='current'?'**التيار والاستهلاك:**\n':intent==='memory'?'**الذاكرة:**\n':intent==='pins'?'**الأطراف والواجهات:**\n':intent==='diagnosis'?'**معلومات التشخيص الموجودة في المرجع:**\n':'**المعلومات الأكثر ارتباطًا بسؤالك:**\n')+direct.map(x=>'• '+x.t).join('\n');
+     if(rest.length)answer+='\n\n**تفاصيل أخرى من نفس المرجع:**\n'+rest.map(x=>'• '+x.t).join('\n');
+   }else answer='وجدت الجهاز في قاعدة بياناتك، لكن النص المحفوظ له لا يحتوي على معلومة واضحة تجيب عن هذا السؤال تحديدًا.';
+   sources.push({title:best.kind==='knowledge'?best.source||title:title,type:best.kind==='item'?'قاعدة أجهزتك':best.kind==='knowledge'?'مستند متعلّم':'حزمة تدريب',page:best.page||null});
+   if(intent==='architecture'&&/esp32/i.test(searchQ))sections.push({title:'توضيح مهم',text:'اسم ESP32 يشير إلى عائلة شرائح وليس معالجًا واحدًا موحدًا؛ لذلك يجب تحديد رقم الشريحة الكامل مثل ESP32, ESP32-S3 أو ESP32-C3 قبل تعميم نوع النواة أو عددها.'});
+   if(intent==='voltage'&&/esp32/i.test(searchQ))sections.push({title:'تنبيه كهربائي',text:'جهد تشغيل الشريحة 3.3V لا يعني أن مدخلات GPIO تتحمل 5V. تحقق من ورقة بيانات الشريحة واللوحة قبل توصيل أي إشارة.'});
+ }else if(builtMatch){
+   const b=builtMatch.d;answer=b.answer+(b.extra?'\n\nتفاصيل عملية:\n'+b.extra:'');sources.push({title:b.title,type:'معرفة فنية مدمجة'});
+   if(second&&second.sc.score>.8&&second.d.id!==b.id)sections.push({title:'موضوع مرتبط',text:second.d.title+': '+second.d.answer});
+ }else{
+   const domain=/(plc|سيمنز|s7|avr|atmega|pic|stm32|c language|لغة c|الكترون|دائره|حساس|صمام|positioner|بوزيشنر|هواء|كهرباء|مقاومه|تيار|جهد|محرك|موتور|esp\d*)/i.test(localNorm(searchQ));
+   return {ok:false,text:domain?'لم أجد نصًا موثوقًا كافيًا يجيب عن هذا السؤال تحديدًا. أضف شرحًا أو مواصفة أو صورة موضحة للجهاز، أو حدد رقم الموديل.':'هذا السؤال خارج نطاق المعرفة الفنية المحلية المتاحة. لا يوجد نموذج لغوي عام مدمج حاليًا، لذلك لن أخترع إجابة.',suggest:'جرّب كتابة اسم الجهاز أو الموديل مع الخاصية المطلوبة، مثل: ESP32-S3 جهد التشغيل أو ESP32-C3 نوع المعالج.',sources:[]};
+ }
+ const intro=diag?'هذا تحليل مبدئي اعتمادًا على محتوى المرجع، وليس تشخيصًا مؤكدًا دون قياسات.\n\n':'إجابة مستخرجة من المرجع الأقرب لموضوع السؤال، مع إعطاء الأولوية لاسم الجهاز أو الموديل.\n\n';
+ return {ok:true,kind:'knowledge',title:diag?'تحليل فني مبدئي':'إجابة فنية موجهة',answer:intro+answer,sections,sources,confidence:selected.length?'مرتبطة مباشرة بعنصر محدد في قاعدة أجهزتك': 'معرفة فنية مدمجة',expanded:found.expanded,intent};
+}
+function offlineChatSection(close){
+ const root=el('div',{style:'display:flex;flex-direction:column;gap:8px'});
+ const status=el('div',{cls:'nn-row'},el('b',null,'🧠 المحرك الفني المحلي — v12 / Transformers.js + Translation'),el('div',{cls:'hx-sm'},'بحث هجين: كلمات + استرجاع دلالي متعدد اللغات. لا يوجد نموذج توليد عام مدمج.'));allKnowledge().then(a=>{const x=status.querySelector('.hx-sm');if(x)x.textContent+=' · ذاكرة المستندات: '+a.length+' مقطعًا';});
+ const tfStatus=el('div',{cls:'hx-sm',style:'padding:8px;border:1px solid var(--border);border-radius:8px'},'نموذج الفهم الدلالي غير محمّل. يحتاج تنزيلًا أوليًا (~120MB)، ثم يحتفظ المتصفح بنسخة مخبأة.');
+ const tfButton=btn('تحميل نموذج الفهم العربي/الإنجليزي',async()=>{tfButton.disabled=true;tfStatus.textContent='تهيئة Transformers.js…';try{const r=await loadTransformersRuntime(t=>tfStatus.textContent=t);tfStatus.textContent='تم تحميل النموذج على '+r.device+'؛ جارٍ فهرسة المستندات…';const ix=await indexKnowledgeWithTransformers(t=>tfStatus.textContent=t);tfStatus.textContent='جاهز: تم فهرسة '+ix.total+' مقطعًا دلاليًا. البحث العربي/الإنجليزي أصبح متاحًا.';tfButton.textContent='إعادة فهرسة المعرفة';}catch(e){tfStatus.textContent='تعذر تحميل النموذج: '+(e.message||e)+'. تحقق من الإنترنت أول مرة، أو من دعم WebAssembly/WebGPU.';}finally{tfButton.disabled=false;}},'secondary');
+ const tfBar=el('div',{style:'display:flex;flex-direction:column;gap:6px'},tfButton,tfStatus);
+ const log=el('div',{style:'display:flex;flex-direction:column;gap:8px;max-height:48vh;overflow:auto;padding:6px;background:var(--panel2);border:1px solid var(--border);border-radius:10px'});
+ const key='workshop.offlineChat.v2';let msgs=[];try{msgs=JSON.parse(localStorage.getItem(key)||'[]');if(!Array.isArray(msgs))msgs=[];}catch(e){msgs=[];}
+ const persist=()=>{try{localStorage.setItem(key,JSON.stringify(msgs.slice(-80)));}catch(e){}};
+ const render=()=>{log.textContent='';if(!msgs.length)log.appendChild(hint('ابدأ بسؤال فني. مثال: ما وظيفة الريليه الهوائي؟ أو لماذا يحدث Hunting في البوزيشنر؟'));msgs.forEach(m=>{const wrap=el('div',{style:'align-self:'+(m.role==='user'?'flex-start':'stretch')+';max-width:'+(m.role==='user'?'92%':'100%')+';padding:9px;border-radius:9px;border:1px solid var(--border);background:'+(m.role==='user'?'var(--panel3)':'var(--panel)')});wrap.appendChild(el('b',null,m.role==='user'?'أنت':'المساعد الفني المحلي'));wrap.appendChild(el('div',{style:'white-space:pre-wrap;line-height:1.65;margin-top:5px;font-size:13px'},m.text));if(m.sources&&m.sources.length){wrap.appendChild(el('div',{cls:'hx-sm',style:'margin-top:7px'},'المراجع: '+m.sources.map(s=>s.title+' ('+s.type+(s.page?'، صفحة '+s.page:'')+')').join(' · ')));}if(m.confidence)wrap.appendChild(el('div',{cls:'hx-sm',style:'margin-top:3px'},'نوع الإسناد: '+m.confidence));log.appendChild(wrap);});log.scrollTop=log.scrollHeight;};
+ const ta=el('textarea',{attrs:{rows:'3'},style:'width:100%;resize:vertical;min-height:72px'});ta.placeholder='اكتب سؤالك الفني هنا…';
+ const send=async()=>{const q=ta.value.trim();if(!q)return;ta.disabled=true;await allKnowledge();msgs.push({role:'user',text:q});let sem=[];if(tfPipeline){try{sem=await semanticKnowledgeSearch(q,14);}catch(e){tfStatus.textContent='تعذر البحث الدلالي: '+(e.message||e);}}let a=answerOffline(q,msgs,sem);{tfStatus.textContent=questionLanguage(q)==='ar'?'السؤال بالعربية: تجهيز الإجابة بالعربية…':'English question: preparing the answer in English…';a=await translateAnswerForQuestion(q,a,t=>tfStatus.textContent=t);if(a.translationError)tfStatus.textContent='تعذرت الترجمة الآلية: '+a.translationError+' — تم الاحتفاظ بالنص الأصلي دون تغيير.';else tfStatus.textContent=questionLanguage(q)==='ar'?'تم إعداد الإجابة بالعربية.':'Answer prepared in English.';}msgs.push({role:'assistant',text:a.ok?(a.title+'\n\n'+a.answer+(a.sections&&a.sections.length?'\n\n'+a.sections.map(x=>x.title+'\n'+x.text).join('\n\n'):'')):(a.text+'\n'+(a.suggest||'')),sources:a.sources||[],confidence:a.confidence||''});ta.disabled=false;ta.value='';persist();render();};
+ ta.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')send();});
+ const controls=el('div',{style:'display:flex;gap:6px;flex-wrap:wrap'},btn('إرسال السؤال',send,'primary'),btn('مسح المحادثة',()=>{if(confirm('مسح سجل هذه المحادثة من هذا الجهاز؟')){msgs=[];persist();render();}}),btn('اختبار المحرك',()=>{const tests=['ما وظيفة البوزيشنر؟','لماذا يحدث Hunting في صمام التحكم؟','ما الفرق بين ADC وUART؟','احسب التيار عند 12 فولت ومقاومة 1 كيلو أوم','ما هو قانون أوم؟','ما عاصمة فرنسا؟'];const rows=tests.map(q=>{const a=answerOffline(q,[]);return q+' → '+(a.ok?'أجاب':'امتنع عن الإجابة')+(a.title?' ('+a.title+')':'');});msgs.push({role:'assistant',text:'نتائج الاختبار الذاتي:\n'+rows.join('\n')+'\n\nهذا اختبار تغطية داخلي وليس مقياسًا علميًا لجودة نموذج لغوي.'});persist();render();}));
+ root.append(status,tfBar,log,ta,controls,hint('اختصار الإرسال: Ctrl + Enter. المحادثة تحفظ محليًا على هذا الجهاز. لا يحتاج المحرك إلى اتصال بالإنترنت.'));
+ render();return root;
+}
+async function offlineChat(host,close){host.textContent='';host.appendChild(offlineChatSection(close));}
+
 /* ---------- علاقات (رسم معرفة خفيف): فاعل —علاقة→ مفعول ---------- */
 const RELS=[[/^(يقيس|بيقيس|تقيس)$/,"يقيس"],[/^(يتحكم|بيتحكم|تتحكم)$/,"يتحكم في"],[/^(يسبب|بيسبب|تسبب)$/,"يسبّب"],[/^(يحول|بيحول)$/,"يحوّل"],[/^(يوصل|بيوصل)$/,"يوصّل"],[/^(يفصل|بيفصل|يقطع|بيقطع)$/,"يفصل"],[/^(يغذي|بيغذي)$/,"يغذّي"],[/^(يشغل|بيشغل)$/,"يشغّل"],[/^(يستخدم|بيستخدم)$/,"يستخدم"],[/^(يسحب|بيسحب)$/,"يسحب"],[/^(يدفع|بيدفع)$/,"يدفع"],[/^(يؤدي|بيؤدي)$/,"يؤدي إلى"]];
 const KSTOP=new Set("في من علي الي الى ان ثم لو عند كان ده دي اللي الذي التي هذا هذه مع عن بعد قبل لما او كل".split(" "));
@@ -19692,7 +20122,7 @@ function extractTriples(text){
 }
 function buildKG(textOf){
   const g=new Map();const add=(t,src)=>{for(const x of extractTriples(t)){const key=x.s+"|"+x.r+"|"+x.o;let e=g.get(key);if(!e){e={...x,n:0,src:new Set()};g.set(key,e);}e.n++;e.src.add(src);}};
-  for(const it of (state.items||[]))add(textOf(it),it.id);for(const p of activePacks())for(const r of p.refs.slice(0,3000))add(r.t,"ref");
+  for(const it of (state.items||[]))add(textOf(it),it.id);for(const p of activePacks())for(const r of p.refs.slice(0,3000))add(r.t,"ref");for(const k of KNOWLEDGE.values())add(k.text,k.source);
   return [...g.values()].sort((a,b)=>b.n-a.n);
 }
 /* ---------- تقييم مستقل لجودة الاستدلال ---------- */
@@ -19737,7 +20167,7 @@ function evaluatePack(pack,extra){
 /* ---------- التدريب ---------- */
 function makeWorker(){const code="self.__S=("+sharedCode.toString()+")();("+workerMain.toString()+")();";return new Worker(URL.createObjectURL(new Blob([code],{type:"text/javascript"})));}
 async function zipFiles(files){
-  const out=[];for(const f of files){if(/\.zip$/i.test(f.name)&&window.JSZip){const z=await window.JSZip.loadAsync(f);for(const [n,e] of Object.entries(z.files)){if(e.dir||!/\.(jsonl|ndjson|json|csv|tsv|txt)$/i.test(n))continue;out.push(new File([await e.async("blob")],n.split("/").pop()));}}else out.push(f);}
+  const out=[];for(const f of files){if(/\.zip$/i.test(f.name)&&window.JSZip){const z=await window.JSZip.loadAsync(f);for(const [n,e] of Object.entries(z.files)){if(e.dir||!/\.(jsonl|ndjson|json|csv|tsv|txt|pdf)$/i.test(n))continue;out.push(new File([await e.async("blob")],n.split("/").pop()));}}else out.push(f);}
   return out;
 }
 const PRESETS={fast:{D:48,H:96,B:1<<15,epochs:2,lr:.07,maxTok:200,label:"سريع"},balanced:{D:64,H:128,B:1<<16,epochs:3,lr:.06,maxTok:300,label:"متوازن"},deep:{D:96,H:192,B:1<<17,epochs:5,lr:.05,maxTok:400,label:"عميق ودقيق"}};
@@ -19763,6 +20193,10 @@ function runTrain(src,cfg,cb,basePack){
 function runPreview(src,limit){
   return new Promise(res=>{const w=makeWorker();w.onmessage=ev=>{const m=ev.data;if(m.type==="preview"||m.type==="error"){w.terminate();res(m);}};w.onerror=e=>{w.terminate();res({type:"error",msg:e.message});};w.postMessage({cmd:"preview",src,limit});});
 }
+function runKnowledgeImport(src,category,onProgress){
+  const w=makeWorker();let done=false,saved=0,pending=Promise.resolve(),pendingError=null;
+  return new Promise(resolve=>{w.onmessage=async ev=>{const m=ev.data;if(m.type==="knowledgeReplace"){pending=pending.then(async()=>{if(pendingError)throw pendingError;for(const source of (m.sources||[]))await deleteKnowledgeSource(source);}).catch(e=>{pendingError=e;});return;}if(m.type==="knowledgeBatch"){pending=pending.then(async()=>{if(pendingError)throw pendingError;saved+=await saveKnowledgeDocs(m.docs);}).catch(e=>{pendingError=e;});return;}if(m.type==="knowledgeProgress"){if(onProgress)onProgress(m);return;}if(m.type==="knowledgeDone"){try{await pending;if(pendingError)throw pendingError;done=true;w.terminate();resolve({ok:true,...m,docs:saved});}catch(e){done=true;w.terminate();resolve({ok:false,msg:e.message});}return;}if(m.type==="error"||m.type==="cancelled"){done=true;w.terminate();resolve({ok:false,msg:m.msg||"تم إيقاف التعلم"});}};w.onerror=e=>{if(!done){done=true;w.terminate();resolve({ok:false,msg:e.message||"خطأ في قراءة المستند"});}};w.postMessage({cmd:"knowledge",src,category});});
+}
 /* بياناتك أنت كمصدر تدريب */
 const lines2=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean);
 function ownRecords(mode){
@@ -19786,7 +20220,22 @@ const det=(title,open,...k)=>{const d=el("details",{open,style:"margin:8px 0;bor
 const hint=t=>el("div",{cls:"hx-sm",style:"margin:3px 0"},t);
 const btn=(t,fn,cls)=>el("button",{cls:"btn small"+(cls?" "+cls:""),on:{click:fn},style:"margin:2px"},t);
 const probBar=(p,col)=>el("div",{style:"display:inline-block;vertical-align:middle;width:70px;height:6px;background:rgba(128,128,128,.25);border-radius:3px;overflow:hidden;margin:0 6px"},el("div",{style:"height:100%;width:"+Math.round(p*100)+"%;background:"+(col||(p>=.8?"#4ade80":p>=.5?"#fbbf24":"#f87171"))}));
-const itemTextOf=it=>{const nb=it.notebookData||{},parts=[it.name,it.notes,nb.explanation];(nb.explanations||[]).forEach(b=>parts.push((b.title||"")+". "+(b.content||"")));(nb.imageGroups||[]).forEach(g=>(g.explanations||[]).forEach(b=>parts.push(b.content)));(nb.images||[]).forEach(x=>parts.push(x.caption));return parts.filter(Boolean).join("\n").slice(0,6000);};
+const itemTextOf=it=>{
+ const nb=it.notebookData||{},parts=[it.name,it.model,it.manufacturer,it.type,it.serial,it.partNumber,it.notes];
+ Object.entries(it.fields||{}).forEach(([k,v])=>parts.push(k+": "+String(v??"")));
+ const addBox=b=>{if(!b)return;parts.push([b.title,b.label,b.name,b.content,b.text,b.description,b.note,b.details].filter(x=>typeof x==="string"&&x.trim()).join("\n"));};
+ parts.push(nb.explanation||"");(nb.explanations||[]).forEach(addBox);
+ (nb.imageGroups||[]).forEach(g=>{parts.push(g.name||g.title||"");(g.explanations||[]).forEach(addBox);(g.images||[]).forEach(x=>parts.push(x.caption||x.description||x.title||""));});
+ (nb.images||[]).forEach(x=>{parts.push(x.caption||x.description||x.title||x.alt||"");if(x.ann)addBox(x.ann);});
+ (nb.codes||[]).forEach(x=>parts.push([x.title,x.label,x.lang,x.code].filter(Boolean).join("\n")));
+ (nb.faultTracking?.pages||[]).forEach(pg=>{parts.push(pg.name||pg.title||pg.description||"");(pg.hotspots||[]).forEach(h=>{parts.push(h.title||h.label||h.name||h.description||"");addBox(h.content);});});
+ if(nb.mindmap){parts.push(nb.mindmap.title||"");}
+ // Read textual annotations and labels recursively, but never image binaries or URLs.
+ const seen=new WeakSet(),allow=/^(title|label|name|caption|alt|text|content|description|explanation|note|notes|details|cause|solution|symptom|action|instruction|warning|code|lang|value|question|answer)$/i;
+ const walk=(o,depth=0)=>{if(!o||depth>5||typeof o!=="object"||seen.has(o))return;seen.add(o);if(Array.isArray(o)){o.slice(0,250).forEach(v=>walk(v,depth+1));return;}for(const [k,v] of Object.entries(o)){if(/^(blob|data|src|url|imageId|fileId|thumbnail|preview|binary|base64)$/i.test(k))continue;if(typeof v==="string"&&allow.test(k)&&v.trim()&&!/^data:|^https?:\/\//i.test(v))parts.push(v);else if(v&&typeof v==="object")walk(v,depth+1);}};
+ walk(nb.faultTracking);walk(nb.drawing);walk(nb.mindmap);walk(nb.imageGroups);
+ return [...new Set(parts.filter(x=>typeof x==="string"&&x.trim()))].join("\n").slice(0,30000);
+};
 const RC=new Map();
 function recog(pack,it){const key=pack.id+"|"+pack.ver+"|"+it.id+"|"+(it.updatedAt||0)+"|"+itemTextOf(it).length;let r=RC.get(key);if(r===undefined){r=classify(pack,itemTextOf(it),3);RC.set(key,r);if(RC.size>20000)RC.clear();}return r;}
 function chipLab(l,p){return el("span",{cls:"nn-lab"},l+(p!=null?" "+Math.round(p*100)+"%":""));}
@@ -19885,7 +20334,7 @@ function formatSection(){
 let lastMsg="",bannerEl=null;
 function trainBox(rerender,base){
   const box=base?el("div",{style:"margin-top:6px;padding:6px;border:1px dashed var(--border);border-radius:8px"}):det("🚀 تدريب حزمة جديدة",true),st={files:[],job:null};
-  const fi=el("input",{attrs:{type:"file",multiple:"",accept:".jsonl,.ndjson,.json,.csv,.tsv,.txt,.zip"}}),nameI=el("input",{style:"width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);margin:4px 0"}),preset=el("select",{style:"padding:5px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});
+  const fi=el("input",{attrs:{type:"file",multiple:"",accept:".pdf,.jsonl,.ndjson,.json,.csv,.tsv,.txt,.zip"}}),nameI=el("input",{style:"width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);margin:4px 0"}),preset=el("select",{style:"padding:5px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"});
   nameI.placeholder="اسم الحزمة (مثلًا: مرجع الأجهزة الحرارية)";nameI.value="حزمتي";
   Object.entries(PRESETS).forEach(([k,v])=>preset.appendChild(el("option",{attrs:{value:k}},v.label+" ("+v.epochs+" دورات، "+v.D+"×"+v.H+")")));preset.value="balanced";
   const adv=el("details",null,el("summary",{style:"cursor:pointer;font-size:12px"},"إعدادات متقدمة")),advIn={};
@@ -19896,10 +20345,10 @@ function trainBox(rerender,base){
   const pre=el("div"),prog=el("div");
   const buildCfg=()=>{const c=Object.assign({},PRESETS[preset.value]);delete c.label;for(const k in advIn){const v=parseFloat(advIn[k].value);if(v>0)c[k]=v;}c.D=Math.round(c.D);c.H=Math.round(c.H);c.epochs=Math.round(c.epochs);c.B=PRESETS[preset.value].B;c.name=nameI.value.trim()||"حزمتي";c.srcName=st.files.map(f=>f.name).slice(0,3).join("، ");c.maskLabel=optMask.c.checked;c.balance=optBal.c.checked;c.semantic=optSem.c.checked;c.autoGuard=optGuard.c.checked;c.algo="v2";return c;};
   const fileInfo=el("div",{cls:"hx-sm"});fi.onchange=()=>{st.files=[...fi.files];fileInfo.textContent=st.files.map(f=>f.name+" ("+fmtB(f.size)+")").join(" · ");};
-  const doPreview=async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}pre.textContent="⏳ بقرا أول 3000 سجل…";const files=await zipFiles(st.files),r=await runPreview({files},3000);pre.textContent="";
+  const doPreview=async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}const files=await zipFiles(st.files);if(files.some(f=>/\.pdf$/i.test(f.name))){pre.textContent="📄 ملف PDF ليس ملف سجلات لتدريب المصنّف؛ لذلك تم إيقاف معاينة أول 3000 سجل لهذا النوع. استخدم «تعلّم محتوى الملف» أو «ابدأ التعلم / التدريب» لاستيراد PDF مباشرة كمعرفة دون معاينة المصنّف.";return;}pre.textContent="⏳ بقرا أول 3000 سجل…";const r=await runPreview({files},3000);pre.textContent="";
     if(r.type==="error"){pre.appendChild(hint("❌ "+r.msg));return;}
     pre.appendChild(el("div",{style:"font-size:12.5px"},"✅ "+r.rows.toLocaleString("en")+" سجل صالح في العينة"+(r.bad?"، "+r.bad+" سجل مرفوض":"")+"، "+r.nLabels+" تصنيف، متوسط الطول "+r.avgLen+" حرف."));
-    if(!r.rows)pre.appendChild(hint("⚠️ مفيش سجلات مقروءة. راجع صيغة الملف (القسم تحت)."));if(r.nLabels<2)pre.appendChild(hint("⚠️ لازم تصنيفين على الأقل."));
+    if(!r.rows)pre.appendChild(hint("⚠️ مفيش سجلات مقروءة. راجع صيغة الملف (القسم تحت)."));if(r.nLabels<2)pre.appendChild(hint("ℹ️ تم العثور على تصنيف واحد. استخدم «تعلّم محتوى الملف» لحفظ المعرفة؛ تدريب المصنّف يحتاج تصنيفين أو أكثر."));
     pre.appendChild(el("div",{style:"display:flex;flex-wrap:wrap;gap:4px;margin:4px 0"},r.labels.slice(0,40).map(([l,n])=>chipLab(l+" ×"+n))));
     r.samples.forEach(s=>pre.appendChild(el("div",{cls:"nn-row"},el("b",null,s.label+": "),s.text)));
     const mn=Math.min(...r.labels.map(x=>x[1])),mx=Math.max(...r.labels.map(x=>x[1])),L=r.leak,W=[];
@@ -19911,6 +20360,8 @@ function trainBox(rerender,base){
     if(!L.groups&&r.rows>200)W.push("مفيش عمود مجموعة/مصدر (group/source): نصوص نفس المصدر ممكن تتوزع على أقسام مختلفة. لو في نصوص متقطّعة من نفس المستند، أضف عمود group");
     pre.appendChild(el("h4",null,"🛡️ فحص التسرب (على العينة)"));if(W.length)W.forEach(w=>pre.appendChild(el("div",{style:"font-size:12px;margin:3px 0"},"⚠️ "+w)));else pre.appendChild(hint("✅ مفيش مؤشرات تسرب واضحة في العينة."));};
   const cancelBtn=btn("⏹ إيقاف",()=>{if(st.job)st.job.cancel();},"danger");cancelBtn.style.display="none";
+  const learnStatus=el("div",{cls:"hx-sm"});
+  const learnBtn=btn("📚 تعلّم محتوى الملف (يقبل تصنيفًا واحدًا)",async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}learnBtn.disabled=true;learnStatus.textContent="⏳ استخراج المعرفة من المستندات…";const src={files:await zipFiles(st.files)},r=await runKnowledgeImport(src,nameI.value.trim()||"مستند فني",m=>{learnStatus.textContent=m.phase==="pdf"?(m.totalPages?`📄 قراءة صفحات PDF: ${m.page}/${m.totalPages} — ${m.docs} مقطعًا حتى الآن`:`📄 تجهيز بيانات PDF… ${Math.round(100*m.bytes/Math.max(1,m.totalBytes))}%`):m.phase==="objects"?`🔎 ${m.stage||"فهرسة PDF"} — ${m.objects||0} كائن، ${m.docs||0} مقطعًا`:m.phase==="pages"?`📖 استخراج الصفحة ${m.page||0}/${m.totalPages||0}…`:m.phase==="fallback"?`🔍 ${m.stage||"استخراج النص"} — ${m.page||0} من ${m.totalPages||0}`:m.phase==="chunk"?`🧩 تقسيم المعرفة: الصفحة ${m.page||0}/${m.totalPages||0} — ${m.docs||0} مقطعًا، ${(m.chars||0).toLocaleString("en")} حرفًا`:m.phase==="complete"?`📄 اكتمل استخراج PDF؛ جارٍ تقسيم النص وحفظ المعرفة…`:`📖 قراءة ${m.files} ملف — استخراج ${m.docs} مقطعًا، ${m.chars.toLocaleString("en")} حرفًا…`;});learnBtn.disabled=false;if(r.ok){learnStatus.textContent="✅ تم تعلّم "+r.docs.toLocaleString("en")+" مقطعًا من "+r.files+" ملفًا ("+r.chars.toLocaleString("en")+" حرفًا). تم حفظها محليًا وأصبحت متاحة للشات.";toast2("اكتمل تعلم المعرفة من المستندات.");}else{learnStatus.textContent="❌ "+r.msg;toast2(r.msg,"err");}} ,"primary");
   const startWith=(src,srcName)=>{
     lastMsg="";if(bannerEl){bannerEl.remove();bannerEl=null;}const cfg=buildCfg();if(srcName)cfg.srcName=srcName;cancelBtn.style.display="";prog.textContent="";
     const stage=el("div",{style:"font-size:12.5px"},"⏳ بدء…"),bar=el("div",{cls:"nn-bar"},el("div")),info=el("div",{cls:"hx-sm"}),leakI=el("div",{style:"font-size:12px"}),curve=el("div");prog.append(stage,bar,info,leakI,curve);
@@ -19926,11 +20377,11 @@ function trainBox(rerender,base){
       else if(msg.type==="cancelled"){cancelBtn.style.display="none";stage.textContent="⏹ اتوقف التدريب.";}
     },base);
   };
-  const startBtn=btn(base?"🚀 ابدأ التدريب الإضافي":"🚀 ابدأ التدريب",async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}startWith({files:await zipFiles(st.files)});},"primary");
+  const startBtn=btn(base?"🚀 ابدأ التدريب الإضافي":"🚀 ابدأ التعلم / التدريب",async()=>{if(!st.files.length){toast2("اختار ملف الأول.","err");return;}const src={files:await zipFiles(st.files)};if(!base){const hasPdf=src.files.some(f=>/\.pdf$/i.test(f.name));if(hasPdf){learnStatus.textContent="📚 ملف PDF: سيتم استخراج المعرفة مباشرة دون تشغيل معاينة التدريب أولًا لتجنب قراءة الملف مرتين…";learnBtn.disabled=true;const r=await runKnowledgeImport(src,nameI.value.trim()||"مستند فني",m=>{learnStatus.textContent=m.phase==="pdf"?(m.totalPages?`📄 قراءة صفحات PDF: ${m.page}/${m.totalPages} — ${m.docs} مقطعًا حتى الآن`:`📄 تجهيز بيانات PDF… ${Math.round(100*m.bytes/Math.max(1,m.totalBytes))}%`):m.phase==="objects"?`🔎 ${m.stage||"فهرسة PDF"} — ${m.objects||0} كائن`:m.phase==="pages"?`📖 استخراج الصفحة ${m.page||0}/${m.totalPages||0}…`:m.phase==="fallback"?`🔍 ${m.stage||"استخراج النص"} — ${m.page||0} من ${m.totalPages||0}`:m.phase==="chunk"?`🧩 تقسيم المعرفة: الصفحة ${m.page||0}/${m.totalPages||0} — ${m.docs||0} مقطعًا، ${(m.chars||0).toLocaleString("en")} حرفًا`:m.phase==="complete"?`📄 اكتمل استخراج PDF؛ جارٍ تقسيم النص وحفظ المعرفة…`:`📖 استخراج المعرفة… ${m.docs} مقطعًا، ${m.chars.toLocaleString("en")} حرفًا`;});learnBtn.disabled=false;learnStatus.textContent=r.ok?"✅ تم تعلم "+r.docs.toLocaleString("en")+" مقطعًا من "+r.files+" ملفًا ("+r.chars.toLocaleString("en")+" حرفًا). أصبحت متاحة للشات.":"❌ "+r.msg;toast2(r.ok?"اكتمل تعلم المعرفة":"تعذر التعلم: "+r.msg,r.ok?"ok":"err");return;}learnStatus.textContent="⏳ بفحص عدد التصنيفات لتحديد طريقة التعلم المناسبة…";const pv=await runPreview(src,3000);if(pv.type==="preview"&&pv.nLabels<2){learnStatus.textContent="📚 تصنيف واحد أو أقل: سيتم حفظ محتوى المستند كمعرفة بدل تدريب مصنّف لا يمكنه التعلم من فئة واحدة.";learnBtn.disabled=true;const r=await runKnowledgeImport(src,nameI.value.trim()||"مستند فني",m=>{learnStatus.textContent="📖 استخراج المعرفة… "+m.docs+" مقطعًا، "+m.chars.toLocaleString("en")+" حرفًا";});learnBtn.disabled=false;learnStatus.textContent=r.ok?"✅ تم تعلم "+r.docs.toLocaleString("en")+" مقطعًا من المستندات وحفظها محليًا. أصبحت متاحة للشات.":"❌ "+r.msg;toast2(r.ok?"اكتمل تعلم المعرفة":"تعذر التعلم: "+r.msg,r.ok?"ok":"err");return;}if(pv.type==="error"){learnStatus.textContent="❌ "+pv.msg;return;}}learnStatus.textContent="";startWith(src);},"primary");
   const ownSel=el("select",{style:"padding:5px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)"},el("option",{attrs:{value:"top"}},"المجلد الرئيسي"),el("option",{attrs:{value:"folder"}},"المجلد المباشر"),el("option",{attrs:{value:"cluster"}},"المواضيع المكتشفة"));
   const ownBtn=btn("🎓 درّب على بياناتي",()=>{const recs=ownRecords(ownSel.value);if(recs.length<20){toast2("بياناتك قليلة أو من غير تصنيفات كفاية ("+recs.length+" سجل).","err");return;}const lb=new Set(recs.map(r=>r.label));if(lb.size<2&&!base){toast2("محتاج تصنيفين على الأقل.","err");return;}startWith({records:recs},"بياناتي ("+ownSel.value+")");});
-  if(base){box.append(hint("التدريب الإضافي بيكمّل من أوزان «"+base.meta.name+"» (من غير ما يبدأ من الصفر): بيضيف تصنيفات جديدة، وبيعيد تشغيل أمثلة قديمة مع الجديد، وبيقيس النسيان على اختبار النسخة القديمة، وبيحجب أي نص كان في تحقق/اختبار النسخة القديمة."),fi,fileInfo,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة",doPreview),startBtn,cancelBtn),pre,prog,el("hr",{style:"opacity:.2"}),el("div",null,ownSel,ownBtn));}
-  else box.append(hint("اختار ملف/ملفات التدريب (أو ZIP). مفيش حد أقصى للحجم — بيتقرا بالبث. النظام بيمنع التسرب تلقائيًا (تكرار، تشابه، اسم التصنيف داخل النص) ويقيس الدقة على اختبار مستقل."),fi,fileInfo,nameI,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة وفحص التسرب",doPreview),startBtn,cancelBtn),pre,prog,el("hr",{style:"opacity:.2"}),hint("أو درّب على محتواك أنت (كل عنصر = نص، وتصنيفه من:) — النصوص المقسّمة من نفس العنصر بتفضل في نفس القسم:"),el("div",null,ownSel,ownBtn));
+  if(base){box.append(hint("التدريب الإضافي بيكمّل من أوزان «"+base.meta.name+"» (من غير ما يبدأ من الصفر): بيضيف تصنيفات جديدة، وبيعيد تشغيل أمثلة قديمة مع الجديد، وبيقيس النسيان على اختبار النسخة القديمة، وبيحجب أي نص كان في تحقق/اختبار النسخة القديمة."),fi,fileInfo,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة",doPreview),learnBtn,startBtn,cancelBtn),learnStatus,pre,prog,el("hr",{style:"opacity:.2"}),el("div",null,ownSel,ownBtn));}
+  else box.append(hint("اختار ملف/ملفات التدريب (أو ZIP). ملفات PDF تُستورد مباشرة كمعرفة لتجنب تحليلها مرتين؛ تدريب المصنّف يظل مسارًا منفصلًا. النظام بيمنع التسرب تلقائيًا (تكرار، تشابه، اسم التصنيف داخل النص) ويقيس الدقة على اختبار مستقل."),fi,fileInfo,nameI,el("div",null,"الإعداد: ",preset),adv,el("div",null,btn("👁️ معاينة وفحص التسرب",doPreview),learnBtn,startBtn,cancelBtn),learnStatus,pre,prog,el("hr",{style:"opacity:.2"}),hint("أو درّب على محتواك أنت (كل عنصر = نص، وتصنيفه من:) — النصوص المقسّمة من نفس العنصر بتفضل في نفس القسم:"),el("div",null,ownSel,ownBtn));
   return box;
 }
 
@@ -19989,7 +20440,7 @@ async function neural(host,close){
   if(!reg.length)pk.appendChild(hint("لسه مفيش حزم. درّب أول حزمة من الأسفل."));
   reg.forEach(r=>{const p=PACKS.get(r.id);if(p)pk.appendChild(packCard(p,r,rerender));else pk.appendChild(el("div",{cls:"hx-sub"},"🧬 "+r.name+" — غير محمّلة على الجهاز ده. استخدم «تحميل الحزم من مجلد المزامنة» تحت.",btn("🗑️ شيل من القائمة",()=>{reg.splice(reg.indexOf(r),1);kickSync();rerender();})));});
   host.appendChild(det("🧬 الحزم المدرّبة ("+reg.length+")",true,pk));
-  host.appendChild(trainBox(rerender,null));host.appendChild(searchSection(close));host.appendChild(trySection());host.appendChild(recSection(close));host.appendChild(importSection(rerender));host.appendChild(formatSection());
+  host.appendChild(trainBox(rerender,null));host.appendChild(qaSection(close));host.appendChild(searchSection(close));host.appendChild(trySection());host.appendChild(recSection(close));host.appendChild(importSection(rerender));host.appendChild(formatSection());
 }
 
 /* ---------- تكامل مع تبويب التحليل ---------- */
@@ -20026,8 +20477,9 @@ function itemExtra(it,close){
   return box;
 }
 
-window.__NN={parsePack,allPacks,packFile,activePacks,classify,addFeedback,onlineLearn,savePack,rollbackPack,deletePack,importPackText,loadFromFolder,runTrain,runPreview,ownRecords,PRESETS,analysisSection,reportLines,itemExtra,recog,evaluatePack,hybridSearch,buildKG,extractTriples,semVec,relatedWords,intentOf,PREV,view,S};
+window.__NN={parsePack,allPacks,allKnowledge,saveKnowledgeDocs,deleteKnowledgeSource,runKnowledgeImport,packFile,activePacks,classify,addFeedback,onlineLearn,savePack,rollbackPack,deletePack,importPackText,loadFromFolder,runTrain,runPreview,ownRecords,PRESETS,analysisSection,reportLines,itemExtra,recog,evaluatePack,hybridSearch,composeTechnicalAnswer,qaSection,buildKG,extractTriples,semVec,relatedWords,intentOf,answerOffline,offlineChatSection,translateAnswerForQuestion,questionLanguage,loadAnswerTranslator,LOCAL_KB,PREV,view,S};
 window.__HIST.neural=neural;
+window.__HIST.offlineChat=offlineChat;
 setTimeout(async()=>{try{await allPacks();const reg=regList();if(reg.some(r=>!PACKS.has(r.id)))await loadFromFolder();}catch(e){}},4000);
 
 })();
@@ -20073,11 +20525,11 @@ function open(itemId){
     if(rows.length>lim){ const mb=document.createElement("button"); mb.type="button"; mb.className="btn small"; mb.textContent="عرض المزيد ("+(rows.length-lim)+")"; mb.onclick=()=>{lim+=150;paint();}; list.appendChild(mb); } };
   inp.oninput=()=>{ q=inp.value.trim().toLowerCase(); lim=150; paint(); };
   body.append(chips,inp,list); drawChips(); paint();
-  const body0=ov.querySelector(".si-body"),tabs=document.createElement("div"),hb=document.createElement("div"),ib=document.createElement("div"),ab=document.createElement("div"),nb2=document.createElement("div");
+  const body0=ov.querySelector(".si-body"),tabs=document.createElement("div"),hb=document.createElement("div"),ib=document.createElement("div"),ab=document.createElement("div"),nb2=document.createElement("div"),chat2=document.createElement("div");
   tabs.style.cssText="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap";
-  [["🕘 السجل",body],["📜 الهيستوري",hb,"history"],["📊 الحصر",ib,"inventory"],["🧠 التحليل",ab,"analysis"],["🧬 التدريب",nb2,"neural"]].forEach(([l,el,fn],ix)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(ix?"":" primary"); b.textContent=l;
-    b.onclick=()=>{ [body,hb,ib,ab,nb2].forEach(x=>x.style.display="none"); el.style.display=""; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); if(fn&&!el.dataset.d&&window.__HIST){ el.dataset.d=1; window.__HIST[fn](el,close,itemId); } }; tabs.appendChild(b); });
-  hb.style.display=ib.style.display=ab.style.display=nb2.style.display="none"; body0.append(...(window.__HIST&&window.__HIST.bar?[window.__HIST.bar()]:[]),tabs,body,hb,ib,ab,nb2);
+  [["🕘 السجل",body],["📜 الهيستوري",hb,"history"],["📊 الحصر",ib,"inventory"],["🧠 التحليل",ab,"analysis"],["🧬 التدريب",nb2,"neural"],["💬 الشات المحلي",chat2,"offlineChat"]].forEach(([l,el,fn],ix)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn small"+(ix?"":" primary"); b.textContent=l;
+    b.onclick=()=>{ [body,hb,ib,ab,nb2,chat2].forEach(x=>x.style.display="none"); el.style.display=""; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); if(fn&&!el.dataset.d&&window.__HIST){ el.dataset.d=1; window.__HIST[fn](el,close,itemId); } }; tabs.appendChild(b); });
+  hb.style.display=ib.style.display=ab.style.display=nb2.style.display=chat2.style.display="none"; body0.append(...(window.__HIST&&window.__HIST.bar?[window.__HIST.bar()]:[]),tabs,body,hb,ib,ab,nb2,chat2);
   ov.querySelector(".si-x").onclick=close; ov.addEventListener("click",e=>{ if(e.target===ov) close(); }); document.body.appendChild(ov);
 }
 
